@@ -1,11 +1,11 @@
-//! `log`, the history of acts (docs/design.md, The log), as data. Nothing
+//! `log`, the history of actions (docs/design.md, The log), as data. Nothing
 //! stores it: one `git log` lists every commit that changed a record, over
 //! the base's tip and the tips of started items' branches, with each
 //! record's old and new version; the repository's one `git cat-file`
-//! process reads those versions; and an act is found by comparing a
+//! process reads those versions; and an action is found by comparing a
 //! record's two versions across one commit.
 
-use crate::acts::STARTED;
+use crate::actions::STARTED;
 use crate::model::{
     Finding, FindingName, Item, Mission, MissionStatus, Review, ReviewName, Settlement, Status,
     Thread, Threads, Verdict,
@@ -22,19 +22,19 @@ use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
 use std::rc::Rc;
 
-/// One act, found in one commit.
+/// One action, found in one commit.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Logged {
     /// The commit's committer time.
     pub time: DateTime<Utc>,
     /// The commit, as Git abbreviates it.
     pub commit: String,
-    /// The item or mission the act is on.
+    /// The item or mission the action is on.
     pub id: String,
-    /// The thread the act is shown with, where the log's table gives one.
+    /// The thread the action is shown with, where the log's table gives one.
     pub thread: Option<Thread>,
-    pub act: Happened,
-    /// Each rule the act's commit carries an `Atelier-Skip` trailer for, as
+    pub action: Happened,
+    /// Each rule the action's commit carries an `Atelier-Skip` trailer for, as
     /// `<rule>: <reason>`.
     pub skips: Vec<String>,
 }
@@ -45,7 +45,7 @@ pub struct Logged {
 pub struct Move {
     pub from: Option<Status>,
     pub to: Status,
-    /// A mission's move, whose statuses the act table writes as an item's
+    /// A mission's move, whose statuses the action table writes as an item's
     /// ([`crate::model::MissionStatus::status`]).
     pub mission: bool,
 }
@@ -109,7 +109,7 @@ pub enum Happened {
 }
 
 impl Happened {
-    /// The act's name, as its line shows it.
+    /// The action's name, as its line shows it.
     pub fn name(&self) -> &'static str {
         match self {
             Happened::Start { .. } => "start",
@@ -126,7 +126,7 @@ impl Happened {
         }
     }
 
-    /// Its row in the log's table, which orders the acts of one commit.
+    /// Its row in the log's table, which orders the actions of one commit.
     fn row(&self) -> u8 {
         match self {
             Happened::Start { .. } | Happened::TakeOver { .. } => 0,
@@ -141,8 +141,8 @@ impl Happened {
         }
     }
 
-    /// Whether Atelier makes the commit of this act, so that a skip its
-    /// commit carries is this act's.
+    /// Whether Atelier makes the commit of this action, so that a skip its
+    /// commit carries is this action's.
     fn commits(&self) -> bool {
         matches!(
             self,
@@ -160,7 +160,7 @@ impl Happened {
 }
 
 /// A version of a record that does not read, which the walk passed over:
-/// the acts across it are found by comparing the versions on each side.
+/// the actions across it are found by comparing the versions on each side.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PassedOver {
     pub time: DateTime<Utc>,
@@ -170,10 +170,10 @@ pub struct PassedOver {
     pub problem: String,
 }
 
-/// What `log` shows: the acts, oldest first, and the versions passed over.
+/// What `log` shows: the actions, oldest first, and the versions passed over.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct History {
-    pub acts: Vec<Logged>,
+    pub actions: Vec<Logged>,
     pub passed_over: Vec<PassedOver>,
 }
 
@@ -193,7 +193,7 @@ pub fn since(text: &str) -> Result<DateTime<Utc>, String> {
         })
 }
 
-/// The history of acts in `repo`: on the item or mission `of` when it is
+/// The history of actions in `repo`: on the item or mission `of` when it is
 /// given, with a mission's plan reviews and its items, and committed at or
 /// after `since` when it is given. `None` when no record of `of` is on the
 /// base's tip or on a branch named for it.
@@ -242,16 +242,16 @@ pub fn history(
         walker.commit(commit)?;
     }
     let mut history = walker.history;
-    // Ordered by time; a commit's acts keep the table's order, and commits
+    // Ordered by time; a commit's actions keep the table's order, and commits
     // of one time the walk's, parents first.
-    history.acts.sort_by_key(|logged| logged.time);
+    history.actions.sort_by_key(|logged| logged.time);
 
     let keep: Box<dyn Fn(&str) -> bool> = match (of, mission) {
         (None, _) => Box::new(|_| true),
         (Some(id), None) => Box::new(move |found| found == id),
         (Some(id), Some(mission)) => {
             let ids: BTreeSet<String> = history
-                .acts
+                .actions
                 .iter()
                 .map(|logged| logged.id.clone())
                 .collect();
@@ -266,7 +266,7 @@ pub fn history(
     };
     let recent = |time: &DateTime<Utc>| since.is_none_or(|since| *time >= since);
     history
-        .acts
+        .actions
         .retain(|logged| keep(&logged.id) && recent(&logged.time));
     history
         .passed_over
@@ -317,7 +317,7 @@ struct Change {
 /// Every commit in the history of `revisions` that changed a record,
 /// parents before children. `--full-history` follows both sides of every
 /// merge: without it Git follows only the side a merge matches on the
-/// record paths, and the other side's acts are lost.
+/// record paths, and the other side's actions are lost.
 fn walk(root: &Path, revisions: &[String]) -> Result<Vec<Commit>> {
     let mut args = vec![
         "log",
@@ -427,7 +427,7 @@ impl Record {
     }
 }
 
-/// A version of a record that reads, with what the acts are found in.
+/// A version of a record that reads, with what the actions are found in.
 enum Version {
     Item {
         item: Item,
@@ -464,7 +464,7 @@ struct Walker<'r, 's> {
 impl Walker<'_, '_> {
     fn commit(&mut self, commit: &Commit) -> Result<()> {
         let mut found: Vec<(String, Option<Thread>, Happened)> = Vec::new();
-        // The status moves the item acts leave to a verdict.
+        // The status moves the item actions leave to a verdict.
         let mut verdicts: Vec<(String, Move)> = Vec::new();
         // What its parents passed over, the first parent's first.
         let mut pending = Pending::new();
@@ -523,10 +523,11 @@ impl Walker<'_, '_> {
                 }
             }
             for (id, old, new) in &items {
-                let (acts, verdict) = item_acts(old.as_deref(), new);
+                let (actions, verdict) = item_actions(old.as_deref(), new);
                 found.extend(
-                    acts.into_iter()
-                        .map(|(thread, act)| (id.clone(), thread, act)),
+                    actions
+                        .into_iter()
+                        .map(|(thread, action)| (id.clone(), thread, action)),
                 );
                 if let Some(status) = verdict {
                     verdicts.push((id.clone(), status));
@@ -534,23 +535,27 @@ impl Walker<'_, '_> {
             }
             for (record, old, new) in &others {
                 let id = record.id().to_string();
-                let acts = match record {
-                    Record::Mission(_) => mission_acts(old.as_deref(), new),
-                    _ => review_acts(old.as_deref(), new),
+                let actions = match record {
+                    Record::Mission(_) => mission_actions(old.as_deref(), new),
+                    _ => review_actions(old.as_deref(), new),
                 };
                 found.extend(
-                    acts.into_iter()
-                        .map(|(thread, act)| (id.clone(), thread, act)),
+                    actions
+                        .into_iter()
+                        .map(|(thread, action)| (id.clone(), thread, action)),
                 );
             }
         }
         // Each goes to its item's last verdict, of the latest round, as
         // review files come in path order.
         for (id, moved) in verdicts {
-            let last = found.iter_mut().rev().find_map(|(of, _, act)| match act {
-                Happened::Verdict { status, .. } if *of == id => Some(status),
-                _ => None,
-            });
+            let last = found
+                .iter_mut()
+                .rev()
+                .find_map(|(of, _, action)| match action {
+                    Happened::Verdict { status, .. } if *of == id => Some(status),
+                    _ => None,
+                });
             if let Some(status) = last {
                 *status = Some(moved);
             }
@@ -558,19 +563,19 @@ impl Walker<'_, '_> {
         if !pending.is_empty() {
             self.pending.insert(commit.hash.clone(), pending);
         }
-        found.sort_by_key(|(_, _, act)| act.row());
-        let carries = found.iter().any(|(_, _, act)| act.commits());
-        for (id, thread, act) in found {
-            let skips = match !carries || act.commits() {
+        found.sort_by_key(|(_, _, action)| action.row());
+        let carries = found.iter().any(|(_, _, action)| action.commits());
+        for (id, thread, action) in found {
+            let skips = match !carries || action.commits() {
                 true => commit.skips.clone(),
                 false => Vec::new(),
             };
-            self.history.acts.push(Logged {
+            self.history.actions.push(Logged {
                 time: commit.time,
                 commit: commit.short.clone(),
                 id,
                 thread,
-                act,
+                action,
                 skips,
             });
         }
@@ -600,7 +605,7 @@ impl Walker<'_, '_> {
         if !merged || from == Some(Status::Done) {
             return Ok(None);
         }
-        let act = Happened::Merge {
+        let action = Happened::Merge {
             status: Move {
                 from,
                 to: Status::Done,
@@ -611,7 +616,7 @@ impl Walker<'_, '_> {
         Ok(Some((
             id.to_string(),
             new.implementers.holder().cloned(),
-            act,
+            action,
         )))
     }
 
@@ -701,7 +706,7 @@ fn version(path: &str, text: &str) -> Result<Version, String> {
     }
 }
 
-type Acts = Vec<(Option<Thread>, Happened)>;
+type Actions = Vec<(Option<Thread>, Happened)>;
 
 /// The threads `new` gained after `old`'s, each with the one before it.
 fn gained<'a>(old: Option<&Threads>, new: &'a Threads) -> Vec<(Option<&'a Thread>, &'a Thread)> {
@@ -716,9 +721,9 @@ fn gained<'a>(old: Option<&Threads>, new: &'a Threads) -> Vec<(Option<&'a Thread
         .collect()
 }
 
-/// The acts across an item's versions `old` and `new`, and the status move
+/// The actions across an item's versions `old` and `new`, and the status move
 /// they leave to a verdict in the same commit.
-fn item_acts(old: Option<&Version>, new: &Version) -> (Acts, Option<Move>) {
+fn item_actions(old: Option<&Version>, new: &Version) -> (Actions, Option<Move>) {
     let Version::Item { item: new, dropped } = new else {
         return (Vec::new(), None);
     };
@@ -733,41 +738,41 @@ fn item_acts(old: Option<&Version>, new: &Version) -> (Acts, Option<Move>) {
         mission: false,
     });
     let holder = new.implementers.holder().cloned();
-    let mut acts = Vec::new();
+    let mut actions = Vec::new();
     let mut building = moved.filter(|status| status.to == Status::Building);
     for (before, thread) in gained(old.map(|old| &old.implementers), &new.implementers) {
         let status = building.take();
-        let act = match before {
+        let action = match before {
             None => Happened::Start { status },
             Some(before) => Happened::TakeOver {
                 from: before.clone(),
                 status,
             },
         };
-        acts.push((Some(thread.clone()), act));
+        actions.push((Some(thread.clone()), action));
     }
     let mut verdict = None;
     if let Some(status) = moved {
         match status.to {
-            Status::InReview => acts.push((holder.clone(), Happened::Submit { status })),
+            Status::InReview => actions.push((holder.clone(), Happened::Submit { status })),
             Status::Ready => {
                 let by = new.ready.as_ref().map(|ready| ready.by.clone());
-                acts.push((None, Happened::Ready { by, status }));
+                actions.push((None, Happened::Ready { by, status }));
             }
             Status::Dropped => {
                 let reason = dropped.clone();
-                acts.push((None, Happened::Drop { status, reason }));
+                actions.push((None, Happened::Drop { status, reason }));
             }
-            Status::Done => acts.push((None, Happened::Close { status })),
+            Status::Done => actions.push((None, Happened::Close { status })),
             Status::Approved | Status::ChangesRequested => verdict = Some(status),
             Status::Draft | Status::Building => {}
         }
     }
-    (acts, verdict)
+    (actions, verdict)
 }
 
-/// The acts across a mission's versions `old` and `new`.
-fn mission_acts(old: Option<&Version>, new: &Version) -> Acts {
+/// The actions across a mission's versions `old` and `new`.
+fn mission_actions(old: Option<&Version>, new: &Version) -> Actions {
     let Version::Mission {
         mission: new,
         dropped,
@@ -779,10 +784,10 @@ fn mission_acts(old: Option<&Version>, new: &Version) -> Acts {
         Some(Version::Mission { mission, .. }) => Some(mission),
         _ => None,
     };
-    let mut acts = Vec::new();
+    let mut actions = Vec::new();
     let before = old.and_then(|old| old.lead.clone());
     if new.lead.is_some() && new.lead != before {
-        acts.push((new.lead.clone(), Happened::Lead { from: before }));
+        actions.push((new.lead.clone(), Happened::Lead { from: before }));
     }
     let from = old.map(|old| old.status.status());
     let to = new.status.status();
@@ -794,27 +799,27 @@ fn mission_acts(old: Option<&Version>, new: &Version) -> Acts {
         };
         match new.status {
             // Made ready, in a record from when a mission had a go-ahead;
-            // an old draft written open by `submit` is no act of its own.
+            // an old draft written open by `submit` is no action of its own.
             MissionStatus::Open => {
                 if let Some(ready) = new.ready.as_ref().filter(|_| from.is_some()) {
                     let by = Some(ready.by.clone());
-                    acts.push((None, Happened::Ready { by, status }));
+                    actions.push((None, Happened::Ready { by, status }));
                 }
             }
             MissionStatus::Dropped => {
                 let reason = dropped.clone();
-                acts.push((None, Happened::Drop { status, reason }));
+                actions.push((None, Happened::Drop { status, reason }));
             }
-            MissionStatus::Done => acts.push((None, Happened::Close { status })),
+            MissionStatus::Done => actions.push((None, Happened::Close { status })),
             MissionStatus::Draft => {}
         }
     }
-    acts
+    actions
 }
 
-/// The acts across a review's versions `old` and `new`. A verdict's status
+/// The actions across a review's versions `old` and `new`. A verdict's status
 /// move is its item's, added by the caller.
-fn review_acts(old: Option<&Version>, new: &Version) -> Acts {
+fn review_actions(old: Option<&Version>, new: &Version) -> Actions {
     let Version::Review {
         name,
         review: new,
@@ -829,9 +834,9 @@ fn review_acts(old: Option<&Version>, new: &Version) -> Acts {
         }) => (Some(review), findings.as_slice()),
         _ => (None, &[][..]),
     };
-    let mut acts = Vec::new();
+    let mut actions = Vec::new();
     for (before, thread) in gained(old.map(|old| &old.reviewers), &new.reviewers) {
-        let act = match before {
+        let action = match before {
             None => Happened::Review {
                 review: name.clone(),
             },
@@ -840,18 +845,18 @@ fn review_acts(old: Option<&Version>, new: &Version) -> Acts {
                 from: before.clone(),
             },
         };
-        acts.push((Some(thread.clone()), act));
+        actions.push((Some(thread.clone()), action));
     }
     if let Some(verdict) = new
         .verdict
         .filter(|_| new.verdict != old.and_then(|old| old.verdict))
     {
-        let act = Happened::Verdict {
+        let action = Happened::Verdict {
             review: name.clone(),
             verdict,
             status: None,
         };
-        acts.push((new.reviewers.holder().cloned(), act));
+        actions.push((new.reviewers.holder().cloned(), action));
     }
     for finding in findings {
         let Some(settlement) = &finding.settlement else {
@@ -864,13 +869,13 @@ fn review_acts(old: Option<&Version>, new: &Version) -> Acts {
         let by = match settlement {
             Settlement::Taken { by, .. } | Settlement::Dropped { by, .. } => by.clone(),
         };
-        let act = Happened::Settle {
+        let action = Happened::Settle {
             finding: finding.name.clone(),
             settlement: settlement.clone(),
         };
-        acts.push((Some(by), act));
+        actions.push((Some(by), action));
     }
-    acts
+    actions
 }
 
 #[cfg(test)]

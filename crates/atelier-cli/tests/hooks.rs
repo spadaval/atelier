@@ -221,7 +221,7 @@ fn check_reports_every_problem_with_its_file_and_field_and_lists_uncommitted_rec
 }
 
 #[test]
-fn a_commit_of_an_invalid_record_or_of_a_status_no_act_sets_is_refused_and_a_hand_edit_goes_through(
+fn a_commit_of_an_invalid_record_or_of_a_status_no_action_sets_is_refused_and_a_hand_edit_goes_through(
 ) {
     let scratch = Scratch::new(&[(ID, "ready"), (OTHER, "ready")]);
     let root = scratch.root();
@@ -294,15 +294,15 @@ fn a_commit_of_an_invalid_record_or_of_a_status_no_act_sets_is_refused_and_a_han
     refused("Finish it", &[&parse], None);
 
     edit(&root, &item_path(ID), "status: ready", "status: approved");
-    let act = format!(
-        "Rule: a status changes only as an act of the lifecycle changes it. These change it as no act does:\n  {}: status: ready to approved. Put back the status HEAD has; atelier status names the command for what comes next.\n",
+    let action = format!(
+        "Rule: a status changes only as an action of the lifecycle changes it. These change it as no action does:\n  {}: status: ready to approved. Put back the status HEAD has; atelier status names the command for what comes next.\n",
         item_path(ID)
     );
     let status = format!(
-        "A status changes only as an act of the lifecycle changes it ({}: ready to approved)",
+        "A status changes only as an action of the lifecycle changes it ({}: ready to approved)",
         item_path(ID)
     );
-    refused("Approve it", &[&act], Some(&status));
+    refused("Approve it", &[&action], Some(&status));
 
     // A record that does not read, beside a rule broken, is not skipped.
     edit(&root, &item_path(ID), "status: ready", "status: finished");
@@ -358,7 +358,7 @@ fn a_rule_a_hook_skips_in_an_atelier_commit_is_printed() {
 }
 
 #[test]
-fn a_status_change_is_judged_by_the_acts_of_its_records_kind() {
+fn a_status_change_is_judged_by_the_actions_of_its_records_kind() {
     let scratch = Scratch::new(&[]);
     let root = scratch.root();
     // `start --mission` commits the mission on its branch.
@@ -370,7 +370,7 @@ fn a_status_change_is_judged_by_the_acts_of_its_records_kind() {
     edit(&root, &path, "status: open", "status: draft");
     assert_eq!(commit_all(&root, "Plan it as before").code, 0);
     install_hooks(&root);
-    // An item's `close` goes from draft to done; no act on a mission does.
+    // An item's `close` goes from draft to done; no action on a mission does.
     edit(&root, &path, "status: draft", "status: done");
     let run = commit_all(&root, "Close it");
     assert_eq!(run.code, 1, "{}", run.stderr);
@@ -741,7 +741,7 @@ fn a_push_of_several_refs_judges_only_the_base() {
 fn an_atelier_merge_of_a_branch_with_code_commits_reaches_the_base_and_its_branch_any_time() {
     let scratch = pushed(&[(ID, "ready")]);
     let root = scratch.root();
-    // Every commit here goes through the pre-commit hook: the acts' too.
+    // Every commit here goes through the pre-commit hook: the actions' too.
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
     fs::write(root.join("hello.txt"), "hello\n").unwrap();
     assert_eq!(commit_all(&root, "Say hello").code, 0);
@@ -1000,7 +1000,7 @@ fn a_commit_on_the_base_that_changes_a_record_is_refused_and_a_skip_passes_it() 
     git(&root, &["checkout", "-q", "--detach"]);
     edit(&root, &item_path(ID), "status: ready", "status: draft");
     let run = commit_all(&root, "Back to draft");
-    assert_ne!(run.code, 0, "ready to draft is no act");
+    assert_ne!(run.code, 0, "ready to draft is no action");
     git(&root, &["reset", "-q", "--hard"]);
     write_item(&root, "demo-n3w1", "draft", &[], &[], "");
     assert_eq!(commit_all(&root, "Plan detached").code, 0);

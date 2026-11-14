@@ -1,7 +1,7 @@
-// act-is-a-record: the Desk's stop of a proposed plan leaves the record
+// action-is-a-record: the Desk's stop of a proposed plan leaves the record
 // `atelier drop` leaves, and publishes it, as one command.
 //
-//   pnpm act-is-a-record <repository> [--by <name>] [--atelier <binary>]
+//   pnpm action-is-a-record <repository> [--by <name>] [--atelier <binary>]
 //       [--desk <atelier-desk binary>] [--app <built app>] [--differ] [--keep]
 //
 // It works only on copies under a new scratch directory, which it removes
@@ -32,8 +32,8 @@ import os from "node:os";
 import path from "node:path";
 
 const usage =
-  "usage: pnpm act-is-a-record <repository> [--by <name>] [--atelier <binary>] [--desk <atelier-desk binary>] [--app <built app>] [--differ] [--keep]";
-const REASON = "Stopped by act-is-a-record, in a scratch copy";
+  "usage: pnpm action-is-a-record <repository> [--by <name>] [--atelier <binary>] [--desk <atelier-desk binary>] [--app <built app>] [--differ] [--keep]";
+const REASON = "Stopped by action-is-a-record, in a scratch copy";
 const IDENTITIES = ["T3CODE_THREAD_ID", "CLAUDE_CODE_SESSION_ID", "CODEX_SESSION_ID", "CODEX_THREAD_ID", "GROK_SESSION_ID"];
 
 function fail(message: string): never {
@@ -102,8 +102,8 @@ function ghStandIn(dir: string, branch: string): { gh: string; log: string } {
 
 /** A proposed mission's record, open, with every section of a plan written. */
 function missionRecord(id: string): string {
-  const sections = ["Why", "Outcome", "Success criteria", "Scope", "Authority"].map((h) => `## ${h}\n\nWritten by act-is-a-record, in a scratch copy, as Sumeet asked.\n`).join("\n");
-  return `---\nschema: atelier.mission\nschema_version: 3\nid: ${id}\ntitle: Check that a stop from the Desk is a record\nstatus: open\nlabels: []\nlead: null\nplanners:\n- act-is-a-record\ncreated_at: 2026-11-13T00:00:00Z\n---\n\n${sections}\n## Result\n`;
+  const sections = ["Why", "Outcome", "Success criteria", "Scope", "Authority"].map((h) => `## ${h}\n\nWritten by action-is-a-record, in a scratch copy, as Sumeet asked.\n`).join("\n");
+  return `---\nschema: atelier.mission\nschema_version: 3\nid: ${id}\ntitle: Check that a stop from the Desk is a record\nstatus: open\nlabels: []\nlead: null\nplanners:\n- action-is-a-record\ncreated_at: 2026-11-13T00:00:00Z\n---\n\n${sections}\n## Result\n`;
 }
 
 /** Starts atelier-desk and gives it with the address it serves on. */
@@ -132,7 +132,7 @@ async function main() {
   const base = config.match(/^base_branch = "(.+)"$/m)?.[1] ?? fail(`${o.clone} names no base branch`);
   const slug = config.match(/^slug = "(.+)"$/m)?.[1] ?? fail(`${o.clone} names no slug`);
   if (!/^\[forge\]/m.test(config)) fail(`${o.clone} names no forge, so the Desk publishes no stop there`);
-  const scratch = mkdtempSync(path.join(process.env.XDG_CACHE_HOME ?? path.join(os.homedir(), ".cache"), "act-is-a-record-"));
+  const scratch = mkdtempSync(path.join(process.env.XDG_CACHE_HOME ?? path.join(os.homedir(), ".cache"), "action-is-a-record-"));
   console.log(`Repository ${o.clone}; scratch ${scratch}; atelier ${o.atelier}; atelier-desk ${o.desk}; app ${o.app}; by ${o.by}`);
   const problems: string[] = [];
   // One line per comparison: a short value whole, a long one by its line
@@ -166,7 +166,7 @@ async function main() {
     mkdirSync(path.join(planner, path.dirname(record)), { recursive: true });
     writeFileSync(path.join(planner, record), missionRecord(id));
     git(planner, "add", "--", record);
-    run(planner, "git", ["-c", "user.name=act-is-a-record", "-c", "user.email=act@localhost.invalid", "commit", "-qm", `Plan ${id}`]);
+    run(planner, "git", ["-c", "user.name=action-is-a-record", "-c", "user.email=action@localhost.invalid", "commit", "-qm", `Plan ${id}`]);
     git(planner, "push", "-q", "origin", id);
     const plan = git(planner, "rev-parse", "HEAD");
     console.log(`Proposed mission ${id} on branch ${id}, at ${plan.slice(0, 9)}`);
@@ -178,8 +178,8 @@ async function main() {
     execFileSync("git", ["clone", "-q", origin, served], { stdio: "ignore" });
     execFileSync("git", ["clone", "-q", origin, byCli], { stdio: "ignore" });
     for (const at of [served, byCli]) {
-      git(at, "config", "user.name", "act-is-a-record");
-      git(at, "config", "user.email", "act@localhost.invalid");
+      git(at, "config", "user.name", "action-is-a-record");
+      git(at, "config", "user.email", "action@localhost.invalid");
     }
 
     // Stop it from the mission's page.
@@ -208,7 +208,7 @@ async function main() {
     await done.waitFor({ timeout: 60_000 });
     console.log(`Stopped from ${url}: ${(await done.innerText()).split("\n")[0]}`);
 
-    // The same act from the CLI, on the plan's branch.
+    // The same action from the CLI, on the plan's branch.
     git(byCli, "switch", "-q", id);
     const reason = o.differ ? `${REASON}, differently` : REASON;
     const said = run(byCli, o.atelier, ["drop", id, "--reason", reason], o.by);

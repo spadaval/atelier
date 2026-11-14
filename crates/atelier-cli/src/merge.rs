@@ -23,7 +23,7 @@ use crate::forge::{CiRun, ForgeError, Github, MergeState, PullRequest};
 use crate::git;
 use crate::output;
 use anyhow::{Context, Result};
-use atelier_core::acts::{check, Act, MissionFacts, Refusal, STARTED};
+use atelier_core::actions::{check, Action, MissionFacts, Refusal, STARTED};
 use atelier_core::model::{Config, Forge, MissionStatus, Named, Status, Thread};
 use atelier_core::plan::{approvals, plan_diff};
 use atelier_core::records::{is_record, load, render_item, CommitReader, CONFIG};
@@ -536,7 +536,7 @@ impl Dirt {
 }
 
 /// Reads the head, then the item as the head holds it and the base's
-/// config, and checks the act's conditions on them. The outcome is a
+/// config, and checks the action's conditions on them. The outcome is a
 /// refusal.
 fn read(repo: &mut Repo, trivial: bool) -> Result<Result<Judged, Outcome>> {
     // Read first: a commit made after this is caught before anything is
@@ -554,19 +554,19 @@ fn read(repo: &mut Repo, trivial: bool) -> Result<Result<Judged, Outcome>> {
             repo.branch.as_deref(),
         ))));
     };
-    let act = if trivial {
-        Act::MergeTrivial
+    let action = if trivial {
+        Action::MergeTrivial
     } else {
-        Act::Merge
+        Action::Merge
     };
     // A reviewer is known by the review file it holds, which it may not
     // have committed, so its role is told from the checkout, as every
     // command tells it.
     let links = repo.links(located.record().expect("the current item has a record"))?;
     let seen = facts(repo, &located, &links, None);
-    if let Err(role @ Refusal::Role(_)) = check(act, &seen) {
-        let text = refused(act, &role, &seen)?;
-        if let Some(refused) = repo.skip.gate(act, &located.id, &[role], text) {
+    if let Err(role @ Refusal::Role(_)) = check(action, &seen) {
+        let text = refused(action, &role, &seen)?;
+        if let Some(refused) = repo.skip.gate(action, &located.id, &[role], text) {
             return Ok(Err(refused.into()));
         }
     }
@@ -611,7 +611,7 @@ fn read(repo: &mut Repo, trivial: bool) -> Result<Result<Judged, Outcome>> {
     if !merged {
         let checkout = repo.checkout(record, &head)?;
         let facts = facts(repo, &located, &links, Some(&checkout));
-        if let Some(refused) = repo.skip.refusal(act, &facts)? {
+        if let Some(refused) = repo.skip.refusal(action, &facts)? {
             return Ok(Err(refused.into()));
         }
         // Its reviewer judges the change against the plan, so an item's
@@ -703,7 +703,7 @@ fn read_records(repo: &mut Repo, head: String, branch: String) -> Result<Result<
                 items: &[],
                 review: None,
             };
-            if let Some(refused) = repo.skip.mission_gate(Act::MergeMission, &id, &facts)? {
+            if let Some(refused) = repo.skip.mission_gate(Action::MergeMission, &id, &facts)? {
                 return Ok(Err(refused.into()));
             }
         }

@@ -1,6 +1,6 @@
 //! The Git calls the commands that stay in this crate make, on the
 //! helpers of `atelier_core::git`, which holds the calls a repository and
-//! the acts there make.
+//! the actions there make.
 
 use anyhow::{bail, Context, Result};
 pub use atelier_core::git::{

@@ -58,7 +58,7 @@ pub enum MissionStatus {
 impl MissionStatus {
     pub const ALL: [MissionStatus; 4] = [Self::Open, Self::Done, Self::Dropped, Self::Draft];
 
-    /// The item status the act table writes this status as. The table's
+    /// The item status the action table writes this status as. The table's
     /// statuses are an item's, and a mission's `open` is written there as
     /// `ready`, the old draft as `draft`.
     pub fn status(self) -> Status {
@@ -70,7 +70,7 @@ impl MissionStatus {
         }
     }
 
-    /// The mission status the act table's `status` stands for, if a
+    /// The mission status the action table's `status` stands for, if a
     /// mission can have it.
     pub fn of(status: Status) -> Option<MissionStatus> {
         Self::ALL.into_iter().find(|s| s.status() == status)

@@ -2,7 +2,7 @@
 //! `status` reads: the base's record from its last commit, a started
 //! item's from its branch.
 
-use crate::acts::approval;
+use crate::actions::approval;
 use crate::disputed::{disputes, Disputes};
 use crate::model::{Finding, Status};
 use crate::records::{ItemDir, MissionDir};
@@ -123,7 +123,7 @@ pub fn item_view(repo: &mut Repo, id: &str) -> Result<Option<ItemView>> {
     }))
 }
 
-/// Adds to `entry`, which `record` gives, what views show besides the act
+/// Adds to `entry`, which `record` gives, what views show besides the action
 /// table: when it was approved, read from the item's branch.
 pub fn annotate(repo: &Repo, entry: &mut Entry, record: &ItemDir) -> Result<()> {
     let id = &record.item.id;

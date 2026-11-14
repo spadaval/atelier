@@ -81,7 +81,7 @@ The tool is the Cargo workspace at the repository root, built to
 
 | Crate | Owns |
 | --- | --- |
-| `atelier-core` | The core, which both programs call. `model`: the domain values, Mission, Item, Review, Finding, Status, Thread and Config, with no I/O. `records`: reading and writing the three record kinds and `config.toml`, from a checkout or from a commit; IDs; validation. The rest: the use cases, which are the status view, each lifecycle act (`acts`), the merge checks, cross-branch reads, the views the Desk reads; a repository opened by path (`Repo`) and the Git calls it and the acts here make (`git`); the history of acts `log` prints; the disagreements `list --disputed` prints; `ready` and a mission's `drop`, as functions that return what they did or a refusal as data; the refusal and skip policy, and the wording of the refusals and results of the acts here |
+| `atelier-core` | The core, which both programs call. `model`: the domain values, Mission, Item, Review, Finding, Status, Thread and Config, with no I/O. `records`: reading and writing the three record kinds and `config.toml`, from a checkout or from a commit; IDs; validation. The rest: the use cases, which are the status view, each lifecycle action (`actions`), the merge checks, cross-branch reads, the views the Desk reads; a repository opened by path (`Repo`) and the Git calls it and the actions here make (`git`); the history of actions `log` prints; the disagreements `list --disputed` prints; `ready` and a mission's `drop`, as functions that return what they did or a refusal as data; the refusal and skip policy, and the wording of the refusals and results of the actions here |
 | `atelier-cli` | Arguments, dispatch, the other commands' Git and shell calls, on `atelier-core`'s Git helpers, and the forge; output |
 | `atelier-desk` | The Desk's server and its T3 Code client |
 
@@ -361,13 +361,13 @@ accepts either kind.
 
 ## Status
 
-Status is a stored field. One table in `atelier-core` (`acts::TABLE`) lists
-every act: the command, the role that may run it, the statuses it may run
+Status is a stored field. One table in `atelier-core` (`actions::TABLE`) lists
+every action: the command, the role that may run it, the statuses it may run
 from, the status it sets, and its conditions. Each command and the `status`
 view read that table, so what `status` says a thing needs is what the command
 will check.
 
-| Act | Role | From | To | Conditions |
+| Action | Role | From | To | Conditions |
 | --- | --- | --- | --- | --- |
 | `ready` (item) | Planner | `draft` | `ready` | none |
 | `start` | Implementer | `ready` | `building` | the item's record is on the base, so an item of a proposed plan waits for the plan to merge; blockers done; its mission, if any, is not dropped; no branch `<id>` exists, local or on the remote; the item is not dropped |
@@ -377,7 +377,7 @@ will check.
 | `start --backlog` | Any | none | none | no branch `backlog/<slug>` exists, local or on the remote; the remote can be reached |
 | `submit` | Implementer | `building`, `changes_requested`, `approved` | `in_review` | Done when ticked; Report written; each open fix-now finding has a line in Responses. After its commit, where a forge is configured, it pushes the branch and opens its pull request; a failure of either is a warning, and `merge` does it |
 | `submit` (mission) | Planner | proposed | unchanged | in a checkout on the mission's branch; no record the branch changes is uncommitted; then it pushes the branch and opens its pull request where a forge is configured. From atelier-2vdq: the mission is not dropped, and a caller not in `planners` is added to it, in a commit of `mission.md` alone, and takes the plan over |
-| `submit` (backlog) | Any | none | none | in a checkout on the backlog branch; no record the branch changes is uncommitted; then it pushes the branch and opens its pull request where a forge is configured. Not an implementer's act on an item. From atelier-2vdq: where the branch changes an agreed mission's plan, a caller not in that mission's `planners` is added to it the same way, and opens the next plan round |
+| `submit` (backlog) | Any | none | none | in a checkout on the backlog branch; no record the branch changes is uncommitted; then it pushes the branch and opens its pull request where a forge is configured. Not an implementer's action on an item. From atelier-2vdq: where the branch changes an agreed mission's plan, a caller not in that mission's `planners` is added to it the same way, and opens the next plan round |
 | `review` | Reviewer | `in_review` | unchanged | the caller is not in the item's `implementers` |
 | `verdict changes` | Reviewer | `in_review` | `changes_requested` | the file validates; it has an open fix-now finding; no finding of it has a `Decided:` line or carries a finding a decision settled |
 | `verdict approve` | Reviewer | `in_review` | `approved` | the file validates; no fix-now finding of the item is open, the file's or one it does not carry; no finding of it has a `Decided:` line or carries a finding a decision settled |
@@ -387,23 +387,23 @@ will check.
 | `merge` | Implementer | `approved` | `done`, read from the merge | a review of the latest round approves it and still covers the head; nothing uncommitted in tracked files or the item's directory; the item and its mission are not dropped |
 | `merge --trivial` | Implementer | `building` | `done`, read from the merge | Done when ticked; Report written; no review file; nothing uncommitted in tracked files or the item's directory; the item and its mission are not dropped |
 | `merge` (mission) | Planner | proposed | agreed, by being on the base | Until atelier-2vdq, refused as a backlog branch that adds a mission is, a rule a skip passes. From atelier-2vdq: two reviews of the current round, from threads not in `planners`, approve, and the plan has not changed since the commit each reviewed; the mission is not dropped on its branch; no code changed; nothing uncommitted |
-| `merge` (backlog) | Any | none | none | in a checkout on the backlog branch; no code changed (no path outside `.atelier/`, and not `config.toml`), which is no rule; it adds no mission and changes no mission's plan, which until atelier-2vdq gives a plan its gate is a rule refused; it brings no item record in a started status; `atelier check` passes on the merged tree; nothing uncommitted. No review file is asked for. Not an implementer's act on an item |
+| `merge` (backlog) | Any | none | none | in a checkout on the backlog branch; no code changed (no path outside `.atelier/`, and not `config.toml`), which is no rule; it adds no mission and changes no mission's plan, which until atelier-2vdq gives a plan its gate is a rule refused; it brings no item record in a started status; `atelier check` passes on the merged tree; nothing uncommitted. No review file is asked for. Not an implementer's action on an item |
 | `close` (item) | Any | `draft`, `ready` | `done` | a result text; no branch `<id>` exists |
 | `close` (mission) | Lead or planner | `open`, on the base | `done` | every item done or dropped; Result written |
 | `drop` | Planner | `draft`, `ready`, and an item's started statuses; a mission's `open` | `dropped` | a reason, on one line; for a started item, a checkout on the item's branch; not an item already merged |
 | `new --from`, `drop` on a finding | Planner on a backlog branch, or an implementer on its branch | `done`, the finding's item | unchanged | a review of the item has the finding; it is deferred; it is not settled |
 | `lead` | Lead | an `open` mission, on the base | unchanged | none |
 
-`ready` on a mission is no act: it is refused, saying a mission needs no
+`ready` on a mission is no action: it is refused, saying a mission needs no
 go-ahead.
 
-Each act's record change belongs on one kind of branch, and either the
+Each action's record change belongs on one kind of branch, and either the
 command commits it or the agent does with Git. The three commands that act
 on Git, `start`, `submit` and `merge`, are the only ones that commit; every
-other act writes the file and stops, and prints the paths and the Git
+other action writes the file and stops, and prints the paths and the Git
 command that commits them.
 
-| Act | Branch its record change belongs on | Committed by |
+| Action | Branch its record change belongs on | Committed by |
 | --- | --- | --- |
 | `start`, `start --new`, a take-over | The item's branch, which `start` makes or switches to | The command: one commit holding the item's record, which is the claim, then a push where a remote is configured |
 | `start --mission` | The mission's branch, which it makes | The command, then a push where a remote is configured |
@@ -422,7 +422,7 @@ command that commits them.
 | `new --from`, `drop` on a finding | A backlog branch, or a gardener's item branch | The agent |
 | `lead` | A backlog branch | The agent |
 
-A status written by an act the agent commits is checked when it is
+A status written by an action the agent commits is checked when it is
 committed: the pre-commit hook refuses a status change the table does not
 list, and refuses any record change committed on the base.
 
@@ -434,8 +434,8 @@ How the table is built:
   `review`, both verdicts, `merge` on each kind of
   branch and with `--trivial`, `lead`, `drop` (one row, for an item and a
   mission), `close` on an item and on a mission, `review` and both
-  verdicts on a plan review, and settling a finding (`Act::Settle`), whose finding's
-  conditions `acts::check_settle` checks after the row's. A mission's row is checked with `acts::check_mission`, from
+  verdicts on a plan review, and settling a finding (`Action::Settle`), whose finding's
+  conditions `actions::check_settle` checks after the row's. A mission's row is checked with `actions::check_mission`, from
   the mission's status and, for `close`, the status of each item that names
   it, each found as `Located::record` finds it, and its Result; for a
   verdict, from the caller's plan review. A mission's From is its stored
@@ -444,10 +444,10 @@ How the table is built:
   `start --mission` run from no status, since each creates its record, and
   take the status they set from their rows. The rows of a backlog branch
   have no record to take a status from. `close` on an item and on a mission needs no role, like a planner's
-  act.
+  action.
 - A round of a plan review is over once every file of it has a verdict,
   since its reviewers work blind in checkouts of their own
-  (`acts::plan_round`). Until then it is the latest round, and the round's
+  (`actions::plan_round`). Until then it is the latest round, and the round's
   file is the caller's of those with no verdict, else the first by name,
   which `review` takes over. Once it is over, `review` opens the next
   round, whose file carries the open fix-now findings of the rounds before,
@@ -458,30 +458,30 @@ How the table is built:
   until `review` creates one. The round's file is the caller's when it holds
   one of the latest round's, else the first by name. The caller is the
   round's reviewer while the item is in review and it holds that file.
-- `acts::check` refuses a caller that holds one role on the item and runs
-  another role's act, with one line naming its role and that role's
+- `actions::check` refuses a caller that holds one role on the item and runs
+  another role's action, with one line naming its role and that role's
   commands. `review` is the exception: an implementer, current or past, is
   refused by its condition and shown the brief. Then `check` refuses an
-  act whose From does not hold the item's status, then one that needs a role
+  action whose From does not hold the item's status, then one that needs a role
   the caller does not hold, then one with an unmet condition, and otherwise
-  gives the status to set. An act that binds a role (`start`, `review`)
+  gives the status to set. An action that binds a role (`start`, `review`)
   needs nothing held;
   `submit` and `merge` need the caller to be the item's last
   implementer, and a verdict needs it to be the round's reviewer. No
-  thread holds the planner's role on an item, so a planner's act on one
+  thread holds the planner's role on an item, so a planner's action on one
   (`ready`) needs nothing held and is never refused for a role the caller
   holds. On a mission, `submit` and `merge` need the caller to be in
   `planners`, which `submit` adds it to, and `review` of the plan needs it
   not to be.
-- `acts::next` names the act the caller would run next: `start` on a ready
+- `actions::next` names the action the caller would run next: `start` on a ready
   item; as its holder, `submit` from building or changes requested, `merge`
   from approved, and nothing while it is in review; as the round's
   reviewer, `verdict changes` while its file holds an open fix-now finding,
   else `verdict approve`; as anyone else, `review` when it is in review and
   they never implemented it, else nothing when they reviewed it before
   (their review is done, and taking the item would put them on both sides),
-  else the take-over. `status` prints that act's
-  unmet conditions from `acts::unmet`, the function `check` calls, and ends
+  else the take-over. `status` prints that action's
+  unmet conditions from `actions::unmet`, the function `check` calls, and ends
   with its command.
 - `start` takes the take-over row when the item's status is a started one,
   and the plain row otherwise, so a draft, done or dropped item is refused by
@@ -505,9 +505,9 @@ Two facts are checked live and never stored:
   makes an approval stale, while code, `config.toml`, a mission's documents,
   another item or the item's own requirements do. If it is stale, `status`
   and `merge` say to run `submit`. `atelier-core`'s `Repo::checkout`
-  gathers what this reads, as `acts::Checkout`: the paths that differ between the reviewed commit and
+  gathers what this reads, as `actions::Checkout`: the paths that differ between the reviewed commit and
   the head, the item's record at the reviewed commit and at the head, and
-  what the checkout has not committed; `acts::unmet` applies the rule. `status` gathers
+  what the checkout has not committed; `actions::unmet` applies the rule. `status` gathers
   it on the item's branch, so it lists what `merge` will check.
 - **The merge checks pass.** The configured commands on the merged tree,
   and CI where the forge names a workflow. A CI run counts when it ran on
@@ -519,7 +519,7 @@ Two facts are checked live and never stored:
   up no CI.
 
 Of the rules in the product specification's Review section, the binary
-enforces three, through the act table: an author never reviews its own
+enforces three, through the action table: an author never reviews its own
 item; `verdict approve` is refused while a fix-now finding is open; and
 only a reviewer settles a fix-now finding without a fix, by withdrawing it
 or keeping it at a lower recommendation with its reason, and what a
@@ -578,7 +578,7 @@ for its lead (the first real item under the new tool, mission atelier-qr5s).
 
 That rule is the command's. A program that links `atelier-core`, such as the
 Desk, names the caller itself when it opens a repository (`Repo::open`),
-and that name is the identity the records get: an act it makes for
+and that name is the identity the records get: an action it makes for
 `sumeet` records `sumeet`, where the command run by a person with
 no harness variable set is `human`. `ready`'s `by`, the person who said go,
 is a parameter of the function, which `ready --by` fills. A name the records
@@ -626,7 +626,7 @@ its holder's `status` lists as unmet, read from the branch's last commit and
 so without what the holder has not committed, what is disputed in the
 mission when anything is, and the handoff line that starts a thread for each item that can
 start now; holding nothing else, it is pointed at no item itself. On the item's branch it says a dropped item
-was dropped and why, as does the refusal of any act on it, and it
+was dropped and why, as does the refusal of any action on it, and it
 speaks to the round's reviewer as reviewer, naming its file, tells
 the implementer of an item in review which thread holds the round's review,
 or that none does yet, and tells the implementer of a building item whose
@@ -665,7 +665,7 @@ branch switch.
 ## Where records are read and written
 
 The base is written only by merges. A record changes in the checkout of a
-branch, and the act table above says which kind of branch each change
+branch, and the action table above says which kind of branch each change
 belongs on and who commits it. This section says how a record is found when
 the base and several branches hold copies of it, and where each command
 reads and writes.
@@ -758,7 +758,7 @@ reads; nothing is written there.
   against every record it can see, and writes nothing when one of them has a
   problem; the pre-commit hook validates them again as they are committed.
   It prints the paths it wrote and ends with a `Then:` line giving the Git
-  command that commits those paths alone. Run on a branch of a kind the act
+  command that commits those paths alone. Run on a branch of a kind the action
   table does not give for its change, such as `lead` on an item's branch, it
   says which kind the change belongs on; that is a rule, and `ATELIER_SKIP`
   passes it. `new --from` and `drop` on a finding, on the branch of a
@@ -888,7 +888,7 @@ reads; nothing is written there.
 - **A refused commit changes nothing.** When `git commit` fails, as when a
   hook refuses it, `start`, the take-over and `submit` put the files they
   wrote and the index under the paths they staged back as they were,
-  removing a file no commit held, so the act can be run again.
+  removing a file no commit held, so the action can be run again.
 - **The forge's remote is the one remote.** Where a forge is configured,
   `start`, `submit` and `merge` push to and read from its `remote`, and the
   reader reads that remote's tracking branches. With no forge, nothing is
@@ -899,7 +899,7 @@ reads; nothing is written there.
   serves every read, and it tells a path the commit lacks, an entry that is
   not a regular file and a failing Git apart. The Desk reads this way, and
   so does anything that compares a record now with the same record at the
-  commit of an earlier act. A program that links `atelier-core`, such as the
+  commit of an earlier action. A program that links `atelier-core`, such as the
   Desk, opens a `Repo` by path; `atelier-core` reads no environment variable
   to find the directory, the caller or a skip's reason, which its caller
   gives it.
@@ -908,7 +908,7 @@ reads; nothing is written there.
 
 `merge` runs in the checkout on the branch it merges, of any of the three
 kinds, and tells the kind from the branch's name. What it needs before it
-merges is the kind's row of the act table: an item's approval or
+merges is the kind's row of the action table: an item's approval or
 `--trivial`, a plan's two approvals, or a record-only change's passing
 `atelier check`. The base receives the merge one of two ways. With a forge,
 the forge makes the merge commit when it merges the pull request, and
@@ -917,7 +917,7 @@ and moves the local base, as before.
 
 In order:
 
-1. With `--trivial "<why>"` on an item: once the act's conditions hold, as
+1. With `--trivial "<why>"` on an item: once the action's conditions hold, as
    step 2 reads them, and unless the head already holds that reason, write
    it into the item's `trivial` field and commit `item.md` alone on the
    branch. An uncommitted change to `item.md` refuses this, since it would
@@ -926,7 +926,7 @@ In order:
    counts for it.
 2. Read everything, without a lock: first the head, which every later step
    is checked against, then the branch's records, and `config.toml` from the
-   base's tip. Check the act's conditions, as in step 5. Where a forge is
+   base's tip. Check the action's conditions, as in step 5. Where a forge is
    configured, also refuse a branch that conflicts with the base, since CI
    does not run on a pull request that conflicts.
 3. Where a forge is configured: push the branch when the forge's copy of it
@@ -946,7 +946,7 @@ In order:
 4. Take the merge lock, then read everything again, as in step 2. Nothing
    read before the lock is trusted, and a checkout now on another branch
    is refused, so `merge` merges only the branch it waited for.
-5. Check the act's conditions from the table, and every gate the branch's
+5. Check the action's conditions from the table, and every gate the branch's
    contents need, whatever its kind. The contents are judged against the
    merge base: code is any changed path outside `.atelier/`, and
    `.atelier/config.toml`; a plan change is a mission added, or a change to
@@ -1086,17 +1086,17 @@ from then on, and the forge may delete it.
 
 ## The log
 
-`atelier log` prints the history of acts. Nothing stores it. It is derived
+`atelier log` prints the history of actions. Nothing stores it. It is derived
 from Git history, by finding the commits where a record changed in one of
 the ways below. Each is one line, and each carries the commit it was found
 in. `atelier-core` returns the same history as data (`history`, in
 `crates/atelier-core/src/log.rs`), which is how the Desk reads it, and the
 command only formats it (`crates/atelier-cli/src/history.rs`).
 
-`atelier log` prints everything; `atelier log <item>` that item's acts;
-`atelier log <mission>` the acts on the mission, its plan reviews and its
+`atelier log` prints everything; `atelier log <item>` that item's actions;
+`atelier log <mission>` the actions on the mission, its plan reviews and its
 items, an item being the mission's when its record on the base's tip, or
-else on its branch, names it. `--since <time>` keeps the acts committed at
+else on its branch, names it. `--since <time>` keeps the actions committed at
 or after an RFC 3339 time or a `YYYY-MM-DD` date, which is that day's start
 in UTC. An ID no record has on the base's tip or on a branch named for it is
 refused as `show` refuses it.
@@ -1113,11 +1113,11 @@ refused as `show` refuses it.
 | ready | An item's status becomes `ready`; on a mission in the old form, its status | None; the name given with `--by` |
 | drop, close | A status becomes `dropped`, or `done` outside a merge | None |
 
-A skip is shown on the line of the act whose commit carries its trailer,
-which is every act where Atelier makes the commit. Those are `start`,
+A skip is shown on the line of the action whose commit carries its trailer,
+which is every action where Atelier makes the commit. Those are `start`,
 `submit` and `merge`, whose trailers are in the merge commit's message
 whether the forge makes it or `merge` does, and a take-over of an
-implementer, which `start` commits. Acts the agent commits carry no
+implementer, which `start` commits. Actions the agent commits carry no
 trailer. The other lines of that
 commit, such as the `review` line of a verdict's commit, do not repeat it.
 
@@ -1128,7 +1128,7 @@ commit, such as the `review` line of a verdict's commit, do not repeat it.
 ```
 
 Each line holds, in this order: the commit's committer time in UTC, to the
-second; the commit, as Git abbreviates it; the record's ID; the act; the
+second; the commit, as Git abbreviates it; the record's ID; the action; the
 thread the table gives, or `-` where it gives none; then what changed, and
 last each skip as `skip <rule>: <reason>`. The first five are separated by
 single spaces and hold no space. What changed and the skips are the rest of
@@ -1140,7 +1140,7 @@ A status move reads `<from> -> <to>`, each spelled as a record spells it,
 and `new` stands for the status of a record the commit added. What changed
 holds:
 
-| Act | What changed |
+| Action | What changed |
 | --- | --- |
 | start | The status move, when the commit made the item `building` |
 | take-over, of an implementer | `from <former implementer>`, then the status move as for start |
@@ -1163,10 +1163,10 @@ every unmerged branch the reader reads, local and remote-tracking,
 parents before children, with its
 parents, committer time, trailers, and the old and new blob of each record
 it changed. The repository's one `git cat-file --batch` process reads those
-versions. An act is found by comparing a record's two versions across one
+versions. An action is found by comparing a record's two versions across one
 commit, so no record's history is read on its own, and `log` starts the
 same few Git processes however many records and commits there are. Git
-lists each commit once, so each act is printed once.
+lists each commit once, so each action is printed once.
 
 - **Both sides of every merge.** Given paths, `git log` simplifies history:
   it follows only the side a merge matches on those paths, and the other
@@ -1187,11 +1187,11 @@ lists each commit once, so each act is printed once.
   branch brought is found on the second-parent side. The forge's merge and
   `merge`'s own are read alike, and a merge someone made by hand on the
   forge is read the same way. A merge of a mission's or a backlog branch
-  gives no line of its own: the acts its branch carried, such as a `ready`
+  gives no line of its own: the actions its branch carried, such as a `ready`
   or a `drop`, are found on the second-parent side. Any other merge commit
   gives no line.
 - **The cutover's conversion commit is read like any other.** Each record
-  it added shows its acts at that commit's time, as `new -> <status>` and
+  it added shows its actions at that commit's time, as `new -> <status>` and
   every thread its record names. Nothing special-cases it; a reader who
   wants the time after it uses `--since`.
 - **A version that does not read.** History can hold a record that was
@@ -1215,14 +1215,14 @@ Git's own log has, so an item's time as a draft is read from its
 and `close`, which no record holds; and a skip in a Git hook or on a command
 that makes no commit, which leaves nothing in Git.
 
-`log` sees commits, not commands. Acts on different records committed
-together appear as separate lines with one time. Two acts on one record in
+`log` sees commits, not commands. Actions on different records committed
+together appear as separate lines with one time. Two actions on one record in
 one commit appear as their net change: an item made ready and closed in the
-same commit shows only as closed. An act undone before it was committed does
+same commit shows only as closed. An action undone before it was committed does
 not appear.
 
 The walk covers the base's history, the second-parent side of each merge,
-and the tips of unmerged branches, so an item's acts stay
+and the tips of unmerged branches, so an item's actions stay
 visible after its branch is merged and deleted. The old tool's history
 reader for the debrief followed first parents only and lost them.
 
@@ -1260,7 +1260,7 @@ The cutover's rollback restores a clone's hooks directory from a copy, so
 
 | Hook | Rule |
 | --- | --- |
-| pre-commit | Every staged record parses and validates: a `mission.md`, an `item.md`, a review file or `config.toml`. Other files under `.atelier/`, such as a mission's documents and an item's artifacts, are not examined. Where a record's status differs from the one in `HEAD`, the act table lists that change. A commit made on the base branch that adds, changes or deletes any file under `.atelier/` is refused, naming `start --backlog <slug>` and `start --mission`. The conditions of an act are the command's to check, not the hook's. |
+| pre-commit | Every staged record parses and validates: a `mission.md`, an `item.md`, a review file or `config.toml`. Other files under `.atelier/`, such as a mission's documents and an item's artifacts, are not examined. Where a record's status differs from the one in `HEAD`, the action table lists that change. A commit made on the base branch that adds, changes or deletes any file under `.atelier/` is refused, naming `start --backlog <slug>` and `start --mission`. The conditions of an action are the command's to check, not the hook's. |
 | pre-push | The base receives only merges. With a forge configured, any push that moves the base is refused, naming `atelier merge`, since the forge makes every merge. Without one, each new commit on the base's first-parent line must be an Atelier merge: two parents, and the `Atelier-Merge:` trailer that `merge` writes in its message's last paragraph. What a merge brings in on its second parent is not examined. |
 | post-checkout | None. On a branch switch it prints what `status` prints. |
 
@@ -1330,26 +1330,26 @@ rule names.
   printed too. The reason and the rules passed are one value per
   invocation, a `Skip`, which its caller makes: the command once per
   process, from `ATELIER_SKIP`, and a program that links `atelier-core` once
-  per act it calls. It needs no repository, since `check` and the hooks
+  per action it calls. It needs no repository, since `check` and the hooks
   pass rules before one is opened, and it outlives any one, since `merge`
   opens several and prints its skips after the last. Whatever opens a
   repository, makes a commit or prints the outcome is given it, so a rule
   passed reaches that invocation's trailers and output and no other's.
-- **All or nothing.** The skip passes an act's refusals, and is offered,
-  only when every one is a rule: `acts::refusals` gives them all, where
+- **All or nothing.** The skip passes an action's refusals, and is offered,
+  only when every one is a rule: `actions::refusals` gives them all, where
   `check` gives the first. Otherwise the first is refused as before, with
   no skip offered.
-- **Rules:** a role, a status and a holder of the act table, and its
+- **Rules:** a role, a status and a holder of the action table, and its
   conditions; a merge check that fails; CI that failed, and CI whose run
   has not finished, which a skip passes without waiting (the "not yet" at
   the bound is no refusal and offers no skip); a record-writing command run
-  on a kind of branch the act table does not give for its change, and
+  on a kind of branch the action table does not give for its change, and
   settling a finding off a backlog branch and off an item the caller
   implements; `set` on a record that is not a draft or ready; `ready` on a
   record that is not a draft; `lead` on a mission that is not agreed; a
   record that reads and does not validate, in what a writing command
-  writes, in `check` and in the pre-commit hook; a status changed as no act
-  on that kind of record (an item or a mission, `acts::changes`) changes
+  writes, in `check` and in the pre-commit hook; a status changed as no action
+  on that kind of record (an item or a mission, `actions::changes`) changes
   it; a record change committed on the base; a push that moves the base
   with a forge configured, or, without one, brings a commit that is not an
   Atelier merge; a plan without its two approvals; and `merge`
@@ -1460,7 +1460,7 @@ root as version 0.5.0. Within four minutes one run of
 `scripts/cutover/cutover.sh` converted atelier, astromech, demiurge,
 life-on-rails and cosplay-studio, installed the binary and the skill,
 stopped the old site's service, pushed each converted base and closed the
-cutover item, atelier-wd1i, the first act the new tool recorded. It stopped
+cutover item, atelier-wd1i, the first action the new tool recorded. It stopped
 nowhere, and no rollback was needed. In each repository `--verify` matched
 a fresh conversion of the recorded base, `atelier check` passed, and the
 counts were those the conversion printed: 133 items and 7 missions in
@@ -1516,23 +1516,23 @@ What is still to come:
   refuses every push to the base, the item loop, a mission's plan and a
   backlog branch all merge through the forge's contract-test double; the
   same script with no forge configured merges by moving the local base.
-- Unit tests on the act table: every act from every status.
-- `log` (`crates/atelier-cli/tests/log.rs`): the plain path prints its acts
+- Unit tests on the action table: every action from every status.
+- `log` (`crates/atelier-cli/tests/log.rs`): the plain path prints its actions
   in order with the right threads, and the same lines after the item's
   branch is merged and deleted; a take-over shows both implementers, and a
   review taken over both reviewers; a deferred
   finding settled on a gardener's branch and merged; a mission's plan
   reviews, its merge, `lead` and `close`, with its item dropped; an item
   merged by the forge, whose base copy stays `approved`, shown as merged; a skip on its
-  act's line; `--since`; two acts on one record in one commit as their net
-  change; a version that does not parse passed over; a branch's acts after
+  action's line; `--since`; two actions on one record in one commit as their net
+  change; a version that does not parse passed over; a branch's actions after
   a plain merge that matches the base, which fails without
   `--full-history`.
 - `new --from` on a deferred finding of a done item writes `Taken:` with the
   thread, and `list --deferred` no longer shows it; settling it again is
   refused; settling a finding of an item that is not done is refused.
 - Hook scenarios in a scratch repository: a commit of an invalid record
-  refused; a commit of a status change the act table does not allow refused;
+  refused; a commit of a status change the action table does not allow refused;
   a commit on the base that changes a record refused; with a forge, any
   push that moves the base refused; without one, a push of the base holding
   a plain commit refused, whatever it touches, and one whose new commit is
@@ -1575,7 +1575,7 @@ evidence.
 | Evidence gates | They checked that a receipt existed, not that it was true |
 | A configurable workflow file | Never tuned per project; each lifecycle change meant editing every repository |
 | A hard limit on lines of code | The October limit of 20,000 held for a day, and a limit rewards shaving lines |
-| Sessions as records | Attribution is a field on the record that the act writes |
+| Sessions as records | Attribution is a field on the record that the action writes |
 | Records on a separate branch | Records with the code are the reason the tool exists |
 | A plan as its own branch | Removed in October 2026 because grooming touches many items and planning branches collided. Restored on 2026-11-13 (atelier-to83), with what was learned: the collisions came from long-lived branches that carried grooming across the whole backlog, not from a plan having a branch. A mission's branch now lives only until two plan reviews approve it, grooming goes on short `backlog/` branches, two branches that touch one record meet as a merge conflict, and `atelier check` on the merged tree catches two that are each valid and contradict each other. Planning on the base, which replaced it, needed direct pushes that a protected base refuses and kept unagreed drafts on the base |
 | `land`, a check an agent had to run | Agents forgot it, or hid its refusal behind a pipe; a pre-push hook runs without being remembered and fails the push itself |
@@ -1640,7 +1640,7 @@ carried here when the ADRs were deleted on 2026-11-11; Git keeps the ADR.
 | Decision | Reason |
 | --- | --- |
 | Records stay in the working tree of the branch that does the work | It is the tool's core value; a host database would be simpler than any halfway design |
-| Status is a stored field | Every stage change is an act by a known role |
+| Status is a stored field | Every stage change is an action by a known role |
 | The implementer merges its own approved item | The reviewer is already the unbiased judge; a third agent adds a relay |
 | The harness starts agents, by whoever holds the status | T3 Code and Claude Code manage subagents well and change fast |
 | Review and readiness are separate facts | Ready says an item should start now; a review says independent agents examined a change. Since 2026-11-13 only an item is made ready, and a mission's plan reviews are its gate |
@@ -1651,7 +1651,7 @@ carried here when the ADRs were deleted on 2026-11-11; Git keeps the ADR.
 | The line count is an indication, not a limit | See Tried and removed |
 | The ADRs are replaced by one design record | They carry history that agents read as current |
 | The tool is rewritten in full, in a fresh workspace | A gradual rewrite has no benefit once the record layout changes under every command |
-| A view of what changed since his go-ahead is the Desk's to derive | It is a derived view; this work supplies the acts with their commits and records readable at any commit |
+| A view of what changed since his go-ahead is the Desk's to derive | It is a derived view; this work supplies the actions with their commits and records readable at any commit |
 | Hooks guard, commands act | A rule in a command applies only when the agent remembers the command |
 | The tool gives facts and the skill does the arithmetic: `log` and `list`, and no scorecard command | A fixed report in the binary would change every time the measures do, as the debrief did |
 | The gardener is a role, and its needs shape the records now | A bug's cause and a deferred finding's settlement are cheap in the first format and costly to add later |
@@ -1659,7 +1659,7 @@ carried here when the ADRs were deleted on 2026-11-11; Git keeps the ADR.
 | `submit` pushes the branch and opens its pull request where a forge is configured (2026-11-10) | CI then runs during the review; it was nearly all of the wait between approval and merge, a median of 5.5 minutes on 25 items |
 | `merge` waits for CI, for up to 9 minutes, with no flag (2026-11-10, reversing "`merge` never waits") | The thread that runs `merge` is almost always a delegated child, which T3 neither lets watch a pull request nor wakes reliably, so "not yet, run me again" left approved items with nobody driving them |
 | His go-ahead on an item stays `ready --by`; a mission has none since 2026-11-13 | A machine account for agents would let GitHub carry it, and his employer's sign-on rules make one too hard to get |
-| The tracker is for agents and the Desk is for the human: two products sharing a vocabulary and the core, which reads records, computes views and performs acts for both. `atelier` has no site. The Desk is its own binary, `atelier-desk`, and web app, `desk/`, one service per host, outside the `atelier` release (ADR 0032, 2026-11-11) | A page that mirrors the tracker's records asks the human to read records; he needs to make a few decisions well, across every repository, at a desk or on a phone |
+| The tracker is for agents and the Desk is for the human: two products sharing a vocabulary and the core, which reads records, computes views and performs actions for both. `atelier` has no site. The Desk is its own binary, `atelier-desk`, and web app, `desk/`, one service per host, outside the `atelier` release (ADR 0032, 2026-11-11) | A page that mirrors the tracker's records asks the human to read records; he needs to make a few decisions well, across every repository, at a desk or on a phone |
 | The Desk acts only through the core: it calls the same function the command calls, naming the person acting, and gets the result as data. It runs no `atelier` binary, reads no command output and writes no record itself. What it needs that the core lacks is added to the core (ADR 0032) | A server outside the core spent most of its code re-deriving what the core knows, by parsing output and grepping records |
 | Records in Git are the only source of truth for work. No check, merge or hook consults the Desk, its database or T3 Code; the guards decide from Git and the records, and from CI for a commit where a forge is configured. Dependence runs one way: `atelier-desk` on the core, never the reverse (ADR 0030, 2026-11-08; ADR 0032) | Records with the code are the reason the tool exists, and a guard that read anything else could disagree with them |
 | One SQLite database per host holds only what Git never held, and each kind has one writer: `atelier` writes which thread, model and role ran each command, each command its own row from the environment its session gave it, never through an MCP server; a feed that runs daily, unattended, writes measurements and findings about how work went; the Desk writes what the human has seen. It holds no copy of a record, and agents read it through a command, never from the file (ADR 0030, decision 7; ADR 0032, decision 6) | Nothing else records who ran each command, so models cannot be compared by role; a copy of a record would be a second truth |

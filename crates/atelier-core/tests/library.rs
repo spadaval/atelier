@@ -1,4 +1,4 @@
-//! The acts a program calls as functions, as the Desk does: a repository
+//! The actions a program calls as functions, as the Desk does: a repository
 //! opened by path, from a working directory outside it, with the caller
 //! naming who acts, and each result read as data.
 
@@ -155,8 +155,8 @@ fn a_caller_the_records_cannot_name_and_read_back_is_refused_before_anything_is_
 }
 
 #[test]
-fn a_skip_reaches_its_own_acts_commit_and_result_and_no_other_acts() {
-    // One act with a reason: `ready` on an item that is no draft passes.
+fn a_skip_reaches_its_own_actions_commit_and_result_and_no_other_actions() {
+    // One action with a reason: `ready` on an item that is no draft passes.
     let (_first_dir, first) = scratch("ready");
     git(&first, &["switch", "-q", "--detach"]);
     let skip = Skip::new(Some("  Sumeet\n said to "));
@@ -214,7 +214,7 @@ fn ready_given_no_id_refuses_and_commits_nothing() {
 }
 
 #[test]
-fn history_returns_the_acts_as_data_to_a_repository_opened_as_the_desk_opens_it() {
+fn history_returns_the_actions_as_data_to_a_repository_opened_as_the_desk_opens_it() {
     let (_dir, root) = scratch("draft");
     outside(&root);
     let skip = Skip::new(None);
@@ -228,14 +228,14 @@ fn history_returns_the_acts_as_data_to_a_repository_opened_as_the_desk_opens_it(
     let mut repo = Repo::open_committed(&root, Thread("desk".into()), &skip).unwrap();
     let found = history(&mut repo, Some(ID), None).unwrap().unwrap();
     assert!(found.passed_over.is_empty());
-    let [logged] = found.acts.as_slice() else {
-        panic!("{:?}", found.acts)
+    let [logged] = found.actions.as_slice() else {
+        panic!("{:?}", found.actions)
     };
     assert_eq!(logged.id, ID);
     assert_eq!(logged.thread, None);
     assert_eq!(logged.commit, git(&root, &["rev-parse", "--short", "HEAD"]));
     assert_eq!(
-        logged.act,
+        logged.action,
         Happened::Ready {
             by: Some("sumeet".into()),
             status: Move {

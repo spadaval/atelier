@@ -341,7 +341,7 @@ async fn the_item_and_document_routes() {
             StatusCode::NOT_FOUND,
         ),
         // Only the app may reach it, by any method.
-        ("/api/act", StatusCode::FORBIDDEN),
+        ("/api/action", StatusCode::FORBIDDEN),
         // Rejected by axum's extractors.
         ("/api/repos/demo/doc", StatusCode::BAD_REQUEST),
         (
@@ -361,7 +361,7 @@ async fn the_item_and_document_routes() {
             StatusCode::METHOD_NOT_ALLOWED,
         ),
         // Without the app's header.
-        ("POST", "/api/act", StatusCode::FORBIDDEN),
+        ("POST", "/api/action", StatusCode::FORBIDDEN),
     ] {
         let (got, body) = send(&served.app, method, uri, "localhost").await;
         let body: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);

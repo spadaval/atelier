@@ -2,14 +2,14 @@
 //! domain values in [`model`], which does no I/O, and its record files in
 //! [`records`].
 //!
-//! Atelier's use cases: who is calling, the act table, which record of an
+//! Atelier's use cases: who is calling, the action table, which record of an
 //! item counts, what `status` shows, the disagreements the records hold,
-//! and the acts a program such as the Desk calls as functions, such as
+//! and the actions a program such as the Desk calls as functions, such as
 //! `ready` and a mission's `drop`, over a repository opened by path ([`Repo::open`]). Each returns what it did, or a refusal, as
 //! data; a [`Skip`] made for the invocation passes the rules its reason
 //! covers.
 
-pub mod acts;
+pub mod actions;
 mod disputed;
 pub mod git;
 mod identity;

@@ -5,7 +5,7 @@ use crate::output::{
     condition, handoff, holder, mission_status_name, priority_name, settled, status_name,
     verdict_name,
 };
-use atelier_core::acts::{Condition, PLANNED, STARTED};
+use atelier_core::actions::{Condition, PLANNED, STARTED};
 use atelier_core::model::{
     Finding, Mission, MissionStatus, Outcome, Ready, Recommendation, Status, Thread,
 };

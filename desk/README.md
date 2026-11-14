@@ -6,7 +6,7 @@ motion across his repositories, stopping a mission, and reading results
 each mission's page, each item's page, what is proposed, what is in motion,
 what is disputed, the inbox and T3 Code's live threads. It reads everything
 from the API that `atelier-desk` serves ([the
-API](../docs/architecture/desk.md)), and sends the human's two acts there:
+API](../docs/architecture/desk.md)), and sends the human's two actions there:
 the stop of a proposed plan, and a planning session. It runs no server of
 its own.
 
@@ -77,7 +77,7 @@ $ pnpm desk-matches-cli http://buildbot.tail47515a.ts.net:3780 ~/projects/atelie
     ~/projects/astromech ~/projects/demiurge ~/projects/life-on-rails ~/projects/cosplay-studio
 ```
 
-**act-is-a-record** never touches the repository it is given or the
+**action-is-a-record** never touches the repository it is given or the
 service. Under a new scratch directory in `~/.cache`, it makes a bare copy
 of the repository's base branch to stand for the forge, proposes a mission
 there on its own branch, and clones it twice. It stops the plan from the
@@ -89,8 +89,8 @@ checks the page shows the plan stopped, and removes the scratch directory.
 The repository must name a forge:
 
 ```console
-$ pnpm act-is-a-record ~/projects/atelier
-$ pnpm act-is-a-record ~/projects/atelier --differ   # must fail
+$ pnpm action-is-a-record ~/projects/atelier
+$ pnpm action-is-a-record ~/projects/atelier --differ   # must fail
 ```
 
 `--differ` gives the CLI's drop another reason, to show the comparison can

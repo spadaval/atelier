@@ -577,7 +577,7 @@ fn a_refused_commit_leaves_the_take_over_to_be_run_again() {
 }
 
 #[test]
-fn a_refusal_lists_the_conditions_of_the_act_refused() {
+fn a_refusal_lists_the_conditions_of_the_action_refused() {
     // Approved, so `status` names merge next; submit still has its own
     // conditions, and its refusal lists them.
     let scratch = Scratch::new(&[(ID, "ready")]);

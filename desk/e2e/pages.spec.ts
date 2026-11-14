@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { missions, z4cr } from "./fixtures";
-import { expectFits, expectOnlyTheActs, load, phone, serve } from "./helpers";
+import { expectFits, expectOnlyTheActions, load, phone, serve } from "./helpers";
 
 test.beforeEach(async ({ page }) => {
   await serve(page);
@@ -27,7 +27,7 @@ test("the repositories page shows each repository's counts and missions, and a r
   await expect(atelier.getByTestId("fetched")).toHaveText("Fetched from origin 2 minutes ago. The Desk fetches every 5 minutes.");
   await expect(atelier.getByRole("link", { name: z4cr.mission.title })).toHaveAttribute("href", "/r/atelier/mission/atelier-z4cr");
   await expect(page.getByRole("region", { name: "broken" })).toContainText("missing field `status`");
-  await expectOnlyTheActs(page);
+  await expectOnlyTheActions(page);
 });
 
 test("the sidebar's footer names the commit the server was built from", async ({ page }) => {
@@ -57,7 +57,7 @@ test("the mission page shows the title, status and counts atelier show prints", 
   await expect(overview).toContainText("this clone lacks the commit reviewed");
   await expect(overview).toContainText("The strategy does not say where the app's types come from");
   await expectReadableFinding(page, ".paper-body");
-  await expectOnlyTheActs(page);
+  await expectOnlyTheActions(page);
 });
 
 test("the Work tab groups items by status in lifecycle order, and a done item shows its Report and fixes", async ({ page }) => {
@@ -138,7 +138,7 @@ test("the item page shows its goal, Done when ticks, report, reviews and blocker
   await expect(finding("Drafts are in the inbox now")).toContainText("Confirms 1-aaaa.1 fixed");
   await expect(page.locator(".issue-main")).toContainText("fixed in 3333cccc");
   await expectReadableFinding(page, ".issue-main");
-  await expectOnlyTheActs(page);
+  await expectOnlyTheActions(page);
 
   await load(page, "/r/atelier/item/atelier-uwxy");
   await expect(page.getByText("Read from its branch")).toBeVisible();
@@ -168,7 +168,7 @@ test("the inbox lists every repository's needs-human items by mission, its propo
   await expect(lately.getByTestId("news").first()).toContainText("Proposed: Give the gardener");
   await expect(lately.getByTestId("news").first()).toHaveAttribute("href", "/r/atelier/mission/atelier-295u");
   await expect(lately.getByTestId("news").nth(1)).toContainText("Merged: Build the Desk");
-  await expectOnlyTheActs(page);
+  await expectOnlyTheActions(page);
 });
 
 test("the proposed page lists each plan with its branch, pull request and round, and record changes by branch", async ({ page }) => {
@@ -185,7 +185,7 @@ test("the proposed page lists each plan with its branch, pull request and round,
   await expect(change).toContainText("atelier-n3w1 added: Fix the fetch timer");
   await expect(change).toContainText("atelier-94pv dropped");
   await expect(page.getByTestId("fetched").first()).toContainText("Fetched from origin");
-  await expectOnlyTheActs(page);
+  await expectOnlyTheActions(page);
 });
 
 test("the in-motion page lists each started item with its branch and thread, and each mission in progress with its lead", async ({ page }) => {
@@ -200,7 +200,7 @@ test("the in-motion page lists each started item with its branch and thread, and
   const missions = page.getByTestId("motion-mission");
   await expect(missions).toContainText("Build the Desk");
   await expect(missions).toContainText("Lead the LoR habits mission");
-  await expectOnlyTheActs(page);
+  await expectOnlyTheActions(page);
 });
 
 test("the disputed page lists each rebuttal and split plan round, with each side's model where known", async ({ page }) => {
@@ -215,7 +215,7 @@ test("the disputed page lists each rebuttal and split plan round, with each side
   await expect(split).toContainText("Plan of atelier-295u, round 1");
   await expect(split).toContainText("grok-reviewer (model unknown)");
   await expect(page.getByTestId("fetched")).toContainText("Fetched from origin");
-  await expectOnlyTheActs(page);
+  await expectOnlyTheActions(page);
 });
 
 test("a repository that cannot be read says so in the rail, where a phone shows it", async ({ page }) => {

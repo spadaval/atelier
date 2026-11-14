@@ -1,12 +1,12 @@
 //! Everything `status` and the commands print. The wording lives here, in
-//! one place, so it is cheap to change, but for what the acts that live in
+//! one place, so it is cheap to change, but for what the actions that live in
 //! `atelier-core` say and the wording of a refusal, which live in
 //! `atelier_core::say` and are used from here.
 
 use crate::forge::{CiRun, ForgeError, MergeState, PullRequest};
 use crate::merge::Moved;
 use crate::setup::{Harness, Step};
-use atelier_core::acts::{Act, Condition, Refusal};
+use atelier_core::actions::{Action, Condition, Refusal};
 use atelier_core::model::{Config, Priority, Response, Status, Thread, Verdict};
 use atelier_core::plan::{Approvals, NotCounted, APPROVALS};
 use atelier_core::records::Problem;
@@ -82,7 +82,7 @@ pub fn item(
     // A thread holding nothing on it, a reviewer whose review is done
     // among them.
     let done = entry.next.is_none() && entry.reviewed.is_some() && !entry.holds;
-    if entry.next == Some(Act::TakeOver) || done {
+    if entry.next == Some(Action::TakeOver) || done {
         next = visiting(id, leads, &next);
     }
     // Before `merge`, what it will run and wait for; a stale approval is
@@ -91,12 +91,12 @@ pub fn item(
         .unmet
         .iter()
         .any(|c| matches!(c, Condition::Stale { .. }));
-    if entry.next == Some(Act::Merge) && !stale {
+    if entry.next == Some(Action::Merge) && !stale {
         let then = next.rfind("Then: ").expect("it ends with a Then line");
         next.insert_str(then, &gates(config));
     }
     let code = outside(id, &entry.uncommitted);
-    if entry.next == Some(Act::Submit) && !code.is_empty() {
+    if entry.next == Some(Action::Submit) && !code.is_empty() {
         let then = next.rfind("Then: ").expect("it ends with a Then line");
         next.insert_str(then, &format!("Not committed: {}\n", some(&code)));
     }
@@ -544,12 +544,12 @@ pub fn check_found(
 }
 
 /// The pre-commit hook's refusal: records that do not read or validate as
-/// staged, and each status changed as no act changes it, with the status
+/// staged, and each status changed as no action changes it, with the status
 /// `HEAD` has and the one staged.
 pub fn commit_refused(
     unread: &[Problem],
     invalid: &[Problem],
-    acts: &[(String, Status, Status)],
+    actions: &[(String, Status, Status)],
     base: &str,
     on_base: &[String],
 ) -> String {
@@ -563,10 +563,10 @@ pub fn commit_refused(
         }
         text += "Make the branch the change belongs on and commit it there: `atelier start --backlog <slug>` for a record change tied to no item or mission, or `atelier start --mission \"<title>\"` for a new mission. `git stash` carries the change across.\n";
     }
-    if !acts.is_empty() {
-        text += "Rule: a status changes only as an act of the lifecycle changes it. These change it as no act does:\n";
+    if !actions.is_empty() {
+        text += "Rule: a status changes only as an action of the lifecycle changes it. These change it as no action does:\n";
     }
-    for (path, before, now) in acts {
+    for (path, before, now) in actions {
         text += &format!(
             "  {path}: status: {} to {}. Put back the status HEAD has; atelier status names the command for what comes next.\n",
             status_name(*before),
@@ -576,11 +576,11 @@ pub fn commit_refused(
     text + "Fix each file named, stage it with git add, and commit again.\n"
 }
 
-/// The rule that a status changes only as an act changes it, as the
+/// The rule that a status changes only as an action changes it, as the
 /// record at `path` breaks it.
 pub(crate) fn rule_status(path: &str, from: Status, to: Status) -> String {
     format!(
-        "A status changes only as an act of the lifecycle changes it ({path}: {} to {})",
+        "A status changes only as an action of the lifecycle changes it ({path}: {} to {})",
         status_name(from),
         status_name(to)
     )

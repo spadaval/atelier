@@ -1,6 +1,6 @@
 //! Where an item's record is read from, and what `status` shows.
 
-use crate::acts::{mission_of, next, unmet, Act, Condition, Facts, PLANNED, STARTED};
+use crate::actions::{mission_of, next, unmet, Action, Condition, Facts, PLANNED, STARTED};
 use crate::disputed::{disputes, Disputes};
 use crate::model::{MissionStatus, Priority, ReviewName, Status, Thread, Verdict};
 use crate::records::{ItemDir, MissionDir, Problem};
@@ -248,11 +248,11 @@ pub struct Entry {
     /// Once approved, the time of the commit that recorded the approving
     /// verdict, where the CLI looked it up; nothing stores it.
     pub approved: Option<String>,
-    /// The act the caller would run next, and its conditions that do not
+    /// The action the caller would run next, and its conditions that do not
     /// hold.
-    pub next: Option<Act>,
+    pub next: Option<Action>,
     pub unmet: Vec<Condition>,
-    /// For a started item another thread holds: what its holder's next act
+    /// For a started item another thread holds: what its holder's next action
     /// needs, the conditions the holder's `status` lists as unmet.
     pub needs: Vec<Condition>,
     /// The ref its record was read from, where views name it: a
@@ -266,7 +266,7 @@ pub struct Entry {
 pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
     let next = next(facts)?;
     let unmet = match next {
-        Some(act) => unmet(act, facts)?,
+        Some(action) => unmet(action, facts)?,
         None => Vec::new(),
     };
     let item = &facts.item.item;
@@ -321,7 +321,7 @@ pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
 }
 
 /// For a started item another thread holds: the conditions its holder's
-/// next act lists as unmet.
+/// next action lists as unmet.
 fn needs(facts: &Facts) -> Result<Vec<Condition>, Problem> {
     let holder = match facts.holder() {
         Some(holder) if !facts.holds() && STARTED.contains(&facts.status()) => holder,
@@ -333,7 +333,7 @@ fn needs(facts: &Facts) -> Result<Vec<Condition>, Problem> {
         ..*facts
     };
     Ok(match next(&theirs)? {
-        Some(act) => unmet(act, &theirs)?,
+        Some(action) => unmet(action, &theirs)?,
         None => Vec::new(),
     })
 }

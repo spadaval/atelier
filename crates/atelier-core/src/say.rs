@@ -1,9 +1,9 @@
-//! What the acts that live here say: their results and refusals, and the
-//! wording of a refusal of any act and of what it needs, which `status`
+//! What the actions that live here say: their results and refusals, and the
+//! wording of a refusal of any action and of what it needs, which `status`
 //! and the commands of `atelier-cli` print too. Moved from `atelier-cli`'s
 //! `output.rs`, which keeps the rest.
 
-use crate::acts::{row, Act, Condition, Refusal, Role};
+use crate::actions::{row, Action, Condition, Refusal, Role};
 use crate::model::{Settlement, Status, Thread, Verdict};
 use crate::records::Problem;
 use crate::skip::Refused;
@@ -23,38 +23,42 @@ pub fn status_name(status: Status) -> &'static str {
     }
 }
 
-pub fn command(act: Act, id: &str) -> String {
-    match act {
-        Act::Start | Act::TakeOver | Act::Review => format!("atelier {} {id}", row(act).command),
-        Act::Ready => format!("atelier ready {id} --by <name>"),
-        Act::StartNew => "atelier start --new \"<title>\"".into(),
-        Act::StartMission => "atelier start --mission \"<title>\"".into(),
-        Act::StartBacklog => "atelier start --backlog <slug>".into(),
-        Act::MergeTrivial => "atelier merge --trivial \"<why>\"".into(),
-        Act::Drop => format!("atelier drop {id} --reason \"<why>\""),
-        Act::Close => format!("atelier close {id} \"<result>\""),
-        Act::CloseMission => format!("atelier close {id}"),
-        _ => format!("atelier {}", row(act).command),
+pub fn command(action: Action, id: &str) -> String {
+    match action {
+        Action::Start | Action::TakeOver | Action::Review => {
+            format!("atelier {} {id}", row(action).command)
+        }
+        Action::Ready => format!("atelier ready {id} --by <name>"),
+        Action::StartNew => "atelier start --new \"<title>\"".into(),
+        Action::StartMission => "atelier start --mission \"<title>\"".into(),
+        Action::StartBacklog => "atelier start --backlog <slug>".into(),
+        Action::MergeTrivial => "atelier merge --trivial \"<why>\"".into(),
+        Action::Drop => format!("atelier drop {id} --reason \"<why>\""),
+        Action::Close => format!("atelier close {id} \"<result>\""),
+        Action::CloseMission => format!("atelier close {id}"),
+        _ => format!("atelier {}", row(action).command),
     }
 }
 
-pub fn goal(act: Act, status: Status) -> &'static str {
-    match act {
-        Act::Ready => "make it ready",
-        Act::Start | Act::StartNew | Act::StartMission | Act::StartBacklog => "start it",
-        Act::SubmitBacklog | Act::SubmitMission => "submit it",
-        Act::MergeBacklog | Act::MergeMission => "merge it",
-        Act::TakeOver => "take it over",
-        Act::Submit if status == Status::ChangesRequested => "return it to review",
-        Act::Submit => "submit it for review",
-        Act::Review => "review it",
-        Act::VerdictChanges | Act::VerdictApprove => "record your verdict",
-        Act::Merge | Act::MergeTrivial => "merge it",
-        Act::Drop => "drop it",
-        Act::Close | Act::CloseMission => "close it",
-        Act::PlanVerdictChanges | Act::PlanVerdictApprove => "record your verdict",
-        Act::Lead => "lead it",
-        Act::Settle => "settle it",
+pub fn goal(action: Action, status: Status) -> &'static str {
+    match action {
+        Action::Ready => "make it ready",
+        Action::Start | Action::StartNew | Action::StartMission | Action::StartBacklog => {
+            "start it"
+        }
+        Action::SubmitBacklog | Action::SubmitMission => "submit it",
+        Action::MergeBacklog | Action::MergeMission => "merge it",
+        Action::TakeOver => "take it over",
+        Action::Submit if status == Status::ChangesRequested => "return it to review",
+        Action::Submit => "submit it for review",
+        Action::Review => "review it",
+        Action::VerdictChanges | Action::VerdictApprove => "record your verdict",
+        Action::Merge | Action::MergeTrivial => "merge it",
+        Action::Drop => "drop it",
+        Action::Close | Action::CloseMission => "close it",
+        Action::PlanVerdictChanges | Action::PlanVerdictApprove => "record your verdict",
+        Action::Lead => "lead it",
+        Action::Settle => "settle it",
     }
 }
 
@@ -153,17 +157,17 @@ pub fn role_name(role: Role) -> &'static str {
     }
 }
 
-/// The rules `refusal` of `act` on `id` says are broken, each in one line,
+/// The rules `refusal` of `action` on `id` says are broken, each in one line,
 /// as a skip names them.
-pub fn rules(act: Act, id: &str, refusal: &Refusal) -> Vec<String> {
+pub fn rules(action: Action, id: &str, refusal: &Refusal) -> Vec<String> {
     vec![match refusal {
         Refusal::Role(role) => format!(
             "`atelier {}` is run by {id}'s {}, not its {}",
-            row(act).command,
-            role_name(row(act).role),
+            row(action).command,
+            role_name(row(action).role),
             role_name(*role)
         ),
-        Refusal::From { act, status } => rule_from(id, row(*act).from, *status),
+        Refusal::From { action, status } => rule_from(id, row(*action).from, *status),
         Refusal::NotHolder { role, holder } => format!(
             "You hold {id} as its {} ({} does)",
             role_name(*role),
@@ -193,7 +197,7 @@ pub fn rule_from(id: &str, from: &[Status], status: Status) -> String {
 /// from its record.
 pub fn next(entry: &Entry, dropped: Option<&str>) -> String {
     let id = &entry.id;
-    let Some(act) = entry.next else {
+    let Some(action) = entry.next else {
         if entry.reviewed.is_some() && !entry.holds {
             return "Your review is done, and nothing on this item is yours to do. Say so to whoever started you, and stop.\n".into();
         }
@@ -214,7 +218,7 @@ pub fn next(entry: &Entry, dropped: Option<&str>) -> String {
             _ => "Nothing is left to do on it.\n".into(),
         };
     };
-    needs(act, entry.status, id, &entry.unmet)
+    needs(action, entry.status, id, &entry.unmet)
 }
 
 /// How an implementer gets its item reviewed.
@@ -262,11 +266,11 @@ pub fn visiting(id: &str, leads: Option<&str>, offer: &str) -> String {
     }
 }
 
-/// The conditions of `act` that do not hold, then its command.
-pub fn needs(act: Act, status: Status, id: &str, unmet: &[Condition]) -> String {
+/// The conditions of `action` that do not hold, then its command.
+pub fn needs(action: Action, status: Status, id: &str, unmet: &[Condition]) -> String {
     let mut text = String::new();
     if !unmet.is_empty() {
-        text += &format!("To {}:\n", goal(act, status));
+        text += &format!("To {}:\n", goal(action, status));
         for unmet in unmet {
             text += &condition(id, unmet);
             text += "\n";
@@ -292,36 +296,36 @@ pub fn needs(act: Act, status: Status, id: &str, unmet: &[Condition]) -> String 
         // A stale approval is answered by a fresh review, not by merging.
         if unmet.iter().any(|c| matches!(c, Condition::Stale { .. })) {
             text += "What changed needs a fresh review, so send it back to review.\n";
-            return text + &format!("Then: {}\n", command(Act::Submit, id));
+            return text + &format!("Then: {}\n", command(Action::Submit, id));
         }
     }
-    let or = match act {
-        Act::VerdictApprove | Act::PlanVerdictApprove => {
+    let or = match action {
+        Action::VerdictApprove | Action::PlanVerdictApprove => {
             " (or `atelier verdict changes`, once your file holds a fix-now finding)"
         }
         _ => "",
     };
-    if act == Act::Submit {
+    if action == Action::Submit {
         // The reviewer reviews the branch's last commit.
         text +=
             "`atelier submit` commits only the item's directory, so commit your change first.\n";
     }
-    if act == Act::TakeOver {
+    if action == Action::TakeOver {
         // Another thread holds it; taking it over is a choice, not a next step.
         return text
             + &format!(
                 "Only if you mean to take it over from its holder: {}\n",
-                command(act, id)
+                command(action, id)
             );
     }
-    text + &format!("Then: {}{or}\n", command(act, id))
+    text + &format!("Then: {}{or}\n", command(action, id))
 }
 
 /// `entry` is what `status` shows the caller, which a refusal of the
-/// item's status or of the act's conditions ends with, and `dropped` why
+/// item's status or of the action's conditions ends with, and `dropped` why
 /// the item was dropped.
 pub fn refusal(
-    act: Act,
+    action: Action,
     refusal: &Refusal,
     caller: &Thread,
     id: &str,
@@ -339,13 +343,13 @@ pub fn refusal(
         Refusal::Role(Role::Planner | Role::Lead) => {
             unreachable!("no thread holds a planner's, a lead's or a decider's role on an item")
         }
-        Refusal::From { act, status } => {
-            let from: Vec<&str> = row(*act).from.iter().map(|s| status_name(*s)).collect();
+        Refusal::From { action, status } => {
+            let from: Vec<&str> = row(*action).from.iter().map(|s| status_name(*s)).collect();
             Refused::then(
                 format!(
                     "{id} is {}, and `atelier {}` runs on an item that is {}. Nothing changed.\n",
                     status_name(*status),
-                    row(*act).command,
+                    row(*action).command,
                     from.join(", "),
                 ),
                 next(shown(), dropped),
@@ -377,8 +381,8 @@ pub fn refusal(
         }
         Refusal::Unmet(unmet) => format!(
             "`{}` refused; nothing changed.\n{}",
-            command(act, id),
-            needs(act, shown().status, id, unmet)
+            command(action, id),
+            needs(action, shown().status, id, unmet)
         )
         .into(),
         Refusal::Record(problem) => format!("{problem}\n").into(),
@@ -645,32 +649,32 @@ pub fn elsewhere(
     )
 }
 
-/// A mission's status, written in the act table as an item's, by the name
+/// A mission's status, written in the action table as an item's, by the name
 /// its record stores.
 pub fn mission_status_name(status: Status) -> &'static str {
     crate::model::MissionStatus::of(status).map_or(status_name(status), |s| s.name())
 }
 
-/// A mission's act refused for `refusal`.
-pub fn mission_refused(act: Act, id: &str, refusal: &Refusal) -> String {
+/// A mission's action refused for `refusal`.
+pub fn mission_refused(action: Action, id: &str, refusal: &Refusal) -> String {
     match refusal {
         Refusal::From { status, .. } => {
-            let from: Vec<&str> = row(act)
+            let from: Vec<&str> = row(action)
                 .from
                 .iter()
                 .filter(|s| crate::model::MissionStatus::of(**s).is_some())
                 .map(|s| mission_status_name(*s))
                 .collect();
             let then = match status {
-                Status::Draft if act == Act::MergeMission => "Its record is an old `draft`: run `atelier submit` here, which writes it open, and start its two plan reviews.\n".to_string(),
+                Status::Draft if action == Action::MergeMission => "Its record is an old `draft`: run `atelier submit` here, which writes it open, and start its two plan reviews.\n".to_string(),
                 Status::Draft => "Its record is an old `draft`, which is proposed: its plan reaches the base once two plan reviews approve it and its branch merges.\n".to_string(),
-                Status::Dropped if matches!(act, Act::SubmitMission | Act::MergeMission) => "A plan dropped on its branch is not merged: push the branch and close its pull request, if it has one.\n".to_string(),
+                Status::Dropped if matches!(action, Action::SubmitMission | Action::MergeMission) => "A plan dropped on its branch is not merged: push the branch and close its pull request, if it has one.\n".to_string(),
                 _ => "Nothing is left to do on it.\n".into(),
             };
             format!(
                 "Mission {id} is {}, and `atelier {}` runs on a mission that is {}. Nothing changed.\n{then}",
                 mission_status_name(*status),
-                row(act).command,
+                row(action).command,
                 from.join(" or ")
             )
         }
@@ -680,16 +684,16 @@ pub fn mission_refused(act: Act, id: &str, refusal: &Refusal) -> String {
                 .map_or(String::new(), |t| format!(", last {t}"));
             format!(
                 "`atelier {}` on mission {id}'s branch is a planner's, and you have not planned it{by}. Nothing changed.\nTo take the plan over, run `atelier submit` here, which makes you one of its planners.\n",
-                row(act).command
+                row(action).command
             )
         }
         Refusal::Unmet(unmet) => format!(
             "`{}` refused; nothing changed.\n{}",
-            command(act, id),
-            needs(act, Status::Ready, id, unmet)
+            command(action, id),
+            needs(action, Status::Ready, id, unmet)
         ),
         Refusal::Role(_) | Refusal::Record(_) => {
-            unreachable!("a mission's act is refused only for its status, planner or conditions")
+            unreachable!("a mission's action is refused only for its status, planner or conditions")
         }
     }
 }

@@ -1,4 +1,4 @@
-//! `log`: the history of acts that `atelier-core` returns, one line each
+//! `log`: the history of actions that `atelier-core` returns, one line each
 //! (docs/design.md, The log). The layout lives here.
 
 use crate::commands::Outcome;
@@ -21,10 +21,10 @@ pub fn log(repo: &mut Repo, id: Option<&str>, since: Option<DateTime<Utc>>) -> R
             one_line(&passed.problem)
         );
     }
-    Ok(Outcome::Done(history.acts.iter().map(line).collect()))
+    Ok(Outcome::Done(history.actions.iter().map(line).collect()))
 }
 
-/// `<time> <commit> <id> <act> <thread>`, then what changed, then each
+/// `<time> <commit> <id> <action> <thread>`, then what changed, then each
 /// skip, the last two in parts separated by `; `.
 pub fn line(logged: &Logged) -> String {
     let thread = logged
@@ -36,9 +36,9 @@ pub fn line(logged: &Logged) -> String {
         logged.time.format("%Y-%m-%dT%H:%M:%SZ"),
         logged.commit,
         logged.id,
-        logged.act.name(),
+        logged.action.name(),
     );
-    let mut parts = changed(&logged.act);
+    let mut parts = changed(&logged.action);
     parts.extend(logged.skips.iter().map(|skip| format!("skip {skip}")));
     let parts: Vec<String> = parts.iter().map(|part| one_line(part)).collect();
     if !parts.is_empty() {
@@ -49,9 +49,9 @@ pub fn line(logged: &Logged) -> String {
 }
 
 /// What changed, in the parts its line shows.
-fn changed(act: &Happened) -> Vec<String> {
+fn changed(action: &Happened) -> Vec<String> {
     let moved = |status: &Option<Move>| status.iter().map(shown).collect::<Vec<_>>();
-    match act {
+    match action {
         Happened::Start { status } => moved(status),
         Happened::TakeOver { from, status } => {
             [vec![format!("from {from}")], moved(status)].concat()

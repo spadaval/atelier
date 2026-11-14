@@ -1,4 +1,4 @@
-//! `POST /api/act`: the human's stop of a proposed plan, carried through
+//! `POST /api/action`: the human's stop of a proposed plan, carried through
 //! by the Desk in a clone of its own, writes the record `atelier drop`
 //! writes, through the same function, and publishes it as atelier-2vdq
 //! defines a stop: pushed to the plan's branch and its pull request
@@ -204,8 +204,8 @@ async fn send(
 
 const FROM_APP: &[(&str, &str)] = &[("x-atelier-desk", "1")];
 
-async fn act(app: &Router, body: Value) -> Value {
-    let (status, answer) = send(app, "POST", "/api/act", FROM_APP, body).await;
+async fn action(app: &Router, body: Value) -> Value {
+    let (status, answer) = send(app, "POST", "/api/action", FROM_APP, body).await;
     assert_eq!(status, StatusCode::OK, "{answer}");
     answer
 }
@@ -271,16 +271,16 @@ async fn a_proposed_plan_is_stopped_from_its_page_and_shown_stopped_once_publish
     );
 
     // A reason is needed, on one line.
-    let empty = act(
+    let empty = action(
         &world.app,
-        json!({"act": "stop", "repo": "demo", "id": PLAN, "reason": " "}),
+        json!({"action": "stop", "repo": "demo", "id": PLAN, "reason": " "}),
     )
     .await;
     assert_eq!(empty["result"], "refused", "{empty}");
 
-    let done = act(
+    let done = action(
         &world.app,
-        json!({"act": "stop", "repo": "demo", "id": PLAN, "reason": REASON}),
+        json!({"action": "stop", "repo": "demo", "id": PLAN, "reason": REASON}),
     )
     .await;
     assert_eq!(done["result"], "done", "{done}");
@@ -332,9 +332,9 @@ async fn a_proposed_plan_is_stopped_from_its_page_and_shown_stopped_once_publish
     let page = get(&world.app, &uri).await;
     assert_eq!(page["mission"]["state"], "stop_pending", "{page}");
     // A second stop is refused: it is stopped already.
-    let again = act(
+    let again = action(
         &world.app,
-        json!({"act": "stop", "repo": "demo", "id": PLAN, "reason": REASON}),
+        json!({"action": "stop", "repo": "demo", "id": PLAN, "reason": REASON}),
     )
     .await;
     assert_eq!(again["result"], "refused", "{again}");
@@ -352,9 +352,9 @@ async fn an_open_missions_stop_is_pending_until_its_branch_merges_and_the_desk_d
         page["stop_commands"][1],
         format!("atelier drop {OPEN} --reason \"<why>\"")
     );
-    let refused = act(
+    let refused = action(
         &world.app,
-        json!({"act": "stop", "repo": "demo", "id": OPEN, "reason": REASON}),
+        json!({"action": "stop", "repo": "demo", "id": OPEN, "reason": REASON}),
     )
     .await;
     assert_eq!(refused["result"], "refused", "{refused}");
@@ -398,10 +398,14 @@ async fn an_open_missions_stop_is_pending_until_its_branch_merges_and_the_desk_d
 async fn only_the_desks_own_app_may_act() {
     let world = world();
     let before = untouched(&world.served);
-    let stop = json!({"act": "stop", "repo": "demo", "id": PLAN, "reason": REASON});
+    let stop = json!({"action": "stop", "repo": "demo", "id": PLAN, "reason": REASON});
     let session = json!({"repo": "demo", "mission": PLAN});
-    for uri in ["/api/act", "/api/sessions"] {
-        let body = if uri == "/api/act" { &stop } else { &session };
+    for uri in ["/api/action", "/api/sessions"] {
+        let body = if uri == "/api/action" {
+            &stop
+        } else {
+            &session
+        };
         for headers in [
             &[][..],
             &[("x-atelier-desk", "0")][..],
@@ -419,30 +423,30 @@ async fn only_the_desks_own_app_may_act() {
     assert_eq!(
         untouched(&world.served),
         before,
-        "a refused act writes nothing"
+        "a refused action writes nothing"
     );
-    assert!(!world.closed.exists(), "a refused act closes nothing");
+    assert!(!world.closed.exists(), "a refused action closes nothing");
 
     // A request the app could not have meant.
     for (body, status) in [
         (
-            json!({"act": "ready", "repo": "demo", "ids": [PLAN]}),
+            json!({"action": "ready", "repo": "demo", "ids": [PLAN]}),
             StatusCode::UNPROCESSABLE_ENTITY,
         ),
         (
-            json!({"act": "stop", "repo": "demo", "id": PLAN, "reason": "r", "by": "x"}),
+            json!({"action": "stop", "repo": "demo", "id": PLAN, "reason": "r", "by": "x"}),
             StatusCode::UNPROCESSABLE_ENTITY,
         ),
         (
-            json!({"act": "stop", "repo": "demo", "id": "../x", "reason": "r"}),
+            json!({"action": "stop", "repo": "demo", "id": "../x", "reason": "r"}),
             StatusCode::BAD_REQUEST,
         ),
         (
-            json!({"act": "stop", "repo": "nowhere", "id": PLAN, "reason": "r"}),
+            json!({"action": "stop", "repo": "nowhere", "id": PLAN, "reason": "r"}),
             StatusCode::NOT_FOUND,
         ),
     ] {
-        let (got, answer) = send(&world.app, "POST", "/api/act", FROM_APP, body.clone()).await;
+        let (got, answer) = send(&world.app, "POST", "/api/action", FROM_APP, body.clone()).await;
         assert_eq!(got, status, "{body}: {answer}");
         assert!(answer["error"].is_string(), "{body}: {answer}");
     }
@@ -469,9 +473,9 @@ async fn a_plan_merged_since_the_last_fetch_is_not_stopped_as_a_plan() {
     );
     git(&world.planner, &["push", "-q", "origin", "main"]);
     let before = git(&world.origin, &["rev-parse", &format!("refs/heads/{PLAN}")]);
-    let refused = act(
+    let refused = action(
         &world.app,
-        json!({"act": "stop", "repo": "demo", "id": PLAN, "reason": REASON}),
+        json!({"action": "stop", "repo": "demo", "id": PLAN, "reason": REASON}),
     )
     .await;
     assert_eq!(refused["result"], "refused", "{refused}");
@@ -534,9 +538,9 @@ async fn a_stop_whose_pull_request_cannot_be_read_stays_pending_and_says_why() {
     // The forge does not answer from the start.
     fs::write(&world.pr_state, "FAIL").unwrap();
     world.desk.fetch_all();
-    let done = act(
+    let done = action(
         &world.app,
-        json!({"act": "stop", "repo": "demo", "id": PLAN, "reason": REASON}),
+        json!({"action": "stop", "repo": "demo", "id": PLAN, "reason": REASON}),
     )
     .await;
     assert_eq!(done["result"], "done", "{done}");
@@ -626,9 +630,9 @@ async fn a_stop_after_a_list_without_its_pull_request_stays_pending_while_the_fo
     world.desk.fetch_all();
     // Then the forge stops answering, and the stop cannot close one.
     fs::write(&world.pr_state, "FAIL").unwrap();
-    let done = act(
+    let done = action(
         &world.app,
-        json!({"act": "stop", "repo": "demo", "id": PLAN, "reason": REASON}),
+        json!({"action": "stop", "repo": "demo", "id": PLAN, "reason": REASON}),
     )
     .await;
     assert!(
@@ -677,9 +681,9 @@ async fn a_stopped_plans_items_are_not_proposed() {
         json!([]),
         "a plan's items are its plan"
     );
-    let done = act(
+    let done = action(
         &world.app,
-        json!({"act": "stop", "repo": "demo", "id": PLAN, "reason": REASON}),
+        json!({"action": "stop", "repo": "demo", "id": PLAN, "reason": REASON}),
     )
     .await;
     assert_eq!(done["result"], "done", "{done}");
@@ -696,9 +700,9 @@ async fn a_pull_request_closed_before_the_stop_does_not_confirm_it() {
     fs::write(&world.pr_state, "CLOSED").unwrap();
     world.desk.fetch_all();
     fs::write(&world.pr_state, "FAIL").unwrap();
-    let done = act(
+    let done = action(
         &world.app,
-        json!({"act": "stop", "repo": "demo", "id": PLAN, "reason": REASON}),
+        json!({"action": "stop", "repo": "demo", "id": PLAN, "reason": REASON}),
     )
     .await;
     assert!(
@@ -776,8 +780,8 @@ async fn a_stop_is_pending_while_its_pull_request_is_read_again() {
     fs::write(&world.pr_state, "HOLD").unwrap();
     let app = world.app.clone();
     let stopping = tokio::spawn(async move {
-        let body = json!({"act": "stop", "repo": "demo", "id": PLAN, "reason": REASON});
-        act(&app, body).await
+        let body = json!({"action": "stop", "repo": "demo", "id": PLAN, "reason": REASON});
+        action(&app, body).await
     });
     // Wait for the drop to be pushed, then read while the list is held.
     let branch = format!("refs/heads/{PLAN}");
@@ -851,9 +855,9 @@ async fn an_open_pull_request_older_than_the_recent_list_keeps_a_stop_pending() 
     // The plan's pull request is open, but 200 newer ones are closed, and
     // closing it fails.
     fs::write(&world.pr_state, "MANY").unwrap();
-    let done = act(
+    let done = action(
         &world.app,
-        json!({"act": "stop", "repo": "demo", "id": PLAN, "reason": REASON}),
+        json!({"action": "stop", "repo": "demo", "id": PLAN, "reason": REASON}),
     )
     .await;
     assert!(
@@ -881,9 +885,9 @@ async fn an_open_pull_request_is_not_hidden_by_a_newer_closed_one_of_its_branch(
     world.desk.fetch_all();
     // #7 is open; a newer #9 of the same branch is closed; closing fails.
     fs::write(&world.pr_state, "TWO").unwrap();
-    let done = act(
+    let done = action(
         &world.app,
-        json!({"act": "stop", "repo": "demo", "id": PLAN, "reason": REASON}),
+        json!({"action": "stop", "repo": "demo", "id": PLAN, "reason": REASON}),
     )
     .await;
     assert!(

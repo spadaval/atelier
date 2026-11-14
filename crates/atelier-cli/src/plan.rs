@@ -7,7 +7,9 @@
 use crate::commands::Outcome;
 use crate::output;
 use anyhow::{anyhow, Result};
-use atelier_core::acts::{check, settle_refusals, Act, MissionFacts, Refusal, PLANNED, STARTED};
+use atelier_core::actions::{
+    check, settle_refusals, Action, MissionFacts, Refusal, PLANNED, STARTED,
+};
 use atelier_core::model::{
     Finding, FindingName, Item, ItemSchema, Mission, MissionSchema, MissionStatus, Priority,
     SchemaVersion, Settlement, Status, Thread, Threads,
@@ -17,7 +19,7 @@ use atelier_core::plan::{
 };
 use atelier_core::records::{put_first, validate_id, ReviewFile};
 use atelier_core::repo::{item_dir, mission_path};
-use atelier_core::{refused as refused_act, Located, Refused, Repo};
+use atelier_core::{refused as refused_action, Located, Refused, Repo};
 
 const ITEM_BODY: &str = "\n## Goal\n\n## Done when\n\n## Scope\n";
 const MISSION_BODY: &str =
@@ -262,7 +264,7 @@ pub fn drop(repo: &mut Repo, id: &str, reason: Option<&str>) -> Result<Outcome> 
                 return Ok(refused.into());
             }
             let facts = planned_facts(repo, &located, record);
-            if let Some(refused) = repo.skip.refusal(Act::Drop, &facts)? {
+            if let Some(refused) = repo.skip.refusal(Action::Drop, &facts)? {
                 return Ok(refused.into());
             }
             let mut item = record.item.clone();
@@ -289,7 +291,7 @@ fn drop_started(
     }
     let record = located.record().expect("a started item has a record");
     let facts = planned_facts(repo, located, record);
-    if let Some(refused) = repo.skip.refusal(Act::Drop, &facts)? {
+    if let Some(refused) = repo.skip.refusal(Action::Drop, &facts)? {
         return Ok(refused.into());
     }
     let mut item = record.item.clone();
@@ -364,7 +366,7 @@ pub fn close(repo: &mut Repo, id: &str, result: Option<&str>) -> Result<Outcome>
             items: &items,
             review: None,
         };
-        if let Some(refused) = repo.skip.mission_gate(Act::CloseMission, id, &facts)? {
+        if let Some(refused) = repo.skip.mission_gate(Action::CloseMission, id, &facts)? {
             return Ok(refused.into());
         }
         let mut mission = dir.mission;
@@ -382,14 +384,14 @@ pub fn close(repo: &mut Repo, id: &str, result: Option<&str>) -> Result<Outcome>
         return Ok(Outcome::Refused(output::unknown_refused("close", id)));
     };
     let facts = planned_facts(repo, &located, record);
-    if let Err(refusal) = check(Act::Close, &facts) {
+    if let Err(refusal) = check(Action::Close, &facts) {
         // An item with a branch ends by its merge, or by `drop`.
         let text: Refused =
             match facts.branch && !matches!(record.item.status, Status::Done | Status::Dropped) {
                 true => output::close_started(id).into(),
-                false => refused_act(Act::Close, &refusal, &facts)?,
+                false => refused_action(Action::Close, &refusal, &facts)?,
             };
-        if let Some(refused) = repo.skip.gated(Act::Close, &facts, text) {
+        if let Some(refused) = repo.skip.gated(Action::Close, &facts, text) {
             return Ok(refused.into());
         }
     }
@@ -437,7 +439,7 @@ fn settle(repo: &mut Repo, command: &str, name: &str, how: Settle) -> Result<Out
     };
     let located = repo.locate_planned(id)?;
     let Some(record) = located.record() else {
-        let none = Refusal::Unmet(vec![atelier_core::acts::Condition::NoFinding(finding)]);
+        let none = Refusal::Unmet(vec![atelier_core::actions::Condition::NoFinding(finding)]);
         return Ok(Outcome::Refused(output::settle_refused(
             command,
             name,
@@ -449,7 +451,7 @@ fn settle(repo: &mut Repo, command: &str, name: &str, how: Settle) -> Result<Out
     let all = settle_refusals(&facts, &finding)?;
     if !all.is_empty() {
         let text = output::settle_refused(command, name, id, &all);
-        if let Some(refused) = repo.skip.gate(Act::Settle, id, &all, text) {
+        if let Some(refused) = repo.skip.gate(Action::Settle, id, &all, text) {
             return Ok(refused.into());
         }
     }

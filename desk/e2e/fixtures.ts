@@ -3,8 +3,8 @@
 // They are modelled on atelier-z4cr, with a review, a finished item, a
 // proposed plan, a stop under way and a dispute added so every part of a
 // page shows.
-import type { ActRequest } from "../src/api/ActRequest";
-import type { ActResponse } from "../src/api/ActResponse";
+import type { ActionRequest } from "../src/api/ActionRequest";
+import type { ActionResponse } from "../src/api/ActionResponse";
 import type { Agent } from "../src/api/Agent";
 import type { DisputedResponse } from "../src/api/DisputedResponse";
 import type { DocResponse } from "../src/api/DocResponse";
@@ -155,7 +155,7 @@ export const z4crItems: ItemRow[] = [
   row("atelier-h3hl", "Let Sumeet start a planning session from a page", "draft", { priority: "medium" }),
   row("atelier-va99", "Install the Desk as a service on this host, on converted clones", "draft", { priority: "medium" }),
   row("atelier-qxmr", "Point the Desk at the live repositories after this host's cutover", "draft", { priority: "low" }),
-  row("atelier-psjw", "Move the acts and repository access into atelier-core", "ready", {
+  row("atelier-psjw", "Move the actions and repository access into atelier-core", "ready", {
     cannot_start: ["atelier-psjw is blocked by atelier-uwxy"],
   }),
   row("atelier-aab1", "Find how atelier serve can read T3 thread status", "ready", { labels: ["needs-human"], needs_human: true, startable: true }),
@@ -181,7 +181,7 @@ export const z4cr: MissionPage = {
         "Sumeet has no tool of his own. A page that lists records asks him to read records.\n[ADR 0032](../../../docs/adr/0032-the-desk-is-the-humans-product.md) makes the human's tool a product of its own, and [its intent](../../../docs/product/desk.md) says what it is for.",
     },
     { heading: "Outcome", markdown: "On this host, a service reached over the tailnet shows Atelier repositories on the redesigned records." },
-    { heading: "Success criteria", markdown: "- desk-matches-cli: every open mission has a page that shows what `atelier show` prints.\n- act-is-a-record: a stop leaves the commit `atelier drop` leaves." },
+    { heading: "Success criteria", markdown: "- desk-matches-cli: every open mission has a page that shows what `atelier show` prints.\n- action-is-a-record: a stop leaves the commit `atelier drop` leaves." },
     { heading: "Scope", markdown: "- In: the `atelier-desk` crate and the app.\n- Out: health, the feed and any database." },
     { heading: "Authority", markdown: "The orchestrator may choose the API's routes and fields." },
   ],
@@ -625,7 +625,7 @@ export const disputed: DisputedResponse = {
 
 export const threads: ThreadsResponse = { t3, threads: [live.uwxy, live.asking, live.lor, live.free] };
 
-/** What the fixture server answers to each act it is sent. */
+/** What the fixture server answers to each action it is sent. */
 export const answers = {
   stopped: {
     result: "done",
@@ -647,14 +647,14 @@ export const answers = {
   },
   started: { result: "started", thread_id: "thread:plan-z4cr", link: "https://app.t3.codes/threads/env-1/thread%3Aplan-z4cr", project_id: "project-atelier" },
   sessionRefused: { result: "refused", text: "No T3 Code project has /projects/atelier as its workspace root, so no session can start there." },
-} satisfies Record<string, ActResponse | SessionResponse>;
+} satisfies Record<string, ActionResponse | SessionResponse>;
 
-/** A request the app sent to an act or session route. */
+/** A request the app sent to an action or session route. */
 export type Sent = { path: string; header: string | undefined; body: unknown };
 
 /**
- * The fixture server: every response above, and acts that change them as
- * atelier-desk would. Each test gets its own, so an act never leaks into
+ * The fixture server: every response above, and actions that change them as
+ * atelier-desk would. Each test gets its own, so an action never leaks into
  * another test.
  */
 export class World {
@@ -685,15 +685,15 @@ export class World {
     if (method === "POST") {
       const parsed: unknown = body ? JSON.parse(body) : null;
       this.sent.push({ path, header, body: parsed });
-      if (header !== "1") return { status: 403, body: { error: "An act needs the header x-atelier-desk: 1." } };
-      if (path === "/api/act") return { status: 200, body: this.act(parsed as ActRequest) };
+      if (header !== "1") return { status: 403, body: { error: "An action needs the header x-atelier-desk: 1." } };
+      if (path === "/api/action") return { status: 200, body: this.action(parsed as ActionRequest) };
       if (path === "/api/sessions") return { status: 200, body: this.session(parsed as SessionRequest) };
       return { status: 404, body: { error: "No route" } };
     }
     return this.read(url);
   }
 
-  private act(request: ActRequest): ActResponse {
+  private action(request: ActionRequest): ActionResponse {
     if (request.id === "atelier-pr0x") {
       // Pushed, and its pull request is still open.
       const page = this.missionPages["atelier-pr0x"];

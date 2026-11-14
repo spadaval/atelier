@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { answers, codexChild, live, planPr, type World } from "./fixtures";
-import { expectFits, expectOnlyTheActs, load, serve } from "./helpers";
+import { expectFits, expectOnlyTheActions, load, serve } from "./helpers";
 
 let world: World;
 
@@ -9,10 +9,10 @@ test.beforeEach(async ({ page }) => {
 });
 
 test.afterEach(async () => {
-  // Every act and session the app sent carried the app's header, to the two routes that take them.
+  // Every action and session the app sent carried the app's header, to the two routes that take them.
   for (const sent of world.sent) {
     expect(sent.header).toBe("1");
-    expect(["/api/act", "/api/sessions"]).toContain(sent.path);
+    expect(["/api/action", "/api/sessions"]).toContain(sent.path);
   }
 });
 
@@ -38,7 +38,7 @@ test("a mission's page shows its agents: live threads link to T3 Code, others ar
   const hrefs = await page.locator("a").evaluateAll((links) => links.map((a) => a.getAttribute("href") ?? ""));
   for (const href of hrefs) expect(href).not.toContain("review-child");
   await expect(card.getByTestId("t3-note")).toHaveCount(0);
-  await expectOnlyTheActs(page);
+  await expectOnlyTheActions(page);
 });
 
 test("when T3 Code cannot be reached a mission's and an item's pages render and say threads are unavailable", async ({ page }) => {
@@ -77,7 +77,7 @@ test("the live-threads page lists T3 Code's threads with what each holds, and a 
   await expect(lor.getByRole("link", { name: "lor-h4bt", exact: true })).toHaveAttribute("href", "/r/lor/mission/lor-h4bt");
   await expect(page.getByRole("region", { name: "Holding nothing in the records" })).toContainText(live.free.title);
   await expect(page.locator(".page")).not.toContainText(/effort|context|token/i);
-  await expectOnlyTheActs(page);
+  await expectOnlyTheActions(page);
 
   await page.getByRole("navigation", { name: "Repositories" }).getByRole("link", { name: "atelier" }).click();
   await expect(page).toHaveURL(/\/r\/atelier\/agents$/);
@@ -108,11 +108,11 @@ test("a proposed plan's page shows its branch, pull request and last round, and 
   const form = page.getByRole("form", { name: "Stop this plan" });
   await expect(form.getByRole("button", { name: "Yes, stop it" })).toBeDisabled();
   expect(world.sent).toEqual([]);
-  await expectOnlyTheActs(page);
+  await expectOnlyTheActions(page);
   await form.getByRole("textbox").fill("Not this month");
   await form.getByRole("button", { name: "Yes, stop it" }).click();
   await expect(page.getByTestId("status")).toHaveText("Stopped");
-  expect(world.sent).toEqual([{ path: "/api/act", header: "1", body: { act: "stop", repo: "atelier", id: "atelier-295u", reason: "Not this month" } }]);
+  expect(world.sent).toEqual([{ path: "/api/action", header: "1", body: { action: "stop", repo: "atelier", id: "atelier-295u", reason: "Not this month" } }]);
   const done = page.getByTestId("done");
   await expect(done).toContainText("You stopped this plan, committed as 76cbb6c0.");
   await expect(done).toContainText("closed its pull request");
@@ -122,7 +122,7 @@ test("a proposed plan's page shows its branch, pull request and last round, and 
   await expect(page.getByRole("link", { name: "Inbox" })).toContainText("4");
 });
 
-test("Not yet sends no stop, and an open mission offers no stop act, only the commands that stop it", async ({ page }) => {
+test("Not yet sends no stop, and an open mission offers no stop action, only the commands that stop it", async ({ page }) => {
   await load(page, "/r/atelier/mission/atelier-295u");
   await page.getByRole("button", { name: "Stop this plan" }).click();
   await page.getByRole("button", { name: "Not yet" }).click();

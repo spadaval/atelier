@@ -1,10 +1,10 @@
-//! The HTTP server: the reading routes, the acts and sessions, the `Host`
+//! The HTTP server: the reading routes, the actions and sessions, the `Host`
 //! and app checks, the cache, and the built app's files.
 
 use crate::api::{
-    ActRequest, ApiError, DisputedRepo, DisputedResponse, FetchMark, Hold, InboxRepo,
+    ActionRequest, ApiError, DisputedRepo, DisputedResponse, FetchMark, Hold, InboxRepo,
     InboxResponse, MissionRow, MissionState, MotionRepo, MotionResponse, PrMark, ProposedRepo,
-    ProposedResponse, RepoSummary, ReposResponse, SessionRequest, StopAct, ThreadsResponse,
+    ProposedResponse, RepoSummary, ReposResponse, SessionRequest, StopAction, ThreadsResponse,
 };
 use crate::config::Config;
 use crate::fetch::{self, Fetches};
@@ -32,7 +32,7 @@ use std::sync::{Arc, Mutex};
 use tower::ServiceExt;
 use tower_http::services::{ServeDir, ServeFile};
 
-/// The header the Desk's app sends with an act or a session, with the
+/// The header the Desk's app sends with an action or a session, with the
 /// value `1`. A page of another site cannot send it without the browser
 /// asking this server first, which it does not answer.
 pub const APP_HEADER: &str = "x-atelier-desk";
@@ -55,7 +55,7 @@ pub struct Desk {
     remotes: Mutex<HashMap<String, (Option<String>, bool)>>,
     /// How many responses were built rather than taken from the cache.
     pub built: AtomicUsize,
-    /// Held while an act runs, so two acts never write at once.
+    /// Held while an action runs, so two actions never write at once.
     acting: Mutex<()>,
 }
 
@@ -89,12 +89,12 @@ impl Desk {
     }
 
     /// Runs `request`, under the configured caller.
-    fn act(&self, request: ActRequest) -> Result<crate::api::ActResponse, Failure> {
-        let ActRequest::Stop(StopAct { repo, id, reason }) = request;
+    fn action(&self, request: ActionRequest) -> Result<crate::api::ActionResponse, Failure> {
+        let ActionRequest::Stop(StopAction { repo, id, reason }) = request;
         checked(&id)?;
         let dir = self.served(&repo)?;
         let Some(state) = self.config.state.as_ref() else {
-            return Ok(crate::api::ActResponse::Refused {
+            return Ok(crate::api::ActionResponse::Refused {
                 rules: Vec::new(),
                 text: "The Desk's configuration names no state directory, where it keeps the clone it writes a stop in. Nothing changed.".into(),
                 next: None,
@@ -351,7 +351,7 @@ pub fn router_for(desk: Arc<Desk>) -> Router {
         .route("/api/disputed", get(disputed))
         .merge(
             Router::new()
-                .route("/api/act", post(act))
+                .route("/api/action", post(action))
                 .route("/api/sessions", post(session))
                 .route_layer(middleware::from_fn_with_state(desk.clone(), from_the_app)),
         )
@@ -423,7 +423,7 @@ async fn allowed_host(State(desk): State<Arc<Desk>>, request: Request, next: Nex
     (StatusCode::FORBIDDEN, Json(ApiError { error })).into_response()
 }
 
-/// Refuses an act or a session that does not come from the Desk's own
+/// Refuses an action or a session that does not come from the Desk's own
 /// app: one without its header, or whose `Origin` is not a host the Desk
 /// answers to.
 async fn from_the_app(State(desk): State<Arc<Desk>>, request: Request, next: Next) -> Response {
@@ -753,9 +753,9 @@ async fn threads(State(desk): State<Arc<Desk>>) -> Response {
     .await
 }
 
-/// `POST /api/act`: the stop of a proposed plan.
-async fn act(State(desk): State<Arc<Desk>>, Json(request): Json<ActRequest>) -> Response {
-    blocking(move || desk.act(request)).await
+/// `POST /api/action`: the stop of a proposed plan.
+async fn action(State(desk): State<Arc<Desk>>, Json(request): Json<ActionRequest>) -> Response {
+    blocking(move || desk.action(request)).await
 }
 
 /// `POST /api/sessions`: a planning session for a mission, as a new T3

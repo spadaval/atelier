@@ -6,7 +6,7 @@
 use crate::commands::Outcome;
 use crate::view_output;
 use anyhow::{anyhow, Result};
-use atelier_core::acts::{check_mission, unsettled, Act, MissionFacts, Refusal};
+use atelier_core::actions::{check_mission, unsettled, Action, MissionFacts, Refusal};
 use atelier_core::model::{MissionStatus, Named};
 use atelier_core::plan::{misplaced, save, Belongs};
 use atelier_core::records::{validate_id, ItemDir, MissionDir};
@@ -318,12 +318,12 @@ pub fn lead(repo: &mut Repo, id: &str) -> Result<Outcome> {
         items: &[],
         review: None,
     };
-    if let Err(refusal) = check_mission(Act::Lead, &facts) {
+    if let Err(refusal) = check_mission(Action::Lead, &facts) {
         let Refusal::From { status, .. } = refusal else {
             unreachable!("lead has no conditions: {refusal:?}")
         };
         let text = view_output::lead_not_ready(id, status);
-        if let Some(refused) = repo.skip.gate(Act::Lead, id, &[refusal], text) {
+        if let Some(refused) = repo.skip.gate(Action::Lead, id, &[refusal], text) {
             return Ok(refused.into());
         }
     }

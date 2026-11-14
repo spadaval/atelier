@@ -1,8 +1,8 @@
-//! The repository an act runs in, and how it finds items: on the base
+//! The repository an action runs in, and how it finds items: on the base
 //! branch's tip, and on the branch named for each, local or the forge's
 //! remote-tracking one.
 
-use crate::acts::{approval, mission_of, Checkout, Facts, SinceApproval, STARTED};
+use crate::actions::{approval, mission_of, Checkout, Facts, SinceApproval, STARTED};
 use crate::model::{Config, Named, Status, Thread};
 use crate::records::{allocate_id, parse_config, CommitReader, ItemDir, MissionDir, Store};
 use crate::view::Record;
@@ -164,7 +164,7 @@ impl<'s> Repo<'s> {
     /// branch's tip even when that branch is checked out here, so nothing
     /// the checkout has not committed is read. [`Repo::everything`],
     /// [`Repo::locate`], [`Repo::current`], [`Repo::missions`] and
-    /// [`Repo::links`] read commits only. Planning's and the acts' methods,
+    /// [`Repo::links`] read commits only. Planning's and the actions' methods,
     /// which read and write the checkout (`store`, `checkout_item`,
     /// `locate_planned`, `planned`, `new_id`, `uncommitted`), are not for a
     /// repository opened this way.
@@ -229,7 +229,7 @@ impl<'s> Repo<'s> {
     }
 
     /// The item `id`: its record at the base's tip, and its branch, as the
-    /// acts find it. A copy on any other branch is not read: an item a
+    /// actions find it. A copy on any other branch is not read: an item a
     /// branch adds is not on the base until that branch merges.
     pub fn locate(&mut self, id: &str) -> Result<Located> {
         let refs = self.refs()?;
@@ -820,7 +820,7 @@ fn readable(thread: &Thread) -> bool {
     !thread.0.contains(['\n', '\r']) && !thread.0.contains(": ")
 }
 
-/// What `act`s on the item `located`, whose links are `links`, are checked
+/// What `action`s on the item `located`, whose links are `links`, are checked
 /// against, for `repo`'s caller.
 pub fn facts<'a>(
     repo: &'a Repo,
@@ -841,7 +841,7 @@ pub fn facts<'a>(
 /// Writes each of `files`, a path in the checkout and its text, creating
 /// its directory where there is none, and commits `paths`. When the commit
 /// fails, each file is put back as it was, or removed with the directories
-/// made for it where there was none, so the act can be run again.
+/// made for it where there was none, so the action can be run again.
 pub fn write_and_commit(
     repo: &Repo,
     files: &[(String, String)],

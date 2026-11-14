@@ -3,7 +3,7 @@
 use crate::forge::Github;
 use crate::{git, merge, output, plan, setup};
 use anyhow::{anyhow, Context, Result};
-use atelier_core::acts::{check, row, unmet, Act, Checkout, Facts, MissionFacts, STARTED};
+use atelier_core::actions::{check, row, unmet, Action, Checkout, Facts, MissionFacts, STARTED};
 use atelier_core::model::{validate_slug, Forge, MissionStatus, Named, Status};
 use atelier_core::records::{render_item, render_mission, validate_id};
 use atelier_core::repo::{facts, item_dir, item_path, mission_path, planning, write_and_commit};
@@ -14,7 +14,7 @@ use atelier_core::{
 pub enum Outcome {
     Done(String),
     Refused(String),
-    /// Nothing is wrong and the act cannot finish yet, as when CI has not
+    /// Nothing is wrong and the action cannot finish yet, as when CI has not
     /// finished; the same command run later goes on.
     NotYet(String),
 }
@@ -186,23 +186,23 @@ pub fn start(repo: &mut Repo, id: &str) -> Result<Outcome> {
     let links = repo.links(record)?;
     let facts = facts(repo, &located, &links, None);
     // `start` takes over an item someone holds, and starts any other.
-    let act = if STARTED.contains(&record.item.status) {
-        Act::TakeOver
+    let action = if STARTED.contains(&record.item.status) {
+        Action::TakeOver
     } else {
-        Act::Start
+        Action::Start
     };
-    let to = match check(act, &facts) {
+    let to = match check(action, &facts) {
         Ok(to) => to,
         Err(refusal) => match repo
             .skip
-            .gated(act, &facts, refused(act, &refusal, &facts)?)
+            .gated(action, &facts, refused(action, &refusal, &facts)?)
         {
             Some(refused) => return Ok(refused.into()),
-            None => row(act).to,
+            None => row(action).to,
         },
     };
     let branch = repo.branch_of(id);
-    if act == Act::Start {
+    if action == Action::Start {
         let mut item = record.item.clone();
         item.status = to.expect("start sets a status");
         item.implementers.take(repo.caller.clone());
@@ -324,7 +324,7 @@ fn take_over(repo: &mut Repo, id: &str, branch: &str, located: &Located) -> Resu
 pub fn start_new(repo: &mut Repo, title: &str) -> Result<Outcome> {
     let id = repo.new_id()?;
     let mut item = plan::draft_item(&id, title, None);
-    item.status = row(Act::StartNew).to.expect("start --new sets a status");
+    item.status = row(Action::StartNew).to.expect("start --new sets a status");
     item.implementers.take(repo.caller.clone());
     let claim = Claim {
         branch: repo.branch_of(&id),
@@ -563,7 +563,7 @@ pub fn submit(repo: &mut Repo) -> Result<Outcome> {
     }
     let links = repo.links(record)?;
     let facts = facts(repo, &located, &links, None);
-    if let Some(refused) = repo.skip.refusal(Act::Submit, &facts)? {
+    if let Some(refused) = repo.skip.refusal(Action::Submit, &facts)? {
         return Ok(refused.into());
     }
     let config = repo.base_config()?;
@@ -690,7 +690,7 @@ fn planned_here(repo: &mut Repo) -> Result<Result<Vec<(String, u32)>, Outcome>> 
                 items: &[],
                 review: None,
             };
-            if let Some(refused) = repo.skip.mission_gate(Act::SubmitMission, &id, &facts)? {
+            if let Some(refused) = repo.skip.mission_gate(Action::SubmitMission, &id, &facts)? {
                 return Ok(Err(refused.into()));
             }
         }
@@ -784,7 +784,7 @@ fn approved_needs(repo: &mut Repo, entries: &mut [Entry], items: &[Located]) -> 
             caller: holder,
             checkout: Some(&checkout),
         };
-        entry.needs = unmet(Act::Merge, &facts)?;
+        entry.needs = unmet(Action::Merge, &facts)?;
     }
     Ok(())
 }

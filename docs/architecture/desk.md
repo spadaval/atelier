@@ -17,7 +17,7 @@ for is in [its product intent](../product/desk.md).
 The core can feed every page. Nothing in the strategy's Design has to
 change. Two facts shape the order of work:
 
-- **Reads need atelier-psjw too, not only acts.** On master, `Located`,
+- **Reads need atelier-psjw too, not only actions.** On master, `Located`,
   `Entry` and `entries` are in `atelier-core`, but the code that builds a
   `Located` for every item (the base's record plus the branch named for it,
   `Repo::everything`) is in `atelier-cli/src/repo.rs`. The atelier-psjw
@@ -25,7 +25,7 @@ change. Two facts shape the order of work:
   read items the way `status`, `list` and `show` do without copying CLI code.
 - **Seven views were missing**, listed with sizes in
   [Missing views](#missing-views). Six were small moves or exposures of code
-  that existed, and atelier-l5ai has added them. One, the history of acts (`atelier log`), is specified and
+  that existed, and atelier-l5ai has added them. One, the history of actions (`atelier log`), is specified and
   not built, and only the debrief's timeline and its plan-against-actual
   need it; the mission page ships without them first.
 
@@ -70,7 +70,7 @@ files. `HEAD` can still be an old commit: on this host the main atelier
 checkout is detached far behind master, so its `HEAD` holds the config of
 that old commit, not the base's. The server opens the checkout that has the
 base out, `atelier_core::git::checkout_of(root, base)`, where there is one.
-Planning's and the acts' methods of `Repo` (`store`, `checkout_item`,
+Planning's and the actions' methods of `Repo` (`store`, `checkout_item`,
 `locate_planned`, `planned`, `new_id`, `uncommitted`) read the checkout,
 and the server does not call them.
 
@@ -261,7 +261,7 @@ $ journalctl --user -u atelier-desk
 ```
 
 The two checks against the live service, `desk-matches-cli` and
-`act-is-a-record`, are commands in `desk/live/`; `desk/README.md` says how
+`action-is-a-record`, are commands in `desk/live/`; `desk/README.md` says how
 to run them.
 
 ## The app
@@ -293,13 +293,13 @@ the tables below suggest:
   unavailable and names the identities without that claim.
 - An identity is shown whole, cut short on screen only, with the whole
   value in its text and title. No link holds one.
-- "Stop this plan" and Start a planning session are the app's only act
+- "Stop this plan" and Start a planning session are the app's only action
   controls. The stop asks for his reason, on one line, before it sends; a
   session asks once. A stop that was pushed and whose pull request did not
   close stays on the page as the server gave it, with the error and the `gh
   pr close` that finishes it, under the note that the stop is not
   published yet. After a `done`, the app reads every page on screen
-  again before showing the act's text. An agreed mission's page shows the
+  again before showing the action's text. An agreed mission's page shows the
   commands that stop it instead (`stop_commands`), folded.
 - A mission's state is its pill: Proposed, Agreed (with "Work in progress"
   when an item is started), Stop not published yet, Stopped or Done. Its
@@ -329,7 +329,7 @@ identity never appears in a path: it can hold `/`, `:` and `%`, as
 | `GET /api/repos` | Repositories | Each repository with its counts |
 | `GET /api/repos/{repo}/missions` | Mission rail | The repository's missions and loose work |
 | `GET /api/repos/{repo}/missions/{id}` | Mission | One mission, wherever it is read from: sections, documents, items, plan reviews, threads, its pull request and its stop |
-| `GET /api/repos/{repo}/missions/{id}/history` | Mission, Activity tab | The acts on the mission and its items (M5; 404 until it exists) |
+| `GET /api/repos/{repo}/missions/{id}/history` | Mission, Activity tab | The actions on the mission and its items (M5; 404 until it exists) |
 | `GET /api/repos/{repo}/doc?path=<path>&at=<commit>` | Mission, Documents tab | One Markdown file at the base's tip, or at `at` |
 | `GET /api/repos/{repo}/items/{id}` | Item | One item in full |
 | `GET /api/inbox` | Inbox | What waits on the human, in every repository |
@@ -337,7 +337,7 @@ identity never appears in a path: it can hold `/`, `:` and `%`, as
 | `GET /api/proposed` | Proposed | Proposed plans and record changes on branches, in every repository |
 | `GET /api/motion` | In motion | Started items and missions in progress, with their threads |
 | `GET /api/disputed` | Disputed | What `atelier list --disputed` gives, with each side's model |
-| `POST /api/act` | Mission | Stops a proposed plan |
+| `POST /api/action` | Mission | Stops a proposed plan |
 | `POST /api/sessions` | Mission | Starts a planning session as a T3 Code thread |
 
 `?done=true` on `/missions` lists done and dropped missions, as
@@ -431,7 +431,7 @@ An **item row**, in a mission, the inbox and the rail's loose work:
 | `blockers[] {id, status}`, `waiting_on[]` | `Entry::blockers`; the IDs of `Entry::waiting_on` | master |
 | `holder`, `reviewer` | `Entry::holder`; `Entry::reviewer`, set only while in review | master |
 | `cannot_start[]` | For a ready item, `say::condition_text(id, c)` for each of `Entry::unmet` | master values, psjw text |
-| `needs[]` | For a started item, `say::condition_text` for each of `Entry::needs`, what its holder's next act lacks | master values, psjw text |
+| `needs[]` | For a started item, `say::condition_text` for each of `Entry::needs`, what its holder's next action lacks | master values, psjw text |
 | `branch {merged, name}` | The branch the record was read from, else the one named for it; absent when there is none | atelier-dciw |
 | `report_written`, `dropped` | `ItemDir::report_written`, `ItemDir::dropped` | master |
 | `approved_at` | `Entry::approved`, which `atelier_core::annotate` fills, from `atelier_core::git::approved_at`; `mission_view` and `item_view` annotate their entries, and the inbox annotates its rows | M4 |
@@ -468,7 +468,7 @@ app resolves them against `path`, as the spike's `DocReader` does.
 | `done_when[] {ticked, text}` | `ItemDir::done_when` | master |
 | `decisions[]`, `responses[]` | `ItemDir::decisions`, from before `escalate` was removed, and `ItemDir::responses` | master |
 | `reviews[]` | `ItemDir::reviews`, each as a review | master |
-| `unsettled[]` | The names of `acts::unsettled`, for a done item | master |
+| `unsettled[]` | The names of `actions::unsettled`, for a done item | master |
 | `threads[]` | One agent per identity and role the record names: its implementers, the reviewers of its reviews and the deciders of its answers, each with `item: null` | Desk, T3 Code |
 | `t3` | As on `/api/threads` | Desk |
 
@@ -552,7 +552,7 @@ none (atelier-aab1), and the strategy puts them out of scope.
 
 | Field | Given by |
 | --- | --- |
-| `items[] {id, title, status, mission, branch, holder, reviewer}` | Each entry in a started status (`acts::STARTED`), its status from the record that counts, which for a started item is its branch's, local or fetched; `branch` is the ref read; `holder` and `reviewer` are agents (`Entry::holder`, `Entry::reviewer`) |
+| `items[] {id, title, status, mission, branch, holder, reviewer}` | Each entry in a started status (`actions::STARTED`), its status from the record that counts, which for a started item is its branch's, local or fetched; `branch` is the ref read; `holder` and `reviewer` are agents (`Entry::holder`, `Entry::reviewer`) |
 | `missions[] {mission, lead}` | Each agreed mission with a started item (`in_progress`), and its lead as an agent |
 
 An agent's `thread` is T3 Code's live thread with that identity, or `null`.
@@ -580,17 +580,17 @@ Code's last 100 threads of any status (`t3_thread_list` with no status
 filter), and the Desk keeps the provider, model and link of every thread
 it has seen.
 
-### `POST /api/act`
+### `POST /api/action`
 
 The request is a stop of a proposed plan:
 
 ```json
-{ "act": "stop", "repo": "atelier", "id": "atelier-xxxx", "reason": "One line." }
+{ "action": "stop", "repo": "atelier", "id": "atelier-xxxx", "reason": "One line." }
 ```
 
-A field the act does not take is refused. The caller is never in the
+A field the action does not take is refused. The caller is never in the
 request: the stop runs under the configured `caller`. The types are
-`ActRequest` (`StopAct`) and `ActResponse` in `desk/src/api/`.
+`ActionRequest` (`StopAction`) and `ActionResponse` in `desk/src/api/`.
 
 The response is `200` with one of:
 
@@ -612,11 +612,11 @@ the plan's branch is not on the remote as last fetched. An `id` that is not
 an ID is `400`, an unknown repository `404`, a body that is not JSON `400`
 or `415`, JSON that is not the shape above `422`, and a failure that is not
 a refusal, such as a push the remote refuses, `500`; each with `error`.
-Acts run one at a time.
+Actions run one at a time.
 
 #### Only from the app
 
-`POST /api/act` and `POST /api/sessions` are refused with `403` unless the
+`POST /api/action` and `POST /api/sessions` are refused with `403` unless the
 request has the header `x-atelier-desk: 1`, and its `Origin`, when it has
 one, names a host in the configuration's `hosts` (its port is ignored). A
 page of another site cannot add the header without the browser asking the
@@ -708,7 +708,7 @@ and looks for news every five minutes.
 
 ## The stop
 
-A proposed plan's stop, `POST /api/act` with `act: stop`, is carried through
+A proposed plan's stop, `POST /api/action` with `action: stop`, is carried through
 by the Desk, as atelier-2vdq defines a stop: the drop on the plan's branch,
 pushed, and the pull request closed (`crates/atelier-desk/src/stop.rs`).
 
@@ -767,11 +767,11 @@ dropped.
 
 The tests `a_proposed_plan_is_stopped_from_its_page_and_shown_stopped_once_published`
 and `an_open_missions_stop_is_pending_until_its_branch_merges_and_the_desk_does_not_make_it`
-(`crates/atelier-desk/tests/acts.rs`) work against a bare remote with a
-`gh` stand-in. The first stops a plan through `POST /api/act`, finds the
+(`crates/atelier-desk/tests/actions.rs`) work against a bare remote with a
+`gh` stand-in. The first stops a plan through `POST /api/action`, finds the
 drop pushed and the pull request closed, finds the record equal to the one
 `drop_mission` writes in another clone, and that the served repository's
-`HEAD`, files and local branches are unchanged. `act-is-a-record` in
+`HEAD`, files and local branches are unchanged. `action-is-a-record` in
 `desk/live/` does the same through the built app and the binaries.
 
 ## Being told
@@ -800,7 +800,7 @@ address is looked up in `gog`'s keyring, so no address is in the
 configuration. The installed configuration leaves `[notify]` commented out
 until he turns it on.
 
-## Act functions
+## Action functions
 
 What the server calls for the stop, and where it stands:
 
@@ -833,7 +833,7 @@ brief and debrief (its `atelier-app`'s `mission_review.rs`, `Brief` and
 | Brief: Scope (items, size, blockers, unknowns) | Items grouped by status, with blockers and labels | `items_of`, `Entry` |
 | Brief: human decisions | Waiting on you: needs-human items | `Entry::needs_human` |
 | Brief: planning review events | Plan reviews, with findings and what changed since each | `MissionDir::reviews`, M6 |
-| Brief and debrief: Next | The stop for a proposed plan, the commands for an agreed mission; the act's own `next` on a refusal | `state`, `Refused::next` |
+| Brief and debrief: Next | The stop for a proposed plan, the commands for an agreed mission; the action's own `next` on a refusal | `state`, `Refused::next` |
 | Debrief: status line | Status, counts per status | `Mission`, `items_of` |
 | Debrief: The Problem (Why) | The Why section | `MissionDir::section` |
 | Debrief: What we set out to do | The Success criteria section | `MissionDir::section` |
@@ -918,7 +918,7 @@ an `ItemView`; `show` prints each.
 | M4 | An approved item's approval time on `Entry` | `atelier_core::annotate` and `annotate_all`, with `atelier_core::git::approved_at`; the CLI calls them | Low | Medium | Low |
 | M7 | An item's page as `show <item>` prints it, with whether its record came from the base or the branch | `atelier_core::item_view`, returning `ItemView`, and `Located::read_from` (`ReadFrom::Base` or `ReadFrom::Branch`); `show` calls it | Low | Medium | Low |
 | M6 | What in a mission's plan changed between a reviewed commit and the base's tip | `atelier_core::plan::plan_changed_at`, comparing two commits; `plan_changed`, which `ready` and `review` use, still compares the checkout | Low | Medium: tells the human at go whether the review is stale | Low |
-| M5 | The history of acts with the commit, time and thread of each, as `atelier log` is specified (`redesign-architecture.md`, The log), for a mission and its items | Missing. The old debrief's reader follows first parents only | High: a Git walk of both merge parents and branch tips, with record diffs per commit | Medium: the timeline, planned against added, and when an item merged | Medium: the walk is unsettled in the specification |
+| M5 | The history of actions with the commit, time and thread of each, as `atelier log` is specified (`redesign-architecture.md`, The log), for a mission and its items | Missing. The old debrief's reader follows first parents only | High: a Git walk of both merge parents and branch tips, with record diffs per commit | Medium: the timeline, planned against added, and when an item merged | Medium: the walk is unsettled in the specification |
 
 M1 to M4 come before the mission page can match `show`. M5 can follow the
 first mission page: its parts show "not available yet" until then.
@@ -935,7 +935,7 @@ The spike's activity feed (`Feed.tsx`, `/r/:repo/activity`), built from
 
 - Repository routes nest under `/api/repos/{repo}`, so a repository's
   name never collides with a route name.
-- One `POST /api/act`, with the act named in the body, so atelier-yclc's
+- One `POST /api/action`, with the action named in the body, so atelier-yclc's
   stop of an agreed mission is the same request.
 - A refusal is `200` with `result: refused`, because it is an answer the
   page shows, not a failed request. The same holds for a session that

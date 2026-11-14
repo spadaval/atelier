@@ -1,7 +1,7 @@
-//! The act table: each lifecycle act, the role that runs it, the statuses
+//! The action table: each lifecycle action, the role that runs it, the statuses
 //! it runs from, the status it sets, and its conditions. The commands check
-//! an act with [`check`], and `status` lists what [`unmet`] gives for the
-//! act it names next, so the two cannot disagree.
+//! an action with [`check`], and `status` lists what [`unmet`] gives for the
+//! action it names next, so the two cannot disagree.
 
 use crate::model::{
     is_deferred, is_open, Decision, Finding, FindingName, MissionStatus, Response, Settlement,
@@ -11,7 +11,7 @@ use crate::records::{validate, ItemDir, MissionDir, Problem, ReviewFile};
 use crate::review::chain;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Act {
+pub enum Action {
     /// `ready` on an item. A mission has no go-ahead, and `ready` refuses
     /// one.
     Ready,
@@ -64,17 +64,17 @@ pub enum Role {
 }
 
 pub struct Row {
-    pub act: Act,
+    pub action: Action,
     /// The command, after `atelier`.
     pub command: &'static str,
     pub role: Role,
-    /// Whether the act binds the caller to its role. An act that does not
+    /// Whether the action binds the caller to its role. An action that does not
     /// needs the caller to hold the role already, unless it is a planner's,
     /// which no thread holds.
     pub binds: bool,
-    /// The statuses it runs from; none for an act that creates its record.
+    /// The statuses it runs from; none for an action that creates its record.
     pub from: &'static [Status],
-    /// The status the act sets; `None` leaves it unchanged.
+    /// The status the action sets; `None` leaves it unchanged.
     pub to: Option<Status>,
 }
 
@@ -100,7 +100,7 @@ pub const PROPOSED: &[Status] = &[Status::Draft, Status::Ready];
 
 pub const TABLE: [Row; 23] = [
     Row {
-        act: Act::Ready,
+        action: Action::Ready,
         command: "ready",
         role: Role::Planner,
         binds: false,
@@ -108,7 +108,7 @@ pub const TABLE: [Row; 23] = [
         to: Some(Status::Ready),
     },
     Row {
-        act: Act::Start,
+        action: Action::Start,
         command: "start",
         role: Role::Implementer,
         binds: true,
@@ -116,7 +116,7 @@ pub const TABLE: [Row; 23] = [
         to: Some(Status::Building),
     },
     Row {
-        act: Act::StartNew,
+        action: Action::StartNew,
         command: "start --new",
         role: Role::Implementer,
         binds: true,
@@ -126,18 +126,18 @@ pub const TABLE: [Row; 23] = [
     // Anyone may plan a mission, and becomes its first planner. It is
     // `open` from the start: proposed while its branch has not merged.
     Row {
-        act: Act::StartMission,
+        action: Action::StartMission,
         command: "start --mission",
         role: Role::Planner,
         binds: true,
         from: &[],
         to: Some(Status::Ready),
     },
-    // The acts of a backlog branch: any thread, in a checkout on that
+    // The actions of a backlog branch: any thread, in a checkout on that
     // branch, with no record to take a status from. None is an
-    // implementer's act on an item.
+    // implementer's action on an item.
     Row {
-        act: Act::StartBacklog,
+        action: Action::StartBacklog,
         command: "start --backlog",
         role: Role::Planner,
         binds: false,
@@ -145,7 +145,7 @@ pub const TABLE: [Row; 23] = [
         to: None,
     },
     Row {
-        act: Act::SubmitBacklog,
+        action: Action::SubmitBacklog,
         command: "submit",
         role: Role::Planner,
         binds: false,
@@ -153,20 +153,20 @@ pub const TABLE: [Row; 23] = [
         to: None,
     },
     Row {
-        act: Act::MergeBacklog,
+        action: Action::MergeBacklog,
         command: "merge",
         role: Role::Planner,
         binds: false,
         from: &[],
         to: None,
     },
-    // The acts of a mission's branch, from proposed, in a checkout on that
+    // The actions of a mission's branch, from proposed, in a checkout on that
     // branch: `submit` binds the caller as a planner, taking the plan over
     // when it was not one, and writes an old `draft` as `open`; `merge`
     // needs a planner, and the plan `open`, as `submit` leaves it. A plan
     // dropped on its branch does neither.
     Row {
-        act: Act::SubmitMission,
+        action: Action::SubmitMission,
         command: "submit",
         role: Role::Planner,
         binds: true,
@@ -174,7 +174,7 @@ pub const TABLE: [Row; 23] = [
         to: Some(Status::Ready),
     },
     Row {
-        act: Act::MergeMission,
+        action: Action::MergeMission,
         command: "merge",
         role: Role::Planner,
         binds: false,
@@ -182,7 +182,7 @@ pub const TABLE: [Row; 23] = [
         to: None,
     },
     Row {
-        act: Act::TakeOver,
+        action: Action::TakeOver,
         command: "start",
         role: Role::Implementer,
         binds: true,
@@ -190,7 +190,7 @@ pub const TABLE: [Row; 23] = [
         to: None,
     },
     Row {
-        act: Act::Submit,
+        action: Action::Submit,
         command: "submit",
         role: Role::Implementer,
         binds: false,
@@ -198,7 +198,7 @@ pub const TABLE: [Row; 23] = [
         to: Some(Status::InReview),
     },
     Row {
-        act: Act::Review,
+        action: Action::Review,
         command: "review",
         role: Role::Reviewer,
         binds: true,
@@ -206,7 +206,7 @@ pub const TABLE: [Row; 23] = [
         to: None,
     },
     Row {
-        act: Act::VerdictChanges,
+        action: Action::VerdictChanges,
         command: "verdict changes",
         role: Role::Reviewer,
         binds: false,
@@ -214,7 +214,7 @@ pub const TABLE: [Row; 23] = [
         to: Some(Status::ChangesRequested),
     },
     Row {
-        act: Act::VerdictApprove,
+        action: Action::VerdictApprove,
         command: "verdict approve",
         role: Role::Reviewer,
         binds: false,
@@ -222,7 +222,7 @@ pub const TABLE: [Row; 23] = [
         to: Some(Status::Approved),
     },
     Row {
-        act: Act::Merge,
+        action: Action::Merge,
         command: "merge",
         role: Role::Implementer,
         binds: false,
@@ -230,7 +230,7 @@ pub const TABLE: [Row; 23] = [
         to: Some(Status::Done),
     },
     Row {
-        act: Act::MergeTrivial,
+        action: Action::MergeTrivial,
         command: "merge --trivial",
         role: Role::Implementer,
         binds: false,
@@ -238,7 +238,7 @@ pub const TABLE: [Row; 23] = [
         to: Some(Status::Done),
     },
     Row {
-        act: Act::Drop,
+        action: Action::Drop,
         command: "drop",
         role: Role::Planner,
         binds: false,
@@ -252,9 +252,9 @@ pub const TABLE: [Row; 23] = [
         ],
         to: Some(Status::Dropped),
     },
-    // Anyone may close an item; like a planner's act, it needs no role.
+    // Anyone may close an item; like a planner's action, it needs no role.
     Row {
-        act: Act::Close,
+        action: Action::Close,
         command: "close",
         role: Role::Planner,
         binds: false,
@@ -264,7 +264,7 @@ pub const TABLE: [Row; 23] = [
     // Its lead or a planner; no role is checked. It runs on an agreed
     // mission: open, read from the base.
     Row {
-        act: Act::CloseMission,
+        action: Action::CloseMission,
         command: "close",
         role: Role::Planner,
         binds: false,
@@ -272,7 +272,7 @@ pub const TABLE: [Row; 23] = [
         to: Some(Status::Done),
     },
     Row {
-        act: Act::PlanVerdictChanges,
+        action: Action::PlanVerdictChanges,
         command: "verdict changes",
         role: Role::Reviewer,
         binds: false,
@@ -280,7 +280,7 @@ pub const TABLE: [Row; 23] = [
         to: None,
     },
     Row {
-        act: Act::PlanVerdictApprove,
+        action: Action::PlanVerdictApprove,
         command: "verdict approve",
         role: Role::Reviewer,
         binds: false,
@@ -291,7 +291,7 @@ pub const TABLE: [Row; 23] = [
     // it runs on; the CLI checks where it runs. It changes the finding, not
     // the status of its item, and checks the finding with `check_settle`.
     Row {
-        act: Act::Settle,
+        action: Action::Settle,
         command: "new --from, drop",
         role: Role::Planner,
         binds: false,
@@ -299,7 +299,7 @@ pub const TABLE: [Row; 23] = [
         to: None,
     },
     Row {
-        act: Act::Lead,
+        action: Action::Lead,
         command: "lead",
         role: Role::Lead,
         binds: true,
@@ -308,36 +308,36 @@ pub const TABLE: [Row; 23] = [
     },
 ];
 
-/// The acts on a mission. `drop` is also an item's; every other act is
+/// The actions on a mission. `drop` is also an item's; every other action is
 /// only an item's.
-const ON_MISSION: [Act; 8] = [
-    Act::StartMission,
-    Act::SubmitMission,
-    Act::MergeMission,
-    Act::CloseMission,
-    Act::Drop,
-    Act::PlanVerdictChanges,
-    Act::PlanVerdictApprove,
-    Act::Lead,
+const ON_MISSION: [Action; 8] = [
+    Action::StartMission,
+    Action::SubmitMission,
+    Action::MergeMission,
+    Action::CloseMission,
+    Action::Drop,
+    Action::PlanVerdictChanges,
+    Action::PlanVerdictApprove,
+    Action::Lead,
 ];
 
-/// Whether an act on an item, or with `mission` on a mission, changes a
+/// Whether an action on an item, or with `mission` on a mission, changes a
 /// status `from` to `to`: what the pre-commit hook asks of a status
 /// changed in a commit.
 pub fn changes(mission: bool, from: Status, to: Status) -> bool {
     (TABLE.iter())
-        .filter(|row| row.act == Act::Drop || ON_MISSION.contains(&row.act) == mission)
+        .filter(|row| row.action == Action::Drop || ON_MISSION.contains(&row.action) == mission)
         .any(|row| row.from.contains(&from) && row.to == Some(to))
 }
 
-pub fn row(act: Act) -> &'static Row {
+pub fn row(action: Action) -> &'static Row {
     TABLE
         .iter()
-        .find(|row| row.act == act)
-        .expect("every act has a row")
+        .find(|row| row.action == action)
+        .expect("every action has a row")
 }
 
-/// What an act is checked against: the item's record, found by the
+/// What an action is checked against: the item's record, found by the
 /// cross-branch rule, and what lies outside it.
 pub struct Facts<'a> {
     pub item: &'a ItemDir,
@@ -379,10 +379,10 @@ pub struct SinceApproval {
     pub head: Option<ItemDir>,
 }
 
-/// What a mission's act is checked against.
+/// What a mission's action is checked against.
 pub struct MissionFacts<'a> {
     pub mission: &'a MissionDir,
-    /// Who acts: a planner, for the acts of a mission's branch.
+    /// Who acts: a planner, for the actions of a mission's branch.
     pub caller: &'a Thread,
     /// The items that name the mission, each with its status as
     /// [`crate::Located::record`] finds it; what `close` waits for.
@@ -520,7 +520,7 @@ impl<'a> Facts<'a> {
     }
 }
 
-/// A condition of an act that does not hold.
+/// A condition of an action that does not hold.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Condition {
     /// A blocker is not done.
@@ -598,14 +598,14 @@ pub enum Condition {
 }
 
 impl Condition {
-    /// Whether `act` refused for this condition breaks a rule, which
+    /// Whether `action` refused for this condition breaks a rule, which
     /// `ATELIER_SKIP` passes, rather than having nothing to act on: a branch
     /// `start` would create, or one a take-over would switch to; a question
     /// to decide; a finding to settle, or one settled already.
-    pub fn is_rule(&self, act: Act) -> bool {
+    pub fn is_rule(&self, action: Action) -> bool {
         !matches!(
-            (act, self),
-            (Act::Start, Condition::BranchExists)
+            (action, self),
+            (Action::Start, Condition::BranchExists)
                 | (
                     _,
                     Condition::NoBranch | Condition::NoFinding(_) | Condition::Settled { .. }
@@ -616,14 +616,14 @@ impl Condition {
 
 #[derive(Debug)]
 pub enum Refusal {
-    /// The caller holds a role on the item, and the act is another role's.
+    /// The caller holds a role on the item, and the action is another role's.
     Role(Role),
-    /// The act does not run from the item's status.
+    /// The action does not run from the item's status.
     From {
-        act: Act,
+        action: Action,
         status: Status,
     },
-    /// The act needs the caller to hold its role on the item, the item
+    /// The action needs the caller to hold its role on the item, the item
     /// itself or this round's review, and it does not.
     NotHolder {
         role: Role,
@@ -634,59 +634,59 @@ pub enum Refusal {
 }
 
 impl Refusal {
-    /// Whether this refusal of `act` breaks only rules, which `ATELIER_SKIP`
+    /// Whether this refusal of `action` breaks only rules, which `ATELIER_SKIP`
     /// passes. A record that does not read is none, nor is a verdict by a
     /// caller with no review file of the round to record it in.
-    pub fn is_rule(&self, act: Act) -> bool {
+    pub fn is_rule(&self, action: Action) -> bool {
         match self {
             Refusal::Record(_) => false,
             Refusal::NotHolder {
                 role: Role::Reviewer,
                 ..
             } => false,
-            Refusal::Unmet(unmet) => unmet.iter().all(|c| c.is_rule(act)),
+            Refusal::Unmet(unmet) => unmet.iter().all(|c| c.is_rule(action)),
             Refusal::Role(_) | Refusal::From { .. } | Refusal::NotHolder { .. } => true,
         }
     }
 }
 
-/// The status `act` sets on the item, `None` for unchanged, or the first
+/// The status `action` sets on the item, `None` for unchanged, or the first
 /// reason it is refused.
-pub fn check(act: Act, facts: &Facts) -> Result<Option<Status>, Refusal> {
-    match found(act, facts, false) {
-        Ok(found) => found.into_iter().next().map_or(Ok(row(act).to), Err),
+pub fn check(action: Action, facts: &Facts) -> Result<Option<Status>, Refusal> {
+    match found(action, facts, false) {
+        Ok(found) => found.into_iter().next().map_or(Ok(row(action).to), Err),
         Err(problem) => Err(Refusal::Record(problem)),
     }
 }
 
-/// Every reason `act` is refused, in the order [`check`] gives the first:
+/// Every reason `action` is refused, in the order [`check`] gives the first:
 /// what `ATELIER_SKIP` would have to pass.
-pub fn refusals(act: Act, facts: &Facts) -> Result<Vec<Refusal>, Problem> {
-    found(act, facts, true)
+pub fn refusals(action: Action, facts: &Facts) -> Result<Vec<Refusal>, Problem> {
+    found(action, facts, true)
 }
 
-fn found(act: Act, facts: &Facts, all: bool) -> Result<Vec<Refusal>, Problem> {
-    let row = row(act);
+fn found(action: Action, facts: &Facts, all: bool) -> Result<Vec<Refusal>, Problem> {
+    let row = row(action);
     let mut found = Vec::new();
     // A thread that holds one role and runs another's command is told its
     // role, whatever the status. `review` by an implementer is refused by
     // its own condition instead, which names every thread that may not run
-    // it, and a planner's act on an item nobody holds
+    // it, and a planner's action on an item nobody holds
     // yet needs no role on it.
     if let Some(role) = facts.role().filter(|role| *role != row.role) {
-        if !matches!(act, Act::Review) && row.role != Role::Planner {
+        if !matches!(action, Action::Review) && row.role != Role::Planner {
             found.push(Refusal::Role(role));
         }
     }
     if !row.from.contains(&facts.status()) {
         found.push(Refusal::From {
-            act,
+            action,
             status: facts.status(),
         });
     }
     if !row.binds {
         let (holds, holder) = match row.role {
-            // A mission's roles bind, so their acts never come here.
+            // A mission's roles bind, so their actions never come here.
             Role::Planner | Role::Lead => (true, None),
             Role::Implementer => (facts.holds(), facts.holder()),
             Role::Reviewer => (
@@ -707,7 +707,7 @@ fn found(act: Act, facts: &Facts, all: bool) -> Result<Vec<Refusal>, Problem> {
     // The conditions read the item's findings, which may not parse: a
     // refusal found before them is said all the same.
     if all || found.is_empty() {
-        let unmet = unmet(act, facts)?;
+        let unmet = unmet(action, facts)?;
         if !unmet.is_empty() {
             found.push(Refusal::Unmet(unmet));
         }
@@ -715,48 +715,51 @@ fn found(act: Act, facts: &Facts, all: bool) -> Result<Vec<Refusal>, Problem> {
     Ok(found)
 }
 
-/// The status `act`, a mission's, sets on the mission, `None` for
+/// The status `action`, a mission's, sets on the mission, `None` for
 /// unchanged, or the first reason it is refused.
-pub fn check_mission(act: Act, facts: &MissionFacts) -> Result<Option<MissionStatus>, Refusal> {
-    match mission_refusals(act, facts) {
+pub fn check_mission(
+    action: Action,
+    facts: &MissionFacts,
+) -> Result<Option<MissionStatus>, Refusal> {
+    match mission_refusals(action, facts) {
         Ok(found) => {
-            (found.into_iter().next()).map_or(Ok(row(act).to.and_then(MissionStatus::of)), Err)
+            (found.into_iter().next()).map_or(Ok(row(action).to.and_then(MissionStatus::of)), Err)
         }
         Err(problem) => Err(Refusal::Record(problem)),
     }
 }
 
-/// Every reason `act`, a mission's, is refused, as [`refusals`] gives an
+/// Every reason `action`, a mission's, is refused, as [`refusals`] gives an
 /// item's.
-pub fn mission_refusals(act: Act, facts: &MissionFacts) -> Result<Vec<Refusal>, Problem> {
-    let row = row(act);
+pub fn mission_refusals(action: Action, facts: &MissionFacts) -> Result<Vec<Refusal>, Problem> {
+    let row = row(action);
     let status = facts.mission.mission.status.status();
     let mut found = Vec::new();
     if !row.from.contains(&status) {
-        found.push(Refusal::From { act, status });
+        found.push(Refusal::From { action, status });
     }
     // Merging a plan needs one of its planners; `submit` makes the caller
     // one, so a thread that is not takes the plan over there.
     let planners = &facts.mission.mission.planners;
-    if act == Act::MergeMission && !planners.0.contains(facts.caller) {
+    if action == Action::MergeMission && !planners.0.contains(facts.caller) {
         found.push(Refusal::NotHolder {
             role: Role::Planner,
             holder: planners.holder().cloned(),
         });
     }
-    let unmet = unmet_mission(act, facts)?;
+    let unmet = unmet_mission(action, facts)?;
     if !unmet.is_empty() {
         found.push(Refusal::Unmet(unmet));
     }
     Ok(found)
 }
 
-/// The conditions of `act`, a mission's, that do not hold.
-pub fn unmet_mission(act: Act, facts: &MissionFacts) -> Result<Vec<Condition>, Problem> {
+/// The conditions of `action`, a mission's, that do not hold.
+pub fn unmet_mission(action: Action, facts: &MissionFacts) -> Result<Vec<Condition>, Problem> {
     let mission = facts.mission;
     let mut unmet = Vec::new();
-    match act {
-        Act::CloseMission => {
+    match action {
+        Action::CloseMission => {
             for (id, status) in facts.items {
                 if !matches!(status, Status::Done | Status::Dropped) {
                     unmet.push(Condition::ItemOpen {
@@ -769,13 +772,13 @@ pub fn unmet_mission(act: Act, facts: &MissionFacts) -> Result<Vec<Condition>, P
                 unmet.push(Condition::NoResult);
             }
         }
-        Act::PlanVerdictChanges | Act::PlanVerdictApprove => {
+        Action::PlanVerdictChanges | Action::PlanVerdictApprove => {
             let Some(file) = facts.review else {
                 return Ok(unmet);
             };
             let findings = mission.findings()?;
             unmet = invalid(validate(&[], std::slice::from_ref(mission)), file);
-            unmet.extend(verdict(act, file, &findings, &[]));
+            unmet.extend(verdict(action, file, &findings, &[]));
         }
         _ => {}
     }
@@ -796,7 +799,7 @@ fn invalid(problems: Vec<Problem>, file: &ReviewFile) -> Vec<Condition> {
 /// same round is another reviewer's, working blind, so what it carries
 /// does not close a finding for this one.
 fn verdict(
-    act: Act,
+    action: Action,
     file: &ReviewFile,
     findings: &[Finding],
     decisions: &[Decision],
@@ -808,7 +811,7 @@ fn verdict(
         .collect();
     let mut unmet = decided(file, &seen, decisions);
     let mut open = seen.iter().filter(|f| is_open(f, &seen, decisions));
-    if matches!(act, Act::VerdictChanges | Act::PlanVerdictChanges) {
+    if matches!(action, Action::VerdictChanges | Action::PlanVerdictChanges) {
         if !open.any(|f| f.name.review == file.name) {
             unmet.push(Condition::NoOpenFinding);
         }
@@ -841,20 +844,23 @@ fn decided(file: &ReviewFile, seen: &[Finding], decisions: &[Decision]) -> Vec<C
         .collect()
 }
 
-/// The conditions of `act` that do not hold.
-pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
+/// The conditions of `action` that do not hold.
+pub fn unmet(action: Action, facts: &Facts) -> Result<Vec<Condition>, Problem> {
     let item = facts.item;
     let mut unmet = Vec::new();
-    match act {
-        Act::Ready | Act::StartNew | Act::Drop | Act::Lead => {}
-        // On no item: a backlog branch's acts, and a mission's.
-        Act::StartMission | Act::StartBacklog | Act::SubmitBacklog | Act::MergeBacklog => {}
-        Act::SubmitMission | Act::MergeMission => {}
+    match action {
+        Action::Ready | Action::StartNew | Action::Drop | Action::Lead => {}
+        // On no item: a backlog branch's actions, and a mission's.
+        Action::StartMission
+        | Action::StartBacklog
+        | Action::SubmitBacklog
+        | Action::MergeBacklog => {}
+        Action::SubmitMission | Action::MergeMission => {}
         // The finding's conditions are checked by `check_settle`.
-        Act::Settle => {}
-        // A mission's act is checked with `unmet_mission`.
-        Act::CloseMission | Act::PlanVerdictChanges | Act::PlanVerdictApprove => {}
-        Act::Start => {
+        Action::Settle => {}
+        // A mission's action is checked with `unmet_mission`.
+        Action::CloseMission | Action::PlanVerdictChanges | Action::PlanVerdictApprove => {}
+        Action::Start => {
             for (id, status) in facts.blockers {
                 if *status != Some(Status::Done) {
                     unmet.push(Condition::Blocked {
@@ -877,14 +883,14 @@ pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
                 unmet.push(Condition::BranchExists);
             }
         }
-        Act::TakeOver => {
+        Action::TakeOver => {
             if !facts.branch {
                 unmet.push(Condition::NoBranch);
             }
             // A dropped mission's items start no more, taken over or not.
             unmet.extend(mission_dropped(facts));
         }
-        Act::Submit => {
+        Action::Submit => {
             for (ticked, text) in item.done_when() {
                 if !ticked {
                     unmet.push(Condition::Unticked(text));
@@ -910,26 +916,26 @@ pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
                 }
             }
         }
-        Act::Review => {
+        Action::Review => {
             if item.item.implementers.0.contains(facts.caller) {
                 unmet.push(Condition::FormerImplementer);
             }
         }
-        Act::VerdictChanges | Act::VerdictApprove => {
+        Action::VerdictChanges | Action::VerdictApprove => {
             let Some(file) = facts.reviewing() else {
                 return Ok(unmet);
             };
             let (findings, decisions) = (item.findings()?, item.decisions()?);
             unmet = invalid(validate(std::slice::from_ref(item), &[]), file);
-            unmet.extend(verdict(act, file, &findings, &decisions));
+            unmet.extend(verdict(action, file, &findings, &decisions));
         }
-        Act::Close => {
+        Action::Close => {
             if facts.branch {
                 unmet.push(Condition::BranchExists);
             }
         }
-        Act::Merge | Act::MergeTrivial => {
-            if act == Act::MergeTrivial {
+        Action::Merge | Action::MergeTrivial => {
+            if action == Action::MergeTrivial {
                 for (ticked, text) in item.done_when() {
                     if !ticked {
                         unmet.push(Condition::Unticked(text));
@@ -945,7 +951,7 @@ pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
             // A stop of its mission stops its merge too.
             unmet.extend(mission_dropped(facts));
             let checkout = facts.checkout;
-            if act == Act::Merge {
+            if action == Action::Merge {
                 match approval(item) {
                     None => unmet.push(Condition::NoApproval),
                     Some(review) => {
@@ -975,10 +981,10 @@ fn mission_dropped(facts: &Facts) -> Option<Condition> {
 }
 
 /// Every reason `new --from` or `drop` on finding `name` of the item is
-/// refused: the act's row needs the item done, and the finding must be one
+/// refused: the action's row needs the item done, and the finding must be one
 /// of its reviews', deferred and not yet settled.
 pub fn settle_refusals(facts: &Facts, name: &FindingName) -> Result<Vec<Refusal>, Problem> {
-    let mut found = refusals(Act::Settle, facts)?;
+    let mut found = refusals(Action::Settle, facts)?;
     let findings = facts.item.findings()?;
     let decisions = facts.item.decisions()?;
     // Settled comes first: it is no rule, so a skip never settles twice.
@@ -1043,15 +1049,15 @@ fn stale(item: &ItemDir, review: &ReviewFile, since: &SinceApproval) -> Option<C
     })
 }
 
-/// The act the caller would run next on the item, if any: start a ready
+/// The action the caller would run next on the item, if any: start a ready
 /// item; as its holder, submit it or merge it; as this round's reviewer,
 /// `verdict changes` while its file holds an open fix-now finding, else
 /// `verdict approve`; as anyone else, review it when it is in review and
 /// they never implemented it, else take it over.
-pub fn next(facts: &Facts) -> Result<Option<Act>, Problem> {
+pub fn next(facts: &Facts) -> Result<Option<Action>, Problem> {
     let status = facts.status();
     if status == Status::Ready {
-        return Ok(Some(Act::Start));
+        return Ok(Some(Action::Start));
     }
     if !STARTED.contains(&status) {
         return Ok(None);
@@ -1063,22 +1069,22 @@ pub fn next(facts: &Facts) -> Result<Option<Act>, Problem> {
             .iter()
             .any(|f| f.name.review == file.name && is_open(f, &findings, &decisions));
         return Ok(Some(if open {
-            Act::VerdictChanges
+            Action::VerdictChanges
         } else {
-            Act::VerdictApprove
+            Action::VerdictApprove
         }));
     }
     if !facts.holds() {
         let implemented = facts.item.item.implementers.0.contains(facts.caller);
         if status == Status::InReview && !implemented {
-            return Ok(Some(Act::Review));
+            return Ok(Some(Action::Review));
         }
         // A reviewer whose review is done is not offered the item itself.
-        return Ok(facts.reviewed().is_none().then_some(Act::TakeOver));
+        return Ok(facts.reviewed().is_none().then_some(Action::TakeOver));
     }
     Ok(match status {
-        Status::Approved => Some(Act::Merge),
+        Status::Approved => Some(Action::Merge),
         Status::InReview => None,
-        _ => Some(Act::Submit),
+        _ => Some(Action::Submit),
     })
 }

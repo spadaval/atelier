@@ -9,7 +9,7 @@
     "build": "tsc --noEmit && vite build",
     "e2e": "playwright test",
     "desk-matches-cli": "node live/desk-matches-cli.ts",
-    "act-is-a-record": "node live/act-is-a-record.ts"
+    "action-is-a-record": "node live/action-is-a-record.ts"
   },
   "packageManager": "pnpm@12.18.0",
   "dependencies": {

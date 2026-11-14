@@ -1,4 +1,4 @@
-//! The Git calls a [`Repo`](crate::Repo) and the acts here make, and the
+//! The Git calls a [`Repo`](crate::Repo) and the actions here make, and the
 //! helpers `atelier-cli`'s own Git calls are built on. `run` and
 //! `current_branch` are copied from `text` and `checkout_branch` in
 //! `crates/atelier-cli/src/commands/git.rs`, trimmed to plain errors; the
