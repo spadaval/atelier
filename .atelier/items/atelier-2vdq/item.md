@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-2vdq
 title: Plan a mission on its branch and make two approving plan reviews its only gate, with no draft status and no go
-status: in_review
+status: approved
 mission: atelier-to83
 labels:
 - redesign
