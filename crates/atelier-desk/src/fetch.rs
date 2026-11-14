@@ -95,13 +95,25 @@ impl Fetches {
 
     /// What the forge says of the pull request whose head is `branch` in
     /// `name`, the newest where several are: unknown while no list of its
-    /// GitHub forge has been read, and none for a repository with no
-    /// GitHub forge.
+    /// GitHub forge has been read, or when the last read failed and the
+    /// list before it had none, and none for a repository with no GitHub
+    /// forge.
     pub fn pull_request(&self, name: &str, branch: &str) -> PrState {
         let state = self.state.lock().unwrap();
         match state.get(name) {
             Some(kept) if !kept.github => PrState::Known(None),
-            Some(Fetched { prs: Some(prs), .. }) => PrState::Known(prs.get(branch).cloned()),
+            Some(Fetched {
+                prs: Some(prs),
+                forge_error,
+                ..
+            }) => match prs.get(branch) {
+                // A pull request the last good list named stays as it was.
+                Some(pr) => PrState::Known(Some(pr.clone())),
+                // Its absence is confirmed only by a list read just now:
+                // one may have been opened since a list that failed after.
+                None if forge_error.is_none() => PrState::Known(None),
+                None => PrState::Unknown,
+            },
             _ => PrState::Unknown,
         }
     }

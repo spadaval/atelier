@@ -541,7 +541,7 @@ none (atelier-aab1), and the strategy puts them out of scope.
 | Field | Given by |
 | --- | --- |
 | `plans[] {mission, amends, pull_request, round}` | Each mission whose `state` is `proposed`, as on its page, and each agreed mission read from its own unmerged branch, an amendment (`amends: true`). A plan dropped on its branch is `stopped` or `stop_pending`, and not listed |
-| `changes[] {branch, pull_request, records[] {kind, id, title, change}}` | By branch: each record an unmerged branch adds (`Located::proposed`, from `Located::source` and `Located::also_added`) or changes (`Located::changes`), with `change` `added`, `changed`, `dropped` or `removed`. A proposed plan's own branch, whose records are its plan, and a started item's own branch, which is work in motion, are left out; an amendment's branch is not |
+| `changes[] {branch, pull_request, records[] {kind, id, title, change}}` | By branch: each record an unmerged branch adds (`Located::proposed`, from `Located::source` and `Located::also_added`) or changes (`Located::changes`), with `change` `added`, `changed`, `dropped` or `removed`. A plan's own branch, proposed or stopped there, whose records are its plan, and a started item's own branch, which is work in motion, are left out; an agreed mission's own branch is not, and its drop there, not merged yet, is listed as `dropped` |
 
 ### `GET /api/motion`
 
@@ -740,7 +740,9 @@ The page shows the plan `stopped` once the drop is on the forge's copy of
 the branch and the forge's last list of pull requests has its pull request
 closed or none, and `stop_pending` before, and while no list has been read,
 since closing it is then not confirmed. A list that fails after one was read
-keeps the last one, and `fetched.error` says why. An agreed mission dropped
+keeps the last one, and `fetched.error` says why; a pull request that list
+named keeps its state, but its having none counts only from a list that was
+read just now, since one may have been opened since. An agreed mission dropped
 on any unmerged branch, its own too, is `stop_pending` until that branch
 merges, whatever its pull request says.
 

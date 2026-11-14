@@ -775,20 +775,34 @@ pub fn proposed(repo: &mut Repo, name: &str) -> Result<Option<ProposedRepo>> {
     // not merged, or an old `draft` on the base; and an agreed mission
     // whose own unmerged branch changes it, an amendment, which merges by
     // its rules.
+    // Records on a branch beside its mission's, each as a change of that
+    // branch: an agreed mission's own drop, not merged yet.
+    let mut beside: Vec<(String, ChangedRecord)> = Vec::new();
     for dir in &records.missions {
         let row = records.row(repo, dir)?;
         let Some((located, _)) = records.mission(&dir.mission.id) else {
             continue;
         };
-        let amends =
-            row.state == MissionState::Open && located.base.is_some() && located.source().is_some();
+        let source = located.source().map(|b| b.name.clone());
+        let agreed = located.base.is_some();
+        // A plan's own branch holds the plan, its items too, whether it is
+        // proposed or stopped there: none of it is a change of its own.
+        // An agreed mission's branch is a change like any branch's.
+        if !agreed {
+            plan_branches.extend(source.clone());
+        }
+        if let (true, Some(branch), MissionState::StopPending) = (agreed, &source, row.state) {
+            let dropped = ChangedRecord {
+                kind: HoldKind::Mission,
+                id: dir.mission.id.clone(),
+                title: dir.mission.title.clone(),
+                change: Change::Dropped,
+            };
+            beside.push((branch.clone(), dropped));
+        }
+        let amends = row.state == MissionState::Open && agreed && source.is_some();
         if row.state != MissionState::Proposed && !amends {
             continue;
-        }
-        // A plan's own branch holds the plan, its items too; an
-        // amendment's other records are changes like any branch's.
-        if !amends {
-            plan_branches.extend(located.source().map(|b| b.name.clone()));
         }
         plans.push(ProposedPlan {
             mission: row,
@@ -820,6 +834,9 @@ pub fn proposed(repo: &mut Repo, name: &str) -> Result<Option<ProposedRepo>> {
     }
     for located in &records.located {
         changes_of(located, HoldKind::Mission, &mut note);
+    }
+    for (branch, record) in beside {
+        note(&branch, record);
     }
     let changes = by_branch
         .into_iter()

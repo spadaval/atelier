@@ -115,7 +115,8 @@ fn world() -> World {
     fs::write(&pr_state, "OPEN").unwrap();
     let gh = dir.path().join("gh");
     let script = format!(
-        "#!/bin/sh\n[ \"$(cat {state})\" = FAIL ] && {{ echo 'gh: the forge did not answer' >&2; exit 1; }}\ncase \"$1 $2\" in\n\
+        "#!/bin/sh\n[ \"$(cat {state})\" = FAIL ] && {{ echo 'gh: the forge did not answer' >&2; exit 1; }}\n\
+         [ \"$1 $2 $(cat {state})\" = 'pr list NONE' ] && {{ echo '[]'; exit 0; }}\ncase \"$1 $2\" in\n\
          'pr list') printf '[{{\"number\":7,\"url\":\"https://forge.example/pull/7\",\"state\":\"%s\",\"headRefName\":\"{PLAN}\"}}]' \"$(cat {state})\" ;;\n\
          'pr close') printf '%s\\n' \"$*\" >> {closed}; printf CLOSED > {state} ;;\n\
          *) exit 1 ;;\nesac\n",
@@ -479,6 +480,29 @@ async fn an_agreed_missions_drop_on_its_own_branch_is_pending_in_both_lists_unti
         shown(&world.app, OPEN).await,
         (json!("stop_pending"), true, false)
     );
+    // The drop is a proposed change of its branch until it merges.
+    let dropping = |proposed: &Value| {
+        let changes = proposed["repos"][0]["changes"].as_array().unwrap().clone();
+        changes
+            .into_iter()
+            .find(|c| c["branch"] == format!("origin/{OPEN}"))
+    };
+    let proposed = get(&world.app, "/api/proposed").await;
+    let change = dropping(&proposed).expect("the drop is proposed");
+    assert_eq!(change["records"][0]["id"], OPEN, "{proposed}");
+    assert_eq!(change["records"][0]["change"], "dropped");
+    git(&world.planner, &["switch", "-q", "main"]);
+    git(
+        &world.planner,
+        &["merge", "-q", "--no-ff", "-m", "Merge the stop", OPEN],
+    );
+    git(&world.planner, &["push", "-q", "origin", "main"]);
+    world.desk.fetch_all();
+    assert_eq!(
+        shown(&world.app, OPEN).await,
+        (json!("stopped"), false, true)
+    );
+    assert!(dropping(&get(&world.app, "/api/proposed").await).is_none());
 }
 
 #[tokio::test]
@@ -569,4 +593,74 @@ async fn an_agreed_missions_amendment_on_its_own_branch_is_proposed_with_its_oth
         .expect("its other records are changes");
     assert_eq!(on["records"][0]["id"], "demo-i001", "{repo}");
     assert_eq!(on["records"][0]["change"], "added");
+}
+
+#[tokio::test]
+async fn a_stop_after_a_list_without_its_pull_request_stays_pending_while_the_forge_fails() {
+    let world = world();
+    // The last good list has no pull request for the plan's branch.
+    fs::write(&world.pr_state, "NONE").unwrap();
+    world.desk.fetch_all();
+    // Then the forge stops answering, and the stop cannot close one.
+    fs::write(&world.pr_state, "FAIL").unwrap();
+    let done = act(
+        &world.app,
+        json!({"act": "stop", "repo": "demo", "id": PLAN, "reason": REASON}),
+    )
+    .await;
+    assert!(
+        done["text"]
+            .as_str()
+            .unwrap()
+            .contains("its pull request was not closed"),
+        "{done}"
+    );
+    assert_eq!(
+        shown(&world.app, PLAN).await,
+        (json!("stop_pending"), true, false)
+    );
+    // A list read now that has none confirms it.
+    fs::write(&world.pr_state, "NONE").unwrap();
+    world.desk.fetch_all();
+    assert_eq!(
+        shown(&world.app, PLAN).await,
+        (json!("stopped"), false, true)
+    );
+}
+
+#[tokio::test]
+async fn a_stopped_plans_items_are_not_proposed() {
+    let world = world();
+    git(&world.planner, &["switch", "-q", PLAN]);
+    let item = format!(
+        "---\nschema: atelier.item\nschema_version: 3\nid: demo-i002\ntitle: The plan's item\n\
+         status: draft\nmission: {PLAN}\nlabels: []\npriority: medium\nblocked_by: []\n\
+         implementers: []\nready: null\ntrivial: null\ncaused_by: null\n\
+         created_at: 2026-11-10T09:00:00Z\n---\n\n## Goal\n\nIt.\n\n## Done when\n\n## Scope\n"
+    );
+    fs::create_dir_all(world.planner.join(".atelier/items/demo-i002")).unwrap();
+    fs::write(world.planner.join(".atelier/items/demo-i002/item.md"), item).unwrap();
+    git(&world.planner, &["add", "-A"]);
+    git(&world.planner, &["commit", "-qm", "Plan an item"]);
+    git(&world.planner, &["push", "-q", "origin", PLAN]);
+    world.desk.fetch_all();
+    let before = get(&world.app, "/api/proposed").await;
+    assert_eq!(
+        before["repos"][0]["plans"][0]["mission"]["id"], PLAN,
+        "{before}"
+    );
+    assert_eq!(
+        before["repos"][0]["changes"],
+        json!([]),
+        "a plan's items are its plan"
+    );
+    let done = act(
+        &world.app,
+        json!({"act": "stop", "repo": "demo", "id": PLAN, "reason": REASON}),
+    )
+    .await;
+    assert_eq!(done["result"], "done", "{done}");
+    let after = get(&world.app, "/api/proposed").await;
+    assert_eq!(after["repos"][0]["plans"], json!([]), "{after}");
+    assert_eq!(after["repos"][0]["changes"], json!([]), "{after}");
 }
