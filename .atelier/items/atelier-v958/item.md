@@ -140,7 +140,7 @@ the CLI's `drop`, and the three lines in `docs/design.md`.
 
 ### The installed service
 
-The service on this host runs this branch's build, 6b40fec1. I installed it
+The service on this host runs this branch's build, e5c264e9. I installed it
 with `desk/service/install.sh` from a clean checkout of this branch, because
 the first Done when line asks for the installed service. Its config, backed
 up first to `~/.cache/atelier-desk/config.toml.before-v958`, now names the
@@ -165,7 +165,7 @@ systemd: the push over SSH, and `gh` being signed in.
   `origin` seconds after the start. `/api/proposed`, `/api/motion` and
   `/api/disputed` read all five repositories without error. In motion lists
   this item's thread as live.
-- `cargo nextest run`: 360 passed, 1 skipped. `cargo clippy --all-targets
+- `cargo nextest run`: 361 passed, 1 skipped. `cargo clippy --all-targets
   -- -D warnings` and `cargo fmt -- --check` are clean.
 - `crates/atelier-desk/tests/acts.rs` runs against a bare remote with a
   `gh` stand-in:
@@ -194,6 +194,10 @@ systemd: the push over SSH, and `gh` being signed in.
     The tests: a stop read while its pull request is being read again is
     pending, and a drop pushed from another clone is not confirmed by a list
     read before it. Both fail on round 3's code.
+  - Round 5's fix: a branch has no open pull request only if every open
+    one was listed; the Desk reads up to 1,000 open ones beside the last
+    200 of any state. The test, an open pull request older than the last
+    200, fails on round 4's code.
 - `crates/atelier-desk/tests/desk.rs` covers the proposed, in-motion and
   disputed pages from local branches. `news.rs` has a unit test of proposed
   and merged news, with no repeat across a restart and the stub command's
@@ -219,3 +223,4 @@ systemd: the push over SSH, and `gh` being signed in.
 - 3-lb05.1: fixed in 7ec7459
 - 3-lb05.4: fixed in 7ec7459
 - 4-c4m7.1: fixed in 6b40fec
+- 5-cowv.2: fixed in e5c264e
