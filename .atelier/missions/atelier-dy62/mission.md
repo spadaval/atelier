@@ -6,7 +6,7 @@ title: Make the tracker one crate, atelier-core, that the CLI and the Desk call
 status: ready
 labels:
 - refactor
-lead: null
+lead: d7c28b6a-ecd6-469e-8cb8-154984751526
 ready:
   by: sumeet, in conversation on 2026-11-14
   at: 2026-11-14T06:21:12.860651075Z
