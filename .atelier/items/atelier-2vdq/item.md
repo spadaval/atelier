@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-2vdq
 title: Plan a mission on its branch and make two approving plan reviews its only gate, with no draft status and no go
-status: draft
+status: ready
 mission: atelier-to83
 labels:
 - redesign
@@ -12,7 +12,9 @@ blocked_by:
 - atelier-ob9u
 - atelier-dciw
 implementers: []
-ready: null
+ready:
+  by: 'sumeet, on 2026-11-13: execute atelier-to83, relayed by the planner thread'
+  at: 2026-11-14T00:14:10.322444756Z
 trivial: null
 caused_by: null
 created_at: 2026-11-13T06:14:32.672218464Z
