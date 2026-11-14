@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-x5al
 title: Run every git and gh call through the core's git and forge modules
-status: building
+status: in_review
 mission: atelier-dy62
 labels: []
 priority: medium
