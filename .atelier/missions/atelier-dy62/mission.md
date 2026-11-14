@@ -55,7 +55,7 @@ server and the T3 Code client. "The core" in the documents and the crate
 named `atelier-core` are the same thing.
 
 No command's behaviour, output or exit status changes, no record format
-changes, and no dependency is added. The one change a reader of the tool
+changes, and no dependency new to the workspace is added. The one change a reader of the tool
 sees is the word "action" where the help, the documents and the skill said
 "act".
 
@@ -77,9 +77,7 @@ a drift:
   test file's diff is the paths of crates and modules wherever they occur,
   the paths of fixtures that moved, the list of crate names in
   `crates/atelier-desk/tests/dependencies.rs`, and in atelier-nl43 the
-  renamed identifiers and the word "act" in expected output. What
-  atelier-yclc changes between them is that item's own and is not judged
-  here.
+  renamed identifiers and the word "act" in expected output.
 - model-is-pure: no file under `crates/atelier-core/src/model/` names
   `std::fs`, `std::process` or a module of the crate outside `model`.
 - one-git: outside `tests/` directories and build scripts
@@ -101,9 +99,9 @@ act, `docs/design.md`, `docs/product.md`, `docs/product/desk.md`,
 
 Out:
 
-- Moving any action's doing out of `atelier-cli`. atelier-yclc of
-  atelier-to83 moves `submit` and `merge`, and nothing else has a second
-  caller.
+- Moving any action's doing out of `atelier-cli`: none has a second
+  caller. The forge code is no action and has two callers, the command and
+  the Desk, so atelier-x5al moves it.
 - One file per command in `atelier-cli`, which gardener run atelier-qb4f
   proposed as P2 and Sumeet has not answered.
 - Narrowing what the merged crate exports, or any other cleanup the merge
@@ -112,19 +110,19 @@ Out:
   record format.
 - The four other repositories, the installed binary and a release.
 
-Order against atelier-to83: atelier-ni3d merges before atelier-yclc starts,
-so that item moves `submit`, `merge` and the forge code once, into the
-merged crate. atelier-x5al follows atelier-yclc, which puts the forge code
-where the Desk can reach it. atelier-yclc is reworded with this plan to
-name `atelier-core`, the crate it will meet, and atelier-hj6b to name the
-core by either name, since nothing orders it against atelier-ni3d.
+Changed on 2026-11-14: Sumeet dropped atelier-yclc of atelier-to83, which
+was to move `submit`, `merge` and the forge code into the core, and
+atelier-x5al waited on it for the forge code. On his word atelier-x5al now
+moves `forge.rs` itself and waits on nothing. `submit` and `merge` stay in
+`atelier-cli`.
 
 ## Authority
 
 The lead may choose the layout inside `atelier-core` other than the module
 names `model`, `records`, `git` and `forge`, the names of
 re-exports, and the order of atelier-x5al and atelier-nl43. It may not add
-a crate or a dependency, change what any command does or prints beyond the
+a crate or a dependency new to the workspace (`atelier-core` may take
+`serde_json`, which `forge.rs` uses and the other two crates already have), change what any command does or prints beyond the
 word "act", move code between `atelier-cli` and the core beyond what an
 item names, or change the record format. atelier-nl43 is the item to drop
 if the mission has to shrink: it is a rename of about 400 places and
