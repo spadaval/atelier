@@ -60,7 +60,7 @@ fn mission(status: MissionStatus, result: &str, reviews: &[ReviewFile]) -> Missi
     let status = status_text(status.status());
     let text = format!(
         "---\nschema: atelier.mission\nschema_version: 3\nid: demo-m1ss\ntitle: M\nstatus: {status}\n\
-         labels: []\nlead: null\nready: null\ncreated_at: 2026-11-10T09:00:00Z\n---\n\
+         labels: []\nlead: null\nplanners:\n- p1\nready: null\ncreated_at: 2026-11-10T09:00:00Z\n---\n\
          ## Outcome\no\n\n## Result\n{result}"
     );
     let path = PathBuf::from("demo-m1ss/mission.md");
@@ -177,11 +177,19 @@ const SPECIFIED: [(Act, &[Status], Option<Status>); 14] = [
     (Act::Settle, &[Status::Done], None),
 ];
 
-/// The acts on a mission, from the same table.
-const MISSION_SPECIFIED: [(Act, &[Status], Option<Status>); 6] = [
-    // `lead` binds its lead to a ready mission, and its status stays.
+/// The acts on a mission, from the same table, where a mission's `open` is
+/// written `ready` and the old `draft` is `draft`.
+const MISSION_SPECIFIED: [(Act, &[Status], Option<Status>); 7] = [
+    // `lead` binds its lead to an open mission, and its status stays.
     (Act::Lead, &[Status::Ready], None),
-    (Act::ReadyMission, &[Status::Draft], Some(Status::Ready)),
+    // A proposed plan's branch: `submit` writes an old draft open, and
+    // `merge` changes no status; a plan dropped there does neither.
+    (
+        Act::SubmitMission,
+        &[Status::Draft, Status::Ready],
+        Some(Status::Ready),
+    ),
+    (Act::MergeMission, &[Status::Ready], None),
     (
         Act::Drop,
         &[Status::Draft, Status::Ready],
@@ -204,7 +212,7 @@ const MISSION_SPECIFIED: [(Act, &[Status], Option<Status>); 6] = [
 /// The acts on no record a status is taken from: a mission's creation on
 /// its branch, and a backlog branch's start, submit and merge.
 const UNRECORDED_SPECIFIED: [(Act, Option<Status>); 4] = [
-    (Act::StartMission, Some(Status::Draft)),
+    (Act::StartMission, Some(Status::Ready)),
     (Act::StartBacklog, None),
     (Act::SubmitBacklog, None),
     (Act::MergeBacklog, None),
@@ -216,10 +224,10 @@ fn a_backlog_branchs_acts_run_from_no_status_for_any_thread_and_are_not_an_imple
         let row = row(act);
         assert!(row.from.is_empty(), "{act:?}");
         assert_eq!(row.to, to, "{act:?}");
-        // Any thread: a planner's act, which no thread holds, and binds
-        // nobody; not the implementer's act on an item.
+        // Any thread: a planner's act, not the implementer's act on an
+        // item. Only `start --mission` binds, its caller as the planner.
         assert_eq!(row.role, Role::Planner, "{act:?}");
-        assert!(!row.binds, "{act:?}");
+        assert_eq!(row.binds, act == Act::StartMission, "{act:?}");
     }
     assert_eq!(row(Act::SubmitBacklog).command, "submit");
     assert_eq!(row(Act::MergeBacklog).command, "merge");
@@ -312,8 +320,10 @@ fn every_act_in_the_table_from_every_status_sets_the_specified_status_or_is_refu
             };
             let file = review("1-aaaa", &["r1"], "null", findings);
             let dir = mission(status, "Done.\n", std::slice::from_ref(&file));
+            let caller = thread("p1");
             let facts = MissionFacts {
                 mission: &dir,
+                caller: &caller,
                 items: &items,
                 review: Some(&file),
             };
@@ -339,10 +349,11 @@ fn every_act_in_the_table_from_every_status_sets_the_specified_status_or_is_refu
         // Drop's row also holds an item's started statuses.
         assert!(from.iter().all(|status| row(act).from.contains(status)));
     }
-    let ready = row(Act::ReadyMission);
+    // Anyone plans a mission, and is bound as its planner.
+    let plan = row(Act::StartMission);
     assert_eq!(
-        (ready.role, ready.from, ready.to),
-        (Role::Planner, &[Status::Draft][..], Some(Status::Ready))
+        (plan.role, plan.binds, plan.from, plan.to),
+        (Role::Planner, true, &[][..], Some(Status::Ready))
     );
     let lead = row(Act::Lead);
     assert_eq!(
@@ -353,15 +364,17 @@ fn every_act_in_the_table_from_every_status_sets_the_specified_status_or_is_refu
 
 #[test]
 fn closing_a_mission_needs_each_item_done_or_dropped_and_its_result_written() {
-    let dir = mission(MissionStatus::Ready, "\n### Notes\n\n", &[]);
+    let dir = mission(MissionStatus::Open, "\n### Notes\n\n", &[]);
     let items = [
         ("demo-d0ne".to_string(), Status::Done),
         ("demo-dr4f".to_string(), Status::Draft),
         ("demo-bu1d".to_string(), Status::Building),
         ("demo-dr0p".to_string(), Status::Dropped),
     ];
+    let caller = thread("p1");
     let facts = MissionFacts {
         mission: &dir,
+        caller: &caller,
         items: &items,
         review: None,
     };
@@ -383,9 +396,10 @@ fn closing_a_mission_needs_each_item_done_or_dropped_and_its_result_written() {
         ]
     );
     // A mission with no items closes once its Result is written.
-    let written = mission(MissionStatus::Ready, "It shipped.\n", &[]);
+    let written = mission(MissionStatus::Open, "It shipped.\n", &[]);
     let facts = MissionFacts {
         mission: &written,
+        caller: &caller,
         items: &[],
         review: None,
     };
@@ -471,9 +485,11 @@ fn a_plan_verdict_counts_its_own_file_and_earlier_rounds_not_a_blind_one() {
     let raised = review("1-aaaa", &["r1"], "changes", FIX_NOW);
     let blind = review("1-bbbb", &["r2"], "null", "");
     let dir = mission(MissionStatus::Draft, "", &[raised.clone(), blind.clone()]);
+    let caller = thread("r1");
     let verdict = |dir: &MissionDir, file: &ReviewFile, act| {
         let facts = MissionFacts {
             mission: dir,
+            caller: &caller,
             items: &[],
             review: Some(file),
         };
@@ -550,16 +566,18 @@ fn a_plan_verdict_counts_its_own_file_and_earlier_rounds_not_a_blind_one() {
 }
 
 #[test]
-fn start_needs_the_items_mission_ready_on_the_base() {
+fn start_asks_of_the_items_mission_only_that_it_is_agreed_and_not_dropped() {
     let item = record(Status::Ready, &[], DONE);
     let caller = thread("t1");
     let mission = |status| Some(("demo-m1ss".to_string(), status));
-    // No mission; a ready one; one that is not ready; one not found.
+    // No mission; an open one on the base; a done one; the old draft,
+    // which is proposed; a dropped one; one not on the base.
     let cases = [
         None,
         mission(Some(Status::Ready)),
-        mission(Some(Status::Draft)),
         mission(Some(Status::Done)),
+        mission(Some(Status::Draft)),
+        mission(Some(Status::Dropped)),
         mission(None),
     ];
     for named in cases {
@@ -569,8 +587,8 @@ fn start_needs_the_items_mission_ready_on_the_base() {
             ..facts(&item, &caller)
         };
         let expected = match &named {
-            Some((id, status)) if *status != Some(Status::Ready) => {
-                vec![Condition::MissionNotReady {
+            Some((id, status @ (None | Some(Status::Draft | Status::Dropped)))) => {
+                vec![Condition::MissionNotOpen {
                     id: id.clone(),
                     status: *status,
                 }]
@@ -588,25 +606,78 @@ fn start_needs_the_items_mission_ready_on_the_base() {
 }
 
 #[test]
-fn taking_over_an_item_needs_its_mission_not_dropped() {
-    let item = record(Status::Building, &["t1"], DONE);
+fn taking_over_or_merging_an_item_needs_its_mission_not_dropped() {
     let caller = thread("t2");
-    for status in [Status::Ready, Status::Done, Status::Dropped] {
-        let facts = Facts {
-            mission: Some(("demo-m1ss".to_string(), Some(status))),
-            ..facts(&item, &caller)
-        };
-        let checked = check(Act::TakeOver, &facts);
-        match status {
-            Status::Dropped => assert!(matches!(
-                checked,
-                Err(Refusal::Unmet(unmet)) if unmet == [Condition::MissionNotReady {
-                    id: "demo-m1ss".into(),
-                    status: Some(Status::Dropped),
-                }]
-            )),
-            _ => assert!(checked.is_ok(), "{status:?}: {checked:?}"),
+    let building = record(Status::Building, &["t1"], DONE);
+    let approved = with_reviews(
+        record(Status::Approved, &["t2"], DONE),
+        &[review("1-aaaa", &["r1"], "approve", "")],
+    );
+    for (act, item) in [(Act::TakeOver, &building), (Act::Merge, &approved)] {
+        for status in [Status::Ready, Status::Done, Status::Dropped] {
+            let facts = Facts {
+                mission: Some(("demo-m1ss".to_string(), Some(status))),
+                ..facts(item, &caller)
+            };
+            let checked = check(act, &facts);
+            match status {
+                Status::Dropped => assert!(
+                    matches!(
+                        &checked,
+                        Err(Refusal::Unmet(unmet)) if *unmet == [Condition::MissionNotOpen {
+                            id: "demo-m1ss".into(),
+                            status: Some(Status::Dropped),
+                        }]
+                    ),
+                    "{act:?}: {checked:?}"
+                ),
+                _ => assert!(checked.is_ok(), "{act:?} {status:?}: {checked:?}"),
+            }
         }
+    }
+}
+
+#[test]
+fn only_a_planner_merges_a_proposed_plan_and_none_merges_a_dropped_one() {
+    let dir = mission(MissionStatus::Open, "", &[]);
+    let facts = |caller: &Thread| {
+        check_mission(
+            Act::MergeMission,
+            &MissionFacts {
+                mission: &dir,
+                caller,
+                items: &[],
+                review: None,
+            },
+        )
+    };
+    assert!(facts(&thread("p1")).is_ok());
+    assert!(matches!(
+        facts(&thread("t9")),
+        Err(Refusal::NotHolder { role: Role::Planner, holder: Some(last) }) if last == thread("p1")
+    ));
+    let dropped = mission(MissionStatus::Dropped, "Dropped: no.\n", &[]);
+    let planner = thread("p1");
+    for act in [Act::SubmitMission, Act::MergeMission] {
+        let checked = check_mission(
+            act,
+            &MissionFacts {
+                mission: &dropped,
+                caller: &planner,
+                items: &[],
+                review: None,
+            },
+        );
+        assert!(
+            matches!(
+                checked,
+                Err(Refusal::From {
+                    status: Status::Dropped,
+                    ..
+                })
+            ),
+            "{act:?}: {checked:?}"
+        );
     }
 }
 
@@ -1240,4 +1311,73 @@ fn carried_names(item: &ItemDir, round: u32) -> Vec<String> {
         .iter()
         .map(|c| c.finding.name.to_string())
         .collect()
+}
+
+/// Each open mission record of the five repositories this tool serves, as
+/// their bases held them on 2026-11-13, with each one's title, labels,
+/// threads and body replaced, since some are private: the front matter
+/// they were written in, `status: ready` with a `ready` field, or `status:
+/// draft` with none.
+#[test]
+fn every_open_mission_record_of_the_five_repositories_reads_in_the_old_form() {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../atelier-records/tests/fixtures/open-missions");
+    let mut paths: Vec<PathBuf> = std::fs::read_dir(&dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .collect();
+    paths.sort();
+    assert_eq!(paths.len(), 16);
+    let (mut open, mut drafts) = (0, 0);
+    let caller = thread("l1");
+    for path in &paths {
+        let text = std::fs::read_to_string(path).unwrap();
+        let mission = parse_mission(path, &text).unwrap_or_else(|e| panic!("{e}"));
+        let stored = text
+            .lines()
+            .find_map(|l| l.strip_prefix("status: "))
+            .unwrap();
+        let dir = MissionDir {
+            mission: mission.clone(),
+            path: path.clone(),
+            reviews: Vec::new(),
+        };
+        let lead = check_mission(
+            Act::Lead,
+            &MissionFacts {
+                mission: &dir,
+                caller: &caller,
+                items: &[],
+                review: None,
+            },
+        );
+        // An item of it, ready, as `start` sees it on the base.
+        let item = record(Status::Ready, &[], DONE);
+        let facts = Facts {
+            mission: Some((mission.id.clone(), Some(mission.status.status()))),
+            branch: false,
+            ..facts(&item, &caller)
+        };
+        let start = check(Act::Start, &facts);
+        match stored {
+            // `ready` is open: led, and its items start.
+            "ready" => {
+                open += 1;
+                assert_eq!(mission.status, MissionStatus::Open, "{}", path.display());
+                assert!(lead.is_ok() && start.is_ok(), "{}", path.display());
+            }
+            // The old draft is proposed: neither led nor started.
+            "draft" => {
+                drafts += 1;
+                assert_eq!(mission.status, MissionStatus::Draft, "{}", path.display());
+                assert!(lead.is_err() && start.is_err(), "{}", path.display());
+            }
+            other => panic!("{}: {other}", path.display()),
+        }
+        // Its `ready` field is read and never written back.
+        let written = atelier_records::render_mission(&mission);
+        assert!(!written.contains("ready"), "{written}");
+        assert!(written.contains("\nplanners: []\n"), "{written}");
+    }
+    assert_eq!((open, drafts), (8, 8));
 }

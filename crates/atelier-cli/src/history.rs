@@ -97,6 +97,10 @@ fn changed(act: &Happened) -> Vec<String> {
 /// A status move, `<from> -> <to>`, each as a record spells it; `new` for
 /// a record the commit added.
 fn shown(status: &Move) -> String {
+    let spelled = |s: Status| match status.mission {
+        true => atelier_core::MissionStatus::of(s).map_or(spelled(s), |s| s.name()),
+        false => spelled(s),
+    };
     let from = status.from.map_or("new", spelled);
     format!("{from} -> {}", spelled(status.to))
 }

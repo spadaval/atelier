@@ -143,7 +143,7 @@ fn stdout(at: &Path, thread: &str, args: &[&str]) -> String {
     run.stdout
 }
 
-const M1: &str = "Mission demo-m1ss (ready, in progress): Greet everyone\n";
+const M1: &str = "Mission demo-m1ss (in progress): Greet everyone\n";
 const A1: &str = "    demo-a1aa (ready, high, can start now): Say hello\n";
 const B2: &str =
     "    demo-b2bb (ready, medium, blocked by demo-a1aa, which is ready): Say goodbye\n";
@@ -160,7 +160,7 @@ fn list_shows_open_work_by_mission_and_label_and_each_flag_narrows_it() {
 
     // A started item is read from its branch, wherever `list` runs.
     let all = format!(
-        "{M1}  No label:\n{B2}{C3}  Labelled ui:\n{A1}{D4}Mission demo-m3dr (draft): Say more\nMission demo-m4rd (ready): Tidy up\n\
+        "{M1}  No label:\n{B2}{C3}  Labelled ui:\n{A1}{D4}Mission demo-m3dr (proposed): Say more\nMission demo-m4rd (agreed): Tidy up\n\
          In no mission:\n  Labelled cli:\n{G7}  Labelled needs-human:\n{F6}"
     );
     assert_eq!(list(&[]), all);
@@ -239,7 +239,7 @@ fn status_on_the_base_shows_what_can_start_the_missions_in_progress_and_what_wai
          1 other ready item cannot start yet: 1 waits on a blocker that is not done. \
          See it with: atelier list\n\
          Held by other threads:\n  demo-d4dd (building, held by t1): Wave\n\
-         Missions in progress:\n  demo-m1ss (ready, in progress): Greet everyone\n\
+         Missions in progress:\n  demo-m1ss (in progress): Greet everyone\n\
          Waiting on a human (labelled needs-human):\n  \
          demo-f6ff (ready, medium, waits on a human): Choose a name\n\
          Then: atelier start demo-a1aa\n"
@@ -252,15 +252,16 @@ fn lead_takes_a_ready_mission_and_hands_each_item_that_can_start_to_another_thre
     let root = scratch.root();
     let path = ".atelier/missions/demo-m1ss/mission.md";
 
-    // Not a ready mission: refused, naming `ready`, and nothing written.
+    // Not an agreed mission: refused, and nothing written. An old draft on
+    // the base is proposed.
     for (id, said, skip) in [
-        ("demo-m3dr", "Mission demo-m3dr is draft, and `atelier lead` runs on a mission that is ready. A planner makes it ready with: atelier ready demo-m3dr --by <name>\n", SKIP),
-        ("demo-m2dn", "Mission demo-m2dn is done, and `atelier lead` runs on a mission that is ready. Nothing is left to lead on it.\n", SKIP),
-        ("demo-a1aa", "No mission demo-a1aa is in this checkout. `atelier list` shows the missions.\n", ""),
+        ("demo-m3dr", "`atelier lead demo-m3dr` refused; nothing written.\nMission demo-m3dr is proposed: main's last commit does not have it open. `atelier lead` runs on an agreed mission, whose plan has merged after two approving plan reviews.\n", SKIP),
+        ("demo-m2dn", "`atelier lead demo-m2dn` refused; nothing changed.\nMission demo-m2dn is done, and `atelier lead` runs on a mission that is open. Nothing is left to lead on it.\n", SKIP),
+        ("demo-a1aa", "`atelier lead demo-a1aa` refused; nothing changed.\nNo mission demo-a1aa is in this checkout. `atelier list` shows the missions.\n", ""),
     ] {
         let run = planned(&root, "lead1", &["lead", id]);
         assert_eq!(run.code, 1, "{id}");
-        assert_eq!(run.stderr, format!("`atelier lead {id}` refused; nothing changed.\n{said}{skip}"));
+        assert_eq!(run.stderr, format!("{said}{skip}"));
     }
     // Not on an item's branch.
     let run = planned(&second, "lead1", &["lead", "demo-m1ss"]);
@@ -307,7 +308,7 @@ fn lead_takes_a_ready_mission_and_hands_each_item_that_can_start_to_another_thre
     );
     assert!(status.ends_with(&tail), "{status}");
     assert!(
-        status.contains("  demo-m1ss (ready, in progress, led by lead1): Greet everyone\n"),
+        status.contains("  demo-m1ss (in progress, led by lead1): Greet everyone\n"),
         "{status}"
     );
 
@@ -363,8 +364,8 @@ fn show_prints_a_mission_on_one_page_with_its_items_disputes_and_plan_reviews() 
     let root = scratch.root();
     assert_eq!(
         stdout(&root, "p1", &["show", "demo-m1ss"]),
-        "Mission demo-m1ss: Greet everyone\nRead from: main\nStatus: ready, in progress\nLead: nobody\nLabels: none\n\
-         Made ready by sumeet at 2026-11-10 09:00:00 +00:00\n\n\
+        "Mission demo-m1ss: Greet everyone\nRead from: main\nStatus: in progress\nLead: nobody\n\
+         Planners: none recorded\nLabels: none\n\n\
          ## Outcome\n\nEvery greeting works.\n\n## Success criteria\n\n- hello: `hello` prints hello.\n\n\
          Items:\n  Draft:\n    demo-c3cc (medium): Say hi\n  Ready:\n    \
          demo-a1aa (high, can start now): Say hello\n    \
@@ -376,8 +377,8 @@ fn show_prints_a_mission_on_one_page_with_its_items_disputes_and_plan_reviews() 
     // A done mission, with its Result and its plan review.
     assert_eq!(
         stdout(&root, "p1", &["show", "demo-m2dn"]),
-        "Mission demo-m2dn: Set up the project\nRead from: main\nStatus: done\nLead: nobody\nLabels: none\n\
-         Made ready by sumeet at 2026-11-10 09:00:00 +00:00\n\n\
+        "Mission demo-m2dn: Set up the project\nRead from: main\nStatus: done\nLead: nobody\n\
+         Planners: none recorded\nLabels: none\n\n\
          ## Outcome\n\nA project exists.\n\n## Result\n\nIt exists.\n\n\
          Items:\n  Done:\n    demo-e5ee (low): Create the repository\n\n\
          Disputed:\n  None.\n\n\

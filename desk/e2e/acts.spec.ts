@@ -106,7 +106,7 @@ test("Say go asks once, sends ready with the app's header, and the page then sho
   await expect(confirm).toBeVisible();
   expect(world.sent).toEqual([]);
   await confirm.getByRole("button", { name: "Yes, say go" }).click();
-  await expect(page.getByTestId("status")).toHaveText("Ready");
+  await expect(page.getByTestId("status")).toHaveText("Open");
   expect(world.sent).toEqual([{ path: "/api/act", header: "1", body: { act: "ready", repo: "atelier", ids: ["atelier-295u"] } }]);
   const done = page.getByTestId("done");
   await expect(done).toContainText("You said go, committed as 76cbb6c0.");

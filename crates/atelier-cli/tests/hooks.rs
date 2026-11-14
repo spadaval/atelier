@@ -366,6 +366,9 @@ fn a_status_change_is_judged_by_the_acts_of_its_records_kind() {
     assert_eq!(run.code, 0, "{}", run.stderr);
     let id = run.stdout.split_whitespace().nth(3).unwrap();
     let path = format!(".atelier/missions/{id}/mission.md");
+    // An old `draft`, as a mission was planned before.
+    edit(&root, &path, "status: open", "status: draft");
+    assert_eq!(commit_all(&root, "Plan it as before").code, 0);
     install_hooks(&root);
     // An item's `close` goes from draft to done; no act on a mission does.
     edit(&root, &path, "status: draft", "status: done");
@@ -378,9 +381,10 @@ fn a_status_change_is_judged_by_the_acts_of_its_records_kind() {
         run.stderr
     );
     git(&root, &["reset", "-q", "--hard"]);
-    edit(&root, &path, "status: draft", "status: ready");
-    assert_eq!(commit_all(&root, "Ready").code, 0);
-    edit(&root, &path, "status: ready", "status: done");
+    // `submit` writes an old draft open, and `close` ends an open one.
+    edit(&root, &path, "status: draft", "status: open");
+    assert_eq!(commit_all(&root, "Submit it").code, 0);
+    edit(&root, &path, "status: open", "status: done");
     let run = commit_all(&root, "Close it");
     assert_eq!(run.code, 0, "{}", run.stderr);
 }

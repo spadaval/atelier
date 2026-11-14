@@ -3,12 +3,12 @@
 use crate::forge::Github;
 use crate::{git, merge, output, plan, setup};
 use anyhow::{anyhow, Context, Result};
-use atelier_app::acts::{check, row, unmet, Act, Checkout, Facts, STARTED};
+use atelier_app::acts::{check, row, unmet, Act, Checkout, Facts, MissionFacts, STARTED};
 use atelier_app::repo::{facts, item_dir, item_path, mission_path, planning, write_and_commit};
 use atelier_app::{
     annotate, annotate_all, entry, overview, refused, Done, Entry, Located, Refused, Repo,
 };
-use atelier_core::{validate_slug, Forge, Named, Status};
+use atelier_core::{validate_slug, Forge, MissionStatus, Named, Status};
 use atelier_records::{render_item, render_mission, validate_id};
 
 pub enum Outcome {
@@ -109,7 +109,20 @@ fn orientation(repo: &mut Repo) -> Result<String> {
         }
         _ => None,
     };
-    let unsaved = unsaved(repo)?;
+    let mut unsaved = unsaved(repo)?;
+    // A stop of a mission this checkout holds dropped, until published.
+    for id in repo.store().ids("missions")? {
+        let dropped =
+            |dir: &atelier_records::MissionDir| dir.mission.status == MissionStatus::Dropped;
+        let base = repo.base_tip.clone();
+        if !dropped(&repo.store().mission(&id)?)
+            || repo.mission_at(&base, &id)?.is_some_and(|d| dropped(&d))
+        {
+            continue;
+        }
+        let located = repo.find_mission(&id)?;
+        unsaved += &crate::views::unpublished_stop(repo, &located)?.unwrap_or_default();
+    }
     Ok(output::overview(
         &repo.caller,
         repo.branch.as_deref(),
@@ -321,11 +334,11 @@ pub fn start_new(repo: &mut Repo, title: &str) -> Result<Outcome> {
     begin(repo, claim, output::started_new(&id, &repo.branch_of(&id)))
 }
 
-/// `start --mission`: a new draft mission, created on a new branch named
-/// for it, where its plan is written.
+/// `start --mission`: a new mission, created open on a new branch named
+/// for it, where its plan is written, with the caller as its planner.
 pub fn start_mission(repo: &mut Repo, title: &str) -> Result<Outcome> {
     let id = repo.new_id()?;
-    let mission = plan::draft_mission(&id, title);
+    let mission = plan::new_mission(&id, title, repo.caller.clone());
     let branch = repo.branch_of(&id);
     let claim = Claim {
         branch: branch.clone(),
@@ -601,15 +614,125 @@ fn submit_records(repo: &mut Repo) -> Result<Outcome> {
             &line,
         )));
     }
-    let config = repo.base_config()?;
-    let shared = match &config.forge {
-        Some(forge) => {
-            let text = output::records_pull_request_text(&branch, &repo.base);
-            share(repo, forge, &branch, text)?
+    // The forge's copy is ahead, as after a reviewer pushed its file: a
+    // submit from here would publish a branch without it.
+    if let Some(remote) = repo.remote().map(str::to_string) {
+        let fetched = atelier_app::git::remote_tip(&repo.root, &remote, &branch)?;
+        let head = git::head(&repo.root)?;
+        if let Some(tip) = fetched.filter(|tip| *tip != head) {
+            if !git::is_ancestor(&repo.root, &tip, &head)? {
+                let refused = output::records_behind(&branch, &remote, &tip);
+                return Ok(Outcome::Refused(refused));
+            }
         }
+    }
+    // The plans the branch proposes or changes: the caller becomes a
+    // planner of each, so that none of its reviewers is.
+    let plans = match planned_here(repo)? {
+        Ok(plans) => plans,
+        Err(refused) => return Ok(refused),
+    };
+    let config = repo.base_config()?;
+    let mut text = match plans.is_empty() {
+        true => output::records_pull_request_text(&branch, &repo.base),
+        false => output::plan_pull_request_text(&branch, &plans, &repo.base),
+    };
+    if let [(id, _)] = plans.as_slice() {
+        let title = repo.store().mission(id)?.mission.title;
+        text.0 = format!("{id}: {title}");
+    }
+    let shared = match &config.forge {
+        Some(forge) => share(repo, forge, &branch, text)?,
         None => String::new(),
     };
-    Ok(Outcome::Done(output::records_submitted(&branch, &shared)))
+    if plans.is_empty() {
+        return Ok(Outcome::Done(output::records_submitted(&branch, &shared)));
+    }
+    let head = git::head(&repo.root)?;
+    Ok(Outcome::Done(output::plan_submitted(
+        &branch, &plans, &head, &shared,
+    )))
+}
+
+/// The missions whose plan the checked-out records branch proposes or
+/// changes, each with the round of plan review its submit opens, once the
+/// caller is written as a planner of each and that is committed; or the
+/// refusal of a plan dropped on its branch. A proposed plan's old `draft`
+/// is written `open`.
+fn planned_here(repo: &mut Repo) -> Result<Result<Vec<(String, u32)>, Outcome>> {
+    let head = git::head(&repo.root)?;
+    let fork = git::run(&repo.root, &["merge-base", &repo.base_tip, &head])?;
+    let changed = git::changed_from_base(&repo.root, &repo.base_tip, &head)?;
+    let mut ids: Vec<String> = merge::plans_changed(repo, (&fork, &head), &changed)?
+        .into_iter()
+        .map(|(id, _, _)| id)
+        .collect();
+    // A plan on its own branch is submitted with nothing changed yet, as
+    // after `start --mission`.
+    let own = match repo.named() {
+        Some(Named::Record(id)) if !crate::plan::agreed(repo, &id)? => Some(id),
+        _ => None,
+    };
+    if let Some(id) = own.as_ref().filter(|id| !ids.contains(id)) {
+        ids.insert(0, id.clone());
+    }
+    let mut plans = Vec::new();
+    let mut written = Vec::new();
+    let mut messages = Vec::new();
+    // A mission the branch removes has no record here to write.
+    ids.retain(|id| repo.root.join(mission_path(id)).exists());
+    for id in ids {
+        let dir = repo.store().mission(&id)?;
+        if own.as_deref() == Some(id.as_str()) {
+            let facts = MissionFacts {
+                mission: &dir,
+                caller: &repo.caller,
+                items: &[],
+                review: None,
+            };
+            if let Some(refused) = repo.skip.mission_gate(Act::SubmitMission, &id, &facts)? {
+                return Ok(Err(refused.into()));
+            }
+        }
+        plans.push((id.clone(), next_round(&dir)));
+        let mut mission = dir.mission;
+        let mut changed = false;
+        if mission.status == MissionStatus::Draft && own.as_deref() == Some(id.as_str()) {
+            mission.status = MissionStatus::Open;
+            changed = true;
+        }
+        if !mission.planners.0.contains(&repo.caller) {
+            messages.push(match mission.planners.holder() {
+                Some(before) => format!("Take over the plan of {id} from {before}"),
+                None => format!("Plan {id}"),
+            });
+            mission.planners.take(repo.caller.clone());
+            changed = true;
+        }
+        if changed {
+            written.push((mission_path(&id), render_mission(&mission)));
+        }
+    }
+    if !written.is_empty() {
+        let paths: Vec<&str> = written.iter().map(|(path, _)| path.as_str()).collect();
+        let message = match messages.as_slice() {
+            [] => format!("Submit the plan of {}", plans[0].0),
+            _ => messages.join("; "),
+        };
+        write_and_commit(repo, &written, &paths, &message)?;
+    }
+    Ok(Ok(plans))
+}
+
+/// The round of plan review a submit of `dir`'s plan opens: the latest
+/// round while a review of it has no verdict, else the next.
+fn next_round(dir: &atelier_records::MissionDir) -> u32 {
+    let latest = dir.reviews.iter().map(|r| r.name.round).max().unwrap_or(0);
+    let open = (dir.reviews.iter()).any(|r| r.name.round == latest && r.review.verdict.is_none());
+    match latest > 0 && open {
+        true => latest,
+        false => latest + 1,
+    }
 }
 
 /// Pushes `branch` and opens its pull request, titled and described by

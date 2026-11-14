@@ -527,7 +527,7 @@ fn a_backlog_branch_with_code_a_new_mission_or_invalid_records_is_not_merged() {
     fs::write(
         &path,
         "---\nschema: atelier.mission\nschema_version: 3\nid: demo-m1ss\ntitle: Greet\n\
-         status: draft\nlabels: []\nlead: null\nready: null\n\
+         status: open\nlabels: []\nlead: null\nplanners:\n- p1\n\
          created_at: 2026-11-10T09:00:00Z\n---\n\n## Outcome\n\nGreetings.\n",
     )
     .unwrap();
@@ -536,8 +536,9 @@ fn a_backlog_branch_with_code_a_new_mission_or_invalid_records_is_not_merged() {
     let run = atelier(&root, "p1", &["merge"]);
     assert_eq!(run.code, 1);
     assert!(
-        run.stderr
-            .contains("  adds the mission, of mission demo-m1ss\n"),
+        run.stderr.contains(
+            "  Mission demo-m1ss: backlog/mission adds the mission.\n    Its plan has no review.\n    0 of 2 count.\n"
+        ),
         "{}",
         run.stderr
     );
@@ -1152,7 +1153,7 @@ fn a_plan_pushed_from_one_clone_is_proposed_in_another_once_it_has_fetched() {
     let listed = hub.atelier(&b, "p1", &["list"]);
     ok(listed.clone());
     let proposed = format!(
-        "Proposed, on branches not yet merged:\nMission {mission} (draft, proposed on origin/{mission}): Greet\n  \
+        "Proposed, on branches not yet merged:\nMission {mission} (proposed on origin/{mission}): Greet\n  \
          No label:\n    {item} (draft, medium, on origin/{mission}): Say hi\n"
     );
     assert!(listed.stdout.contains(&proposed), "{}", listed.stdout);
@@ -1187,7 +1188,7 @@ fn a_plan_pushed_from_one_clone_is_proposed_in_another_once_it_has_fetched() {
         "{}",
         shown.stdout
     );
-    assert_eq!(lines[2], "Status: draft, proposed");
+    assert_eq!(lines[2], "Status: proposed");
     assert!(
         shown.stdout.contains(&format!(
             "\nItems:\n  Draft:\n    {item} (medium, on origin/{mission}): Say hi\n"
@@ -1218,7 +1219,7 @@ fn a_plan_pushed_from_one_clone_is_proposed_in_another_once_it_has_fetched() {
     ok(here.clone());
     assert!(
         here.stdout.contains(&format!(
-            "Mission {mission} (draft, proposed on {mission}): Greet\n"
+            "Mission {mission} (proposed on {mission}): Greet\n"
         )),
         "{}",
         here.stdout
@@ -1232,7 +1233,7 @@ fn a_mission_dropped_on_its_branch_is_listed_as_dropped_and_not_as_proposed() {
     let (mission, _) = planned_and_pushed(&hub, &a);
     let path = a.join(mission_path(&mission));
     let text = fs::read_to_string(&path).unwrap();
-    let dropped = text.replace("status: draft", "status: dropped");
+    let dropped = text.replace("status: open", "status: dropped");
     let dropped = match dropped.contains("## Result\n") {
         true => dropped.replace("## Result\n", "## Result\n\nDropped: no longer wanted\n"),
         false => dropped + "\n## Result\n\nDropped: no longer wanted\n",
@@ -1512,4 +1513,270 @@ fn a_proposed_record_change_is_narrowed_by_the_flags_its_record_would_be() {
     let labelled = hub.atelier(&a, "t1", &["list", "--proposed", "--label", "none-such"]);
     ok(labelled.clone());
     assert!(!labelled.stdout.contains(ID), "{}", labelled.stdout);
+}
+
+/// The command the line of `output` that starts with `prefix` gives after
+/// its last `: `.
+fn command_after(output: &str, prefix: &str) -> String {
+    let line = output
+        .lines()
+        .find(|line| line.starts_with(prefix))
+        .unwrap_or_else(|| panic!("no line {prefix:?} in {output}"));
+    line.rsplit_once(": ").unwrap().1.to_string()
+}
+
+fn sh(at: &Path, line: &str) -> std::process::Output {
+    identity(Command::new("sh").current_dir(at).args(["-c", line]))
+        .output()
+        .unwrap()
+}
+
+/// An approving plan review `name` of `mission` by `thread` of `commit`,
+/// written and committed in `at`.
+fn approve(at: &Path, mission: &str, name: &str, thread: &str, commit: &str) {
+    let path = format!(".atelier/missions/{mission}/reviews/{name}.md");
+    fs::create_dir_all(at.join(&path).parent().unwrap()).unwrap();
+    fs::write(
+        at.join(&path),
+        format!(
+            "---\nschema: atelier.review\nschema_version: 3\nround: 1\ncommit: {commit}\n\
+             reviewers:\n- {thread}\nmodel: null\nverdict: approve\ncreated_at: 2026-11-13T09:00:00Z\n---\n\n\
+             ## Summary\n\nGood.\n"
+        ),
+    )
+    .unwrap();
+    git(at, &["add", "-A"]);
+    git(at, &["commit", "-qm", &format!("Review {name}")]);
+}
+
+#[test]
+fn two_reviewers_in_clones_of_their_own_land_their_files_on_the_plans_branch_and_it_merges() {
+    let hub = Hub::new(&[(ID, "ready")]);
+    let a = hub.clone("a");
+    ok(hub.atelier(&a, "p1", &["start", "--mission", "Greet"]));
+    let mission = current(&a);
+    let path = a.join(mission_path(&mission));
+    let text = fs::read_to_string(&path).unwrap();
+    fs::write(
+        &path,
+        text.replace("## Why\n", "## Why\n\nAsked for.\n")
+            .replace("## Outcome\n", "## Outcome\n\nGreetings.\n"),
+    )
+    .unwrap();
+    git(&a, &["commit", "-qam", "Plan it"]);
+    let submitted = hub.atelier(&a, "p1", &["submit"]);
+    ok(submitted.clone());
+    let commit = head(&a);
+    assert_eq!(hub.tip(&mission).as_deref(), Some(commit.as_str()));
+
+    // Each reviewer in a clone of its own, detached at the commit
+    // submitted, so neither sees the other's file.
+    let reviewers: Vec<(PathBuf, &str)> = [("r1", "c1"), ("r2", "c2")]
+        .into_iter()
+        .map(|(thread, name)| {
+            let at = hub.clone(name);
+            git(&at, &["fetch", "-q", "origin", &mission]);
+            git(&at, &["checkout", "-q", "--detach", &commit]);
+            let run = hub.atelier(&at, thread, &["review", &mission]);
+            ok(run.clone());
+            assert!(
+                run.stdout.contains(&format!(
+                    "Push it to {mission}: git push origin HEAD:refs/heads/{mission}\n"
+                )),
+                "{}",
+                run.stdout
+            );
+            (at, thread)
+        })
+        .collect();
+    let mut again = Vec::new();
+    for (at, thread) in &reviewers {
+        let run = hub.atelier(at, thread, &["verdict", "approve"]);
+        ok(run.clone());
+        run_then(at, &run.stdout);
+        let push = command_after(&run.stdout, &format!("Push it to {mission}: "));
+        if sh(at, &push).status.success() {
+            again.push(false);
+            continue;
+        }
+        let after = command_after(
+            &run.stdout,
+            "If that is refused because the other reviewer got there first",
+        );
+        let output = sh(at, &after);
+        assert!(output.status.success(), "{after}: {output:?}");
+        again.push(true);
+    }
+    assert_eq!(again, [false, true]);
+
+    // The planner brings both files in, and the plan merges. Once it has
+    // fetched them, a submit from here would leave them out.
+    git(&a, &["fetch", "-q", "origin"]);
+    let refused = hub.atelier(&a, "p1", &["submit"]);
+    assert_eq!(refused.code, 1, "{}", refused.stdout);
+    assert!(
+        refused
+            .stderr
+            .ends_with(&format!("Then: git pull --no-rebase origin {mission}\n")),
+        "{}",
+        refused.stderr
+    );
+    git(&a, &["pull", "-q", "--no-rebase", "origin", &mission]);
+    let reviews = fs::read_dir(a.join(format!(".atelier/missions/{mission}/reviews")))
+        .unwrap()
+        .count();
+    assert_eq!(reviews, 2);
+    let merged = hub.atelier(&a, "p1", &["merge"]);
+    ok(merged.clone());
+    let base = hub.tip("main").unwrap();
+    let text = git(
+        &hub.remote,
+        &["show", &format!("{base}:{}", mission_path(&mission))],
+    );
+    assert!(text.contains("\nstatus: open\n"), "{text}");
+}
+
+#[test]
+fn a_plan_dropped_on_its_branch_with_two_approvals_does_not_merge_and_the_stop_counts_once_pushed()
+{
+    let hub = Hub::new(&[(ID, "ready")]);
+    let (a, b) = (hub.clone("a"), hub.clone("b"));
+    let (mission, _) = planned_and_pushed(&hub, &a);
+    let reviewed = git(&a, &["rev-parse", "HEAD^"]);
+    approve(&a, &mission, "1-efgh", "r2", &reviewed);
+    git(&a, &["push", "-q", "origin", &mission]);
+
+    let run = hub.atelier(&a, "t1", &["drop", &mission, "--reason", "Not now"]);
+    ok(run.clone());
+    assert!(
+        run.stdout.contains(&format!(
+            "It stops nothing until it is published: commit it, push the branch (`git push origin {mission}`) and close its pull request (`gh pr close {mission}`). Its branch is never merged.\n"
+        )),
+        "{}",
+        run.stdout
+    );
+    run_then(&a, &run.stdout);
+    // Committed and not pushed, it is not published.
+    let unpublished = format!("Stop not published: mission {mission}'s plan is dropped here, and origin's copy of {mission} is not");
+    for args in [&["status"][..], &["show", &mission]] {
+        let run = hub.atelier(&a, "t1", args);
+        assert!(
+            run.stdout.contains(&unpublished),
+            "{args:?}: {}",
+            run.stdout
+        );
+    }
+    let base = hub.tip("main");
+    let run = hub.atelier(&a, "t1", &["merge"]);
+    assert_eq!(run.code, 1);
+    assert!(
+        run.stderr.starts_with(&format!(
+            "Mission {mission} is dropped, and `atelier merge` runs on a mission that is open."
+        )),
+        "{}",
+        run.stderr
+    );
+    assert_eq!(hub.tip("main"), base);
+
+    // Pushed, it is published: the other clone reads the plan as dropped
+    // once it has fetched.
+    git(&a, &["push", "-q", "origin", &mission]);
+    let run = hub.atelier(&a, "t1", &["status"]);
+    assert!(!run.stdout.contains("Stop not published"), "{}", run.stdout);
+    git(&b, &["fetch", "-q", "origin"]);
+    let shown = hub.atelier(&b, "p1", &["show", &mission]);
+    ok(shown.clone());
+    assert!(
+        shown.stdout.contains("\nStatus: dropped\n"),
+        "{}",
+        shown.stdout
+    );
+    assert!(
+        !shown.stdout.contains("Stop not published"),
+        "{}",
+        shown.stdout
+    );
+}
+
+#[test]
+fn a_stop_of_an_agreed_mission_refuses_its_ready_and_started_items_in_a_clone_that_has_fetched() {
+    const READY: &str = "demo-r3dy";
+    const MISSION: &str = "demo-m1ss";
+    let hub = Hub::new(&[(ID, "ready"), (READY, "ready")]);
+    let (a, b) = (hub.clone("a"), hub.clone("b"));
+    // The mission agreed on the base, with both items in it.
+    git(&a, &["checkout", "-q", "main"]);
+    let path = a.join(mission_path(MISSION));
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(
+        &path,
+        "---\nschema: atelier.mission\nschema_version: 3\nid: demo-m1ss\ntitle: Greet\n\
+         status: open\nlabels: []\nlead: null\nplanners:\n- p1\n\
+         created_at: 2026-11-10T09:00:00Z\n---\n\n## Why\n\nAsked for.\n\n## Outcome\n\nGreetings.\n\n## Result\n",
+    )
+    .unwrap();
+    for id in [ID, READY] {
+        let item = a.join(item_path(id));
+        let text = fs::read_to_string(&item).unwrap();
+        fs::write(&item, text.replace("mission: null", "mission: demo-m1ss")).unwrap();
+    }
+    git(&a, &["add", "-A"]);
+    git(&a, &["commit", "-qm", "Agree the mission"]);
+    git(&a, &["push", "-q", "origin", "main"]);
+    git(&a, &["checkout", "-q", "--detach", "main"]);
+    git(&b, &["fetch", "-q", "origin"]);
+    git(&b, &["checkout", "-q", "--detach", "origin/main"]);
+    git(&b, &["branch", "-qf", "main", "origin/main"]);
+    // One of its items started and approved in the other clone.
+    hub.approved(&b, "t1");
+    let listed = hub.atelier(&b, "t2", &["list", "--ready"]);
+    assert!(listed.stdout.contains(READY), "{}", listed.stdout);
+
+    // The stop, written on a backlog branch, is not published until that
+    // branch merges.
+    ok(hub.atelier(&a, "p1", &["start", "--backlog", "stop"]));
+    let run = hub.atelier(&a, "p1", &["drop", MISSION, "--reason", "No time"]);
+    ok(run.clone());
+    run_then(&a, &run.stdout);
+    let shown = hub.atelier(&a, "p1", &["show", MISSION]);
+    assert!(
+        shown.stdout.contains("Stop not published: mission demo-m1ss is dropped on backlog/stop, which has not merged"),
+        "{}",
+        shown.stdout
+    );
+    ok(hub.atelier(&a, "p1", &["submit"]));
+    ok(hub.atelier(&a, "p1", &["merge"]));
+
+    // The other clone fetches, and its own base has not moved: the stop
+    // holds all the same.
+    git(&b, &["fetch", "-q", "origin"]);
+    assert_ne!(
+        git(&b, &["rev-parse", "main"]),
+        git(&b, &["rev-parse", "origin/main"])
+    );
+    let stop =
+        "Mission demo-m1ss is not dropped (it was stopped, so none of its items starts or merges)";
+    let run = hub.atelier(&b, "t2", &["start", READY]);
+    assert_eq!(run.code, 1, "{}", run.stdout);
+    assert!(run.stderr.contains(stop), "{}", run.stderr);
+    // `show` reads it the same way: dropped, and published.
+    let shown = hub.atelier(&b, "t2", &["show", MISSION]);
+    ok(shown.clone());
+    assert!(
+        shown.stdout.contains("\nStatus: dropped\n"),
+        "{}",
+        shown.stdout
+    );
+    assert!(
+        !shown.stdout.contains("Stop not published"),
+        "{}",
+        shown.stdout
+    );
+    // `list` reads the stop the same way: nothing of it can start.
+    let listed = hub.atelier(&b, "t2", &["list", "--ready"]);
+    ok(listed.clone());
+    assert!(!listed.stdout.contains(READY), "{}", listed.stdout);
+    let run = hub.atelier(&b, "t1", &["merge"]);
+    assert_eq!(run.code, 1, "{}", run.stdout);
+    assert!(run.stderr.contains(stop), "{}", run.stderr);
 }

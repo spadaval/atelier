@@ -2,11 +2,14 @@
 //! The wording lives here, beside `output.rs`, so it is cheap to change.
 
 use crate::output::{
-    condition, handoff, holder, priority_name, settled, status_name, verdict_name,
+    condition, handoff, holder, mission_status_name, priority_name, settled, status_name,
+    verdict_name,
 };
 use atelier_app::acts::{Condition, PLANNED, STARTED};
 use atelier_app::{Disputes, Entry, Filter, Group, Judged, Overview, LIFECYCLE};
-use atelier_core::{Finding, Mission, Outcome, Ready, Recommendation, Status, Thread};
+use atelier_core::{
+    Finding, Mission, MissionStatus, Outcome, Ready, Recommendation, Status, Thread,
+};
 use atelier_records::{ItemDir, MissionDir, ReviewFile};
 use std::time::SystemTime;
 
@@ -23,8 +26,10 @@ pub struct Whence {
     /// The other unmerged branches that add it.
     pub also_added: Vec<String>,
     /// Each unmerged branch that changes the base's copy, with the status
-    /// of its copy there; `None` where it removes it.
-    pub changes: Vec<(String, Option<Status>)>,
+    /// of its copy there, by name; `None` where it removes it.
+    pub changes: Vec<(String, Option<&'static str>)>,
+    /// A mission's stop that is written and not published, said whole.
+    pub unpublished: Option<String>,
 }
 
 /// A record change an unmerged branch proposes, as `list` shows it.
@@ -34,8 +39,8 @@ pub struct Change {
     /// The branch, as it is shown.
     pub on: String,
     /// The status of the base's copy, and of the branch's, if it keeps one.
-    pub before: Status,
-    pub after: Option<Status>,
+    pub before: &'static str,
+    pub after: Option<&'static str>,
 }
 
 /// How long ago `time` was, in the largest whole unit.
@@ -92,7 +97,7 @@ fn whence(whence: &Whence) -> String {
     if !whence.changes.is_empty() {
         let changes: Vec<String> = (whence.changes.iter())
             .map(|(on, status)| match status {
-                Some(status) => format!("{on} ({} there)", status_name(*status)),
+                Some(status) => format!("{on} ({status} there)"),
                 None => format!("{on} (removed there)"),
             })
             .collect();
@@ -100,6 +105,9 @@ fn whence(whence: &Whence) -> String {
             "Changed on branches not yet merged: {}\n",
             changes.join(", ")
         );
+    }
+    if let Some(unpublished) = &whence.unpublished {
+        text += unpublished;
     }
     text
 }
@@ -152,17 +160,30 @@ fn line(entry: &Entry, status: bool) -> String {
     format!("{} ({}): {}\n", entry.id, facts.join(", "), entry.title)
 }
 
+/// What a mission is shown as: proposed while its record is open on a
+/// branch that has not merged, or is the old `draft`; agreed, or in
+/// progress, once it is open on the base; done; or dropped, wherever it is
+/// read from.
+pub fn shown_as(status: MissionStatus, proposed: bool, in_progress: bool) -> &'static str {
+    match status {
+        MissionStatus::Done => "done",
+        MissionStatus::Dropped => "dropped",
+        MissionStatus::Draft => "proposed",
+        MissionStatus::Open if proposed => "proposed",
+        MissionStatus::Open if in_progress => "in progress",
+        MissionStatus::Open => "agreed",
+    }
+}
+
 /// A mission's status, whether it is in progress, its lead, and the
 /// branch it is proposed on.
 fn mission_line(dir: &MissionDir, in_progress: bool, on: Option<String>) -> String {
     let mission = &dir.mission;
-    let mut facts = vec![status_name(mission.status.status()).to_string()];
-    if in_progress {
-        facts.push("in progress".into());
-    }
-    if let Some(on) = on {
-        facts.push(format!("proposed on {on}"));
-    }
+    let shown = shown_as(mission.status, on.is_some(), in_progress);
+    let mut facts = vec![match &on {
+        Some(on) => format!("{shown} on {on}"),
+        None => shown.to_string(),
+    }];
     if let Some(lead) = &mission.lead {
         facts.push(format!("led by {lead}"));
     }
@@ -377,23 +398,22 @@ pub fn mission(
     reviews: &[ReviewFile],
 ) -> String {
     let mission = &dir.mission;
-    let progress = match (in_progress, whence.proposed) {
-        (true, _) => ", in progress",
-        (false, true) => ", proposed",
-        (false, false) => "",
-    };
     let lead = mission
         .lead
         .as_ref()
         .map_or("nobody".to_string(), Thread::to_string);
+    let planners: Vec<String> = mission.planners.0.iter().map(Thread::to_string).collect();
+    let planners = match planners.is_empty() {
+        true => "none recorded".to_string(),
+        false => planners.join(", "),
+    };
     let mut text = format!(
-        "Mission {}: {}\n{}Status: {}{progress}\nLead: {lead}\nLabels: {}\n{}",
+        "Mission {}: {}\n{}Status: {}\nLead: {lead}\nPlanners: {planners}\nLabels: {}\n",
         mission.id,
         mission.title,
         self::whence(whence),
-        status_name(mission.status.status()),
+        shown_as(mission.status, whence.proposed, in_progress),
         labels(&mission.labels),
-        ready_line(mission.ready.as_ref()),
     );
     for heading in ["Outcome", "Success criteria", "Result"] {
         let content = dir.section(heading).unwrap_or_default().trim();
@@ -415,6 +435,27 @@ pub fn mission(
         text += &review_line(review);
     }
     text
+}
+
+/// A stop of agreed mission `id` written on the unmerged branches `on`.
+pub fn stop_waits(id: &str, on: &[String]) -> String {
+    format!(
+        "Stop not published: mission {id} is dropped on {}, which has not merged, so the stop stops nothing yet. It is published once that branch merges.\n",
+        on.join(", ")
+    )
+}
+
+/// A stop of mission `id`'s proposed plan written on its branch `branch`
+/// and not pushed to `remote`, or with none, not committed.
+pub fn plan_stop_unpublished(id: &str, branch: &str, remote: Option<&str>) -> String {
+    match remote {
+        Some(remote) => format!(
+            "Stop not published: mission {id}'s plan is dropped here, and {remote}'s copy of {branch} is not, so other clones still read it as proposed. Push it with `git push {remote} {branch}`, and close its pull request with `gh pr close {branch}`.\n"
+        ),
+        None => format!(
+            "Stop not published: mission {id}'s plan is dropped in this checkout and not committed on {branch}. Commit it.\n"
+        ),
+    }
 }
 
 pub fn unknown(id: &str, base: &str) -> String {
@@ -488,13 +529,9 @@ pub fn proposed(
         for change in changes {
             let after = match change.after {
                 Some(after) if after == change.before => {
-                    format!("changed there, still {}", status_name(after))
+                    format!("changed there, still {after}")
                 }
-                Some(after) => format!(
-                    "{} on the base, {} there",
-                    status_name(change.before),
-                    status_name(after)
-                ),
+                Some(after) => format!("{} on the base, {after} there", change.before),
                 None => "removed there".into(),
             };
             text += &format!(
@@ -623,15 +660,9 @@ pub fn lead(
 }
 
 pub fn lead_not_ready(id: &str, status: Status) -> String {
-    let way = match status {
-        Status::Draft => {
-            format!("A planner makes it ready with: atelier ready {id} --by <name>")
-        }
-        _ => "Nothing is left to lead on it.".into(),
-    };
     format!(
-        "`atelier lead {id}` refused; nothing changed.\nMission {id} is {}, and `atelier lead` runs on a mission that is ready. {way}\n",
-        status_name(status)
+        "`atelier lead {id}` refused; nothing changed.\nMission {id} is {}, and `atelier lead` runs on a mission that is open. Nothing is left to lead on it.\n",
+        mission_status_name(status)
     )
 }
 

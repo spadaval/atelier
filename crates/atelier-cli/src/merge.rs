@@ -22,10 +22,11 @@ use crate::forge::{CiRun, ForgeError, Github, PullRequest};
 use crate::git;
 use crate::output;
 use anyhow::{Context, Result};
-use atelier_app::acts::{check, Act, Refusal, STARTED};
+use atelier_app::acts::{check, Act, MissionFacts, Refusal, STARTED};
+use atelier_app::plan::{approvals, plan_diff};
 use atelier_app::repo::{facts, item_dir, item_path};
 use atelier_app::{refused, Located, Repo, Skip};
-use atelier_core::{Config, Forge, Status, Thread};
+use atelier_core::{Config, Forge, MissionStatus, Named, Status, Thread};
 use atelier_records::{is_record, load, parse_item, render_item, CommitReader, CONFIG};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions, TryLockError};
@@ -460,6 +461,25 @@ fn read(repo: &mut Repo, trivial: bool) -> Result<Result<Judged, Outcome>> {
         if let Some(refused) = repo.skip.refusal(act, &facts)? {
             return Ok(Err(refused.into()));
         }
+        // Its reviewer judges the change against the plan, so an item's
+        // branch changes no plan and adds no mission: those go through
+        // their own plan reviews.
+        let fork = git::run(&repo.root, &["merge-base", &repo.base_tip, &head])?;
+        let changed = git::changed_from_base(&repo.root, &repo.base_tip, &head)?;
+        let planned = plans_changed(repo, (&fork, &head), &changed)?;
+        if !planned.is_empty() {
+            let planned: Vec<(String, String)> = planned
+                .into_iter()
+                .map(|(id, what, _)| (id, what))
+                .collect();
+            let text = output::item_changes_plan(&id, &planned);
+            if let Some(refused) = repo
+                .skip
+                .refuse([output::rule_item_changes_plan(&id)], text)
+            {
+                return Ok(Err(refused.into()));
+            }
+        }
     }
     Ok(Ok(Judged {
         head,
@@ -508,6 +528,24 @@ fn read_records(repo: &mut Repo, head: String, branch: String) -> Result<Result<
             &branch, &repo.base, &code,
         ))));
     }
+    // The branch of a proposed plan: one of its planners merges it, and a
+    // plan dropped there never merges.
+    let fork = git::run(&root, &["merge-base", &repo.base_tip, &head])?;
+    if let Some(Named::Record(id)) = repo.named() {
+        let agreed = (repo.mission_at(&fork, &id)?)
+            .is_some_and(|dir| dir.mission.status != MissionStatus::Draft);
+        if let Some(dir) = repo.mission_at(&head, &id)?.filter(|_| !agreed) {
+            let facts = MissionFacts {
+                mission: &dir,
+                caller: &repo.caller,
+                items: &[],
+                review: None,
+            };
+            if let Some(refused) = repo.skip.mission_gate(Act::MergeMission, &id, &facts)? {
+                return Ok(Err(refused.into()));
+            }
+        }
+    }
     // A started item's record changes on its own branch, and reaches the
     // base in its own merge.
     let mut started = Vec::new();
@@ -530,11 +568,21 @@ fn read_records(repo: &mut Repo, head: String, branch: String) -> Result<Result<
             return Ok(Err(refused.into()));
         }
     }
-    let planned = plans_changed(repo, &head, &changed)?;
-    if !planned.is_empty() {
-        let text = output::records_plan(&branch, &planned);
-        let rule = output::rule_records_plan(&branch);
-        if let Some(refused) = repo.skip.refuse([rule], text) {
+    // A new mission, or a changed plan, needs two approving plan reviews
+    // of the plan the head holds.
+    let mut unapproved = Vec::new();
+    for (id, what, on_base) in plans_changed(repo, (&fork, &head), &changed)? {
+        let approvals = approvals(repo, &id, &head, on_base)?;
+        if !approvals.enough() {
+            unapproved.push((what, approvals));
+        }
+    }
+    if !unapproved.is_empty() {
+        let text = output::plan_unapproved(&branch, &unapproved, repo.remote());
+        let rules = unapproved
+            .iter()
+            .map(|(_, a)| output::rule_plan_approved(&a.id));
+        if let Some(refused) = repo.skip.refuse(rules, text) {
             return Ok(Err(refused.into()));
         }
     }
@@ -548,49 +596,60 @@ fn read_records(repo: &mut Repo, head: String, branch: String) -> Result<Result<
     Ok(Ok(judged(Dirt::read(&root, uncommitted)?)))
 }
 
-/// The missions `changed`, the paths a branch at `head` changes, add or
-/// whose plan they change, each with what: its Why, Outcome, Success
-/// criteria, Scope or Authority, or a file beside `mission.md` other than
-/// `notes.md` and its reviews. atelier-2vdq gives these their gate.
-fn plans_changed(repo: &mut Repo, head: &str, changed: &[String]) -> Result<Vec<(String, String)>> {
-    // What the branch itself changed: its plan sections as it forked from
-    // the base, against its head, so a plan edit the base made since is
-    // not taken for the branch's.
-    let fork = git::run(&repo.root, &["merge-base", &repo.base_tip, head])?;
-    let mut found: Vec<(String, String)> = Vec::new();
+/// The missions whose plan a branch changes, from `fork`, where it forked
+/// from the base, to its `head`, given the paths it changes: each with
+/// what of the plan it changes, and whether the mission is on the base,
+/// agreed. A mission is on the base when `fork` holds it and not as the
+/// old `draft`, which is proposed; until then its items are part of its
+/// plan, so an item a branch changes, adds, removes or moves into or out
+/// of it counts. What the base changed since `fork` is not the branch's.
+pub(crate) fn plans_changed(
+    repo: &mut Repo,
+    (fork, head): (&str, &str),
+    changed: &[String],
+) -> Result<Vec<(String, String, bool)>> {
+    let mut ids: Vec<String> = Vec::new();
     for path in changed {
-        let Some(rest) = path.strip_prefix(".atelier/missions/") else {
-            continue;
-        };
-        let Some((id, file)) = rest.split_once('/') else {
-            continue;
-        };
-        if found.iter().any(|(m, _)| m == id) {
+        if let Some(rest) = path.strip_prefix(".atelier/missions/") {
+            ids.extend(rest.split_once('/').map(|(id, _)| id.to_string()));
+        }
+        let item = path
+            .strip_prefix(".atelier/items/")
+            .and_then(|rest| rest.split('/').next());
+        if let Some(item) = item {
+            for at in [fork, head] {
+                let found = repo.item_at(at, item).ok().flatten();
+                ids.extend(found.and_then(|dir| dir.item.mission));
+            }
+        }
+    }
+    ids.sort();
+    ids.dedup();
+    let mut found = Vec::new();
+    for id in ids {
+        let base = repo.mission_at(fork, &id)?;
+        let on_base = base
+            .as_ref()
+            .is_some_and(|dir| dir.mission.status != MissionStatus::Draft);
+        let diff = plan_diff(repo, &id, (fork, head), !on_base)?;
+        // An old draft on the base written open is its plan's first
+        // agreement, whatever else changed.
+        let agrees = !on_base
+            && base.is_some()
+            && (repo.mission_at(head, &id)?)
+                .is_some_and(|dir| dir.mission.status != MissionStatus::Draft);
+        if diff.is_empty() && !agrees {
             continue;
         }
-        let Some(base) = repo.mission_at(&fork, id)? else {
-            found.push((id.to_string(), "adds the mission".into()));
-            continue;
+        let what = match &base {
+            None => "adds the mission".to_string(),
+            Some(_) if agrees && diff.is_empty() => {
+                "agrees the mission, whose record on the base is an old draft".to_string()
+            }
+            Some(_) if !on_base => format!("changes the proposed plan: {}", diff.join(", ")),
+            Some(_) => format!("changes its plan: {}", diff.join(", ")),
         };
-        if file == "notes.md" || file.starts_with("reviews/") {
-            continue;
-        }
-        if file != "mission.md" {
-            found.push((id.to_string(), format!("changes {path}")));
-            continue;
-        }
-        let Some(now) = repo.mission_at(head, id)? else {
-            found.push((id.to_string(), "removes the mission".into()));
-            continue;
-        };
-        let sections = ["Why", "Outcome", "Success criteria", "Scope", "Authority"];
-        let differ: Vec<&str> = sections
-            .into_iter()
-            .filter(|h| base.section(h).map(str::trim) != now.section(h).map(str::trim))
-            .collect();
-        if !differ.is_empty() {
-            found.push((id.to_string(), format!("changes its {}", differ.join(", "))));
-        }
+        found.push((id, what, on_base));
     }
     Ok(found)
 }

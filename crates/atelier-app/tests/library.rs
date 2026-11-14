@@ -281,7 +281,8 @@ fn history_returns_the_acts_as_data_to_a_repository_opened_as_the_desk_opens_it(
             by: Some("sumeet".into()),
             status: Move {
                 from: Some(Status::Draft),
-                to: Status::Ready
+                to: Status::Ready,
+                mission: false,
             }
         }
     );

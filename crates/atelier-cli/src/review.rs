@@ -3,7 +3,7 @@
 
 use crate::commands::Outcome;
 use crate::forge::Github;
-use crate::output::{self, Brief, PlanBrief};
+use crate::output::{self, Brief, Landing, PlanBrief};
 use crate::{git, merge};
 use anyhow::{anyhow, Context, Result};
 use atelier_app::acts::{check, plan_round, row, Act, Facts, MissionFacts, Refusal};
@@ -160,6 +160,13 @@ fn plan_review(repo: &mut Repo, id: &str) -> Result<Outcome> {
     }
     let store = repo.store();
     let mission = store.mission(id)?;
+    // The plan's reviews are what let it merge, so no planner gives one.
+    if mission.mission.planners.0.contains(&repo.caller) {
+        let text = output::planner_reviews(id, &repo.caller);
+        if let Some(refused) = repo.skip.refuse([output::rule_planner_reviews(id)], text) {
+            return Ok(refused.into());
+        }
+    }
     let round = plan_round(&mission, &repo.caller);
     let commit = git::head(&repo.root)?;
     // The plan as the commit the review records holds it: this checkout's
@@ -211,6 +218,7 @@ fn plan_review(repo: &mut Repo, id: &str) -> Result<Outcome> {
         })
         .collect();
     let changed = plan_changed(repo, id, commit)?.unwrap_or_default();
+    let landing = landing(repo, id)?;
     let brief = output::plan_brief(&PlanBrief {
         id,
         title: &plan.mission.title,
@@ -223,6 +231,7 @@ fn plan_review(repo: &mut Repo, id: &str) -> Result<Outcome> {
         changed,
         carried: &carried_plan(&mission, file.name.round)?,
         path: &format!("{}/reviews/{name}.md", mission_dir(id)),
+        landing: &landing,
     });
     Ok(Outcome::Done(said + &brief))
 }
@@ -268,6 +277,7 @@ fn plan_verdict(repo: &mut Repo, verdict: Verdict, model: Option<String>) -> Res
     };
     let facts = MissionFacts {
         mission: &mission,
+        caller: &repo.caller,
         items: &[],
         review: Some(file),
     };
@@ -289,9 +299,33 @@ fn plan_verdict(repo: &mut Repo, verdict: Verdict, model: Option<String>) -> Res
     written.review = review;
     written.write().context("cannot write the review file")?;
     let line = output::commit_line(repo.git_at(), std::slice::from_ref(&path), &message);
+    let landing = landing(repo, &id)?;
     Ok(Outcome::Done(output::plan_verdict_recorded(
-        &id, name.round, verdict, &path, &line,
+        &id, name.round, verdict, &path, &line, &landing,
     )))
+}
+
+/// Where a review of mission `id`'s plan goes once committed: its branch,
+/// while it is proposed, on the forge's remote or in this clone.
+fn landing(repo: &mut Repo, id: &str) -> Result<Landing> {
+    if crate::plan::agreed(repo, id)? {
+        return Ok(Landing {
+            branch: None,
+            remote: repo.remote().map(str::to_string),
+            checkout: None,
+        });
+    }
+    let branch = repo.branch_of(id);
+    let remote = repo.remote().map(str::to_string);
+    let checkout = match remote {
+        Some(_) => None,
+        None => git::checkout_of(&repo.root, &branch)?,
+    };
+    Ok(Landing {
+        branch: Some(branch),
+        remote,
+        checkout,
+    })
 }
 
 /// Records the caller's verdict in its review file and the item's new

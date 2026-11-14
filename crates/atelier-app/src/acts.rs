@@ -12,10 +12,9 @@ use atelier_records::{validate, ItemDir, MissionDir, Problem, ReviewFile};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Act {
-    /// `ready` on an item.
+    /// `ready` on an item. A mission has no go-ahead, and `ready` refuses
+    /// one.
     Ready,
-    /// `ready` on a mission.
-    ReadyMission,
     Start,
     /// `start --new`, which creates the item it starts.
     StartNew,
@@ -28,6 +27,11 @@ pub enum Act {
     SubmitBacklog,
     /// `merge` of a backlog branch, which holds records alone.
     MergeBacklog,
+    /// `submit` on a mission's branch, by a planner of it or a thread that
+    /// takes the plan over.
+    SubmitMission,
+    /// `merge` of a mission's branch, by a planner of it.
+    MergeMission,
     TakeOver,
     Submit,
     Review,
@@ -93,20 +97,17 @@ pub const STARTED: &[Status] = &[
 /// still change with `set`.
 pub const PLANNED: &[Status] = &[Status::Draft, Status::Ready];
 
-/// Every status a mission can have.
+/// Every status a mission can have. A mission's `open` is `ready` here,
+/// and the old `draft` is `draft` ([`MissionStatus::status`]).
 const MISSION: &[Status] = &[Status::Draft, Status::Ready, Status::Done, Status::Dropped];
 
-pub const TABLE: [Row; 23] = [
+/// A mission that is proposed, read from its branch, which has not merged:
+/// `open`, or the old `draft`.
+pub const PROPOSED: &[Status] = &[Status::Draft, Status::Ready];
+
+pub const TABLE: [Row; 24] = [
     Row {
         act: Act::Ready,
-        command: "ready",
-        role: Role::Planner,
-        binds: false,
-        from: &[Status::Draft],
-        to: Some(Status::Ready),
-    },
-    Row {
-        act: Act::ReadyMission,
         command: "ready",
         role: Role::Planner,
         binds: false,
@@ -129,15 +130,15 @@ pub const TABLE: [Row; 23] = [
         from: &[],
         to: Some(Status::Building),
     },
-    // Anyone may plan a mission; like a planner's act, it needs no role.
-    // Its stored status stays `draft` until atelier-2vdq.
+    // Anyone may plan a mission, and becomes its first planner. It is
+    // `open` from the start: proposed while its branch has not merged.
     Row {
         act: Act::StartMission,
         command: "start --mission",
         role: Role::Planner,
-        binds: false,
+        binds: true,
         from: &[],
-        to: Some(Status::Draft),
+        to: Some(Status::Ready),
     },
     // The acts of a backlog branch: any thread, in a checkout on that
     // branch, with no record to take a status from. None is an
@@ -164,6 +165,27 @@ pub const TABLE: [Row; 23] = [
         role: Role::Planner,
         binds: false,
         from: &[],
+        to: None,
+    },
+    // The acts of a mission's branch, from proposed, in a checkout on that
+    // branch: `submit` binds the caller as a planner, taking the plan over
+    // when it was not one, and writes an old `draft` as `open`; `merge`
+    // needs a planner, and the plan `open`, as `submit` leaves it. A plan
+    // dropped on its branch does neither.
+    Row {
+        act: Act::SubmitMission,
+        command: "submit",
+        role: Role::Planner,
+        binds: true,
+        from: PROPOSED,
+        to: Some(Status::Ready),
+    },
+    Row {
+        act: Act::MergeMission,
+        command: "merge",
+        role: Role::Planner,
+        binds: false,
+        from: &[Status::Ready],
         to: None,
     },
     Row {
@@ -255,7 +277,8 @@ pub const TABLE: [Row; 23] = [
         from: PLANNED,
         to: Some(Status::Done),
     },
-    // Its lead or a planner; no role is checked.
+    // Its lead or a planner; no role is checked. It runs on an agreed
+    // mission: open, read from the base.
     Row {
         act: Act::CloseMission,
         command: "close",
@@ -303,9 +326,10 @@ pub const TABLE: [Row; 23] = [
 
 /// The acts on a mission. `drop` is also an item's; every other act is
 /// only an item's.
-const ON_MISSION: [Act; 7] = [
-    Act::ReadyMission,
+const ON_MISSION: [Act; 8] = [
     Act::StartMission,
+    Act::SubmitMission,
+    Act::MergeMission,
     Act::CloseMission,
     Act::Drop,
     Act::PlanVerdictChanges,
@@ -374,6 +398,8 @@ pub struct SinceApproval {
 /// What a mission's act is checked against.
 pub struct MissionFacts<'a> {
     pub mission: &'a MissionDir,
+    /// Who acts: a planner, for the acts of a mission's branch.
+    pub caller: &'a Thread,
     /// The items that name the mission, each with its status as
     /// [`crate::Located::record`] finds it; what `close` waits for.
     pub items: &'a [(String, Status)],
@@ -518,9 +544,10 @@ pub enum Condition {
         id: String,
         status: Option<Status>,
     },
-    /// The item's mission is not ready; `None` when no such mission is
-    /// found.
-    MissionNotReady {
+    /// The item's mission is not open on the base: dropped, so that none of
+    /// its items starts or merges, or the old `draft`, which is proposed;
+    /// `None` when the base has no such mission.
+    MissionNotOpen {
         id: String,
         status: Option<Status>,
     },
@@ -734,6 +761,15 @@ pub fn mission_refusals(act: Act, facts: &MissionFacts) -> Result<Vec<Refusal>, 
     if !row.from.contains(&status) {
         found.push(Refusal::From { act, status });
     }
+    // Merging a plan needs one of its planners; `submit` makes the caller
+    // one, so a thread that is not takes the plan over there.
+    let planners = &facts.mission.mission.planners;
+    if act == Act::MergeMission && !planners.0.contains(facts.caller) {
+        found.push(Refusal::NotHolder {
+            role: Role::Planner,
+            holder: planners.holder().cloned(),
+        });
+    }
     let unmet = unmet_mission(act, facts)?;
     if !unmet.is_empty() {
         found.push(Refusal::Unmet(unmet));
@@ -843,9 +879,10 @@ pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
     let item = facts.item;
     let mut unmet = Vec::new();
     match act {
-        Act::Ready | Act::ReadyMission | Act::StartNew | Act::Drop | Act::Lead => {}
-        // On no item: a backlog branch's acts, and a mission's creation.
+        Act::Ready | Act::StartNew | Act::Drop | Act::Lead => {}
+        // On no item: a backlog branch's acts, and a mission's.
         Act::StartMission | Act::StartBacklog | Act::SubmitBacklog | Act::MergeBacklog => {}
+        Act::SubmitMission | Act::MergeMission => {}
         // The finding's conditions are checked by `check_settle`.
         Act::Settle => {}
         // A mission's act is checked with `unmet_mission`.
@@ -859,9 +896,11 @@ pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
                     });
                 }
             }
+            // Of its mission it asks only that it is agreed and not
+            // dropped: on the base, and not the old `draft`.
             if let Some((id, status)) = &facts.mission {
-                if *status != Some(Status::Ready) {
-                    unmet.push(Condition::MissionNotReady {
+                if matches!(status, None | Some(Status::Draft | Status::Dropped)) {
+                    unmet.push(Condition::MissionNotOpen {
                         id: id.clone(),
                         status: *status,
                     });
@@ -876,12 +915,7 @@ pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
                 unmet.push(Condition::NoBranch);
             }
             // A dropped mission's items start no more, taken over or not.
-            if let Some((id, Some(Status::Dropped))) = &facts.mission {
-                unmet.push(Condition::MissionNotReady {
-                    id: id.clone(),
-                    status: Some(Status::Dropped),
-                });
-            }
+            unmet.extend(mission_dropped(facts));
         }
         Act::Submit => {
             for (ticked, text) in item.done_when() {
@@ -962,6 +996,8 @@ pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
                     unmet.push(Condition::Reviewed);
                 }
             }
+            // A stop of its mission stops its merge too.
+            unmet.extend(mission_dropped(facts));
             let checkout = facts.checkout;
             if act == Act::Merge {
                 match approval(item) {
@@ -979,6 +1015,17 @@ pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
         }
     }
     Ok(unmet)
+}
+
+/// The stop of the item's mission, when it is dropped.
+fn mission_dropped(facts: &Facts) -> Option<Condition> {
+    match &facts.mission {
+        Some((id, Some(Status::Dropped))) => Some(Condition::MissionNotOpen {
+            id: id.clone(),
+            status: Some(Status::Dropped),
+        }),
+        _ => None,
+    }
 }
 
 /// Every reason `new --from` or `drop` on finding `name` of the item is
