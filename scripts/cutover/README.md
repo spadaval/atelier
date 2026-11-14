@@ -105,7 +105,7 @@ converted base (below).
 
 The runbook finished with exit status 0 and printed its report; step 7 had
 passed before step 8 ran. Then, in any of the five repositories,
-`atelier --version` prints `atelier 0.5.0`, `atelier status` runs, and
+`atelier --version` prints `atelier 0.5.0` or later, `atelier status` runs, and
 `atelier check` says every record is valid. `systemctl --user is-active
 atelier-serve` says `inactive`.
 
