@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-ni3d
 title: Merge atelier-records and atelier-app into atelier-core, as modules, with no change in behaviour
-status: in_review
+status: approved
 mission: atelier-dy62
 labels: []
 priority: medium
