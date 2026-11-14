@@ -82,7 +82,9 @@ a drift:
   `std::fs`, `std::process` or a module of the crate outside `model`.
 - one-git: outside `tests/` directories and build scripts
   (`build.rs`), `Command::new("git")` occurs in one source file of the
-  workspace, and a `gh` program is spawned from one source file.
+  workspace, and a `gh` program is spawned from one source file. If
+  atelier-x5al has to stop at the Git half, as its Done when allows, the
+  `gh` part is not met and the Result says so and why.
 - one-word: `atelier --help`, `docs/product.md`, `docs/product/desk.md`,
   `docs/design.md`, `docs/architecture/desk.md` and `skills/agent-factory`
   say "action", and
@@ -114,7 +116,9 @@ Changed on 2026-11-14: Sumeet dropped atelier-yclc of atelier-to83, which
 was to move `submit`, `merge` and the forge code into the core, and
 atelier-x5al waited on it for the forge code. On his word atelier-x5al now
 moves `forge.rs` itself and waits on nothing. `submit` and `merge` stay in
-`atelier-cli`.
+`atelier-cli`. The documents and the Desk's messages that still name
+atelier-yclc are atelier-f3ax's to correct, outside this mission, except the
+mission's own Decision in `docs/design.md`, which atelier-x5al corrects.
 
 ## Authority
 
@@ -122,7 +126,7 @@ The lead may choose the layout inside `atelier-core` other than the module
 names `model`, `records`, `git` and `forge`, the names of
 re-exports, and the order of atelier-x5al and atelier-nl43. It may not add
 a crate or a dependency new to the workspace (`atelier-core` may take
-`serde_json`, which `forge.rs` uses and the other two crates already have), change what any command does or prints beyond the
+`serde_json` and `tempfile`, which `forge.rs` uses and the workspace already has), change what any command does or prints beyond the
 word "act", move code between `atelier-cli` and the core beyond what an
 item names, or change the record format. atelier-nl43 is the item to drop
 if the mission has to shrink: it is a rename of about 400 places and
