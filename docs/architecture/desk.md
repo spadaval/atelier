@@ -691,13 +691,14 @@ replaced. Its default (`atelier_desk::config::SESSION_MESSAGE`) is:
 No command of the tracker fetches (docs/design.md, No command fetches); the
 Desk does, for the human. On a thread of its own, every `fetch_seconds`, it
 runs `git fetch --quiet --prune <remote>` in each served repository, with no
-terminal prompt and SSH in batch mode. The remote is the forge's, as
-`config.toml` at `HEAD` names it, else `origin`; a repository with neither
+terminal prompt and SSH in batch mode (`atelier_core::git::unattended`).
+The remote is the forge's, as `config.toml` at `HEAD` names it, else `origin`; a repository with neither
 is not fetched. A fetch writes only the repository's remote-tracking refs
 and `FETCH_HEAD`, never a checkout. A failed fetch keeps the refs as they
 were and its error is shown in `fetched.error`. Where the forge is GitHub's,
 the same round reads its last 200 pull requests of any state and up to 1,000
-open ones with `gh pr list --json number,url,state,headRefName`. It keeps
+open ones with `gh pr list --json number,url,state,headRefName`
+(`atelier_core::forge::list_pull_requests`). It keeps
 the newest of each list for each head branch, the open ones apart, so a
 newer closed pull request never hides an older open one of the same branch.
 The open list is complete when it holds fewer than 1,000, and only then does
@@ -811,11 +812,19 @@ What the server calls for the stop, and where it stands:
 | Open the Desk's clone by path, naming the person | `atelier_core::Repo::open(dir: &Path, caller: Thread, skip: &Skip)` | The same |
 | Drop the mission | `atelier_core::plan::drop_mission(&mut Repo, id: &str, reason: &str)` | `anyhow::Result<Result<Done, Refused>>`. `Done` has the text and the paths written, and commits nothing |
 | Commit the paths written | `atelier_core::git::commit_paths` | The commit, with no trailer, since the skip passes nothing |
+| Close the pull request | `atelier_core::forge::close_pull_request(gh: &Path, dir: &Path, branch: &str, comment: &str)` | `anyhow::Result<bool>`: `false` when the branch has no open pull request |
 
 The caller is `Thread(caller)` with `caller` from the configuration, whole.
 The skip is always `Skip::new(None)`. The server runs no `atelier` binary
-and reads no command's output. It runs `git` and `gh`, and writes only in
-its own clone.
+and reads no command's output. It writes only in its own clone. It starts
+`git` through `atelier_core::git`, as the command does: its fetch, clone,
+config, commit and push, and the other reads above. Its fetches and the
+stop's calls in its clone it makes with `atelier_core::git::unattended`, so
+a remote that wants a password or a host key fails instead of waiting on a
+terminal; the clone copies from the served repository's path, which asks
+nothing. It starts `gh`, the program its configuration names, through
+`atelier_core::forge`: `list_pull_requests` on each fetch and
+`close_pull_request` in the stop.
 
 ## The brief and the debrief on the mission page
 

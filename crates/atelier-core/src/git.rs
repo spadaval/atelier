@@ -1,5 +1,8 @@
-//! The Git calls a [`Repo`](crate::Repo) and the actions here make, and the
-//! helpers `atelier-cli`'s own Git calls are built on. `run` and
+//! The one place a `git` program is started, for every caller in the
+//! workspace but the tests and the Desk's build script: the Git calls a
+//! [`Repo`](crate::Repo) and the actions here make, the helpers
+//! `atelier-cli`'s own Git calls are built on, the record reader's
+//! `cat-file --batch`, and the Desk's fetch, clone and push. `run` and
 //! `current_branch` are copied from `text` and `checkout_branch` in
 //! `crates/atelier-cli/src/commands/git.rs`, trimmed to plain errors; the
 //! rest is new.
@@ -15,6 +18,16 @@ pub fn git(repo: &Path) -> Command {
     let mut command = Command::new("git");
     command.current_dir(repo).arg("--no-replace-objects");
     command
+}
+
+/// `command`, set to ask nothing of a terminal: no prompt for credentials,
+/// and ssh in batch mode, so a remote that wants a password or a host key
+/// confirmed fails instead of waiting. A caller with no one at a terminal,
+/// as the Desk, chooses it; the `atelier` command's calls do not.
+pub fn unattended(command: &mut Command) -> &mut Command {
+    command
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GIT_SSH_COMMAND", "ssh -o BatchMode=yes")
 }
 
 /// What a Git command printed and how it ended, with `input` on its stdin.

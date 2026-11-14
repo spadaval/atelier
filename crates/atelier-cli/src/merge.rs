@@ -19,11 +19,11 @@
 //! the head, are new.
 
 use crate::commands::{self, hold, Outcome};
-use crate::forge::{CiRun, ForgeError, Github, MergeState, PullRequest};
 use crate::git;
 use crate::output;
 use anyhow::{Context, Result};
 use atelier_core::actions::{check, Action, MissionFacts, Refusal, STARTED};
+use atelier_core::forge::{CiRun, ForgeError, Github, MergeState, PullRequest};
 use atelier_core::model::{Config, Forge, MissionStatus, Named, Status, Thread};
 use atelier_core::plan::{approvals, plan_diff};
 use atelier_core::records::{is_record, load, render_item, CommitReader, CONFIG};

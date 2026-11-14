@@ -16,7 +16,7 @@ use crate::records::{
 use std::fmt;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::process::{Child, ChildStdin, ChildStdout, Stdio};
 
 /// Why a file could not be read at a commit.
 #[derive(Debug)]
@@ -373,9 +373,8 @@ impl CommitReader {
 
 impl Batch {
     fn spawn(repo: &Path) -> Result<Batch, ReadError> {
-        let mut child = Command::new("git")
-            .current_dir(repo)
-            .args(["--no-replace-objects", "cat-file", "--batch"])
+        let mut child = crate::git::git(repo)
+            .args(["cat-file", "--batch"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

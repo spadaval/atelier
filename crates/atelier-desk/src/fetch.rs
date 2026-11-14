@@ -6,10 +6,10 @@
 use crate::api::{FetchMark, PrMark};
 use crate::read::PrState;
 use anyhow::{bail, Context, Result};
+use atelier_core::forge::{self, Listed};
 use atelier_core::git;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::Mutex;
 
 /// What the Desk last fetched, and the pull requests it last read, by
@@ -157,10 +157,7 @@ fn remote_tips(dir: &Path, remote: &str) -> HashMap<String, String> {
 
 /// `git fetch --prune <remote>`, asking nothing of a terminal.
 pub fn fetch(dir: &Path, remote: &str) -> Result<()> {
-    let output = Command::new("git")
-        .current_dir(dir)
-        .env("GIT_TERMINAL_PROMPT", "0")
-        .env("GIT_SSH_COMMAND", "ssh -o BatchMode=yes")
+    let output = git::unattended(&mut git::git(dir))
         .args(["fetch", "--quiet", "--prune", remote])
         .output()
         .with_context(|| format!("cannot run git fetch in {}", dir.display()))?;
@@ -177,15 +174,6 @@ fn last_fetched(dir: &Path) -> Option<String> {
     Some(chrono::DateTime::<chrono::Utc>::from(at).to_rfc3339())
 }
 
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Listed {
-    number: u32,
-    url: String,
-    state: String,
-    head_ref_name: String,
-}
-
 /// How many pull requests a list asks for: the recent ones of any state,
 /// for links, and the open ones, which settle whether a branch has one
 /// open.
@@ -198,8 +186,8 @@ const OPEN: usize = 1000;
 /// whether the open ones were all listed, fewer than `OPEN` of them, so a
 /// branch missing from them has none open.
 fn pull_requests(gh: &Path, dir: &Path) -> Result<Prs> {
-    let recent = newest(listed(gh, dir, "all", RECENT)?);
-    let open = listed(gh, dir, "open", OPEN)?;
+    let recent = newest(forge::list_pull_requests(gh, dir, "all", RECENT)?);
+    let open = forge::list_pull_requests(gh, dir, "open", OPEN)?;
     let every_open = open.len() < OPEN;
     Ok(Prs {
         recent,
@@ -233,23 +221,4 @@ fn newest(listed: Vec<Listed>) -> HashMap<String, PrMark> {
         }
     }
     prs
-}
-
-/// `gh pr list` of the pull requests in `state`, at most `limit`.
-fn listed(gh: &Path, dir: &Path, state: &str, limit: usize) -> Result<Vec<Listed>> {
-    let limit = limit.to_string();
-    let output = Command::new(gh)
-        .current_dir(dir)
-        .env("GH_PROMPT_DISABLED", "1")
-        .args(["pr", "list", "--state", state, "--limit", &limit])
-        .args(["--json", "number,url,state,headRefName"])
-        .output()
-        .with_context(|| format!("cannot run {}", gh.display()))?;
-    if !output.status.success() {
-        bail!(
-            "gh pr list failed: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        );
-    }
-    serde_json::from_slice(&output.stdout).context("gh pr list gave unreadable JSON")
 }

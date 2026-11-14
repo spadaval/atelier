@@ -11,6 +11,7 @@
 
 pub mod actions;
 mod disputed;
+pub mod forge;
 pub mod git;
 mod identity;
 pub mod log;
