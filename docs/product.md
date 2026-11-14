@@ -87,7 +87,7 @@ Each word has one meaning in the CLI, its help, the docs and the skill.
 | Thread | The T3 Code thread that holds a role. Records store its ID. |
 | Role | Lead, implementer, reviewer or planner. A thread gets a role from the command it enters with; `start --mission` makes it a planner of the mission. |
 | Gardener | Whoever keeps a repository easy to navigate, easy to change and easy to validate, and brings Sumeet the redesigns that need his taste. A run looks at one focus area, which Sumeet may name at the start, through agents' threads and the code itself. In the tool a gardener is the implementer of an item labelled `garden`: that item is its run, and the item's Report is the one page Sumeet reads. No command is reserved for it. |
-| Status | A stored field on a mission or item, set only by the command that performs the act. |
+| Status | A stored field on a mission or item, set only by the command that performs the action. |
 | Done | The end state of merged work, of a closed item, and of a closed mission. |
 | Record-only change | A branch every one of whose changed paths is under `.atelier/` other than `config.toml`, and which adds no mission and changes no plan. It merges once `atelier check` passes on the merged tree. |
 | Check | `atelier check`, which the Git hooks and CI also run, or one of a project's configured merge checks. |
@@ -272,7 +272,7 @@ in the checkout that has the base out, it writes nothing and names the
 | `status` | Who this thread is, what it holds, what each thing needs, and the next command. On the base with nothing held: the ready items `start` would accept now, one line counting the other ready items by what stops them, missions in progress and what waits on Sumeet, which is not listed as ready. For a mission's lead, its mission, what each item needs, and what is disputed in it. |
 | `show <id>` | An item in full, with a summary of each review: its round, reviewer, model, the commit it reviewed and its verdict, and each finding's name, recommendation, state and title. A finding's text is in its review file. For a mission, the whole mission on one page: whether it is proposed, agreed, done or dropped, its outcome and criteria, its items grouped by status with who holds each and what blocks each, what is disputed in it as `list --disputed` gives it, and its reviews by round. Either says which ref the record was read from, and, for a fetched ref, how long ago the remote was fetched. |
 | `list` | With no flags, all open work on the base, grouped by mission and then by label, and apart from it what is proposed: missions on unmerged branches and record changes waiting to merge, each with its branch. Narrowed by `--ready`, `--blocked`, `--needs-human`, `--proposed`, `--mission <id>`, `--label <l>`, `--mine` and `--deferred`; `--done` shows finished missions and items instead. `--disputed` lists instead, across open and done items, each finding whose Response is `rebutted` with what the next round made of it (kept, withdrawn, fixed, kept at defer or no action, or not yet reviewed), and each plan-review round whose reviewers gave different verdicts; `--mission <id>` narrows it. Nothing refuses or warns on any of them. |
-| `log` | The history of acts, read from Git, one line each and oldest first: when, the commit, which item or mission, the act, the thread where the record holds one, what changed, and any rule its commit skipped. For everything, one item, or one mission with its plan reviews and its items, and only acts `--since` a time. It adds nothing up. |
+| `log` | The history of actions, read from Git, one line each and oldest first: when, the commit, which item or mission, the action, the thread where the record holds one, what changed, and any rule its commit skipped. For everything, one item, or one mission with its plan reviews and its items, and only actions `--since` a time. It adds nothing up. |
 | `check` | Validates every record. The Git hooks and CI run it. |
 
 A lead or a planner reads where things stand with `show`, `list` and
@@ -663,7 +663,7 @@ skill.
 - A view of what changed between the merge of a mission's plan and its
   result. It is a derived view and the Desk's to build later. The tool
   gives it the data: records readable at any commit, and, from `log`, every
-  act with the commit it happened in.
+  action with the commit it happened in.
 - Coordinating clones beyond the claim. Two clones of one remote cannot
   both start one item, since `start` pushes the branch it makes, and each
   sees the other's work once it has fetched. Nothing else is coordinated

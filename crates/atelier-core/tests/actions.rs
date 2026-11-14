@@ -1,5 +1,5 @@
-use atelier_core::acts::{
-    check, check_mission, next, row, settle_refusals, unmet, unsettled, Act, Condition, Facts,
+use atelier_core::actions::{
+    check, check_mission, next, row, settle_refusals, unmet, unsettled, Action, Condition, Facts,
     MissionFacts, Refusal, Role, TABLE,
 };
 use atelier_core::model::{FindingName, MissionStatus, Settlement, Status, Thread};
@@ -113,15 +113,15 @@ fn facts<'a>(item: &'a ItemDir, caller: &'a Thread) -> Facts<'a> {
     }
 }
 
-/// The architecture specification's act table, for the acts this step
+/// The architecture specification's action table, for the actions this step
 /// builds, written out here so the code's table is checked against it.
-const SPECIFIED: [(Act, &[Status], Option<Status>); 13] = [
-    (Act::Ready, &[Status::Draft], Some(Status::Ready)),
-    (Act::Start, &[Status::Ready], Some(Status::Building)),
-    // Created by the act, so it runs from no status at all.
-    (Act::StartNew, &[], Some(Status::Building)),
+const SPECIFIED: [(Action, &[Status], Option<Status>); 13] = [
+    (Action::Ready, &[Status::Draft], Some(Status::Ready)),
+    (Action::Start, &[Status::Ready], Some(Status::Building)),
+    // Created by the action, so it runs from no status at all.
+    (Action::StartNew, &[], Some(Status::Building)),
     (
-        Act::TakeOver,
+        Action::TakeOver,
         &[
             Status::Building,
             Status::InReview,
@@ -131,25 +131,29 @@ const SPECIFIED: [(Act, &[Status], Option<Status>); 13] = [
         None,
     ),
     (
-        Act::Submit,
+        Action::Submit,
         &[Status::Building, Status::ChangesRequested, Status::Approved],
         Some(Status::InReview),
     ),
-    (Act::Review, &[Status::InReview], None),
+    (Action::Review, &[Status::InReview], None),
     (
-        Act::VerdictChanges,
+        Action::VerdictChanges,
         &[Status::InReview],
         Some(Status::ChangesRequested),
     ),
     (
-        Act::VerdictApprove,
+        Action::VerdictApprove,
         &[Status::InReview],
         Some(Status::Approved),
     ),
-    (Act::Merge, &[Status::Approved], Some(Status::Done)),
-    (Act::MergeTrivial, &[Status::Building], Some(Status::Done)),
+    (Action::Merge, &[Status::Approved], Some(Status::Done)),
     (
-        Act::Drop,
+        Action::MergeTrivial,
+        &[Status::Building],
+        Some(Status::Done),
+    ),
+    (
+        Action::Drop,
         &[
             Status::Draft,
             Status::Ready,
@@ -161,134 +165,137 @@ const SPECIFIED: [(Act, &[Status], Option<Status>); 13] = [
         Some(Status::Dropped),
     ),
     (
-        Act::Close,
+        Action::Close,
         &[Status::Draft, Status::Ready],
         Some(Status::Done),
     ),
     // `new --from` and `drop` on a finding change the finding, not its item.
-    (Act::Settle, &[Status::Done], None),
+    (Action::Settle, &[Status::Done], None),
 ];
 
-/// The acts on a mission, from the same table, where a mission's `open` is
+/// The actions on a mission, from the same table, where a mission's `open` is
 /// written `ready` and the old `draft` is `draft`.
-const MISSION_SPECIFIED: [(Act, &[Status], Option<Status>); 7] = [
+const MISSION_SPECIFIED: [(Action, &[Status], Option<Status>); 7] = [
     // `lead` binds its lead to an open mission, and its status stays.
-    (Act::Lead, &[Status::Ready], None),
+    (Action::Lead, &[Status::Ready], None),
     // A proposed plan's branch: `submit` writes an old draft open, and
     // `merge` changes no status; a plan dropped there does neither.
     (
-        Act::SubmitMission,
+        Action::SubmitMission,
         &[Status::Draft, Status::Ready],
         Some(Status::Ready),
     ),
-    (Act::MergeMission, &[Status::Ready], None),
+    (Action::MergeMission, &[Status::Ready], None),
     (
-        Act::Drop,
+        Action::Drop,
         &[Status::Draft, Status::Ready],
         Some(Status::Dropped),
     ),
-    (Act::CloseMission, &[Status::Ready], Some(Status::Done)),
+    (Action::CloseMission, &[Status::Ready], Some(Status::Done)),
     // A plan review's verdict changes no status, from any.
     (
-        Act::PlanVerdictChanges,
+        Action::PlanVerdictChanges,
         &[Status::Draft, Status::Ready, Status::Done, Status::Dropped],
         None,
     ),
     (
-        Act::PlanVerdictApprove,
+        Action::PlanVerdictApprove,
         &[Status::Draft, Status::Ready, Status::Done, Status::Dropped],
         None,
     ),
 ];
 
-/// The acts on no record a status is taken from: a mission's creation on
+/// The actions on no record a status is taken from: a mission's creation on
 /// its branch, and a backlog branch's start, submit and merge.
-const UNRECORDED_SPECIFIED: [(Act, Option<Status>); 4] = [
-    (Act::StartMission, Some(Status::Ready)),
-    (Act::StartBacklog, None),
-    (Act::SubmitBacklog, None),
-    (Act::MergeBacklog, None),
+const UNRECORDED_SPECIFIED: [(Action, Option<Status>); 4] = [
+    (Action::StartMission, Some(Status::Ready)),
+    (Action::StartBacklog, None),
+    (Action::SubmitBacklog, None),
+    (Action::MergeBacklog, None),
 ];
 
 #[test]
-fn a_backlog_branchs_acts_run_from_no_status_for_any_thread_and_are_not_an_implementers() {
-    for (act, to) in UNRECORDED_SPECIFIED {
-        let row = row(act);
-        assert!(row.from.is_empty(), "{act:?}");
-        assert_eq!(row.to, to, "{act:?}");
-        // Any thread: a planner's act, not the implementer's act on an
+fn a_backlog_branchs_actions_run_from_no_status_for_any_thread_and_are_not_an_implementers() {
+    for (action, to) in UNRECORDED_SPECIFIED {
+        let row = row(action);
+        assert!(row.from.is_empty(), "{action:?}");
+        assert_eq!(row.to, to, "{action:?}");
+        // Any thread: a planner's action, not the implementer's action on an
         // item. Only `start --mission` binds, its caller as the planner.
-        assert_eq!(row.role, Role::Planner, "{act:?}");
-        assert_eq!(row.binds, act == Act::StartMission, "{act:?}");
+        assert_eq!(row.role, Role::Planner, "{action:?}");
+        assert_eq!(row.binds, action == Action::StartMission, "{action:?}");
     }
-    assert_eq!(row(Act::SubmitBacklog).command, "submit");
-    assert_eq!(row(Act::MergeBacklog).command, "merge");
-    assert_eq!(row(Act::StartBacklog).command, "start --backlog");
-    assert_eq!(row(Act::StartMission).command, "start --mission");
+    assert_eq!(row(Action::SubmitBacklog).command, "submit");
+    assert_eq!(row(Action::MergeBacklog).command, "merge");
+    assert_eq!(row(Action::StartBacklog).command, "start --backlog");
+    assert_eq!(row(Action::StartMission).command, "start --mission");
 }
 
 #[test]
-fn every_act_in_the_table_from_every_status_sets_the_specified_status_or_is_refused() {
-    // Each item's act, and each mission's, `lead` among them; `drop` is
-    // both; and the acts on no record.
+fn every_action_in_the_table_from_every_status_sets_the_specified_status_or_is_refused() {
+    // Each item's action, and each mission's, `lead` among them; `drop` is
+    // both; and the actions on no record.
     assert_eq!(
         TABLE.len(),
         SPECIFIED.len() + MISSION_SPECIFIED.len() - 1 + UNRECORDED_SPECIFIED.len()
     );
-    for (act, from, to) in SPECIFIED {
+    for (action, from, to) in SPECIFIED {
         for status in ALL {
             // Every condition holds: the caller holds the item, except a
             // reviewer, who never implemented it and, for a verdict, holds
             // the round's review, which has an open fix-now finding for
             // `changes` and none for `approve`; a take-over has its branch
             // and a start or a close has none.
-            let findings = if act == Act::VerdictChanges {
+            let findings = if action == Action::VerdictChanges {
                 FIX_NOW
             } else {
                 ""
             };
             // A merge needs a review that approves, and a trivial merge
             // an item nobody reviewed.
-            let reviews = match act {
-                Act::MergeTrivial => vec![],
-                Act::Merge => vec![review("1-aaaa", &["r1"], "approve", "")],
+            let reviews = match action {
+                Action::MergeTrivial => vec![],
+                Action::Merge => vec![review("1-aaaa", &["r1"], "approve", "")],
                 _ => vec![review("1-aaaa", &["r1"], "null", findings)],
             };
             let item = with_reviews(record(status, &["t1"], DONE), &reviews);
-            let reviewer = matches!(act, Act::Review | Act::VerdictChanges | Act::VerdictApprove);
+            let reviewer = matches!(
+                action,
+                Action::Review | Action::VerdictChanges | Action::VerdictApprove
+            );
             // A planner holds nothing; the item's holder readying it is
             // refused by its status too, never by its role.
-            let caller = thread(match act {
+            let caller = thread(match action {
                 _ if reviewer => "r1",
-                Act::Ready if status == Status::Draft => "p1",
+                Action::Ready if status == Status::Draft => "p1",
                 _ => "t1",
             });
             let facts = Facts {
                 item: &item,
-                branch: !matches!(act, Act::Start | Act::Close),
+                branch: !matches!(action, Action::Start | Action::Close),
                 blockers: &[],
                 mission: None,
                 caller: &caller,
                 checkout: None,
             };
-            match check(act, &facts) {
+            match check(action, &facts) {
                 Ok(set) => {
-                    assert!(from.contains(&status), "{act:?} from {status:?}");
-                    assert_eq!(set, to, "{act:?} from {status:?}");
+                    assert!(from.contains(&status), "{action:?} from {status:?}");
+                    assert_eq!(set, to, "{action:?} from {status:?}");
                 }
                 Err(Refusal::From {
-                    act: refused,
+                    action: refused,
                     status: at,
                 }) => {
-                    assert!(!from.contains(&status), "{act:?} from {status:?}");
-                    assert_eq!((refused, at), (act, status));
+                    assert!(!from.contains(&status), "{action:?} from {status:?}");
+                    assert_eq!((refused, at), (action, status));
                 }
-                Err(other) => panic!("{act:?} from {status:?}: {other:?}"),
+                Err(other) => panic!("{action:?} from {status:?}: {other:?}"),
             }
         }
-        assert_eq!(row(act).from, from);
+        assert_eq!(row(action).from, from);
     }
-    // Each mission's act, from each of a mission's statuses, with every
+    // Each mission's action, from each of a mission's statuses, with every
     // condition holding: its items done or dropped, its Result written, and
     // the caller's plan review holding an open fix-now finding for
     // `changes` and none for `approve`.
@@ -296,9 +303,9 @@ fn every_act_in_the_table_from_every_status_sets_the_specified_status_or_is_refu
         ("demo-d0ne".to_string(), Status::Done),
         ("demo-dr0p".to_string(), Status::Dropped),
     ];
-    for (act, from, to) in MISSION_SPECIFIED {
+    for (action, from, to) in MISSION_SPECIFIED {
         for status in MissionStatus::ALL {
-            let findings = if act == Act::PlanVerdictChanges {
+            let findings = if action == Action::PlanVerdictChanges {
                 FIX_NOW
             } else {
                 ""
@@ -312,35 +319,41 @@ fn every_act_in_the_table_from_every_status_sets_the_specified_status_or_is_refu
                 items: &items,
                 review: Some(&file),
             };
-            match check_mission(act, &facts) {
+            match check_mission(action, &facts) {
                 Ok(set) => {
-                    assert!(from.contains(&status.status()), "{act:?} from {status:?}");
+                    assert!(
+                        from.contains(&status.status()),
+                        "{action:?} from {status:?}"
+                    );
                     assert_eq!(
                         set.map(MissionStatus::status),
                         to,
-                        "{act:?} from {status:?}"
+                        "{action:?} from {status:?}"
                     );
                 }
                 Err(Refusal::From {
-                    act: refused,
+                    action: refused,
                     status: at,
                 }) => {
-                    assert!(!from.contains(&status.status()), "{act:?} from {status:?}");
-                    assert_eq!((refused, at), (act, status.status()));
+                    assert!(
+                        !from.contains(&status.status()),
+                        "{action:?} from {status:?}"
+                    );
+                    assert_eq!((refused, at), (action, status.status()));
                 }
-                Err(other) => panic!("{act:?} from {status:?}: {other:?}"),
+                Err(other) => panic!("{action:?} from {status:?}: {other:?}"),
             }
         }
         // Drop's row also holds an item's started statuses.
-        assert!(from.iter().all(|status| row(act).from.contains(status)));
+        assert!(from.iter().all(|status| row(action).from.contains(status)));
     }
     // Anyone plans a mission, and is bound as its planner.
-    let plan = row(Act::StartMission);
+    let plan = row(Action::StartMission);
     assert_eq!(
         (plan.role, plan.binds, plan.from, plan.to),
         (Role::Planner, true, &[][..], Some(Status::Ready))
     );
-    let lead = row(Act::Lead);
+    let lead = row(Action::Lead);
     assert_eq!(
         (lead.role, lead.binds, lead.from, lead.to),
         (Role::Lead, true, &[Status::Ready][..], None)
@@ -363,7 +376,7 @@ fn closing_a_mission_needs_each_item_done_or_dropped_and_its_result_written() {
         items: &items,
         review: None,
     };
-    let Err(Refusal::Unmet(unmet)) = check_mission(Act::CloseMission, &facts) else {
+    let Err(Refusal::Unmet(unmet)) = check_mission(Action::CloseMission, &facts) else {
         panic!("closed a mission with open items");
     };
     assert_eq!(
@@ -389,7 +402,7 @@ fn closing_a_mission_needs_each_item_done_or_dropped_and_its_result_written() {
         review: None,
     };
     assert_eq!(
-        check_mission(Act::CloseMission, &facts).unwrap(),
+        check_mission(Action::CloseMission, &facts).unwrap(),
         Some(MissionStatus::Done)
     );
 }
@@ -437,7 +450,9 @@ fn a_finding_is_settled_only_when_its_item_is_done_and_it_is_deferred_and_unsett
     for status in [Status::Approved, Status::Dropped] {
         let open = with_reviews(record(status, &["t1"], &decided), &reviews);
         match &settle_refusals(&facts(&open, &caller), &name("1-aaaa.1")).unwrap()[..] {
-            [Refusal::From { act, status: at }] => assert_eq!((*act, *at), (Act::Settle, status)),
+            [Refusal::From { action, status: at }] => {
+                assert_eq!((*action, *at), (Action::Settle, status))
+            }
             other => panic!("{other:?}"),
         }
         assert!(names_unsettled(&open).is_empty());
@@ -457,7 +472,7 @@ fn closing_an_item_needs_no_branch_named_for_it() {
     let item = record(Status::Ready, &[], DONE);
     let caller = thread("p1");
     let facts = facts(&item, &caller);
-    match check(Act::Close, &facts) {
+    match check(Action::Close, &facts) {
         Err(Refusal::Unmet(unmet)) => assert_eq!(unmet, [Condition::BranchExists]),
         other => panic!("{other:?}"),
     }
@@ -471,19 +486,19 @@ fn a_plan_verdict_counts_its_own_file_and_earlier_rounds_not_a_blind_one() {
     let blind = review("1-bbbb", &["r2"], "null", "");
     let dir = mission(MissionStatus::Draft, "", &[raised.clone(), blind.clone()]);
     let caller = thread("r1");
-    let verdict = |dir: &MissionDir, file: &ReviewFile, act| {
+    let verdict = |dir: &MissionDir, file: &ReviewFile, action| {
         let facts = MissionFacts {
             mission: dir,
             caller: &caller,
             items: &[],
             review: Some(file),
         };
-        check_mission(act, &facts)
+        check_mission(action, &facts)
     };
     // The blind reviewer approves its own clean file, whatever the other holds.
-    assert!(verdict(&dir, &blind, Act::PlanVerdictApprove).is_ok());
+    assert!(verdict(&dir, &blind, Action::PlanVerdictApprove).is_ok());
     assert!(matches!(
-        verdict(&dir, &blind, Act::PlanVerdictChanges),
+        verdict(&dir, &blind, Action::PlanVerdictChanges),
         Err(Refusal::Unmet(unmet)) if unmet == [Condition::NoOpenFinding]
     ));
     // Round 2 carries round 1's open finding, and opens until it says it
@@ -503,7 +518,7 @@ fn a_plan_verdict_counts_its_own_file_and_earlier_rounds_not_a_blind_one() {
         &[raised.clone(), blind.clone(), missing.clone()],
     );
     assert!(matches!(
-        verdict(&dir2, &missing, Act::PlanVerdictApprove),
+        verdict(&dir2, &missing, Action::PlanVerdictApprove),
         Err(Refusal::Unmet(unmet)) if unmet.len() == 1
     ));
     let fixed = review(
@@ -517,7 +532,7 @@ fn a_plan_verdict_counts_its_own_file_and_earlier_rounds_not_a_blind_one() {
         "",
         &[raised.clone(), blind, fixed.clone()],
     );
-    assert!(verdict(&dir2, &fixed, Act::PlanVerdictApprove).is_ok());
+    assert!(verdict(&dir2, &fixed, Action::PlanVerdictApprove).is_ok());
     // A blind file of the same round that carries the earlier finding does
     // not close it for a file that left it out.
     let carrier = review(
@@ -532,7 +547,7 @@ fn a_plan_verdict_counts_its_own_file_and_earlier_rounds_not_a_blind_one() {
         &[raised.clone(), missing.clone(), carrier],
     );
     assert!(matches!(
-        verdict(&both, &missing, Act::PlanVerdictApprove),
+        verdict(&both, &missing, Action::PlanVerdictApprove),
         Err(Refusal::Unmet(unmet)) if unmet == [Condition::OpenFinding {
             finding: "1-aaaa.1".parse().unwrap(),
             title: "Wrong".into(),
@@ -544,7 +559,7 @@ fn a_plan_verdict_counts_its_own_file_and_earlier_rounds_not_a_blind_one() {
     wrong_round.review.round = 3;
     let dir3 = mission(MissionStatus::Draft, "", std::slice::from_ref(&wrong_round));
     assert!(matches!(
-        verdict(&dir3, &wrong_round, Act::PlanVerdictApprove),
+        verdict(&dir3, &wrong_round, Action::PlanVerdictApprove),
         Err(Refusal::Unmet(unmet))
             if matches!(&unmet[..], [Condition::Invalid(problem)] if problem.field == "round")
     ));
@@ -580,7 +595,7 @@ fn start_asks_of_the_items_mission_only_that_it_is_agreed_and_not_dropped() {
             }
             _ => Vec::new(),
         };
-        match check(Act::Start, &facts) {
+        match check(Action::Start, &facts) {
             Ok(set) => assert!(expected.is_empty() && set == Some(Status::Building)),
             Err(Refusal::Unmet(unmet)) => assert_eq!(unmet, expected, "{named:?}"),
             Err(other) => panic!("{named:?}: {other:?}"),
@@ -598,13 +613,13 @@ fn taking_over_or_merging_an_item_needs_its_mission_not_dropped() {
         record(Status::Approved, &["t2"], DONE),
         &[review("1-aaaa", &["r1"], "approve", "")],
     );
-    for (act, item) in [(Act::TakeOver, &building), (Act::Merge, &approved)] {
+    for (action, item) in [(Action::TakeOver, &building), (Action::Merge, &approved)] {
         for status in [Status::Ready, Status::Done, Status::Dropped] {
             let facts = Facts {
                 mission: Some(("demo-m1ss".to_string(), Some(status))),
                 ..facts(item, &caller)
             };
-            let checked = check(act, &facts);
+            let checked = check(action, &facts);
             match status {
                 Status::Dropped => assert!(
                     matches!(
@@ -614,9 +629,9 @@ fn taking_over_or_merging_an_item_needs_its_mission_not_dropped() {
                             status: Some(Status::Dropped),
                         }]
                     ),
-                    "{act:?}: {checked:?}"
+                    "{action:?}: {checked:?}"
                 ),
-                _ => assert!(checked.is_ok(), "{act:?} {status:?}: {checked:?}"),
+                _ => assert!(checked.is_ok(), "{action:?} {status:?}: {checked:?}"),
             }
         }
     }
@@ -627,7 +642,7 @@ fn only_a_planner_merges_a_proposed_plan_and_none_merges_a_dropped_one() {
     let dir = mission(MissionStatus::Open, "", &[]);
     let facts = |caller: &Thread| {
         check_mission(
-            Act::MergeMission,
+            Action::MergeMission,
             &MissionFacts {
                 mission: &dir,
                 caller,
@@ -643,9 +658,9 @@ fn only_a_planner_merges_a_proposed_plan_and_none_merges_a_dropped_one() {
     ));
     let dropped = mission(MissionStatus::Dropped, "Dropped: no.\n", &[]);
     let planner = thread("p1");
-    for act in [Act::SubmitMission, Act::MergeMission] {
+    for action in [Action::SubmitMission, Action::MergeMission] {
         let checked = check_mission(
-            act,
+            action,
             &MissionFacts {
                 mission: &dropped,
                 caller: &planner,
@@ -661,7 +676,7 @@ fn only_a_planner_merges_a_proposed_plan_and_none_merges_a_dropped_one() {
                     ..
                 })
             ),
-            "{act:?}: {checked:?}"
+            "{action:?}: {checked:?}"
         );
     }
 }
@@ -707,18 +722,18 @@ fn status_lists_the_conditions_the_command_reports() {
                 };
                 let shown = entry(&facts).unwrap();
                 assert_eq!(shown.next, next(&facts).unwrap());
-                let Some(act) = shown.next else {
+                let Some(action) = shown.next else {
                     assert!(shown.unmet.is_empty());
                     continue;
                 };
-                // The act status names next is never refused for its
+                // The action status names next is never refused for its
                 // status or its holder, only for its conditions.
-                let checked = match check(act, &facts) {
+                let checked = match check(action, &facts) {
                     Ok(_) => Vec::new(),
                     Err(Refusal::Unmet(conditions)) => conditions,
-                    Err(other) => panic!("{act:?} from {status:?}: {other:?}"),
+                    Err(other) => panic!("{action:?} from {status:?}: {other:?}"),
                 };
-                assert_eq!(shown.unmet, checked, "{act:?} from {status:?}");
+                assert_eq!(shown.unmet, checked, "{action:?} from {status:?}");
                 reported += checked.len();
             }
         }
@@ -727,18 +742,18 @@ fn status_lists_the_conditions_the_command_reports() {
 }
 
 #[test]
-fn the_next_act_follows_the_status_and_who_is_asking() {
+fn the_next_action_follows_the_status_and_who_is_asking() {
     let cases = [
         (Status::Draft, "t1", None),
-        (Status::Ready, "r1", Some(Act::Start)),
-        (Status::Building, "t1", Some(Act::Submit)),
-        (Status::Building, "t0", Some(Act::TakeOver)),
-        (Status::ChangesRequested, "t1", Some(Act::Submit)),
+        (Status::Ready, "r1", Some(Action::Start)),
+        (Status::Building, "t1", Some(Action::Submit)),
+        (Status::Building, "t0", Some(Action::TakeOver)),
+        (Status::ChangesRequested, "t1", Some(Action::Submit)),
         (Status::InReview, "t1", None),
-        (Status::InReview, "t0", Some(Act::TakeOver)),
-        (Status::InReview, "r1", Some(Act::Review)),
-        (Status::Approved, "t1", Some(Act::Merge)),
-        (Status::Approved, "r1", Some(Act::TakeOver)),
+        (Status::InReview, "t0", Some(Action::TakeOver)),
+        (Status::InReview, "r1", Some(Action::Review)),
+        (Status::Approved, "t1", Some(Action::Merge)),
+        (Status::Approved, "r1", Some(Action::TakeOver)),
         (Status::Done, "t1", None),
         (Status::Dropped, "t1", None),
     ];
@@ -758,7 +773,10 @@ fn the_next_act_follows_the_status_and_who_is_asking() {
     // The round's reviewer: changes while its file holds an open fix-now
     // finding, else approve.
     let r1 = thread("r1");
-    for (findings, expected) in [("", Act::VerdictApprove), (FIX_NOW, Act::VerdictChanges)] {
+    for (findings, expected) in [
+        ("", Action::VerdictApprove),
+        (FIX_NOW, Action::VerdictChanges),
+    ] {
         let item = with_reviews(
             record(Status::InReview, &["t1"], DONE),
             &[review("1-aaaa", &["r1"], "null", findings)],
@@ -780,7 +798,7 @@ fn only_the_holder_submits() {
             caller: &caller,
             checkout: None,
         };
-        match check(Act::Submit, &facts) {
+        match check(Action::Submit, &facts) {
             Err(Refusal::NotHolder {
                 role: Role::Implementer,
                 holder: found,
@@ -801,7 +819,7 @@ fn only_the_holder_submits() {
         checkout: None,
     };
     assert!(matches!(
-        check(Act::Submit, &facts),
+        check(Action::Submit, &facts),
         Err(Refusal::NotHolder { holder: None, .. })
     ));
 }
@@ -831,7 +849,7 @@ fn submit_needs_each_open_finding_answered_and_no_question_waits_on_it() {
             caller: &caller,
             checkout: None,
         };
-        match check(Act::Submit, &facts) {
+        match check(Action::Submit, &facts) {
             Ok(_) => Vec::new(),
             Err(Refusal::Unmet(conditions)) => conditions,
             Err(other) => panic!("{other:?}"),
@@ -879,7 +897,7 @@ fn a_kept_finding_whose_rebuttal_was_kept_has_had_its_one_try() {
     );
     let caller = thread("t1");
     assert_eq!(
-        unmet(Act::Submit, &facts(&item, &caller)).unwrap(),
+        unmet(Action::Submit, &facts(&item, &caller)).unwrap(),
         [Condition::NoResponse {
             finding: "2-bbbb.1".parse().unwrap(),
             title: "Wrong".into(),
@@ -933,30 +951,35 @@ fn a_thread_holding_one_role_is_told_it_when_it_runs_another_roles_command() {
         &[review("1-aaaa", &["r0", "r1"], "null", "")],
     );
     let r1 = thread("r1");
-    for act in [Act::Submit, Act::TakeOver, Act::Merge, Act::Start] {
+    for action in [
+        Action::Submit,
+        Action::TakeOver,
+        Action::Merge,
+        Action::Start,
+    ] {
         assert!(
             matches!(
-                check(act, &facts(&item, &r1)),
+                check(action, &facts(&item, &r1)),
                 Err(Refusal::Role(Role::Reviewer))
             ),
-            "{act:?}"
+            "{action:?}"
         );
     }
     let t1 = thread("t1");
-    for act in [Act::VerdictApprove, Act::VerdictChanges] {
+    for action in [Action::VerdictApprove, Action::VerdictChanges] {
         assert!(
             matches!(
-                check(act, &facts(&item, &t1)),
+                check(action, &facts(&item, &t1)),
                 Err(Refusal::Role(Role::Implementer))
             ),
-            "{act:?}"
+            "{action:?}"
         );
     }
     // An author asking to review is refused by the condition, current
     // holder or not.
     for author in ["t0", "t1"] {
         let author = thread(author);
-        match check(Act::Review, &facts(&item, &author)) {
+        match check(Action::Review, &facts(&item, &author)) {
             Err(Refusal::Unmet(unmet)) => assert_eq!(unmet, [Condition::FormerImplementer]),
             other => panic!("{other:?}"),
         }
@@ -964,7 +987,7 @@ fn a_thread_holding_one_role_is_told_it_when_it_runs_another_roles_command() {
     // A former reviewer, and anyone else, is told who holds the review.
     for other in ["r0", "x9"] {
         let other = thread(other);
-        match check(Act::VerdictApprove, &facts(&item, &other)) {
+        match check(Action::VerdictApprove, &facts(&item, &other)) {
             Err(Refusal::NotHolder {
                 role: Role::Reviewer,
                 holder,
@@ -978,7 +1001,7 @@ fn a_thread_holding_one_role_is_told_it_when_it_runs_another_roles_command() {
         &[review("1-aaaa", &["r1"], "changes", FIX_NOW)],
     );
     assert!(matches!(
-        check(Act::Submit, &facts(&decided, &r1)),
+        check(Action::Submit, &facts(&decided, &r1)),
         Err(Refusal::NotHolder {
             role: Role::Implementer,
             ..
@@ -986,7 +1009,7 @@ fn a_thread_holding_one_role_is_told_it_when_it_runs_another_roles_command() {
     ));
     let unopened = record(Status::InReview, &["t1"], DONE);
     assert!(matches!(
-        check(Act::VerdictApprove, &facts(&unopened, &r1)),
+        check(Action::VerdictApprove, &facts(&unopened, &r1)),
         Err(Refusal::NotHolder {
             role: Role::Reviewer,
             holder: None
@@ -997,9 +1020,9 @@ fn a_thread_holding_one_role_is_told_it_when_it_runs_another_roles_command() {
 #[test]
 fn verdicts_count_open_findings_across_rounds_and_refuse_an_invalid_file() {
     let r1 = thread("r1");
-    let verdict = |reviews: &[ReviewFile], act: Act| {
+    let verdict = |reviews: &[ReviewFile], action: Action| {
         let item = with_reviews(record(Status::InReview, &["t1"], DONE), reviews);
-        check(act, &facts(&item, &r1))
+        check(action, &facts(&item, &r1))
     };
     let round_1 = review("1-aaaa", &["r0"], "changes", FIX_NOW);
     let carry = |now: &str| {
@@ -1017,26 +1040,26 @@ fn verdicts_count_open_findings_across_rounds_and_refuse_an_invalid_file() {
     // Kept, the carried finding is open in the file: changes, not approve.
     let kept = [round_1.clone(), carry("kept")];
     assert_eq!(
-        verdict(&kept, Act::VerdictChanges).unwrap(),
+        verdict(&kept, Action::VerdictChanges).unwrap(),
         Some(Status::ChangesRequested)
     );
-    match verdict(&kept, Act::VerdictApprove) {
+    match verdict(&kept, Action::VerdictApprove) {
         Err(Refusal::Unmet(unmet)) => assert_eq!(unmet, [open_as("2-bbbb.1")]),
         other => panic!("{other:?}"),
     }
     // Withdrawn, nothing is open: approve, not changes.
     let withdrawn = [round_1.clone(), carry("withdrawn")];
     assert_eq!(
-        verdict(&withdrawn, Act::VerdictApprove).unwrap(),
+        verdict(&withdrawn, Action::VerdictApprove).unwrap(),
         Some(Status::Approved)
     );
-    match verdict(&withdrawn, Act::VerdictChanges) {
+    match verdict(&withdrawn, Action::VerdictChanges) {
         Err(Refusal::Unmet(unmet)) => assert_eq!(unmet, [Condition::NoOpenFinding]),
         other => panic!("{other:?}"),
     }
     // Not carried at all, round 1's finding stays open and blocks approve.
     let dropped = [round_1.clone(), review("2-bbbb", &["r1"], "null", "")];
-    match verdict(&dropped, Act::VerdictApprove) {
+    match verdict(&dropped, Action::VerdictApprove) {
         Err(Refusal::Unmet(unmet)) => assert_eq!(unmet, [open_as("1-aaaa.1")]),
         other => panic!("{other:?}"),
     }
@@ -1048,7 +1071,7 @@ fn verdicts_count_open_findings_across_rounds_and_refuse_an_invalid_file() {
         "null",
         "\n## Finding 1: Wrong\nRecommendation: fix now\nWas: 1-aaaa.7\nNow: fixed\n",
     );
-    match verdict(&[round_1, bad], Act::VerdictApprove) {
+    match verdict(&[round_1, bad], Action::VerdictApprove) {
         Err(Refusal::Unmet(unmet)) => match &unmet[..] {
             [Condition::Invalid(problem), open] => {
                 assert_eq!(problem.file, PathBuf::from("2-bbbb.md"));
@@ -1072,12 +1095,12 @@ fn what_a_decision_settled_before_decide_was_removed_stays_settled_and_nothing_d
         format!("\n## Finding 1: Wrong\nRecommendation: fix now\nWas: {was}\n{line}\n")
     };
     let caller = thread("r2");
-    let verdict = |body: &str, earlier: &[ReviewFile], file: &str, act: Act| {
+    let verdict = |body: &str, earlier: &[ReviewFile], file: &str, action: Action| {
         let round = earlier.len() + 1;
         let mut reviews = earlier.to_vec();
         reviews.push(review(&format!("{round}-cccc"), &["r2"], "null", file));
         let item = with_reviews(record(Status::InReview, &["t1"], body), &reviews);
-        match check(act, &facts(&item, &caller)) {
+        match check(action, &facts(&item, &caller)) {
             Ok(_) => Vec::new(),
             Err(Refusal::Unmet(unmet)) => unmet,
             Err(other) => panic!("{other:?}"),
@@ -1087,14 +1110,14 @@ fn what_a_decision_settled_before_decide_was_removed_stays_settled_and_nothing_d
     let named = |name: &str| name.parse().unwrap();
     // The Decisions entry closed the finding: a new round need not carry
     // it, and approves.
-    assert_eq!(verdict(&decided, round_1, "", Act::VerdictApprove), []);
+    assert_eq!(verdict(&decided, round_1, "", Action::VerdictApprove), []);
     // A new review neither reopens it nor writes `Decided:` of its own.
     assert_eq!(
         verdict(
             &decided,
             round_1,
             &carry("1-aaaa.1", "Now: kept"),
-            Act::VerdictChanges
+            Action::VerdictChanges
         ),
         [Condition::Decided(named("2-cccc.1"))]
     );
@@ -1104,7 +1127,7 @@ fn what_a_decision_settled_before_decide_was_removed_stays_settled_and_nothing_d
                 body,
                 round_1,
                 &carry("1-aaaa.1", "Decided: defer"),
-                Act::VerdictApprove
+                Action::VerdictApprove
             ),
             [Condition::Decided(named("2-cccc.1"))]
         );
@@ -1118,14 +1141,14 @@ fn what_a_decision_settled_before_decide_was_removed_stays_settled_and_nothing_d
         &carry("1-aaaa.1", "Decided: defer"),
     );
     let rounds = [first.clone(), round_2];
-    assert_eq!(verdict(&decided, &rounds, "", Act::VerdictApprove), []);
+    assert_eq!(verdict(&decided, &rounds, "", Action::VerdictApprove), []);
     for was in ["1-aaaa.1", "2-bbbb.1"] {
         assert_eq!(
             verdict(
                 &decided,
                 &rounds,
                 &carry(was, "Now: kept"),
-                Act::VerdictChanges
+                Action::VerdictChanges
             ),
             [Condition::Decided(named("3-cccc.1"))],
             "{was}"
@@ -1150,7 +1173,7 @@ fn a_reviewer_closes_a_carried_finding_by_withdrawing_it_or_lowering_it_with_a_r
     let approve = |file: &str| {
         let reviews = [first.clone(), review("2-cccc", &["r2"], "null", file)];
         let item = with_reviews(record(Status::InReview, &["t1"], &body), &reviews);
-        match check(Act::VerdictApprove, &facts(&item, &caller)) {
+        match check(Action::VerdictApprove, &facts(&item, &caller)) {
             Ok(_) => Vec::new(),
             Err(Refusal::Unmet(unmet)) => unmet,
             // Its findings do not read.
@@ -1274,7 +1297,7 @@ fn every_open_mission_record_of_the_five_repositories_reads_in_the_old_form() {
             reviews: Vec::new(),
         };
         let lead = check_mission(
-            Act::Lead,
+            Action::Lead,
             &MissionFacts {
                 mission: &dir,
                 caller: &caller,
@@ -1289,7 +1312,7 @@ fn every_open_mission_record_of_the_five_repositories_reads_in_the_old_form() {
             branch: false,
             ..facts(&item, &caller)
         };
-        let start = check(Act::Start, &facts);
+        let start = check(Action::Start, &facts);
         match stored {
             // `ready` is open: led, and its items start.
             "ready" => {

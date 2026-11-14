@@ -6,7 +6,7 @@ use crate::forge::Github;
 use crate::output::{self, Brief, Landing, PlanBrief};
 use crate::{git, merge};
 use anyhow::{anyhow, Context, Result};
-use atelier_core::acts::{check, plan_round, row, Act, Facts, MissionFacts, Refusal};
+use atelier_core::actions::{check, plan_round, row, Action, Facts, MissionFacts, Refusal};
 use atelier_core::model::{
     Forge, Review, ReviewName, ReviewSchema, SchemaVersion, Thread, Threads, Verdict,
 };
@@ -32,7 +32,7 @@ pub fn review(repo: &mut Repo, id: &str) -> Result<Outcome> {
     let links = repo.links(record)?;
     let forge = repo.base_config()?.forge;
     let facts = facts(repo, &located, &links, None);
-    let text = match check(Act::Review, &facts) {
+    let text = match check(Action::Review, &facts) {
         Ok(_) => None,
         // Its one condition: the caller never implemented the item.
         Err(Refusal::Unmet(_)) => {
@@ -40,9 +40,9 @@ pub fn review(repo: &mut Repo, id: &str) -> Result<Outcome> {
                 output::author(id, &repo.caller) + &brief(repo, &facts, None, forge.as_ref())?;
             Some(text.into())
         }
-        Err(refusal) => Some(refused(Act::Review, &refusal, &facts)?),
+        Err(refusal) => Some(refused(Action::Review, &refusal, &facts)?),
     };
-    if let Some(refused) = text.and_then(|text| repo.skip.gated(Act::Review, &facts, text)) {
+    if let Some(refused) = text.and_then(|text| repo.skip.gated(Action::Review, &facts, text)) {
         return Ok(refused.into());
     }
     if repo.branch.as_deref() != Some(repo.branch_of(id).as_str()) {
@@ -271,9 +271,9 @@ fn plan_verdict(repo: &mut Repo, verdict: Verdict, model: Option<String>) -> Res
         .iter()
         .find(|r| r.name == name)
         .expect("it was found");
-    let act = match verdict {
-        Verdict::Approve => Act::PlanVerdictApprove,
-        Verdict::Changes => Act::PlanVerdictChanges,
+    let action = match verdict {
+        Verdict::Approve => Action::PlanVerdictApprove,
+        Verdict::Changes => Action::PlanVerdictChanges,
     };
     let facts = MissionFacts {
         mission: &mission,
@@ -281,7 +281,7 @@ fn plan_verdict(repo: &mut Repo, verdict: Verdict, model: Option<String>) -> Res
         items: &[],
         review: Some(file),
     };
-    if let Some(refused) = repo.skip.mission_gate(act, &id, &facts)? {
+    if let Some(refused) = repo.skip.mission_gate(action, &id, &facts)? {
         return Ok(refused.into());
     }
     let mut review = file.review.clone();
@@ -342,11 +342,11 @@ pub fn verdict(repo: &mut Repo, verdict: Verdict, model: Option<String>) -> Resu
     let record = located.record().expect("the current item has a record");
     let links = repo.links(record)?;
     let facts = facts(repo, &located, &links, None);
-    let act = match verdict {
-        Verdict::Approve => Act::VerdictApprove,
-        Verdict::Changes => Act::VerdictChanges,
+    let action = match verdict {
+        Verdict::Approve => Action::VerdictApprove,
+        Verdict::Changes => Action::VerdictChanges,
     };
-    if let Some(refused) = repo.skip.refusal(act, &facts)? {
+    if let Some(refused) = repo.skip.refusal(action, &facts)? {
         return Ok(refused.into());
     }
     let file = facts.reviewing().expect("check found the caller's review");
@@ -356,7 +356,7 @@ pub fn verdict(repo: &mut Repo, verdict: Verdict, model: Option<String>) -> Resu
         review.model = Some(model);
     }
     let mut item = record.item.clone();
-    item.status = row(act).to.expect("a verdict sets the status");
+    item.status = row(action).to.expect("a verdict sets the status");
     let id = item.id.clone();
     let review_path = format!("{}/reviews/{}.md", item_dir(&id), file.name);
     let message = format!(

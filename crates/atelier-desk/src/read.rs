@@ -6,7 +6,7 @@
 
 use crate::api::*;
 use anyhow::Result;
-use atelier_core::acts::{unsettled, STARTED};
+use atelier_core::actions::{unsettled, STARTED};
 use atelier_core::model::{
     is_deferred, is_open, Decision, Finding, MissionStatus as Stored, Named, Outcome as Settled,
     Recommendation as Rec, Thread, Time,
@@ -553,7 +553,7 @@ fn mission_row(
 fn item_row(entry: &Entry, located: &[Located]) -> Result<ItemRow> {
     let located = located.iter().find(|l| l.id == entry.id);
     let record = located.and_then(Located::record);
-    let conditions = |conditions: &[atelier_core::acts::Condition]| {
+    let conditions = |conditions: &[atelier_core::actions::Condition]| {
         let texts = conditions.iter().map(|c| condition_text(&entry.id, c));
         texts.collect::<Vec<_>>()
     };

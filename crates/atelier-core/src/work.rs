@@ -1,7 +1,7 @@
 //! Views of many items and missions: `list`'s groups, a mission's items,
 //! and whether a mission is in progress.
 
-use crate::acts::STARTED;
+use crate::actions::STARTED;
 use crate::model::{MissionStatus, Status, Thread};
 use crate::records::MissionDir;
 use crate::view::Entry;

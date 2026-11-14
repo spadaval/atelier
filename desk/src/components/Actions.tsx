@@ -1,9 +1,9 @@
 import { CircleCheck, MessagesSquare, OctagonX, TriangleAlert } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
-import type { ActResponse } from "../api/ActResponse";
+import type { ActionResponse } from "../api/ActionResponse";
 import type { MissionPage } from "../api/MissionPage";
 import type { SessionResponse } from "../api/SessionResponse";
-import { act, sessionRequest, startSession, stopRequest, succeeded, type Sent } from "../lib/acts";
+import { action, sessionRequest, startSession, stopRequest, succeeded, type Sent } from "../lib/actions";
 import { reloadAll } from "../lib/api";
 import { shortCommit } from "../lib/words";
 import { ThreadTitle } from "./Agents";
@@ -11,20 +11,20 @@ import { ThreadTitle } from "./Agents";
 /** A refusal as the server gave it: its text, the rules it names and its next step. */
 function Refusal({ title, text, rules = [], next = null }: { title: string; text: string; rules?: string[]; next?: string | null }) {
   return (
-    <div className="act-result bad" role="alert" data-testid="refusal">
+    <div className="action-result bad" role="alert" data-testid="refusal">
       <TriangleAlert size={15} aria-hidden />
       <div className="grow">
         <b>{title}</b>
-        <p className="act-text">{text}</p>
+        <p className="action-text">{text}</p>
         {rules.length > 0 ? (
-          <ul className="act-rules">
+          <ul className="action-rules">
             {rules.map((rule, at) => (
               <li key={at}>{rule}</li>
             ))}
           </ul>
         ) : null}
         {next ? (
-          <p className="act-next">
+          <p className="action-next">
             <span className="muted">Next: </span>
             {next}
           </p>
@@ -36,28 +36,28 @@ function Refusal({ title, text, rules = [], next = null }: { title: string; text
 
 function Failed({ error }: { error: string }) {
   return (
-    <div className="act-result bad" role="alert" data-testid="failure">
+    <div className="action-result bad" role="alert" data-testid="failure">
       <TriangleAlert size={15} aria-hidden />
       <p className="grow">It did not run. {error}</p>
     </div>
   );
 }
 
-/** What an act answered: done, refused, or no answer at all. */
-function ActOutcome({ sent, refusedTitle, done }: { sent: Sent<ActResponse>; refusedTitle: string; done: (text: string, commit: string | null) => ReactNode }) {
+/** What an action answered: done, refused, or no answer at all. */
+function ActionOutcome({ sent, refusedTitle, done }: { sent: Sent<ActionResponse>; refusedTitle: string; done: (text: string, commit: string | null) => ReactNode }) {
   if (sent.state === "failed") return <Failed error={sent.error} />;
   if (sent.state !== "answered") return null;
   const r = sent.response;
   if (r.result === "refused") return <Refusal title={refusedTitle} text={r.text} rules={r.rules} next={r.next} />;
   return (
-    <div className="act-result ok" role="status" data-testid="done">
+    <div className="action-result ok" role="status" data-testid="done">
       <CircleCheck size={15} aria-hidden />
       <div className="grow">{done(r.text, r.commit)}</div>
     </div>
   );
 }
 
-/** Asks once before an act runs. */
+/** Asks once before an action runs. */
 function Confirm({ label, children, yes, onYes, onNo }: { label: string; children: ReactNode; yes: string; onYes: () => void; onNo: () => void }) {
   return (
     <div className="confirm" role="group" aria-label={label}>
@@ -83,7 +83,7 @@ function Confirm({ label, children, yes, onYes, onNo }: { label: string; childre
  * has written shows as pending until that branch merges.
  */
 export function StopControl({ repo, page }: { repo: string; page: MissionPage }) {
-  const [sent, setSent] = useState<Sent<ActResponse>>({ state: "idle" });
+  const [sent, setSent] = useState<Sent<ActionResponse>>({ state: "idle" });
   const [reason, setReason] = useState("");
   const id = useId();
   const m = page.mission;
@@ -98,13 +98,13 @@ export function StopControl({ repo, page }: { repo: string; page: MissionPage })
             : `It counts once the drop is on the forge's copy of ${m.branch ?? "its branch"} and ${page.pull_request ? `pull request #${page.pull_request.number}` : "its pull request"} is closed.`}
         </p>
         {/* A stop sent from here that was pushed and not closed says why, and what finishes it. */}
-        <ActOutcome
+        <ActionOutcome
           sent={sent}
           refusedTitle="The stop was refused."
           done={(text, commit) => (
             <>
               <b>Your stop is written{commit ? ` as ${shortCommit(commit)}` : ""} and not finished.</b>
-              <p className="act-text">{text}</p>
+              <p className="action-text">{text}</p>
             </>
           )}
         />
@@ -124,7 +124,7 @@ export function StopControl({ repo, page }: { repo: string; page: MissionPage })
   if (m.state !== "proposed" && !stopped) return null;
   const send = async () => {
     setSent({ state: "sending" });
-    const result = await act(stopRequest(repo, m.id, reason.trim()));
+    const result = await action(stopRequest(repo, m.id, reason.trim()));
     if (succeeded(result)) await reloadAll();
     setSent(result);
   };
@@ -138,7 +138,7 @@ export function StopControl({ repo, page }: { repo: string; page: MissionPage })
         </p>
       ) : null}
       {page.can_stop && (sent.state === "idle" || sent.state === "failed" || (sent.state === "answered" && !stopped)) ? (
-        <div className="row act-bar">
+        <div className="row action-bar">
           <button type="button" className="btn" onClick={() => setSent({ state: "confirming" })}>
             <OctagonX size={14} aria-hidden /> Stop this plan
           </button>
@@ -166,13 +166,13 @@ export function StopControl({ repo, page }: { repo: string; page: MissionPage })
           </div>
         </form>
       ) : null}
-      <ActOutcome
+      <ActionOutcome
         sent={sent}
         refusedTitle="The stop was refused."
         done={(text, commit) => (
           <>
             <b>You stopped this plan{commit ? `, committed as ${shortCommit(commit)}` : ""}.</b>
-            <p className="act-text">{text}</p>
+            <p className="action-text">{text}</p>
           </>
         )}
       />
@@ -208,7 +208,7 @@ export function PlanningSession({ repo, mission }: { repo: string; mission: stri
       {sent.state === "failed" ? <Failed error={sent.error} /> : null}
       {response?.result === "refused" ? <Refusal title="T3 Code did not start a session." text={response.text} /> : null}
       {response?.result === "started" ? (
-        <div className="act-result ok" role="status" data-testid="started">
+        <div className="action-result ok" role="status" data-testid="started">
           <CircleCheck size={15} aria-hidden />
           <div className="grow">
             <b>A planning session started in T3 Code.</b>{" "}

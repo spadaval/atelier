@@ -69,7 +69,7 @@ In order of importance:
 ## What it never does
 
 - It is not a source of truth, and it gates nothing.
-- It is not a record editor. It offers the few acts that are the human's.
+- It is not a record editor. It offers the few actions that are the human's.
 - It is not a chat client. Conversations happen in T3 Code; the Desk starts
   and links to them.
 - It does not score agents or people.
@@ -116,7 +116,7 @@ once it is published (docs/design.md, Where each command writes):
 - **An agreed mission**: its stop reaches the base by a record-only branch
   that `atelier submit` and `atelier merge` carry. Those live in
   `atelier-cli`, and the Desk runs no `atelier` binary (ADR 0032), so until
-  atelier-yclc moves them into the core the Desk offers no stop act here: the
+  atelier-yclc moves them into the core the Desk offers no stop action here: the
   page gives the commands. A stop someone has written is shown as not
   published yet, naming its branch, until that branch merges, and then as
   stopped.
@@ -144,7 +144,7 @@ lead):
 
 | Source | What the Desk takes from it |
 | --- | --- |
-| Records, through the core | Missions, their documents, items, reviews and the history of acts |
+| Records, through the core | Missions, their documents, items, reviews and the history of actions |
 | Git, through each repository's remote | Branches pushed from other clones, fetched on a timer |
 | The forge, through `gh` | Each branch's pull request and its state; closing a stopped plan's |
 | T3 Code, through its MCP server | Threads, their models and state; a way to start a session |
@@ -152,7 +152,7 @@ lead):
 | A host-wide SQLite database | Trends, findings, and what the human last saw. Nothing a record holds. |
 
 The Desk writes no record itself. It calls the core's own functions for
-the human's acts, the ones the `atelier` command calls, under his name, and
+the human's actions, the ones the `atelier` command calls, under his name, and
 writes only in a clone of its own, never in a served repository's checkout. The tracker can be rebuilt without the Desk changing its
 purpose, and no agent, check or merge depends on the Desk.
 
@@ -165,7 +165,7 @@ carries both, reached over the tailnet.
 ## Order of building
 
 1. The mission page with its brief and debrief, the inbox, agents and the
-   human's acts, on the redesigned records (mission atelier-z4cr).
+   human's actions, on the redesigned records (mission atelier-z4cr).
 2. The live repositories, what is proposed and in motion, the stop, and
    being told (atelier-v958); an agreed mission's stop from the Desk
    (atelier-yclc).

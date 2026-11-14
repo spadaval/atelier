@@ -4,7 +4,7 @@
 //! the change belongs on, and the change reaches the base when that branch
 //! merges. Nothing is written in the base's own checkout.
 
-use crate::acts::{check, row, Act, Facts, Refusal, STARTED};
+use crate::actions::{check, row, Action, Facts, Refusal, STARTED};
 use crate::model::{Item, Mission, MissionStatus, Named, Ready, Status};
 use crate::records::{put_first, validate, validate_id, ItemDir, MissionDir, Problem, ReviewFile};
 use crate::repo::{is_planning, item_dir, item_path, mission_dir, mission_path};
@@ -13,7 +13,7 @@ use crate::{git, say, Located, Repo};
 use anyhow::{anyhow, Result};
 use std::path::PathBuf;
 
-/// What an act did: the paths it wrote, the commit it made, if it made
+/// What an action did: the paths it wrote, the commit it made, if it made
 /// one, and what it says.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Done {
@@ -60,7 +60,7 @@ pub fn ready(repo: &mut Repo, ids: &[String], by: &str) -> Result<Result<Done, R
             continue;
         };
         let facts = planned_facts(repo, &located, record);
-        match check(Act::Ready, &facts) {
+        match check(Action::Ready, &facts) {
             Ok(_) => {}
             Err(Refusal::From { status, .. }) => refused.push((id, status)),
             Err(other) => unreachable!("an item's ready has no role or conditions: {other:?}"),
@@ -72,7 +72,7 @@ pub fn ready(repo: &mut Repo, ids: &[String], by: &str) -> Result<Result<Done, R
     }
     if !unknown.is_empty() || !refused.is_empty() || !missions.is_empty() {
         let text = say::ready_refused(&unknown, &refused, &missions);
-        let from = row(Act::Ready).from;
+        let from = row(Action::Ready).from;
         let rules = (refused.iter()).map(|(id, status)| say::rule_from(id, from, *status));
         let refused = match unknown.is_empty() && missions.is_empty() {
             true => repo.skip.refuse(rules, text),
@@ -164,7 +164,7 @@ fn in_plan(
     Ok(changed)
 }
 
-/// What a planner's act on the item `located`, whose record is `record`,
+/// What a planner's action on the item `located`, whose record is `record`,
 /// is checked against: its record and branch, and nothing it waits for.
 pub fn planned_facts<'a>(repo: &'a Repo, located: &Located, record: &'a ItemDir) -> Facts<'a> {
     Facts {
@@ -197,13 +197,13 @@ pub fn drop_mission(repo: &mut Repo, id: &str, reason: &str) -> Result<Result<Do
         return Ok(Err(refused));
     }
     let dir = repo.store().mission(id)?;
-    let facts = crate::acts::MissionFacts {
+    let facts = crate::actions::MissionFacts {
         mission: &dir,
         caller: &repo.caller,
         items: &[],
         review: None,
     };
-    if let Some(refused) = repo.skip.mission_gate(Act::Drop, id, &facts)? {
+    if let Some(refused) = repo.skip.mission_gate(Action::Drop, id, &facts)? {
         return Ok(Err(refused));
     }
     let mut mission = dir.mission;
@@ -224,7 +224,7 @@ pub fn is_mission(repo: &Repo, id: &str) -> bool {
     validate_id(id).is_ok() && repo.root.join(mission_path(id)).exists()
 }
 
-/// The kind of branch a record change belongs on, by the act table.
+/// The kind of branch a record change belongs on, by the action table.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Belongs<'a> {
     /// A backlog branch, or a mission's branch for its plan.

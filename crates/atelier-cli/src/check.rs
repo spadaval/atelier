@@ -6,7 +6,7 @@
 use crate::commands::{self, Outcome};
 use crate::{git, output, setup};
 use anyhow::{bail, Context, Result};
-use atelier_core::acts::changes;
+use atelier_core::actions::changes;
 use atelier_core::model::Status;
 use atelier_core::records::{
     is_record, load, parse_config, parse_item, parse_mission, CommitReader, Problem, ReadError,
@@ -177,7 +177,7 @@ fn kept(name: &str, args: &[String], input: Option<&str>) -> Result<Option<Strin
 }
 
 /// Every staged record reads and validates, as staged, and each status a
-/// record changes from `HEAD`'s is a change some act makes.
+/// record changes from `HEAD`'s is a change some action makes.
 fn pre_commit(root: &Path, skip: &Skip) -> Result<Outcome> {
     let mut reader = CommitReader::new(root);
     let mut files = Vec::new();
@@ -198,7 +198,7 @@ fn pre_commit(root: &Path, skip: &Skip) -> Result<Outcome> {
     let unread: Vec<Problem> = loaded.unread.into_iter().filter(staged).collect();
     let invalid: Vec<Problem> = loaded.invalid.into_iter().filter(staged).collect();
 
-    let mut acts = Vec::new();
+    let mut actions = Vec::new();
     if git::has_commit(root, "HEAD")? {
         let head = git::head(root)?;
         let items = loaded.items.iter().map(|dir| (&dir.path, dir.item.status));
@@ -213,7 +213,7 @@ fn pre_commit(root: &Path, skip: &Skip) -> Result<Outcome> {
             };
             let mission = path.ends_with("/mission.md");
             if before != now && !changes(mission, before, now) {
-                acts.push((path.into_owned(), before, now));
+                actions.push((path.into_owned(), before, now));
             }
         }
     }
@@ -253,14 +253,15 @@ fn pre_commit(root: &Path, skip: &Skip) -> Result<Outcome> {
         Some(_) => git::staged_all(root, ".atelier")?,
         None => Vec::new(),
     };
-    if unread.is_empty() && invalid.is_empty() && acts.is_empty() && base_records.is_empty() {
+    if unread.is_empty() && invalid.is_empty() && actions.is_empty() && base_records.is_empty() {
         return Ok(Outcome::Done(String::new()));
     }
     let base = on_base.unwrap_or_default();
-    let text = output::commit_refused(&unread, &invalid, &acts, &base, &base_records);
+    let text = output::commit_refused(&unread, &invalid, &actions, &base, &base_records);
     let broken = (invalid.iter().map(output::valid))
         .chain(
-            acts.iter()
+            actions
+                .iter()
                 .map(|(path, from, to)| output::rule_status(path, *from, *to)),
         )
         .chain((!base_records.is_empty()).then(|| output::rule_record_on_base(&base)));

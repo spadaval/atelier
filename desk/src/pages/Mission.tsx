@@ -7,7 +7,7 @@ import type { ItemRow } from "../api/ItemRow";
 import type { MissionPage } from "../api/MissionPage";
 import type { MissionRow } from "../api/MissionRow";
 import type { MissionsResponse } from "../api/MissionsResponse";
-import { PlanningSession, StopControl } from "../components/Acts";
+import { PlanningSession, StopControl } from "../components/Actions";
 import { AgentsCard, Identity } from "../components/Agents";
 import { Crumbs } from "../components/Crumbs";
 import { ItemLine } from "../components/ItemLine";

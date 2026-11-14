@@ -10,7 +10,7 @@
 //! them into the core. Until then the Desk does not make it, and the
 //! mission's page gives the commands.
 
-use crate::api::ActResponse;
+use crate::api::ActionResponse;
 use crate::{fetch, read};
 use anyhow::{bail, Context, Result};
 use atelier_core::model::{MissionStatus, Thread};
@@ -30,8 +30,8 @@ pub struct Stopping<'a> {
     pub gh: &'a Path,
 }
 
-fn refused(text: impl Into<String>, next: Option<String>) -> ActResponse {
-    ActResponse::Refused {
+fn refused(text: impl Into<String>, next: Option<String>) -> ActionResponse {
+    ActionResponse::Refused {
         rules: Vec::new(),
         text: text.into(),
         next,
@@ -40,7 +40,7 @@ fn refused(text: impl Into<String>, next: Option<String>) -> ActResponse {
 
 /// Stops the proposed plan of mission `id` with `reason`, or refuses,
 /// changing nothing.
-pub fn stop(at: &Stopping, id: &str, reason: &str) -> Result<ActResponse> {
+pub fn stop(at: &Stopping, id: &str, reason: &str) -> Result<ActionResponse> {
     let reason = reason.trim();
     if reason.is_empty() || reason.contains(['\n', '\r']) {
         return Ok(refused(
@@ -126,7 +126,7 @@ pub fn stop(at: &Stopping, id: &str, reason: &str) -> Result<ActResponse> {
     let done = match atelier_core::plan::drop_mission(&mut repo, id, reason)? {
         Ok(done) => done,
         Err(Refused { rules, text, next }) => {
-            return Ok(ActResponse::Refused { rules, text, next })
+            return Ok(ActionResponse::Refused { rules, text, next })
         }
     };
     let paths: Vec<&str> = done.paths.iter().map(String::as_str).collect();
@@ -145,7 +145,7 @@ pub fn stop(at: &Stopping, id: &str, reason: &str) -> Result<ActResponse> {
         Ok(false) => format!("Pushed {branch} to {remote}. It has no open pull request. The plan is stopped."),
         Err(error) => format!("Pushed {branch} to {remote}, but its pull request was not closed: {error:#}. The stop is published once it is closed: gh pr close {branch}."),
     };
-    Ok(ActResponse::Done {
+    Ok(ActionResponse::Done {
         text: format!("{}\n{said}\n", first_line(&text)),
         paths,
         commit: Some(commit),

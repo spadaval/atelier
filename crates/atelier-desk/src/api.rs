@@ -200,7 +200,7 @@ pub struct ItemRow {
     pub reviewer: Option<String>,
     /// For a ready item, why it cannot start now.
     pub cannot_start: Vec<String>,
-    /// For a started item, what its holder's next act still lacks.
+    /// For a started item, what its holder's next action still lacks.
     pub needs: Vec<String>,
     pub branch: Option<BranchMark>,
     pub report_written: bool,
@@ -476,32 +476,32 @@ pub enum HoldKind {
     Mission,
 }
 
-/// `POST /api/act`, sent with the header `x-atelier-desk: 1`.
+/// `POST /api/action`, sent with the header `x-atelier-desk: 1`.
 #[derive(Debug, Clone, Deserialize, TS)]
-#[serde(tag = "act", rename_all = "snake_case")]
-pub enum ActRequest {
+#[serde(tag = "action", rename_all = "snake_case")]
+pub enum ActionRequest {
     /// Stops a proposed plan: `atelier drop <id> --reason <reason>` on its
     /// branch, committed, pushed, and its pull request closed.
-    Stop(StopAct),
+    Stop(StopAction),
 }
 
 #[derive(Debug, Clone, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
-pub struct StopAct {
+pub struct StopAction {
     pub repo: String,
     pub id: String,
     /// Why, on one line.
     pub reason: String,
 }
 
-/// What an act did, or why it was refused, as the core's function gave it.
+/// What an action did, or why it was refused, as the core's function gave it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[serde(tag = "result", rename_all = "snake_case")]
-pub enum ActResponse {
+pub enum ActionResponse {
     Done {
         text: String,
         paths: Vec<String>,
-        /// The commit the act made.
+        /// The commit the action made.
         commit: Option<String>,
     },
     Refused {
@@ -795,8 +795,8 @@ pub fn export_types(dir: &std::path::Path) -> Result<(), ts_rs::ExportError> {
     ProposedResponse::export_all(&config)?;
     MotionResponse::export_all(&config)?;
     DisputedResponse::export_all(&config)?;
-    ActRequest::export_all(&config)?;
-    ActResponse::export_all(&config)?;
+    ActionRequest::export_all(&config)?;
+    ActionResponse::export_all(&config)?;
     SessionRequest::export_all(&config)?;
     SessionResponse::export_all(&config)?;
     ApiError::export_all(&config)?;

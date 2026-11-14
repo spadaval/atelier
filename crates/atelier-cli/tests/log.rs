@@ -1,5 +1,5 @@
-//! `log`, the history of acts, driven through the new binary in scratch
-//! repositories: each act found once in Git, with its thread, in order,
+//! `log`, the history of actions, driven through the new binary in scratch
+//! repositories: each action found once in Git, with its thread, in order,
 //! whether its item's branch is still there or merged and deleted.
 
 mod common;
@@ -26,7 +26,7 @@ fn log(root: &Path, args: &[&str]) -> Vec<String> {
 
 /// `lines` without their time and commit, after checking both: a time in
 /// UTC to the second, and a commit Git knows by that name.
-fn acts(root: &Path, lines: &[String]) -> Vec<String> {
+fn actions(root: &Path, lines: &[String]) -> Vec<String> {
     lines
         .iter()
         .map(|line| {
@@ -81,7 +81,7 @@ fn then(output: &str) -> &str {
 }
 
 #[test]
-fn the_plain_path_prints_its_acts_in_order_and_the_same_lines_once_its_branch_is_merged_and_deleted(
+fn the_plain_path_prints_its_actions_in_order_and_the_same_lines_once_its_branch_is_merged_and_deleted(
 ) {
     let scratch = Scratch::new(&[(ID, "draft")]);
     let root = scratch.root();
@@ -93,7 +93,7 @@ fn the_plain_path_prints_its_acts_in_order_and_the_same_lines_once_its_branch_is
     ok(verdict(&root, "t2", &["verdict", "approve"]));
     let (review, _) = review_of(&root, 1);
 
-    // Before the merge, the branch's acts come from its tip.
+    // Before the merge, the branch's actions come from its tip.
     let started = [
         format!("{ID} ready - draft -> ready; by sumeet"),
         format!("{ID} start t1 ready -> building"),
@@ -101,14 +101,14 @@ fn the_plain_path_prints_its_acts_in_order_and_the_same_lines_once_its_branch_is
         format!("{ID} review t2 {review}"),
         format!("{ID} verdict t2 {review} approve; in_review -> approved"),
     ];
-    assert_eq!(acts(&root, &log(&root, &[])), started);
-    assert_eq!(acts(&root, &log(&root, &[ID])), started);
+    assert_eq!(actions(&root, &log(&root, &[])), started);
+    assert_eq!(actions(&root, &log(&root, &[ID])), started);
 
     ok(atelier(&root, "t1", &["merge"]));
     let merged = log(&root, &[]);
     let mut all = started.to_vec();
     all.push(format!("{ID} merge t1 approved -> done"));
-    assert_eq!(acts(&root, &merged), all);
+    assert_eq!(actions(&root, &merged), all);
     // The merge line is the merge commit's; the others are the branch's.
     assert_eq!(commit_of(&merged[5]), short(&root, "main"));
     assert_eq!(commit_of(&merged[4]), short(&root, ID));
@@ -150,7 +150,7 @@ fn a_take_over_shows_both_implementers_and_a_review_taken_over_both_reviewers() 
     run_then(&root, &run.stdout);
     let (review, _) = review_of(&root, 1);
     assert_eq!(
-        acts(&root, &log(&root, &[])),
+        actions(&root, &log(&root, &[])),
         [
             // The fixture's first commit adds the item ready.
             format!("{ID} ready - new -> ready"),
@@ -212,7 +212,7 @@ fn a_deferred_finding_settled_on_a_gardeners_branch_shows_once_merged() {
 
     let lines = log(&root, &[DONE]);
     assert_eq!(
-        acts(&root, &lines),
+        actions(&root, &lines),
         [
             // Added done, as the cutover's conversion commit adds records.
             format!("{DONE} start t1"),
@@ -247,7 +247,7 @@ fn write_mission(root: &Path) {
 }
 
 #[test]
-fn a_mission_shows_its_ready_lead_plan_review_and_close_with_its_items_acts() {
+fn a_mission_shows_its_ready_lead_plan_review_and_close_with_its_items_actions() {
     let scratch = Scratch::new(&[(ID, "draft"), ("demo-0ther", "draft")]);
     let root = scratch.root();
     write_mission(&root);
@@ -301,19 +301,19 @@ fn a_mission_shows_its_ready_lead_plan_review_and_close_with_its_items_acts() {
         format!("{ID} drop - ready -> dropped; Nobody needs it."),
         format!("{MISSION} close - open -> done"),
     ];
-    assert_eq!(acts(&root, &log(&root, &[MISSION])), ours);
+    assert_eq!(actions(&root, &log(&root, &[MISSION])), ours);
     // Everything holds the other item too; the item alone holds its own.
-    let all = acts(&root, &log(&root, &[]));
+    let all = actions(&root, &log(&root, &[]));
     assert_eq!(all.len(), ours.len() + 1);
     assert_eq!(all[0], "demo-0ther ready - draft -> ready; by sumeet");
     assert_eq!(
-        acts(&root, &log(&root, &[ID])),
+        actions(&root, &log(&root, &[ID])),
         [ours[0].clone(), ours[5].clone()]
     );
 }
 
 #[test]
-fn a_skip_ends_the_line_of_the_act_whose_commit_carries_it() {
+fn a_skip_ends_the_line_of_the_action_whose_commit_carries_it() {
     let scratch = Scratch::new(&[(ID, "draft")]);
     let root = scratch.root();
     let output = atelier_command(&root, "t1", &["start", ID])
@@ -322,7 +322,7 @@ fn a_skip_ends_the_line_of_the_act_whose_commit_carries_it() {
         .unwrap();
     assert!(output.status.success(), "{output:?}");
     assert_eq!(
-        acts(&root, &log(&root, &[])),
+        actions(&root, &log(&root, &[])),
         [format!(
             "{ID} start t1 draft -> building; skip {ID} is ready (it is draft): {REASON}"
         )]
@@ -330,7 +330,7 @@ fn a_skip_ends_the_line_of_the_act_whose_commit_carries_it() {
 }
 
 #[test]
-fn since_leaves_out_the_acts_committed_before_it() {
+fn since_leaves_out_the_actions_committed_before_it() {
     let scratch = Scratch::new(&[(ID, "draft")]);
     let root = scratch.root();
     let at = |time: &str, thread: &str, args: &[&str]| {
@@ -390,7 +390,7 @@ fn since_leaves_out_the_acts_committed_before_it() {
 }
 
 #[test]
-fn two_acts_on_one_record_in_one_commit_show_as_their_net_change() {
+fn two_actions_on_one_record_in_one_commit_show_as_their_net_change() {
     let scratch = Scratch::new(&[(ID, "draft")]);
     let root = scratch.root();
     // Made ready and closed at once: only closed.
@@ -403,7 +403,7 @@ fn two_acts_on_one_record_in_one_commit_show_as_their_net_change() {
     fs::write(&path, text).unwrap();
     on_base(&root, "Ready and close");
     assert_eq!(
-        acts(&root, &log(&root, &[])),
+        actions(&root, &log(&root, &[])),
         [format!("{ID} close - draft -> done")]
     );
 }
@@ -431,10 +431,10 @@ fn a_version_that_does_not_read_is_passed_over_and_said_on_stderr() {
         run.stderr
     );
     assert_eq!(run.stderr.lines().count(), 1, "{}", run.stderr);
-    // The acts across it compare the versions on each side.
+    // The actions across it compare the versions on each side.
     let lines: Vec<String> = run.stdout.lines().map(str::to_string).collect();
     assert_eq!(
-        acts(&root, &lines),
+        actions(&root, &lines),
         [format!("{ID} ready - draft -> ready")]
     );
     assert_eq!(commit_of(&lines[0]), short(&root, "HEAD"));
@@ -462,9 +462,9 @@ fn an_id_no_record_has_is_refused_as_show_refuses_it() {
 /// matches its other parent on the record paths. An Atelier merge never
 /// does, since it marks its item done; a plain merge of a branch whose
 /// record changes were undone does, and without `--full-history` the
-/// branch's acts would be lost with the branch.
+/// branch's actions would be lost with the branch.
 #[test]
-fn acts_on_a_branch_whose_records_a_plain_merge_matches_survive_its_deletion() {
+fn actions_on_a_branch_whose_records_a_plain_merge_matches_survive_its_deletion() {
     let scratch = Scratch::new(&[(ID, "ready")]);
     let root = scratch.root();
     ok(atelier(&root, "t1", &["start", ID]));
@@ -480,7 +480,7 @@ fn acts_on_a_branch_whose_records_a_plain_merge_matches_survive_its_deletion() {
     git(&root, &["branch", "-qD", ID]);
     let lines = log(&root, &[]);
     assert_eq!(
-        acts(&root, &lines),
+        actions(&root, &lines),
         [
             format!("{ID} ready - new -> ready"),
             format!("{ID} start t1 ready -> building"),
@@ -517,7 +517,7 @@ fn a_version_that_is_not_utf8_is_passed_over_like_one_that_does_not_parse() {
         );
         let lines: Vec<String> = run.stdout.lines().map(str::to_string).collect();
         assert_eq!(
-            acts(&root, &lines),
+            actions(&root, &lines),
             [format!("{ID} ready - draft -> ready")]
         );
     }
@@ -543,7 +543,7 @@ fn a_version_that_does_not_read_twice_stands_each_time_for_the_version_before_it
     assert_eq!(run.stderr.lines().count(), 1, "{}", run.stderr);
     let lines: Vec<String> = run.stdout.lines().map(str::to_string).collect();
     assert_eq!(
-        acts(&root, &lines),
+        actions(&root, &lines),
         [format!("{ID} ready - draft -> ready")]
     );
     assert_eq!(commit_of(&lines[0]), short(&root, "HEAD~2"));
@@ -559,14 +559,14 @@ fn a_version_that_does_not_read_twice_stands_each_time_for_the_version_before_it
     let run = atelier(&root, "t9", &["log"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     let lines: Vec<String> = run.stdout.lines().map(str::to_string).collect();
-    let acts = acts(&root, &lines);
+    let actions = actions(&root, &lines);
     assert!(
-        acts.contains(&format!("{ID} close - draft -> done")),
-        "{acts:?}"
+        actions.contains(&format!("{ID} close - draft -> done")),
+        "{actions:?}"
     );
     assert!(
-        acts.contains(&format!("{ID} drop - done -> dropped")),
-        "{acts:?}"
+        actions.contains(&format!("{ID} drop - done -> dropped")),
+        "{actions:?}"
     );
-    assert_eq!(acts.len(), 3, "{acts:?}");
+    assert_eq!(actions.len(), 3, "{actions:?}");
 }

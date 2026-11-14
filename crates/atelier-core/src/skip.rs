@@ -8,16 +8,16 @@
 //! Every refusal of a rule goes through [`Skip::refuse`], so a rule cannot
 //! refuse without offering the skip.
 
-use crate::acts::{check, mission_refusals, refusals, Act, Facts, MissionFacts, Refusal};
+use crate::actions::{check, mission_refusals, refusals, Action, Facts, MissionFacts, Refusal};
 use crate::{entry, say};
 use anyhow::Result;
 use std::cell::RefCell;
 
 /// The variable that gives a command a skip's reason, which the Git hooks
-/// an act's commit or push runs are given from its [`Skip`].
+/// an action's commit or push runs are given from its [`Skip`].
 pub const VARIABLE: &str = "ATELIER_SKIP";
 
-/// A refused act: the rules it breaks, one line each, which a reason would
+/// A refused action: the rules it breaks, one line each, which a reason would
 /// pass, or none when what refused it is no rule; what it says; and the way
 /// out, where it names one.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -116,61 +116,66 @@ impl Skip {
         self.passed.borrow().clone()
     }
 
-    /// What the caller is told when `act` is refused, or `None` when it may
+    /// What the caller is told when `action` is refused, or `None` when it may
     /// run, as when a reason passed every refusal.
-    pub fn refusal(&self, act: Act, facts: &Facts) -> Result<Option<Refused>> {
-        match check(act, facts) {
+    pub fn refusal(&self, action: Action, facts: &Facts) -> Result<Option<Refused>> {
+        match check(action, facts) {
             Ok(_) => Ok(None),
             Err(refusal) => {
-                let refused = refused(act, &refusal, facts)?;
-                Ok(self.gated(act, facts, refused))
+                let refused = refused(action, &refusal, facts)?;
+                Ok(self.gated(action, facts, refused))
             }
         }
     }
 
-    /// `refused`, which refuses `act` and names the way out, as the caller
-    /// gets it: `None` when a reason passes every refusal of the act.
-    pub fn gated(&self, act: Act, facts: &Facts, refused: impl Into<Refused>) -> Option<Refused> {
-        let all = refusals(act, facts).unwrap_or_else(|problem| vec![Refusal::Record(problem)]);
-        self.gate(act, &facts.item.item.id, &all, refused)
+    /// `refused`, which refuses `action` and names the way out, as the caller
+    /// gets it: `None` when a reason passes every refusal of the action.
+    pub fn gated(
+        &self,
+        action: Action,
+        facts: &Facts,
+        refused: impl Into<Refused>,
+    ) -> Option<Refused> {
+        let all = refusals(action, facts).unwrap_or_else(|problem| vec![Refusal::Record(problem)]);
+        self.gate(action, &facts.item.item.id, &all, refused)
     }
 
-    /// [`Skip::gated`] for the refusals `all` of `act` on `id`: only when
+    /// [`Skip::gated`] for the refusals `all` of `action` on `id`: only when
     /// every one is a rule can they be skipped.
     pub fn gate(
         &self,
-        act: Act,
+        action: Action,
         id: &str,
         all: &[Refusal],
         refused: impl Into<Refused>,
     ) -> Option<Refused> {
-        if !all.iter().all(|refusal| refusal.is_rule(act)) {
+        if !all.iter().all(|refusal| refusal.is_rule(action)) {
             return Some(refused.into());
         }
-        self.refuse(all.iter().flat_map(|r| say::rules(act, id, r)), refused)
+        self.refuse(all.iter().flat_map(|r| say::rules(action, id, r)), refused)
     }
 
-    /// What the caller is told when `act`, a mission's, is refused, or
+    /// What the caller is told when `action`, a mission's, is refused, or
     /// `None` when it may run, as when a reason passed every refusal. A
     /// record that does not read is an error.
     pub fn mission_gate(
         &self,
-        act: Act,
+        action: Action,
         id: &str,
         facts: &MissionFacts,
     ) -> Result<Option<Refused>> {
-        let all = mission_refusals(act, facts)?;
+        let all = mission_refusals(action, facts)?;
         Ok(match all.first() {
             None => None,
-            Some(first) => self.gate(act, id, &all, say::mission_refused(act, id, first)),
+            Some(first) => self.gate(action, id, &all, say::mission_refused(action, id, first)),
         })
     }
 }
 
-/// What the caller is told when `act` is refused for `refusal`. Only a
+/// What the caller is told when `action` is refused for `refusal`. Only a
 /// refusal that says what comes next reads the item's findings, so a
 /// reviewer's draft that does not parse yet cannot hide its role line.
-pub fn refused(act: Act, refusal: &Refusal, facts: &Facts) -> Result<Refused> {
+pub fn refused(action: Action, refusal: &Refusal, facts: &Facts) -> Result<Refused> {
     let entry = match refusal {
         Refusal::Record(problem) => return Err(problem.clone().into()),
         Refusal::From { .. } | Refusal::Unmet(_) => Some(entry(facts)?),
@@ -178,7 +183,7 @@ pub fn refused(act: Act, refusal: &Refusal, facts: &Facts) -> Result<Refused> {
     };
     let id = &facts.item.item.id;
     Ok(say::refusal(
-        act,
+        action,
         refusal,
         facts.caller,
         id,

@@ -16,7 +16,7 @@ function entry(path: string): Entry {
 /**
  * Reads `path` again, and resolves once a read that started after this call
  * has its answer. A read already under way may have started before the
- * change this call is for, such as a commit or an act, so its answer is not
+ * change this call is for, such as a commit or an action, so its answer is not
  * enough: one more read follows it, shared by every caller that asks while
  * it waits.
  */
@@ -53,8 +53,8 @@ async function fetchInto(path: string, e: Entry) {
 }
 
 /**
- * Reads every page the app has open again, after an act changed the
- * records, and resolves once each has an answer read after the act.
+ * Reads every page the app has open again, after an action changed the
+ * records, and resolves once each has an answer read after the action.
  * Pages not on screen are dropped, to be read when next opened.
  */
 export async function reloadAll(): Promise<void> {
