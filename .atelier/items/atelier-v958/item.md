@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-v958
 title: Show on the Desk what is proposed and in motion and who is doing it, from the live repositories
-status: draft
+status: ready
 mission: atelier-to83
 labels:
 - redesign
@@ -13,7 +13,9 @@ blocked_by:
 - atelier-2vdq
 - atelier-xbog
 implementers: []
-ready: null
+ready:
+  by: 'sumeet, on 2026-11-13: execute atelier-to83, relayed by the planner thread'
+  at: 2026-11-14T01:30:23.044847409Z
 trivial: null
 caused_by: null
 created_at: 2026-11-13T06:14:32.720158409Z
