@@ -109,7 +109,16 @@ impl Desk {
             gh: &self.config.gh,
         };
         let acted = stop::stop(&at, &id, &reason).map_err(|e| Failure::Failed(format!("{e:#}")))?;
-        // Its pull request is read again, so the page shows it closed.
+        // What was known of the plan's pull request came from before this
+        // stop, so it confirms nothing about it: only a list read from now
+        // on does. Then its pull request is read again, so the page shows
+        // it closed.
+        if matches!(acted, crate::api::ActResponse::Done { .. }) {
+            let skip = Skip::new(None);
+            if let Ok(served) = read::open(&dir, &self.config.caller, &skip) {
+                self.fetches.forget(&repo, &served.branch_of(&id));
+            }
+        }
         let (remote, github) = self.remote(&repo, &dir);
         self.fetches.fetch(&repo, &dir, remote.as_deref(), github);
         Ok(acted)

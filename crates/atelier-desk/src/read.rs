@@ -784,23 +784,32 @@ pub fn proposed(repo: &mut Repo, name: &str) -> Result<Option<ProposedRepo>> {
             continue;
         };
         let source = located.source().map(|b| b.name.clone());
-        let agreed = located.base.is_some();
+        let agreed = located.base.as_ref();
         // A plan's own branch holds the plan, its items too, whether it is
         // proposed or stopped there: none of it is a change of its own.
         // An agreed mission's branch is a change like any branch's.
-        if !agreed {
+        if agreed.is_none() {
             plan_branches.extend(source.clone());
         }
-        if let (true, Some(branch), MissionState::StopPending) = (agreed, &source, row.state) {
-            let dropped = ChangedRecord {
-                kind: HoldKind::Mission,
-                id: dir.mission.id.clone(),
-                title: dir.mission.title.clone(),
-                change: Change::Dropped,
-            };
-            beside.push((branch.clone(), dropped));
+        // An agreed mission's own unmerged branch, by what it holds there:
+        // a drop, which is a change of that branch, or an amendment.
+        let own = (located.branch.as_ref()).filter(|b| !b.merged && agreed.is_some());
+        let own = own.and_then(|b| Some((b, b.record.as_ref()?)));
+        let mut amends = false;
+        if let (Some(base), Some((branch, record))) = (agreed, own) {
+            let dropped = |dir: &MissionDir| dir.mission.status == Stored::Dropped;
+            if dropped(record) && !dropped(base) {
+                let change = ChangedRecord {
+                    kind: HoldKind::Mission,
+                    id: dir.mission.id.clone(),
+                    title: record.mission.title.clone(),
+                    change: Change::Dropped,
+                };
+                beside.push((branch.name.clone(), change));
+            } else if !dropped(record) && !base.finished() {
+                amends = true;
+            }
         }
-        let amends = row.state == MissionState::Open && agreed && source.is_some();
         if row.state != MissionState::Proposed && !amends {
             continue;
         }

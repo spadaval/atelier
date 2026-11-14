@@ -541,7 +541,7 @@ none (atelier-aab1), and the strategy puts them out of scope.
 | Field | Given by |
 | --- | --- |
 | `plans[] {mission, amends, pull_request, round}` | Each mission whose `state` is `proposed`, as on its page, and each agreed mission read from its own unmerged branch, an amendment (`amends: true`). A plan dropped on its branch is `stopped` or `stop_pending`, and not listed |
-| `changes[] {branch, pull_request, records[] {kind, id, title, change}}` | By branch: each record an unmerged branch adds (`Located::proposed`, from `Located::source` and `Located::also_added`) or changes (`Located::changes`), with `change` `added`, `changed`, `dropped` or `removed`. A plan's own branch, proposed or stopped there, whose records are its plan, and a started item's own branch, which is work in motion, are left out; an agreed mission's own branch is not, and its drop there, not merged yet, is listed as `dropped` |
+| `changes[] {branch, pull_request, records[] {kind, id, title, change}}` | By branch: each record an unmerged branch adds (`Located::proposed`, from `Located::source` and `Located::also_added`) or changes (`Located::changes`), with `change` `added`, `changed`, `dropped` or `removed`. A plan's own branch, proposed or stopped there, whose records are its plan, and a started item's own branch, which is work in motion, are left out; an agreed mission's own branch is not: what that branch holds decides, a drop there, not merged yet, listed as `dropped`, or an amendment, listed under `plans` |
 
 ### `GET /api/motion`
 
@@ -742,7 +742,8 @@ closed or none, and `stop_pending` before, and while no list has been read,
 since closing it is then not confirmed. A list that fails after one was read
 keeps the last one, and `fetched.error` says why; a pull request that list
 named keeps its state, but its having none counts only from a list that was
-read just now, since one may have been opened since. An agreed mission dropped
+read just now, since one may have been opened since. A stop forgets what was known
+of its branch's pull request, so only a list read after it can confirm it. An agreed mission dropped
 on any unmerged branch, its own too, is `stop_pending` until that branch
 merges, whatever its pull request says.
 

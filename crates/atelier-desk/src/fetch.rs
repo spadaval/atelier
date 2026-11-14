@@ -93,6 +93,16 @@ impl Fetches {
         }
     }
 
+    /// Forgets what the last list said of `branch`'s pull request in
+    /// `name`, so it is unknown until a list read after this names it or
+    /// confirms it has none.
+    pub fn forget(&self, name: &str, branch: &str) {
+        let mut state = self.state.lock().unwrap();
+        if let Some(prs) = state.get_mut(name).and_then(|kept| kept.prs.as_mut()) {
+            prs.remove(branch);
+        }
+    }
+
     /// What the forge says of the pull request whose head is `branch` in
     /// `name`, the newest where several are: unknown while no list of its
     /// GitHub forge has been read, or when the last read failed and the

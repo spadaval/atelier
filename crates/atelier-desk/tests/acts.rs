@@ -664,3 +664,79 @@ async fn a_stopped_plans_items_are_not_proposed() {
     assert_eq!(after["repos"][0]["plans"], json!([]), "{after}");
     assert_eq!(after["repos"][0]["changes"], json!([]), "{after}");
 }
+
+#[tokio::test]
+async fn a_pull_request_closed_before_the_stop_does_not_confirm_it() {
+    let world = world();
+    // The last list showed the plan's pull request closed; it is reopened
+    // since, and the forge stops answering before the stop.
+    fs::write(&world.pr_state, "CLOSED").unwrap();
+    world.desk.fetch_all();
+    fs::write(&world.pr_state, "FAIL").unwrap();
+    let done = act(
+        &world.app,
+        json!({"act": "stop", "repo": "demo", "id": PLAN, "reason": REASON}),
+    )
+    .await;
+    assert!(
+        done["text"]
+            .as_str()
+            .unwrap()
+            .contains("its pull request was not closed"),
+        "{done}"
+    );
+    assert_eq!(
+        shown(&world.app, PLAN).await,
+        (json!("stop_pending"), true, false)
+    );
+    // A list read after the stop confirms it.
+    fs::write(&world.pr_state, "CLOSED").unwrap();
+    world.desk.fetch_all();
+    assert_eq!(
+        shown(&world.app, PLAN).await,
+        (json!("stopped"), false, true)
+    );
+}
+
+#[tokio::test]
+async fn an_amendment_and_a_stop_on_another_branch_are_each_shown_as_they_are() {
+    let world = world();
+    // An amendment of the agreed mission on its own branch.
+    git(&world.planner, &["switch", "-qc", OPEN, "main"]);
+    let path = world
+        .planner
+        .join(format!(".atelier/missions/{OPEN}/mission.md"));
+    let text = fs::read_to_string(&path)
+        .unwrap()
+        .replace("Sumeet asked for it.", "Sumeet asked for more.");
+    fs::write(&path, text).unwrap();
+    git(&world.planner, &["commit", "-qam", "Amend the plan"]);
+    git(&world.planner, &["push", "-q", "origin", OPEN]);
+    // Its stop, on a backlog branch.
+    let stop = format!("backlog/stop-{OPEN}");
+    git(&world.planner, &["switch", "-qc", &stop, "main"]);
+    let skip = Skip::new(None);
+    let mut repo = Repo::open(&world.planner, Thread("p1".into()), &skip).unwrap();
+    atelier_app::plan::drop_mission(&mut repo, OPEN, REASON)
+        .unwrap()
+        .unwrap();
+    git(&world.planner, &["commit", "-qam", &format!("Drop {OPEN}")]);
+    git(&world.planner, &["push", "-q", "origin", &stop]);
+    world.desk.fetch_all();
+    let page = get(&world.app, &format!("/api/repos/demo/missions/{OPEN}")).await;
+    assert_eq!(page["stop_on"], format!("origin/{stop}"), "{page}");
+    let proposed = get(&world.app, "/api/proposed").await;
+    let repo = &proposed["repos"][0];
+    let amended = (repo["plans"].as_array().unwrap().iter())
+        .find(|p| p["mission"]["id"] == OPEN)
+        .expect("the amendment is listed");
+    assert_eq!(amended["amends"], true, "{repo}");
+    let drops: Vec<&Value> = (repo["changes"].as_array().unwrap().iter())
+        .filter(|c| {
+            (c["records"].as_array().unwrap().iter())
+                .any(|r| r["id"] == OPEN && r["change"] == "dropped")
+        })
+        .collect();
+    assert_eq!(drops.len(), 1, "{repo}");
+    assert_eq!(drops[0]["branch"], format!("origin/{stop}"));
+}
