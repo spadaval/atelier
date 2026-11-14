@@ -47,3 +47,5 @@ Out: a finder (atelier-ic22); a mission's history page (atelier-hj6b); any read 
 ## Context
 
 `crates/atelier-desk/src/config.rs` holds `roots`. `desk/README.md` describes the checks `desk-matches-cli` and `act-is-a-record`, which this item keeps passing against the live roots.
+
+How Sumeet is told of a plan is open, and this item settles it in `docs/product/desk.md`. Read `.atelier/missions/atelier-to83/notes.md` first: it names a candidate he agreed to as a separate item (atelier-plr9) and one means he turned down (T3's Browser panel).
