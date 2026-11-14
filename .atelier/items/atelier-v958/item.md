@@ -140,7 +140,7 @@ the CLI's `drop`, and the three lines in `docs/design.md`.
 
 ### The installed service
 
-The service on this host runs this branch's build, 97c112af. I installed it
+The service on this host runs this branch's build, 77d270f3. I installed it
 with `desk/service/install.sh` from a clean checkout of this branch, because
 the first Done when line asks for the installed service. Its config, backed
 up first to `~/.cache/atelier-desk/config.toml.before-v958`, now names the
@@ -201,12 +201,16 @@ systemd: the push over SSH, and `gh` being signed in.
   - Round 6's fix: open pull requests are kept apart from the recent list,
     so a newer closed one of the same branch never hides an open one. Its
     test fails on round 5's code.
+  - Round 7's fix: a stop that was pushed and whose pull request did not
+    close keeps the server's text, with the error and the `gh pr close`
+    that finishes it, under the pending note. Its interface test fails on
+    round 6's code.
 - `crates/atelier-desk/tests/desk.rs` covers the proposed, in-motion and
   disputed pages from local branches. `news.rs` has a unit test of proposed
   and merged news, with no repeat across a restart and the stub command's
   arguments. `config.rs` tests the new keys.
 - `pnpm typecheck`, `pnpm test` (41 passed), `pnpm build`, and `pnpm e2e`
-  (48 passed, desktop and phone). The interface tests cover the plan's
+  (50 passed, desktop and phone). The interface tests cover the plan's
   stop, its refusal, Not yet, an open mission's commands, a pending stop,
   and each new page.
 - `desk/service/notify-mail.test.sh` passes against a `gog` stand-in, and
@@ -228,3 +232,4 @@ systemd: the push over SSH, and `gh` being signed in.
 - 4-c4m7.1: fixed in 6b40fec
 - 5-cowv.2: fixed in e5c264e
 - 6-fz7c.2: fixed in 97c112a
+- 7-8b05.2: fixed in 77d270f
