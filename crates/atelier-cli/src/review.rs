@@ -2,11 +2,11 @@
 //! and on a mission's plan.
 
 use crate::commands::Outcome;
-use crate::forge::Github;
 use crate::output::{self, Brief, Landing, PlanBrief};
 use crate::{git, merge};
 use anyhow::{anyhow, Context, Result};
 use atelier_core::actions::{check, plan_round, row, Action, Facts, MissionFacts, Refusal};
+use atelier_core::forge::Github;
 use atelier_core::model::{
     Forge, Review, ReviewName, ReviewSchema, SchemaVersion, Thread, Threads, Verdict,
 };

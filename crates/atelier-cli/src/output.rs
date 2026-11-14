@@ -3,10 +3,10 @@
 //! `atelier-core` say and the wording of a refusal, which live in
 //! `atelier_core::say` and are used from here.
 
-use crate::forge::{CiRun, ForgeError, MergeState, PullRequest};
 use crate::merge::Moved;
 use crate::setup::{Harness, Step};
 use atelier_core::actions::{Action, Condition, Refusal};
+use atelier_core::forge::{CiRun, ForgeError, MergeState, PullRequest};
 use atelier_core::model::{Config, Priority, Response, Status, Thread, Verdict};
 use atelier_core::plan::{Approvals, NotCounted, APPROVALS};
 use atelier_core::records::Problem;

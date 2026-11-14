@@ -2,7 +2,6 @@
 
 mod check;
 mod commands;
-mod forge;
 mod git;
 mod history;
 mod merge;

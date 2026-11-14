@@ -15,10 +15,10 @@
 //! reads a branch's runs where the old code read a commit's. `until` bounds
 //! each call in time, for `merge`'s wait. Trimmed: the base's push runs, the lookup of a
 //! commit's pull requests, the check that a pull request merged, and the
-//! error codes and wording, which `output.rs` holds.
+//! error codes and wording, which `crates/atelier-cli/src/output.rs` holds.
 
 use crate::git;
-use atelier_core::model::Forge;
+use crate::model::Forge;
 use serde_json::Value;
 use std::fs::File;
 use std::io::{Read, Seek};
