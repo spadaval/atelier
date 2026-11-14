@@ -65,7 +65,7 @@ enum Command {
     },
     /// Install Atelier's Git hooks in this clone, keeping any hook it has as <name>.local; or with a harness, its session hooks in this repository.
     Setup { harness: Option<setup::Harness> },
-    /// One item in full with its reviews, or one mission on one page with its items and disputed findings.
+    /// One item in full with its reviews, or one mission on one page with its items and disputed findings, found on the base or on any named branch this clone has, local or fetched, and saying where it was read from. It fetches nothing.
     Show { id: String },
     /// The history of acts, read from Git, one line each, oldest first: of everything, of one item, or of one mission with its plan reviews and its items.
     ///
@@ -79,7 +79,7 @@ enum Command {
         #[arg(long, value_name = "TIME", value_parser = since)]
         since: Option<chrono::DateTime<chrono::Utc>>,
     },
-    /// All open work, grouped by mission and then by label; each flag given narrows it.
+    /// All open work on the base, grouped by mission and then by label, and then what is proposed on branches not yet merged; each flag given narrows it. It reads the branches this clone has, local and fetched, and fetches nothing.
     List {
         /// Only items a thread could start now: ready, their blockers done, their mission ready.
         #[arg(long)]
@@ -102,11 +102,14 @@ enum Command {
         /// Finished missions and items, done or dropped, instead of open ones.
         #[arg(long)]
         done: bool,
+        /// Only what is proposed: missions open on branches not yet merged, the items those branches add, and the record changes they hold, each with its branch.
+        #[arg(long, conflicts_with = "done")]
+        proposed: bool,
         /// Instead, the deferred findings of done items that nobody has taken into an item or dropped.
-        #[arg(long, conflicts_with_all = ["ready", "blocked", "needs_human", "mission", "label", "mine", "done"])]
+        #[arg(long, conflicts_with_all = ["ready", "blocked", "needs_human", "mission", "label", "mine", "done", "proposed"])]
         deferred: bool,
         /// Instead, each rebutted finding of an open or done item with what the next round made of it, and each plan-review round whose reviewers' verdicts differ; with --mission, only that mission's.
-        #[arg(long, conflicts_with_all = ["ready", "blocked", "needs_human", "label", "mine", "done", "deferred"])]
+        #[arg(long, conflicts_with_all = ["ready", "blocked", "needs_human", "label", "mine", "done", "deferred", "proposed"])]
         disputed: bool,
     },
     /// Create a draft item in this checkout, on a backlog or mission branch, and commit nothing; it prints the path and the Git command that commits it. A mission is made by `start --mission`.
@@ -289,6 +292,7 @@ fn main() -> ExitCode {
                 label,
                 mine,
                 done,
+                proposed,
                 deferred: false,
                 disputed: false,
             } => {
@@ -300,6 +304,7 @@ fn main() -> ExitCode {
                     label,
                     mine,
                     done,
+                    proposed,
                 };
                 views::list(&mut repo, &filter)
             }

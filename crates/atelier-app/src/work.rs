@@ -89,6 +89,9 @@ pub struct Filter {
     pub mine: bool,
     /// Finished missions and items, done or dropped, instead of open ones.
     pub done: bool,
+    /// What is proposed on branches not yet merged, instead of the base's
+    /// backlog.
+    pub proposed: bool,
 }
 
 /// One mission's kept items, or the kept items in no mission.
@@ -105,10 +108,13 @@ pub struct Group<'a> {
 /// What `list` shows with `filter`: each mission with an item kept, by
 /// ID, and then the kept items in no mission. A mission with no item kept
 /// is shown when the mission itself is kept, unless a flag only items have
-/// (`ready`, `blocked`, `needs_human`) is given.
+/// (`ready`, `blocked`, `needs_human`) is given. `proposed` names the
+/// missions of `missions` that are proposed: they and the proposed items
+/// are kept with `filter.proposed`, and only then.
 pub fn list<'a>(
     entries: &'a [Entry],
     missions: &'a [MissionDir],
+    proposed: &[String],
     caller: &Thread,
     filter: &Filter,
 ) -> Vec<Group<'a>> {
@@ -116,6 +122,7 @@ pub fn list<'a>(
     let leads = |m: &MissionDir| m.mission.lead.as_ref() == Some(caller);
     let keep_item = |e: &Entry| {
         e.finished() == filter.done
+            && e.proposed == filter.proposed
             && (!filter.ready || e.startable())
             && (!filter.blocked || !e.waiting_on().is_empty())
             && (!filter.needs_human || e.needs_human())
@@ -133,6 +140,7 @@ pub fn list<'a>(
             MissionStatus::Done | MissionStatus::Dropped
         );
         finished == filter.done
+            && proposed.contains(&m.mission.id) == filter.proposed
             && !only_items
             && filter.mission.as_ref().is_none_or(|id| *id == m.mission.id)
             && filter

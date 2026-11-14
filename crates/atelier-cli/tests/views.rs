@@ -363,7 +363,7 @@ fn show_prints_a_mission_on_one_page_with_its_items_disputes_and_plan_reviews() 
     let root = scratch.root();
     assert_eq!(
         stdout(&root, "p1", &["show", "demo-m1ss"]),
-        "Mission demo-m1ss: Greet everyone\nStatus: ready, in progress\nLead: nobody\nLabels: none\n\
+        "Mission demo-m1ss: Greet everyone\nRead from: main\nStatus: ready, in progress\nLead: nobody\nLabels: none\n\
          Made ready by sumeet at 2026-11-10 09:00:00 +00:00\n\n\
          ## Outcome\n\nEvery greeting works.\n\n## Success criteria\n\n- hello: `hello` prints hello.\n\n\
          Items:\n  Draft:\n    demo-c3cc (medium): Say hi\n  Ready:\n    \
@@ -376,7 +376,7 @@ fn show_prints_a_mission_on_one_page_with_its_items_disputes_and_plan_reviews() 
     // A done mission, with its Result and its plan review.
     assert_eq!(
         stdout(&root, "p1", &["show", "demo-m2dn"]),
-        "Mission demo-m2dn: Set up the project\nStatus: done\nLead: nobody\nLabels: none\n\
+        "Mission demo-m2dn: Set up the project\nRead from: main\nStatus: done\nLead: nobody\nLabels: none\n\
          Made ready by sumeet at 2026-11-10 09:00:00 +00:00\n\n\
          ## Outcome\n\nA project exists.\n\n## Result\n\nIt exists.\n\n\
          Items:\n  Done:\n    demo-e5ee (low): Create the repository\n\n\
@@ -397,7 +397,7 @@ fn show_prints_a_started_item_from_its_branch_wherever_it_runs_and_a_done_one() 
     let root = scratch.root();
     let header = |done_when: &str| {
         format!(
-            "Item demo-d4dd: Wave\nStatus: building, held by t1\nMission: demo-m1ss (ready)\n\
+            "Item demo-d4dd: Wave\nRead from: demo-d4dd\nStatus: building, held by t1\nMission: demo-m1ss (ready)\n\
              Labels: ui\nPriority: medium\nBlocked by: none\n\
              Made ready by sumeet at 2026-11-10 09:00:00 +00:00\n\n\
              ## Goal\n\nDo it.\n\n## Done when\n\n- [{done_when}] It is done.\n\n\
@@ -416,7 +416,7 @@ fn show_prints_a_started_item_from_its_branch_wherever_it_runs_and_a_done_one() 
     let done = stdout(&root, "p1", &["show", "demo-e5ee"]);
     assert!(
         done.starts_with(
-            "Item demo-e5ee: Create the repository\nStatus: done\nMission: demo-m2dn (done)\n"
+            "Item demo-e5ee: Create the repository\nRead from: main\nStatus: done\nMission: demo-m2dn (done)\n"
         ),
         "{done}"
     );
@@ -448,7 +448,7 @@ fn show_prints_each_review_by_round_with_its_findings_and_whether_each_is_open()
     let commit = front(&read(&root, &path), "commit");
     let show = stdout(&root, "p1", &["show", ID]);
     assert!(
-        show.starts_with("Item demo-ab12: Say hello\nStatus: changes requested, held by t1\n"),
+        show.starts_with("Item demo-ab12: Say hello\nRead from: demo-ab12\nStatus: changes requested, held by t1\n"),
         "{show}"
     );
     assert!(

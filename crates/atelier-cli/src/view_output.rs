@@ -8,6 +8,101 @@ use atelier_app::acts::{Condition, PLANNED, STARTED};
 use atelier_app::{Disputes, Entry, Filter, Group, Judged, Overview, LIFECYCLE};
 use atelier_core::{Finding, Mission, Outcome, Ready, Recommendation, Status, Thread};
 use atelier_records::{ItemDir, MissionDir, ReviewFile};
+use std::time::SystemTime;
+
+/// Where `show` read a record from, and the other unmerged branches that
+/// add or change it.
+pub struct Whence {
+    /// The ref read: the base, a local branch, or `<remote>/<branch>`.
+    pub from: String,
+    /// For a remote-tracking ref, when this clone last fetched, if ever.
+    pub fetched: Option<Option<SystemTime>>,
+    pub proposed: bool,
+    /// The local branch and its remote-tracking branch have diverged.
+    pub diverged: bool,
+    /// The other unmerged branches that add it.
+    pub also_added: Vec<String>,
+    /// Each unmerged branch that changes the base's copy, with the status
+    /// of its copy there; `None` where it removes it.
+    pub changes: Vec<(String, Option<Status>)>,
+}
+
+/// A record change an unmerged branch proposes, as `list` shows it.
+pub struct Change {
+    pub id: String,
+    pub title: String,
+    /// The branch, as it is shown.
+    pub on: String,
+    /// The status of the base's copy, and of the branch's, if it keeps one.
+    pub before: Status,
+    pub after: Option<Status>,
+}
+
+/// How long ago `time` was, in the largest whole unit.
+fn ago(time: SystemTime) -> String {
+    let seconds = SystemTime::now()
+        .duration_since(time)
+        .map_or(0, |since| since.as_secs());
+    let (count, unit) = match seconds {
+        0..60 => (seconds, "second"),
+        60..3600 => (seconds / 60, "minute"),
+        3600..86400 => (seconds / 3600, "hour"),
+        _ => (seconds / 86400, "day"),
+    };
+    let plural = if count == 1 { "" } else { "s" };
+    format!("{count} {unit}{plural} ago")
+}
+
+/// The age of the last fetch of `remote`.
+fn fetch_age(remote: &str, fetched: Option<SystemTime>) -> String {
+    match fetched {
+        Some(time) => format!("{remote} was last fetched {}", ago(time)),
+        None => format!("{remote} was never fetched in this clone"),
+    }
+}
+
+/// `list`'s first line, where a forge's remote is configured: its branches
+/// are read as this clone last fetched them.
+pub fn fetched(remote: &str, fetched: Option<SystemTime>) -> String {
+    format!(
+        "Read from this clone's branches, local and of {remote}; {}. Nothing here fetches: `git fetch {remote}` brings the latest.\n",
+        fetch_age(remote, fetched)
+    )
+}
+
+/// The lines under `show`'s title: where the record was read from, and
+/// what other branches propose for it.
+fn whence(whence: &Whence) -> String {
+    let mut text = format!("Read from: {}", whence.from);
+    if let Some(fetched) = whence.fetched {
+        let remote = whence.from.split('/').next().unwrap_or_default();
+        text += &format!(" ({})", fetch_age(remote, fetched));
+    }
+    if whence.proposed {
+        text += ", where it is proposed: it is not on the base until that branch merges";
+    }
+    if whence.diverged {
+        text +=
+            ". The local branch and the remote-tracking one have diverged, and this one was read";
+    }
+    text += "\n";
+    if !whence.also_added.is_empty() {
+        text += &format!("Also added on: {}\n", whence.also_added.join(", "));
+    }
+    if !whence.changes.is_empty() {
+        let changes: Vec<String> = (whence.changes.iter())
+            .map(|(on, status)| match status {
+                Some(status) => format!("{on} ({} there)", status_name(*status)),
+                None => format!("{on} (removed there)"),
+            })
+            .collect();
+        text += &format!(
+            "Changed on branches not yet merged: {}\n",
+            changes.join(", ")
+        );
+    }
+    text
+}
 
 /// Where an item stands: who holds it, what blocks it, and whether a
 /// thread could start it now.
@@ -51,15 +146,22 @@ fn line(entry: &Entry, status: bool) -> String {
     }
     facts.push(priority_name(entry.priority).to_string());
     facts.extend(standing(entry));
+    if let Some(on) = &entry.on {
+        facts.push(format!("on {on}"));
+    }
     format!("{} ({}): {}\n", entry.id, facts.join(", "), entry.title)
 }
 
-/// A mission's status, whether it is in progress, and its lead.
-fn mission_line(dir: &MissionDir, in_progress: bool) -> String {
+/// A mission's status, whether it is in progress, its lead, and the
+/// branch it is proposed on.
+fn mission_line(dir: &MissionDir, in_progress: bool, on: Option<String>) -> String {
     let mission = &dir.mission;
     let mut facts = vec![status_name(mission.status.status()).to_string()];
     if in_progress {
         facts.push("in progress".into());
+    }
+    if let Some(on) = on {
+        facts.push(format!("proposed on {on}"));
     }
     if let Some(lead) = &mission.lead {
         facts.push(format!("led by {lead}"));
@@ -191,6 +293,7 @@ fn start_threads(items: &[&Entry]) -> String {
 /// with its findings. `open` names the fix-now findings still open.
 pub fn item(
     dir: &ItemDir,
+    whence: &Whence,
     entry: &Entry,
     mission: Option<&(String, Option<Status>)>,
     findings: &[Finding],
@@ -210,9 +313,10 @@ pub fn item(
         .map(|(id, s)| format!("{id} ({})", s.map_or("not found", status_name)))
         .collect();
     let mut text = format!(
-        "Item {}: {}\nStatus: {}\nMission: {mission}\nLabels: {}\nPriority: {}\nBlocked by: {}\n{}",
+        "Item {}: {}\n{}Status: {}\nMission: {mission}\nLabels: {}\nPriority: {}\nBlocked by: {}\n{}",
         item.id,
         item.title,
+        self::whence(whence),
         status.join(", "),
         labels(&item.labels),
         priority_name(item.priority),
@@ -266,21 +370,27 @@ fn review_line(file: &ReviewFile) -> String {
 /// Result, its items by status, its disagreements, and its plan reviews.
 pub fn mission(
     dir: &MissionDir,
+    whence: &Whence,
     in_progress: bool,
     items: &[&Entry],
     disputed: &Disputes,
     reviews: &[ReviewFile],
 ) -> String {
     let mission = &dir.mission;
-    let progress = if in_progress { ", in progress" } else { "" };
+    let progress = match (in_progress, whence.proposed) {
+        (true, _) => ", in progress",
+        (false, true) => ", proposed",
+        (false, false) => "",
+    };
     let lead = mission
         .lead
         .as_ref()
         .map_or("nobody".to_string(), Thread::to_string);
     let mut text = format!(
-        "Mission {}: {}\nStatus: {}{progress}\nLead: {lead}\nLabels: {}\n{}",
+        "Mission {}: {}\n{}Status: {}{progress}\nLead: {lead}\nLabels: {}\n{}",
         mission.id,
         mission.title,
+        self::whence(whence),
         status_name(mission.status.status()),
         labels(&mission.labels),
         ready_line(mission.ready.as_ref()),
@@ -314,17 +424,25 @@ pub fn unknown(id: &str, base: &str) -> String {
 }
 
 /// `list`: each group under its mission, its items under their labels.
-pub fn list(groups: &[Group], filter: &Filter) -> String {
+/// `on` gives the branch a proposed mission is read from.
+pub fn list(groups: &[Group], filter: &Filter, on: &dyn Fn(&str) -> Option<String>) -> String {
     if groups.is_empty() {
         return match filter.done {
             true => "Nothing finished matches.\n".into(),
             false => "No open work matches.\n".into(),
         };
     }
+    groups_text(groups, on)
+}
+
+fn groups_text(groups: &[Group], on: &dyn Fn(&str) -> Option<String>) -> String {
     let mut text = String::new();
     for group in groups {
         text += &match (group.mission, &group.id) {
-            (Some(dir), _) => format!("Mission {}", mission_line(dir, group.in_progress)),
+            (Some(dir), id) => {
+                let on = id.as_deref().and_then(on);
+                format!("Mission {}", mission_line(dir, group.in_progress, on))
+            }
             (None, Some(id)) => format!("Mission {id} (not in the base's last commit):\n"),
             (None, None) => "In no mission:\n".into(),
         };
@@ -340,6 +458,64 @@ pub fn list(groups: &[Group], filter: &Filter) -> String {
             }
             text += &format!("    {}", line(entry, true));
         }
+    }
+    text
+}
+
+/// What is proposed on branches not yet merged: the proposed missions and
+/// items, by mission, and the record changes. With `only`, as `list
+/// --proposed` asks, it says so when nothing is.
+pub fn proposed(
+    groups: &[Group],
+    changes: &[Change],
+    only: bool,
+    on: &dyn Fn(&str) -> Option<String>,
+) -> String {
+    if groups.is_empty() && changes.is_empty() {
+        return match only {
+            true => "Nothing matching is proposed on a branch not yet merged.\n".into(),
+            false => String::new(),
+        };
+    }
+    let mut text = String::new();
+    if !groups.is_empty() {
+        text += "\nProposed, on branches not yet merged:\n";
+        text += &groups_text(groups, on);
+    }
+    if !changes.is_empty() {
+        text +=
+            "\nRecord changes on branches not yet merged, which take effect when each merges:\n";
+        for change in changes {
+            let after = match change.after {
+                Some(after) if after == change.before => {
+                    format!("changed there, still {}", status_name(after))
+                }
+                Some(after) => format!(
+                    "{} on the base, {} there",
+                    status_name(change.before),
+                    status_name(after)
+                ),
+                None => "removed there".into(),
+            };
+            text += &format!(
+                "  {} (on {}: {after}): {}\n",
+                change.id, change.on, change.title
+            );
+        }
+    }
+    text
+}
+
+/// The missions dropped on their branch, not merged: each with its
+/// reason and its branch.
+pub fn dropped_missions(missions: &[(String, String, Option<String>, String)]) -> String {
+    if missions.is_empty() {
+        return String::new();
+    }
+    let mut text = "\nMissions dropped on their branch, not merged:\n".to_string();
+    for (id, title, why, on) in missions {
+        let why = why.as_deref().unwrap_or("no reason given");
+        text += &format!("  {id} (dropped on {on}: {why}): {title}\n");
     }
     text
 }
@@ -381,7 +557,7 @@ pub fn overview(overview: &Overview) -> String {
     if !overview.in_progress.is_empty() {
         text += "Missions in progress:\n";
         for dir in &overview.in_progress {
-            text += &format!("  {}", mission_line(dir, true));
+            text += &format!("  {}", mission_line(dir, true, None));
         }
     }
     if !overview.waiting.is_empty() {

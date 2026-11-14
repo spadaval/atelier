@@ -3,17 +3,78 @@
 //! remote-tracking one.
 
 use crate::acts::{approval, mission_of, Checkout, Facts, SinceApproval};
+use crate::view::Record;
 use crate::{git, say, Branch, Located, Skip};
 use anyhow::{bail, Context, Result};
 use atelier_core::{Config, Named, Status, Thread};
 use atelier_records::{allocate_id, parse_config, CommitReader, ItemDir, MissionDir, Store};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
-/// The tips of a branch named for a record.
-struct Tips {
-    local: Option<String>,
+/// A branch the convention names, as this clone has it: the local branch,
+/// the forge's remote-tracking branch, or both.
+struct Pair {
+    /// Its name, as `git branch` gives it.
+    name: String,
+    /// What the convention names it for; a branch it does not name is
+    /// kept only for the record whose own branch name it has.
+    named: Option<Named>,
+    local: Option<git::Ref>,
+    remote: Option<git::Ref>,
+}
+
+/// The tip of a [`Pair`] that is read.
+struct Tip {
+    tip: String,
+    remote: bool,
+    merged: bool,
+    diverged: bool,
+}
+
+/// Every named branch of this clone, by name: one listing of the refs.
+struct Refs {
+    pairs: BTreeMap<String, Pair>,
+    /// The forge's remote, which a remote-tracking branch is shown under.
     remote: Option<String>,
+}
+
+/// The kind of record, read the same way at a commit or in the checkout.
+trait Stored: Record + Sized {
+    const DIR: &'static str;
+    fn at(reader: &mut CommitReader, commit: &str, id: &str) -> Result<Option<Self>>;
+    fn in_checkout(repo: &Repo, id: &str) -> Result<Option<Self>>;
+}
+
+impl Stored for ItemDir {
+    const DIR: &'static str = ".atelier/items/";
+    fn at(reader: &mut CommitReader, commit: &str, id: &str) -> Result<Option<Self>> {
+        Ok(reader.item(commit, id)?)
+    }
+    fn in_checkout(repo: &Repo, id: &str) -> Result<Option<Self>> {
+        repo.checkout_item(id)
+    }
+}
+
+impl Stored for MissionDir {
+    const DIR: &'static str = ".atelier/missions/";
+    fn at(reader: &mut CommitReader, commit: &str, id: &str) -> Result<Option<Self>> {
+        Ok(reader.mission(commit, id)?)
+    }
+    fn in_checkout(repo: &Repo, id: &str) -> Result<Option<Self>> {
+        if !repo.root.join(mission_path(id)).exists() {
+            return Ok(None);
+        }
+        Ok(Some(repo.store().mission(id)?))
+    }
+}
+
+/// An unmerged named branch other than a record's own that touches it.
+struct Touching {
+    /// The branch's name.
+    branch: String,
+    tip: Tip,
+    /// The records it changes, by whether each is an item and its ID.
+    ids: BTreeSet<(bool, String)>,
 }
 
 /// What an item's start depends on, as [`Repo::links`] finds it.
@@ -45,6 +106,9 @@ pub struct Repo<'s> {
     /// Opened with [`Repo::open_committed`]: no record is read from the
     /// checkout's files.
     pub(crate) committed: bool,
+    /// The record paths each branch tip changes since it forked from the
+    /// base's tip, by tip: two commits' diff never changes.
+    changed: std::cell::RefCell<HashMap<String, Vec<String>>>,
 }
 
 impl<'s> Repo<'s> {
@@ -108,6 +172,7 @@ impl<'s> Repo<'s> {
             root,
             dir: dir.to_path_buf(),
             committed,
+            changed: Default::default(),
         })
     }
 
@@ -129,20 +194,32 @@ impl<'s> Repo<'s> {
         Store::new(self.root.join(".atelier"))
     }
 
-    /// The item `id`: its record at the base's tip, and its branch.
+    /// The item `id`: its record at the base's tip, and its branch, as the
+    /// acts find it. A copy on any other branch is not read: an item a
+    /// branch adds is not on the base until that branch merges.
     pub fn locate(&mut self, id: &str) -> Result<Located> {
-        let tips = self.tips(id)?;
+        let refs = self.refs()?;
         let base = self.reader.item(&self.base_tip, id)?;
-        self.locate_at(id, tips, base)
+        self.located(&refs, id, base, Vec::new())
+    }
+
+    /// The item `id` wherever it is: [`Repo::locate`], and its copies on
+    /// the other unmerged named branches, as `show` reads it.
+    pub fn find(&mut self, id: &str) -> Result<Located> {
+        let refs = self.refs()?;
+        let touching = self.touching(&refs)?;
+        let base = self.reader.item(&self.base_tip, id)?;
+        let elsewhere = self.elsewhere(&touching, id)?;
+        self.located(&refs, id, base, elsewhere)
     }
 
     /// The item `id` as a planning command finds it: its record in this
     /// checkout, where planning is written before it is committed, and its
     /// branch.
     pub fn locate_planned(&mut self, id: &str) -> Result<Located> {
-        let tips = self.tips(id)?;
+        let refs = self.refs()?;
         let base = self.checkout_item(id)?;
-        self.locate_at(id, tips, base)
+        self.located(&refs, id, base, Vec::new())
     }
 
     /// The branch named for the item or mission `id`.
@@ -158,67 +235,130 @@ impl<'s> Repo<'s> {
             .map(|forge| forge.remote.as_str())
     }
 
-    /// The tips of `id`'s branch: the local branch, and the forge's
-    /// remote-tracking branch.
-    fn tips(&self, id: &str) -> Result<Tips> {
-        let branch = self.branch_of(id);
-        let remote = match self.remote() {
-            Some(remote) => git::remote_tip(&self.root, remote, &branch)?,
-            None => None,
-        };
-        Ok(Tips {
-            local: git::branch_tip(&self.root, &branch)?,
+    /// Every branch the convention names, local and the forge's
+    /// remote-tracking ones, with whether each is merged into the base.
+    fn refs(&self) -> Result<Refs> {
+        let remote = self.remote().map(str::to_string);
+        let listed = git::refs(&self.root, remote.as_deref(), &self.base_tip)?;
+        let tracking = remote
+            .as_ref()
+            .map(|remote| format!("refs/remotes/{remote}/"));
+        let mut pairs: BTreeMap<String, Pair> = BTreeMap::new();
+        for listed in listed {
+            let (name, remote) = match listed.name.strip_prefix("refs/heads/") {
+                Some(name) => (name.to_string(), false),
+                None => match tracking
+                    .as_deref()
+                    .and_then(|t| listed.name.strip_prefix(t))
+                {
+                    Some(name) => (name.to_string(), true),
+                    None => continue,
+                },
+            };
+            if name == self.base {
+                continue;
+            }
+            let named = self.config.named(&name);
+            if named.is_none() && !remote {
+                // Kept for a lookup by name: a record's own branch.
+            } else if named.is_none() {
+                continue;
+            }
+            let pair = pairs.entry(name.clone()).or_insert(Pair {
+                name,
+                named,
+                local: None,
+                remote: None,
+            });
+            match remote {
+                true => pair.remote = Some(listed),
+                false => pair.local = Some(listed),
+            }
+        }
+        Ok(Refs { pairs, remote })
+    }
+
+    /// The tip of `pair` that is read: the one that contains the other, or
+    /// where they have diverged, the local one.
+    fn tip(&self, pair: &Pair) -> Result<Tip> {
+        let tip = |found: &git::Ref, remote: bool, diverged: bool| Tip {
+            tip: found.tip.clone(),
             remote,
+            merged: found.merged,
+            diverged,
+        };
+        Ok(match (&pair.local, &pair.remote) {
+            (Some(local), None) => tip(local, false, false),
+            (None, Some(remote)) => tip(remote, true, false),
+            (Some(local), Some(remote)) if local.tip == remote.tip => tip(local, false, false),
+            (Some(local), Some(remote)) => {
+                if git::is_ancestor(&self.root, &local.tip, &remote.tip)? {
+                    // The remote is ahead, as after a fetch of another
+                    // clone's take-over or drop.
+                    tip(remote, true, false)
+                } else if git::is_ancestor(&self.root, &remote.tip, &local.tip)? {
+                    tip(local, false, false)
+                } else {
+                    tip(local, false, true)
+                }
+            }
+            (None, None) => unreachable!("a listed branch has a ref"),
         })
     }
 
-    fn locate_at(&mut self, id: &str, tips: Tips, base: Option<ItemDir>) -> Result<Located> {
-        // A terminal status on the base wins, so the branch's record is
-        // not read, and one that does not parse cannot hide it.
-        let terminal = base.as_ref().is_some_and(Located::terminal);
-        let here = !self.committed && self.branch.as_deref() == Some(&self.branch_of(id));
-        let branch = match (tips.local, tips.remote) {
-            (None, None) => None,
-            (Some(local), None) => Some((local, false)),
-            (Some(local), Some(remote)) if remote == local => Some((local, false)),
-            (None, Some(remote)) => Some((remote, true)),
-            (Some(local), Some(remote)) => {
-                if git::is_ancestor(&self.root, &local, &remote)? {
-                    // The remote is ahead, as after a fetch of another
-                    // clone's take-over or drop.
-                    Some((remote, true))
-                } else if git::is_ancestor(&self.root, &remote, &local)? || terminal {
-                    Some((local, false))
-                } else {
+    /// `record`'s copy at `tip` of the branch `name`: from the checkout's
+    /// files where it is the local branch checked out here.
+    fn read<R: Stored>(&mut self, name: &str, tip: &Tip, id: &str) -> Result<Option<R>> {
+        let here = !self.committed && !tip.remote && self.branch.as_deref() == Some(name);
+        match here {
+            true => R::in_checkout(self, id),
+            false => R::at(&mut self.reader, &tip.tip, id),
+        }
+    }
+
+    /// `id`, found as a record of kind `R`, from its base copy `base`, the
+    /// branch named for it among `refs`, and its copies `elsewhere`.
+    fn located<R: Stored>(
+        &mut self,
+        refs: &Refs,
+        id: &str,
+        base: Option<R>,
+        elsewhere: Vec<Branch<R>>,
+    ) -> Result<Located<R>> {
+        // A final status on the base wins, so the branch's record is not
+        // read, and one that does not parse cannot hide it.
+        let terminal = base.as_ref().is_some_and(R::finished);
+        let name = self.branch_of(id);
+        let branch = match refs.pairs.get(&name) {
+            None => None,
+            Some(pair) => {
+                let mut tip = self.tip(pair)?;
+                if tip.diverged && !terminal {
                     // Diverged: a drop on either wins, else the local tip.
-                    let dropped = |record: Option<ItemDir>| {
-                        record.is_some_and(|dir| dir.item.status == Status::Dropped)
+                    let remote = pair.remote.as_ref().expect("diverged from a remote");
+                    let at = |repo: &mut Self, tip: &str| -> Result<bool> {
+                        Ok(R::at(&mut repo.reader, tip, id)?.is_some_and(|r| r.is_dropped()))
                     };
-                    let remote_dropped = dropped(self.reader.item(&remote, id)?);
-                    let local_dropped = dropped(self.reader.item(&local, id)?);
-                    match remote_dropped && !local_dropped {
-                        true => Some((remote, true)),
-                        false => Some((local, false)),
+                    if at(self, &remote.tip)? && !at(self, &tip.tip)? {
+                        tip = Tip {
+                            tip: remote.tip.clone(),
+                            remote: true,
+                            merged: remote.merged,
+                            diverged: true,
+                        };
                     }
                 }
-            }
-        };
-        let branch = match branch {
-            None => None,
-            Some((tip, remote)) => {
-                let merged = git::is_ancestor(&self.root, &tip, &self.base_tip)?;
-                let record = if terminal {
-                    None
-                } else if here && !remote {
-                    self.checkout_item(id)?
-                } else {
-                    self.reader.item(&tip, id)?
+                let record = match terminal {
+                    true => None,
+                    false => self.read(&name, &tip, id)?,
                 };
                 Some(Branch {
-                    merged,
+                    name: shown(refs, &name, tip.remote),
+                    merged: tip.merged,
+                    tip: tip.tip,
+                    remote: tip.remote,
+                    diverged: tip.diverged,
                     record,
-                    tip,
-                    remote,
                 })
             }
         };
@@ -226,7 +366,104 @@ impl<'s> Repo<'s> {
             id: id.to_string(),
             base,
             branch,
+            elsewhere,
         })
+    }
+
+    /// The unmerged named branches, each with the records it changes since
+    /// it forked from the base, by kind and ID, less its own: one `git
+    /// diff` for each, and none for a branch that changes no record.
+    fn touching(&self, refs: &Refs) -> Result<Vec<Touching>> {
+        let mut found = Vec::new();
+        for pair in refs.pairs.values() {
+            let Some(named) = &pair.named else {
+                continue;
+            };
+            let tip = self.tip(pair)?;
+            if tip.merged {
+                continue;
+            }
+            let own = match named {
+                Named::Record(id) => Some(id.as_str()),
+                Named::Backlog(_) => None,
+            };
+            let mut ids = BTreeSet::new();
+            let cached = self.changed.borrow().get(&tip.tip).cloned();
+            let paths = match cached {
+                Some(paths) => paths,
+                None => {
+                    let paths = git::changed_records(&self.root, &self.base_tip, &tip.tip)?;
+                    let mut changed = self.changed.borrow_mut();
+                    changed.entry(tip.tip.clone()).or_insert(paths).clone()
+                }
+            };
+            for path in paths {
+                let kinds = [(true, ItemDir::DIR), (false, MissionDir::DIR)];
+                for (item, dir) in kinds {
+                    let id = path
+                        .strip_prefix(dir)
+                        .and_then(|rest| rest.split('/').next());
+                    if let Some(id) = id.filter(|id| Some(*id) != own) {
+                        ids.insert((item, id.to_string()));
+                    }
+                }
+            }
+            if !ids.is_empty() {
+                let branch = pair.name.clone();
+                found.push(Touching { branch, tip, ids });
+            }
+        }
+        Ok(found)
+    }
+
+    /// The copies of `id` on the branches of `touching` that change it.
+    fn elsewhere<R: Stored>(&mut self, touching: &[Touching], id: &str) -> Result<Vec<Branch<R>>> {
+        let item = R::DIR == ItemDir::DIR;
+        let mut found = Vec::new();
+        for on in touching {
+            if !on.ids.contains(&(item, id.to_string())) {
+                continue;
+            }
+            let record = self.read(&on.branch, &on.tip, id)?;
+            found.push(Branch {
+                name: shown_on(self.remote(), &on.branch, on.tip.remote),
+                merged: false,
+                tip: on.tip.tip.clone(),
+                remote: on.tip.remote,
+                diverged: on.tip.diverged,
+                record,
+            });
+        }
+        Ok(found)
+    }
+
+    /// Every record of kind `R` on the base, on a branch named for one, and
+    /// on an unmerged named branch that adds one.
+    fn all<R: Stored>(&mut self, base_ids: Vec<String>) -> Result<Vec<Located<R>>> {
+        let refs = self.refs()?;
+        let touching = self.touching(&refs)?;
+        let item = R::DIR == ItemDir::DIR;
+        let mut ids: BTreeSet<String> = base_ids.into_iter().collect();
+        ids.extend(refs.pairs.values().filter_map(|pair| match &pair.named {
+            Some(Named::Record(id)) => Some(id.clone()),
+            _ => None,
+        }));
+        for touched in &touching {
+            let of_kind = touched.ids.iter().filter(|(kind, _)| *kind == item);
+            ids.extend(of_kind.map(|(_, id)| id.clone()));
+        }
+        let mut found = Vec::new();
+        for id in ids {
+            let base = R::at(&mut self.reader, &self.base_tip, &id)?;
+            let elsewhere = self.elsewhere(&touching, &id)?;
+            let located = self.located(&refs, &id, base, elsewhere)?;
+            // A branch named for an ID is an item's or a mission's: keep
+            // only the kind it holds.
+            if item || located.base.is_some() || located.record().is_some() {
+                found.push(located);
+            }
+        }
+        Ok(found)
     }
 
     /// What the convention names the checked-out branch for, if anything.
@@ -249,31 +486,22 @@ impl<'s> Repo<'s> {
     /// The IDs that branches are named for, local and the forge's
     /// remote-tracking ones.
     fn branch_ids(&self) -> Result<BTreeSet<String>> {
-        let mut names: Vec<String> = git::branches(&self.root)?
-            .into_iter()
-            .map(|(name, _)| name)
-            .collect();
-        if let Some(remote) = self.remote() {
-            let remote = git::remote_branches(&self.root, remote)?;
-            names.extend(remote.into_iter().map(|(name, _)| name));
-        }
-        Ok(names
-            .iter()
-            .filter_map(|name| self.config.record_of(name))
+        let refs = self.refs()?;
+        Ok(refs
+            .pairs
+            .into_values()
+            .filter_map(|pair| match pair.named {
+                Some(Named::Record(id)) => Some(id),
+                _ => None,
+            })
             .collect())
     }
 
-    /// Every item on the base and on a branch named for one.
+    /// Every item on the base, on a branch named for one, and on an
+    /// unmerged named branch that adds or changes one.
     pub fn everything(&mut self) -> Result<Vec<Located>> {
-        let mut ids: BTreeSet<String> = self.reader.item_ids(&self.base_tip)?.into_iter().collect();
-        ids.extend(self.branch_ids()?);
-        ids.into_iter()
-            .map(|id| {
-                let tips = self.tips(&id)?;
-                let base = self.reader.item(&self.base_tip, &id)?;
-                self.locate_at(&id, tips, base)
-            })
-            .collect()
+        let ids = self.reader.item_ids(&self.base_tip)?;
+        self.all(ids)
     }
 
     /// Every item in this checkout and on a branch named for one, as a
@@ -300,14 +528,30 @@ impl<'s> Repo<'s> {
         }
     }
 
-    /// Every mission at the base's tip.
+    /// Every mission as [`Repo::all_missions`] finds them, each as its
+    /// record that counts.
     pub fn missions(&mut self) -> Result<Vec<MissionDir>> {
+        let located = self.all_missions()?;
+        Ok(located
+            .iter()
+            .filter_map(|located| located.record().cloned())
+            .collect())
+    }
+
+    /// Every mission on the base, on its own branch, and on an unmerged
+    /// named branch that adds or changes one.
+    pub fn all_missions(&mut self) -> Result<Vec<Located<MissionDir>>> {
         let ids = self.reader.mission_ids(&self.base_tip)?;
-        let mut missions = Vec::new();
-        for id in ids {
-            missions.extend(self.reader.mission(&self.base_tip, &id)?);
-        }
-        Ok(missions)
+        self.all(ids)
+    }
+
+    /// The mission `id` wherever it is, as `show` reads it.
+    pub fn find_mission(&mut self, id: &str) -> Result<Located<MissionDir>> {
+        let refs = self.refs()?;
+        let touching = self.touching(&refs)?;
+        let base = self.reader.mission(&self.base_tip, id)?;
+        let elsewhere = self.elsewhere(&touching, id)?;
+        self.located(&refs, id, base, elsewhere)
     }
 
     /// A new ID that no item or mission has, in this checkout, at the
@@ -418,6 +662,19 @@ impl<'s> Repo<'s> {
             return Ok(None);
         }
         Ok(Some(store.item(id)?))
+    }
+}
+
+/// The ref `name` is read from, as it is shown: the branch's name, or
+/// `<remote>/<branch>` for a remote-tracking one.
+fn shown(refs: &Refs, name: &str, remote: bool) -> String {
+    shown_on(refs.remote.as_deref(), name, remote)
+}
+
+fn shown_on(remote: Option<&str>, name: &str, tracking: bool) -> String {
+    match (remote, tracking) {
+        (Some(remote), true) => format!("{remote}/{name}"),
+        _ => name.to_string(),
     }
 }
 

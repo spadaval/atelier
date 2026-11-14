@@ -366,3 +366,79 @@ pub fn approved_at(repo: &Path, rev: &str, path: &str) -> Result<Option<String>>
     )?;
     Ok(Some(time).filter(|time| !time.is_empty()))
 }
+
+/// A ref listed by [`refs`]: its full name, the commit it points at, and
+/// whether that commit is in the history of the commit the listing was
+/// asked about.
+pub struct Ref {
+    pub name: String,
+    pub tip: String,
+    pub merged: bool,
+}
+
+/// Every local branch and, with `remote`, every remote-tracking branch of
+/// `remote`, each with whether it is in the history of `base`: one `git
+/// for-each-ref` for the refs and one for those merged, however many there
+/// are.
+pub fn refs(repo: &Path, remote: Option<&str>, base: &str) -> Result<Vec<Ref>> {
+    let remote = remote.map(|remote| format!("refs/remotes/{remote}/"));
+    let mut patterns = vec!["refs/heads/"];
+    patterns.extend(remote.as_deref());
+    let list = |merged: Option<&str>| -> Result<Vec<(String, String)>> {
+        let flag = merged.map(|base| format!("--merged={base}"));
+        let mut args = vec!["for-each-ref", "--format=%(refname)%00%(objectname)"];
+        args.extend(flag.as_deref());
+        args.extend(&patterns);
+        Ok(listing(repo, &args)?
+            .lines()
+            .filter_map(|line| line.split_once('\0'))
+            .map(|(name, tip)| (name.to_string(), tip.to_string()))
+            .collect())
+    };
+    let merged: std::collections::HashSet<String> = list(Some(base))?
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect();
+    Ok(list(None)?
+        .into_iter()
+        .map(|(name, tip)| Ref {
+            merged: merged.contains(&name),
+            name,
+            tip,
+        })
+        .collect())
+}
+
+/// The record paths, under `.atelier/items/` and `.atelier/missions/`, that
+/// the commit `tip` changes since it forked from `base`.
+pub fn changed_records(repo: &Path, base: &str, tip: &str) -> Result<Vec<String>> {
+    let range = format!("{base}...{tip}");
+    let args = [
+        "diff",
+        "--name-only",
+        "-z",
+        "--no-renames",
+        &range,
+        "--",
+        ".atelier/items",
+        ".atelier/missions",
+    ];
+    Ok(names(&listing(repo, &args)?))
+}
+
+/// When this clone last fetched: the newest `FETCH_HEAD` of its worktrees,
+/// since each worktree writes its own, or `None` when none has fetched.
+pub fn fetched_at(repo: &Path) -> Result<Option<std::time::SystemTime>> {
+    let common = PathBuf::from(run(
+        repo,
+        &["rev-parse", "--path-format=absolute", "--git-common-dir"],
+    )?);
+    let mut heads = vec![common.join("FETCH_HEAD")];
+    if let Ok(worktrees) = std::fs::read_dir(common.join("worktrees")) {
+        heads.extend(worktrees.flatten().map(|dir| dir.path().join("FETCH_HEAD")));
+    }
+    let times = heads
+        .iter()
+        .filter_map(|head| head.metadata().ok()?.modified().ok());
+    Ok(times.max())
+}

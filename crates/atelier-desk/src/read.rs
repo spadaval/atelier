@@ -86,6 +86,7 @@ pub fn summary(repo: &mut Repo, name: &str) -> Result<Option<RepoSummary>> {
     let waiting = list(
         &records.entries,
         &records.missions,
+        &[],
         &repo.caller,
         &needing_human(),
     );
@@ -124,7 +125,13 @@ pub fn missions(repo: &mut Repo, done: bool) -> Result<Option<MissionsResponse>>
         done,
         ..Filter::default()
     };
-    let groups = list(&records.entries, &records.missions, &repo.caller, &filter);
+    let groups = list(
+        &records.entries,
+        &records.missions,
+        &[],
+        &repo.caller,
+        &filter,
+    );
     let loose = groups.iter().find(|group| group.id.is_none());
     Ok(Some(MissionsResponse {
         commit: repo.base_tip.clone(),
@@ -533,6 +540,7 @@ pub fn inbox(repo: &mut Repo, name: &str) -> Result<Option<InboxRepo>> {
     for group in list(
         &records.entries,
         &records.missions,
+        &[],
         &repo.caller,
         &needing_human(),
     ) {

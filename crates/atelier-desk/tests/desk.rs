@@ -217,7 +217,7 @@ async fn each_mission_agrees_with_show_and_the_inbox_with_list() {
         needs_human: true,
         ..Filter::default()
     };
-    let listed: Vec<String> = list(&entries, &missions, &repo.caller, &filter)
+    let listed: Vec<String> = list(&entries, &missions, &[], &repo.caller, &filter)
         .iter()
         .flat_map(|group| group.items.iter().map(|e| e.id.clone()))
         .collect();
