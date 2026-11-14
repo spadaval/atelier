@@ -129,13 +129,24 @@ impl Records {
     }
 }
 
-/// Where mission `dir`, read from `located`, stands. A plan stopped on its
-/// branch is shown stopped here once the stop is on the forge's copy of
-/// the branch; [`settle_state`] keeps it pending while its pull request
-/// is open.
+/// Where mission `dir`, read from `located`, stands. An agreed mission's
+/// stop counts once it merges, wherever it is written, its own branch too.
+/// A plan stopped on its branch is shown stopped here once the stop is on
+/// the forge's copy of the branch; [`settle_state`] keeps it pending while
+/// its pull request is open or not known.
 fn state_of(repo: &Repo, located: &Located<MissionDir>, dir: &MissionDir) -> Result<MissionState> {
     let stop_on = stop_on(located);
-    if dir.mission.status == Stored::Dropped {
+    let base_open = (located.base.as_ref()).is_some_and(|b| b.mission.status != Stored::Dropped);
+    let read_dropped = located
+        .record()
+        .is_some_and(|r| r.mission.status == Stored::Dropped);
+    if dir.mission.status == Stored::Dropped && base_open && read_dropped {
+        // Dropped on a branch of an agreed mission, not merged yet. One the
+        // forge's base holds was marked by `published_stops`, and its
+        // record that counts is not dropped.
+        return Ok(MissionState::StopPending);
+    }
+    if dir.mission.status == Stored::Dropped && located.base.is_none() {
         if let Some(branch) = located.source() {
             // Dropped on the plan's own branch: published once the
             // forge's copy holds it.
@@ -181,11 +192,33 @@ fn stop_on(located: &Located<MissionDir>) -> Option<String> {
         .map(|b| b.name.clone())
 }
 
-/// `row`'s state once its pull request `pr` is known: a plan stopped on its
-/// branch whose pull request is still open is pending.
-pub fn settle_state(row: &mut MissionRow, pr: Option<&PrMark>) {
-    let open = pr.is_some_and(|pr| pr.state == "OPEN");
-    if row.state == MissionState::Stopped && row.branch.is_some() && open {
+/// What the forge says of a branch's pull request.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PrState {
+    /// The forge's list was read: the branch's pull request, or none.
+    Known(Option<PrMark>),
+    /// The list has not been read.
+    Unknown,
+}
+
+impl PrState {
+    pub fn mark(&self) -> Option<PrMark> {
+        match self {
+            PrState::Known(pr) => pr.clone(),
+            PrState::Unknown => None,
+        }
+    }
+}
+
+/// `row`'s state once its pull request is known: a plan stopped on its
+/// branch is pending while its pull request is open, or while the forge's
+/// list has never been read, since closing it is not confirmed.
+pub fn settle_state(row: &mut MissionRow, pr: &PrState) {
+    let unconfirmed = match pr {
+        PrState::Known(pr) => pr.as_ref().is_some_and(|pr| pr.state == "OPEN"),
+        PrState::Unknown => true,
+    };
+    if row.state == MissionState::Stopped && row.branch.is_some() && unconfirmed {
         row.state = MissionState::StopPending;
     }
 }
@@ -248,13 +281,12 @@ pub fn summary(repo: &mut Repo, name: &str) -> Result<Option<RepoSummary>> {
     }))
 }
 
-/// The missions not finished, proposed ones among them, or with `done`
-/// the finished ones, by ID, and the count of items in no mission that
-/// `list` keeps with the same flag.
+/// Every mission, by ID, for the server to keep those not finished,
+/// proposed ones among them, or with `done` the finished ones once their
+/// state is settled; and the count of items in no mission that `list`
+/// keeps with the same flag.
 pub fn missions(repo: &mut Repo, done: bool) -> Result<Option<MissionsResponse>> {
     let records = Records::read(repo)?;
-    let finished =
-        |row: &MissionRow| matches!(row.state, MissionState::Done | MissionState::Stopped);
     let filter = Filter {
         done,
         ..Filter::default()
@@ -269,7 +301,9 @@ pub fn missions(repo: &mut Repo, done: bool) -> Result<Option<MissionsResponse>>
     let loose = groups.iter().find(|group| group.id.is_none());
     Ok(Some(MissionsResponse {
         commit: repo.base_tip.clone(),
-        missions: records.rows(repo, |row| finished(row) == done)?,
+        // Every mission: the server settles each one's state with its pull
+        // request, and then keeps the finished or the unfinished.
+        missions: records.rows(repo, |_| true)?,
         loose: loose.map_or(0, |group| group.items.len()),
         fetched: FetchMark::default(),
     }))
@@ -727,6 +761,7 @@ pub fn inbox(repo: &mut Repo, name: &str) -> Result<Option<InboxRepo>> {
         needs_human,
         proposed,
         threads: Vec::new(),
+        fetched: FetchMark::default(),
     }))
 }
 
@@ -737,24 +772,38 @@ pub fn proposed(repo: &mut Repo, name: &str) -> Result<Option<ProposedRepo>> {
     let mut plans = Vec::new();
     let mut plan_branches = Vec::new();
     // Proposed as the mission's page shows it: open on a branch that has
-    // not merged, or an old `draft` on the base.
+    // not merged, or an old `draft` on the base; and an agreed mission
+    // whose own unmerged branch changes it, an amendment, which merges by
+    // its rules.
     for dir in &records.missions {
         let row = records.row(repo, dir)?;
-        if row.state != MissionState::Proposed {
+        let Some((located, _)) = records.mission(&dir.mission.id) else {
+            continue;
+        };
+        let amends =
+            row.state == MissionState::Open && located.base.is_some() && located.source().is_some();
+        if row.state != MissionState::Proposed && !amends {
             continue;
         }
-        if let Some((located, _)) = records.mission(&dir.mission.id) {
+        // A plan's own branch holds the plan, its items too; an
+        // amendment's other records are changes like any branch's.
+        if !amends {
             plan_branches.extend(located.source().map(|b| b.name.clone()));
         }
         plans.push(ProposedPlan {
             mission: row,
+            amends,
             pull_request: None,
             round: round(dir),
         });
     }
     plans.sort_by(|a, b| a.mission.id.cmp(&b.mission.id));
     let own_item = |shown: &str| match repo.config.named(&local_name(repo, shown)) {
-        Some(Named::Record(id)) => records.items.iter().any(|l| l.id == id),
+        // A started item's branch; a branch named for a mission has a
+        // `Located` among the items too, with no record.
+        Some(Named::Record(id)) => {
+            (records.items.iter()).any(|l| l.id == id && l.record().is_some())
+        }
         _ => false,
     };
     let mut by_branch: BTreeMap<String, Vec<ChangedRecord>> = BTreeMap::new();
@@ -925,6 +974,7 @@ pub fn disputed(repo: &mut Repo, name: &str) -> Result<Option<DisputedRepo>> {
         repo: name.to_string(),
         commit: Some(repo.base_tip.clone()),
         error: None,
+        fetched: FetchMark::default(),
         rebuttals,
         plans,
     }))

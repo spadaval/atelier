@@ -4,7 +4,7 @@ import type { DisputedResponse } from "../api/DisputedResponse";
 import type { Side } from "../api/Side";
 import { Identity, ThreadTitle } from "../components/Agents";
 import { Crumbs } from "../components/Crumbs";
-import { Empty, ErrorBanner, Skeleton } from "../components/ui";
+import { Empty, ErrorBanner, FetchedNote, Skeleton } from "../components/ui";
 import { api, to, useData } from "../lib/api";
 
 /** One side of a disagreement: its thread and the model behind it, where known. */
@@ -81,6 +81,7 @@ function RepoDisputed({ repo, many }: { repo: DisputedRepo; many: boolean }) {
           </span>
         </div>
       ))}
+      {repo.error ? null : <FetchedNote fetched={repo.fetched} />}
     </section>
   );
 }

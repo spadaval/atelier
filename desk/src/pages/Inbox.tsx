@@ -7,7 +7,7 @@ import { LiveThreadRow, T3Notice } from "../components/Agents";
 import { Crumbs } from "../components/Crumbs";
 import { ItemLine } from "../components/ItemLine";
 import { inboxCount } from "../components/Shell";
-import { Empty, ErrorBanner, ScopeBar, Skeleton } from "../components/ui";
+import { Empty, ErrorBanner, FetchedNote, ScopeBar, Skeleton } from "../components/ui";
 import { api, to, useData } from "../lib/api";
 import { countsLine, dateTime, plural } from "../lib/words";
 
@@ -84,6 +84,7 @@ function RepoInbox({ repo, many }: { repo: InboxRepo; many: boolean }) {
           </div>
         </div>
       ))}
+      {repo.error ? null : <FetchedNote fetched={repo.fetched} />}
     </section>
   );
 }

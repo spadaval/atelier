@@ -115,7 +115,7 @@ fn world() -> World {
     fs::write(&pr_state, "OPEN").unwrap();
     let gh = dir.path().join("gh");
     let script = format!(
-        "#!/bin/sh\ncase \"$1 $2\" in\n\
+        "#!/bin/sh\n[ \"$(cat {state})\" = FAIL ] && {{ echo 'gh: the forge did not answer' >&2; exit 1; }}\ncase \"$1 $2\" in\n\
          'pr list') printf '[{{\"number\":7,\"url\":\"https://forge.example/pull/7\",\"state\":\"%s\",\"headRefName\":\"{PLAN}\"}}]' \"$(cat {state})\" ;;\n\
          'pr close') printf '%s\\n' \"$*\" >> {closed}; printf CLOSED > {state} ;;\n\
          *) exit 1 ;;\nesac\n",
@@ -422,4 +422,151 @@ async fn only_the_desks_own_app_may_act() {
         assert_eq!(got, status, "{body}: {answer}");
         assert!(answer["error"].is_string(), "{body}: {answer}");
     }
+}
+
+/// The page and both lists of missions, for `id`: its state on its page,
+/// and whether the unfinished list and the finished list hold it.
+async fn shown(app: &Router, id: &str) -> (Value, bool, bool) {
+    let page = get(app, &format!("/api/repos/demo/missions/{id}")).await;
+    let has = |list: &Value| (list["missions"].as_array().unwrap().iter()).any(|m| m["id"] == id);
+    let open = has(&get(app, "/api/repos/demo/missions").await);
+    let done = has(&get(app, "/api/repos/demo/missions?done=true").await);
+    (page["mission"]["state"].clone(), open, done)
+}
+
+#[tokio::test]
+async fn a_plan_merged_since_the_last_fetch_is_not_stopped_as_a_plan() {
+    let world = world();
+    world.desk.fetch_all();
+    // The plan merges on the remote after the Desk's fetch.
+    git(
+        &world.planner,
+        &["merge", "-q", "--no-ff", "-m", "Merge the plan", PLAN],
+    );
+    git(&world.planner, &["push", "-q", "origin", "main"]);
+    let before = git(&world.origin, &["rev-parse", &format!("refs/heads/{PLAN}")]);
+    let refused = act(
+        &world.app,
+        json!({"act": "stop", "repo": "demo", "id": PLAN, "reason": REASON}),
+    )
+    .await;
+    assert_eq!(refused["result"], "refused", "{refused}");
+    assert!(refused["text"]
+        .as_str()
+        .unwrap()
+        .contains("merged since the Desk last fetched"));
+    let after = git(&world.origin, &["rev-parse", &format!("refs/heads/{PLAN}")]);
+    assert_eq!(before, after, "nothing is pushed");
+    assert!(!world.closed.exists(), "no pull request is closed");
+    assert_eq!(shown(&world.app, PLAN).await, (json!("open"), true, false));
+}
+
+#[tokio::test]
+async fn an_agreed_missions_drop_on_its_own_branch_is_pending_in_both_lists_until_it_merges() {
+    let world = world();
+    git(&world.planner, &["switch", "-qc", OPEN, "main"]);
+    let skip = Skip::new(None);
+    let mut repo = Repo::open(&world.planner, Thread("p1".into()), &skip).unwrap();
+    atelier_app::plan::drop_mission(&mut repo, OPEN, REASON)
+        .unwrap()
+        .unwrap();
+    git(&world.planner, &["commit", "-qam", &format!("Drop {OPEN}")]);
+    git(&world.planner, &["push", "-q", "origin", OPEN]);
+    world.desk.fetch_all();
+    let page = get(&world.app, &format!("/api/repos/demo/missions/{OPEN}")).await;
+    assert_eq!(page["stop_on"], format!("origin/{OPEN}"), "{page}");
+    assert_eq!(
+        shown(&world.app, OPEN).await,
+        (json!("stop_pending"), true, false)
+    );
+}
+
+#[tokio::test]
+async fn a_stop_whose_pull_request_cannot_be_read_stays_pending_and_says_why() {
+    let world = world();
+    // The forge does not answer from the start.
+    fs::write(&world.pr_state, "FAIL").unwrap();
+    world.desk.fetch_all();
+    let done = act(
+        &world.app,
+        json!({"act": "stop", "repo": "demo", "id": PLAN, "reason": REASON}),
+    )
+    .await;
+    assert_eq!(done["result"], "done", "{done}");
+    assert!(
+        done["text"]
+            .as_str()
+            .unwrap()
+            .contains("its pull request was not closed"),
+        "{done}"
+    );
+    let page = get(&world.app, &format!("/api/repos/demo/missions/{PLAN}")).await;
+    assert!(
+        page["fetched"]["error"]
+            .as_str()
+            .unwrap()
+            .contains("the forge did not answer"),
+        "{page}"
+    );
+    assert_eq!(
+        shown(&world.app, PLAN).await,
+        (json!("stop_pending"), true, false)
+    );
+    // The forge answers: the pull request was open, and is closed now.
+    fs::write(&world.pr_state, "CLOSED").unwrap();
+    world.desk.fetch_all();
+    assert_eq!(
+        shown(&world.app, PLAN).await,
+        (json!("stopped"), false, true)
+    );
+    // A failure after a list was read keeps that list, and says so.
+    fs::write(&world.pr_state, "FAIL").unwrap();
+    world.desk.fetch_all();
+    assert_eq!(
+        shown(&world.app, PLAN).await,
+        (json!("stopped"), false, true)
+    );
+    let page = get(&world.app, &format!("/api/repos/demo/missions/{PLAN}")).await;
+    assert!(page["fetched"]["error"].is_string(), "{page}");
+}
+
+#[tokio::test]
+async fn an_agreed_missions_amendment_on_its_own_branch_is_proposed_with_its_other_records() {
+    let world = world();
+    git(&world.planner, &["switch", "-qc", OPEN, "main"]);
+    let path = world
+        .planner
+        .join(format!(".atelier/missions/{OPEN}/mission.md"));
+    let text = fs::read_to_string(&path)
+        .unwrap()
+        .replace("Sumeet asked for it.", "Sumeet asked for more.");
+    fs::write(&path, text).unwrap();
+    let item = format!(
+        "---\nschema: atelier.item\nschema_version: 3\nid: demo-i001\ntitle: A new item\n\
+         status: draft\nmission: {OPEN}\nlabels: []\npriority: medium\nblocked_by: []\n\
+         implementers: []\nready: null\ntrivial: null\ncaused_by: null\n\
+         created_at: 2026-11-10T09:00:00Z\n---\n\n## Goal\n\nMore.\n\n## Done when\n\n## Scope\n"
+    );
+    fs::create_dir_all(world.planner.join(".atelier/items/demo-i001")).unwrap();
+    fs::write(world.planner.join(".atelier/items/demo-i001/item.md"), item).unwrap();
+    git(&world.planner, &["add", "-A"]);
+    git(&world.planner, &["commit", "-qm", "Amend the plan"]);
+    git(&world.planner, &["push", "-q", "origin", OPEN]);
+    world.desk.fetch_all();
+    let proposed = get(&world.app, "/api/proposed").await;
+    let repo = &proposed["repos"][0];
+    let plans = repo["plans"].as_array().unwrap();
+    let amended = plans
+        .iter()
+        .find(|p| p["mission"]["id"] == OPEN)
+        .expect("the amendment is listed");
+    assert_eq!(amended["amends"], true, "{repo}");
+    assert_eq!(amended["mission"]["branch"], format!("origin/{OPEN}"));
+    let changes = repo["changes"].as_array().unwrap();
+    let on = changes
+        .iter()
+        .find(|c| c["branch"] == format!("origin/{OPEN}"))
+        .expect("its other records are changes");
+    assert_eq!(on["records"][0]["id"], "demo-i001", "{repo}");
+    assert_eq!(on["records"][0]["change"], "added");
 }

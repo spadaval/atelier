@@ -3,4 +3,9 @@ import type { MissionRow } from "./MissionRow";
 import type { PrMark } from "./PrMark";
 import type { RoundMark } from "./RoundMark";
 
-export type ProposedPlan = { mission: MissionRow, pull_request: PrMark | null, round: RoundMark | null, };
+export type ProposedPlan = { mission: MissionRow,
+/**
+ * An agreed mission whose own unmerged branch changes it, rather than
+ * a plan not yet agreed.
+ */
+amends: boolean, pull_request: PrMark | null, round: RoundMark | null, };

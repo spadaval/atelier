@@ -113,6 +113,16 @@ pub fn stop(at: &Stopping, id: &str, reason: &str) -> Result<ActResponse> {
     )?;
     let skip = Skip::new(None);
     let mut repo = Repo::open(&clone, Thread(at.caller.to_string()), &skip)?;
+    // The plan may have merged since the served repository last fetched:
+    // the clone has the forge's base as it is now. An agreed mission's stop
+    // reaches the base by a merge, which the Desk does not make yet.
+    if atelier_app::plan::agreed(&mut repo, id)? {
+        let _ = fetch::fetch(at.served, &remote);
+        return Ok(refused(
+            format!("Mission {id} merged since the Desk last fetched, so it is agreed now: its stop reaches the base by a merge, which the Desk does not make yet (atelier-yclc). Nothing changed."),
+            Some("Run the commands its page gives in a checkout of the repository.".into()),
+        ));
+    }
     let done = match atelier_app::plan::drop_mission(&mut repo, id, reason)? {
         Ok(done) => done,
         Err(Refused { rules, text, next }) => {

@@ -65,7 +65,7 @@ function RepoProposed({ repo, many }: { repo: ProposedRepo; many: boolean }) {
                     {p.mission.title}
                   </Link>
                   <span className="sub">
-                    <span className="mono">{p.mission.id}</span> · <span className="mono">{p.mission.branch ?? "on the base"}</span> · <PullRequestLink pr={p.pull_request} /> · {roundWords(p.round)}
+                    {p.amends ? <span className="tag">amends an agreed mission</span> : null} <span className="mono">{p.mission.id}</span> · <span className="mono">{p.mission.branch ?? "on the base"}</span> · <PullRequestLink pr={p.pull_request} /> · {roundWords(p.round)}
                   </span>
                 </span>
               </div>

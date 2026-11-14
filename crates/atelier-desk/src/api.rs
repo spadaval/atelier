@@ -369,6 +369,7 @@ pub struct InboxRepo {
     pub needs_human: Vec<NeedsHuman>,
     /// Plans under review, which he may stop.
     pub proposed: Vec<MissionRow>,
+    pub fetched: FetchMark,
     /// T3 Code's live threads waiting on a person that hold something in
     /// this repository's records, with only those holds.
     pub threads: Vec<LiveThread>,
@@ -559,6 +560,9 @@ pub struct ProposedRepo {
 #[derive(Debug, Clone, Serialize, TS)]
 pub struct ProposedPlan {
     pub mission: MissionRow,
+    /// An agreed mission whose own unmerged branch changes it, rather than
+    /// a plan not yet agreed.
+    pub amends: bool,
     pub pull_request: Option<PrMark>,
     pub round: Option<RoundMark>,
 }
@@ -643,6 +647,7 @@ pub struct DisputedRepo {
     pub repo: String,
     pub commit: Option<String>,
     pub error: Option<String>,
+    pub fetched: FetchMark,
     pub rebuttals: Vec<RebuttalRow>,
     pub plans: Vec<SplitRoundRow>,
 }

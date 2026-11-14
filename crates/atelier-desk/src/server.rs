@@ -3,12 +3,13 @@
 
 use crate::api::{
     ActRequest, ApiError, DisputedRepo, DisputedResponse, FetchMark, Hold, InboxRepo,
-    InboxResponse, MissionRow, MotionRepo, MotionResponse, PrMark, ProposedRepo, ProposedResponse,
-    RepoSummary, ReposResponse, SessionRequest, StopAct, ThreadsResponse,
+    InboxResponse, MissionRow, MissionState, MotionRepo, MotionResponse, PrMark, ProposedRepo,
+    ProposedResponse, RepoSummary, ReposResponse, SessionRequest, StopAct, ThreadsResponse,
 };
 use crate::config::Config;
 use crate::fetch::{self, Fetches};
 use crate::news::News;
+use crate::read::PrState;
 use crate::stop::{self, Stopping};
 use crate::threads::Threads;
 use crate::{read, sessions};
@@ -146,8 +147,9 @@ impl Desk {
         self.fetches.mark(name, dir, remote.as_deref())
     }
 
-    /// The pull request of the branch shown as `shown` in `name`.
-    fn pull_request(&self, name: &str, dir: &Path, shown: &str) -> Option<PrMark> {
+    /// What the forge says of the pull request of the branch shown as
+    /// `shown` in `name`.
+    fn pr_state(&self, name: &str, dir: &Path, shown: &str) -> PrState {
         let (remote, _) = self.remote(name, dir);
         let branch = match &remote {
             Some(remote) => shown.strip_prefix(&format!("{remote}/")).unwrap_or(shown),
@@ -156,10 +158,17 @@ impl Desk {
         self.fetches.pull_request(name, branch)
     }
 
+    /// The pull request of the branch shown as `shown` in `name`, where
+    /// the forge's list has one.
+    fn pull_request(&self, name: &str, dir: &Path, shown: &str) -> Option<PrMark> {
+        self.pr_state(name, dir, shown).mark()
+    }
+
     /// `row`'s state with its pull request known.
     fn settle(&self, name: &str, dir: &Path, row: &mut MissionRow) {
-        let pr = (row.branch.clone()).and_then(|b| self.pull_request(name, dir, &b));
-        read::settle_state(row, pr.as_ref());
+        if let Some(branch) = row.branch.clone() {
+            read::settle_state(row, &self.pr_state(name, dir, &branch));
+        }
     }
 
     /// Fetches every repository served once, then looks for news.
@@ -481,6 +490,11 @@ async fn missions(
         for row in &mut page.missions {
             desk.settle(&repo, &dir, row);
         }
+        // Kept once settled, so a stop still pending stays with the
+        // unfinished missions.
+        let finished =
+            |row: &MissionRow| matches!(row.state, MissionState::Done | MissionState::Stopped);
+        page.missions.retain(|row| finished(row) == done);
         page.fetched = desk.fetched(&repo, &dir);
         Ok(page)
     })
@@ -605,6 +619,7 @@ async fn inbox(State(desk): State<Arc<Desk>>) -> Response {
                     .into_iter()
                     .filter(|thread| thread.status == "waiting" && !thread.holds.is_empty());
                 inbox.threads = waiting.collect();
+                inbox.fetched = desk.fetched(name, dir);
             },
         );
         Ok(InboxResponse {
@@ -689,7 +704,8 @@ async fn disputed(State(desk): State<Arc<Desk>>) -> Response {
                 error: Some(error),
                 ..DisputedRepo::default()
             },
-            |_, _, disputed| {
+            |name, dir, disputed| {
+                disputed.fetched = desk.fetched(name, dir);
                 let describe = |side: &mut crate::api::Side| desk.threads.describe(side);
                 for rebuttal in &mut disputed.rebuttals {
                     rebuttal.implementer.iter_mut().for_each(describe);

@@ -349,11 +349,13 @@ read at (`Repo::base_tip`, psjw). `/api/repos` gives each repository's
 `base_tip` instead, and `/api/inbox` a `commit` for each repository.
 
 Every response that reads one repository, and each repository of
-`/api/repos`, `/api/proposed` and `/api/motion`, has `fetched {remote, at,
+`/api/repos`, `/api/inbox`, `/api/proposed`, `/api/motion` and
+`/api/disputed`, has `fetched {remote, at,
 error, every_seconds}`: the remote the Desk fetches (the forge's, else
 `origin`; `null` when there is neither), when the clone last fetched, from
-`git::fetched_at` (the newest `FETCH_HEAD`), why the Desk's last fetch
-failed, and the configured period. It is joined on each request, not
+`git::fetched_at` (the newest `FETCH_HEAD`), why the Desk's last fetch or
+its last read of the forge's pull requests failed, and the configured
+period. It is joined on each request, not
 cached, and so are pull requests and T3 Code's threads.
 
 ### `GET /api/repos`
@@ -388,7 +390,10 @@ included, in ID order, as `list` orders groups:
 
 `loose`: the item count of the group with `id: None` from `list` (master),
 the spike's "work outside missions", with the same `done` flag. With
-`?done=true` the rows are the done and stopped missions.
+`?done=true` the rows are the done and stopped missions. The server
+settles each row's state with its pull request before it keeps the
+finished or the unfinished, so a plan whose stop is pushed and whose pull
+request is still open stays with the unfinished.
 
 ### `GET /api/repos/{repo}/missions/{id}`
 
@@ -535,8 +540,8 @@ none (atelier-aab1), and the strategy puts them out of scope.
 
 | Field | Given by |
 | --- | --- |
-| `plans[] {mission, pull_request, round}` | Each mission whose `state` is `proposed`, as on its page. A plan dropped on its branch is `stopped` or `stop_pending`, and not listed |
-| `changes[] {branch, pull_request, records[] {kind, id, title, change}}` | By branch: each record an unmerged branch adds (`Located::proposed`, from `Located::source` and `Located::also_added`) or changes (`Located::changes`), with `change` `added`, `changed`, `dropped` or `removed`. A proposed plan's own branch, whose records are its plan, and a started item's own branch, which is work in motion, are left out |
+| `plans[] {mission, amends, pull_request, round}` | Each mission whose `state` is `proposed`, as on its page, and each agreed mission read from its own unmerged branch, an amendment (`amends: true`). A plan dropped on its branch is `stopped` or `stop_pending`, and not listed |
+| `changes[] {branch, pull_request, records[] {kind, id, title, change}}` | By branch: each record an unmerged branch adds (`Located::proposed`, from `Located::source` and `Located::also_added`) or changes (`Located::changes`), with `change` `added`, `changed`, `dropped` or `removed`. A proposed plan's own branch, whose records are its plan, and a started item's own branch, which is work in motion, are left out; an amendment's branch is not |
 
 ### `GET /api/motion`
 
@@ -714,7 +719,10 @@ pushed, and the pull request closed (`crates/atelier-desk/src/stop.rs`).
    branch out at the remote's tip, and removes any file a failed attempt
    left.
 3. **The record.** It opens the clone with `Repo::open`, naming the
-   configured caller, and calls `atelier_app::plan::drop_mission(&mut repo,
+   configured caller. The clone has the forge's base as it is now, so it
+   refuses, changing nothing, a plan that merged since the served
+   repository last fetched: that is an agreed mission's stop. Otherwise it
+   calls `atelier_app::plan::drop_mission(&mut repo,
    id, reason)`, the function `atelier drop <mission>` calls, which writes
    the mission dropped with `Dropped: <reason>` first in its Result and
    commits nothing. A refusal from it is the response.
@@ -729,7 +737,12 @@ pushed, and the pull request closed (`crates/atelier-desk/src/stop.rs`).
    requests again, so the page shows the plan stopped.
 
 The page shows the plan `stopped` once the drop is on the forge's copy of
-the branch and its pull request is not open, and `stop_pending` before.
+the branch and the forge's last list of pull requests has its pull request
+closed or none, and `stop_pending` before, and while no list has been read,
+since closing it is then not confirmed. A list that fails after one was read
+keeps the last one, and `fetched.error` says why. An agreed mission dropped
+on any unmerged branch, its own too, is `stop_pending` until that branch
+merges, whatever its pull request says.
 
 An agreed mission's stop reaches the base by `atelier start --backlog`,
 `atelier drop`, a commit, `atelier submit` and `atelier merge`. `submit` and
@@ -757,8 +770,9 @@ After each round of fetches the Desk compares each repository's missions
 
 - a mission proposed now that was neither proposed nor agreed before is
   news that a plan was proposed;
-- a mission agreed now (on the base) that was proposed before is news that
-  it merged.
+- a mission agreed now (on the base) that was not before is news that it
+  merged, whether or not a look saw it proposed: a plan proposed and merged
+  between two looks, or while the Desk was down, is still told.
 
 The first look at a repository remembers and tells nothing, so starting the
 Desk tells nothing. What it has seen, and the last 50 pieces of news, are

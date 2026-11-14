@@ -162,6 +162,7 @@ test("the inbox lists every repository's needs-human items by mission, its propo
   await expect(atelier.getByRole("link", { name: /Read the fleet site/ })).toBeVisible();
   await expect(page.getByRole("region", { name: "broken" })).toContainText("missing field `status`");
   await expect(page.getByRole("link", { name: "Inbox" })).toContainText("5");
+  await expect(atelier.getByTestId("fetched")).toContainText("Fetched from origin 2 minutes ago.");
   const lately = page.getByRole("region", { name: "Lately" });
   await expect(lately.getByTestId("news")).toHaveCount(2);
   await expect(lately.getByTestId("news").first()).toContainText("Proposed: Give the gardener");
@@ -173,7 +174,8 @@ test("the inbox lists every repository's needs-human items by mission, its propo
 test("the proposed page lists each plan with its branch, pull request and round, and record changes by branch", async ({ page }) => {
   await load(page, "/proposed");
   const plans = page.getByTestId("plan");
-  await expect(plans).toHaveCount(2);
+  await expect(plans).toHaveCount(3);
+  await expect(plans.nth(2)).toContainText("amends an agreed mission");
   await expect(plans.first()).toContainText("origin/atelier-295u");
   await expect(plans.first()).toContainText("round 1: approved, changes asked");
   await expect(plans.first().getByTestId("pull-request")).toHaveAttribute("href", "https://github.com/spadaval/atelier/pull/412");
@@ -212,6 +214,7 @@ test("the disputed page lists each rebuttal and split plan round, with each side
   const split = page.getByTestId("split-round");
   await expect(split).toContainText("Plan of atelier-295u, round 1");
   await expect(split).toContainText("grok-reviewer (model unknown)");
+  await expect(page.getByTestId("fetched")).toContainText("Fetched from origin");
   await expectOnlyTheActs(page);
 });
 

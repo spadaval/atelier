@@ -4,6 +4,7 @@
 //! (docs/design.md, No command fetches).
 
 use crate::api::{FetchMark, PrMark};
+use crate::read::PrState;
 use anyhow::{bail, Context, Result};
 use atelier_app::git;
 use std::collections::HashMap;
@@ -23,9 +24,14 @@ pub struct Fetches {
 #[derive(Default, Clone)]
 struct Fetched {
     error: Option<String>,
-    /// The pull requests of the forge, by head branch; `None` when the
-    /// repository has no GitHub forge or `gh` failed.
+    /// Whether the repository has a GitHub forge, whose pull requests are
+    /// read.
+    github: bool,
+    /// The pull requests of the forge, by head branch, as last read; `None`
+    /// while none has been read.
     prs: Option<HashMap<String, PrMark>>,
+    /// Why the last read of the pull requests failed.
+    forge_error: Option<String>,
 }
 
 /// The remote the Desk fetches in `dir`, whose `config.toml` at `HEAD`
@@ -55,18 +61,20 @@ impl Fetches {
     /// `github`. A failure is kept to be shown, and the refs stay as they
     /// were.
     pub fn fetch(&self, name: &str, dir: &Path, remote: Option<&str>, github: bool) {
-        let fetched = match remote {
-            None => Fetched::default(),
-            Some(remote) => Fetched {
-                error: fetch(dir, remote).err().map(|e| format!("{e:#}")),
-                prs: github.then(|| pull_requests(&self.gh, dir).ok()).flatten(),
-            },
-        };
+        let error = remote.and_then(|remote| fetch(dir, remote).err().map(|e| format!("{e:#}")));
+        let github = github && remote.is_some();
+        let read = github.then(|| pull_requests(&self.gh, dir));
         let mut state = self.state.lock().unwrap();
         let kept = state.entry(name.to_string()).or_default();
-        // A failed read of the pull requests keeps the last one.
-        let prs = fetched.prs.clone().or(kept.prs.take());
-        *kept = Fetched { prs, ..fetched };
+        kept.error = error;
+        kept.github = github;
+        match read {
+            None => (kept.prs, kept.forge_error) = (None, None),
+            Some(Ok(prs)) => (kept.prs, kept.forge_error) = (Some(prs), None),
+            // A failed read keeps the last list, which still says what was
+            // open, and says why it failed.
+            Some(Err(e)) => kept.forge_error = Some(format!("{e:#}")),
+        }
     }
 
     /// When `name` at `dir` was last fetched and how.
@@ -76,17 +84,26 @@ impl Fetches {
         FetchMark {
             remote: remote.map(str::to_string),
             at: last_fetched(dir),
-            error: kept.and_then(|k| k.error.clone()),
+            error: kept.and_then(|k| {
+                let errors = [k.error.clone(), k.forge_error.clone()];
+                let errors: Vec<String> = errors.into_iter().flatten().collect();
+                (!errors.is_empty()).then(|| errors.join("; "))
+            }),
             every_seconds: u32::try_from(self.every).unwrap_or(u32::MAX),
         }
     }
 
-    /// The pull request whose head is `branch` in `name`, the newest where
-    /// several are.
-    pub fn pull_request(&self, name: &str, branch: &str) -> Option<PrMark> {
+    /// What the forge says of the pull request whose head is `branch` in
+    /// `name`, the newest where several are: unknown while no list of its
+    /// GitHub forge has been read, and none for a repository with no
+    /// GitHub forge.
+    pub fn pull_request(&self, name: &str, branch: &str) -> PrState {
         let state = self.state.lock().unwrap();
-        let prs = state.get(name)?.prs.as_ref()?;
-        prs.get(branch).cloned()
+        match state.get(name) {
+            Some(kept) if !kept.github => PrState::Known(None),
+            Some(Fetched { prs: Some(prs), .. }) => PrState::Known(prs.get(branch).cloned()),
+            _ => PrState::Unknown,
+        }
     }
 }
 

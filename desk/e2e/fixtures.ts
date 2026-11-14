@@ -511,8 +511,17 @@ export const inbox: InboxResponse = {
       ],
       proposed: [missionPages["atelier-295u"].mission, missionPages["atelier-k9rf"].mission],
       threads: [live.asking],
+      fetched,
     },
-    { repo: "broken", commit: null, error: "`.atelier/items/x/item.md` does not read: missing field `status`", needs_human: [], proposed: [], threads: [] },
+    {
+      repo: "broken",
+      commit: null,
+      error: "`.atelier/items/x/item.md` does not read: missing field `status`",
+      needs_human: [],
+      proposed: [],
+      threads: [],
+      fetched: { remote: null, at: null, error: null, every_seconds: 300 },
+    },
   ],
   t3,
   news: [
@@ -528,7 +537,10 @@ export const proposed: ProposedResponse = {
       commit,
       error: null,
       fetched,
-      plans: ["atelier-295u", "atelier-k9rf"].map((id) => ({ mission: missionPages[id].mission, pull_request: missionPages[id].pull_request, round: missionPages[id].round })),
+      plans: [
+        ...["atelier-295u", "atelier-k9rf"].map((id) => ({ mission: missionPages[id].mission, amends: false, pull_request: missionPages[id].pull_request, round: missionPages[id].round })),
+        { mission: { ...missionPages["atelier-g6rp"].mission, branch: "origin/atelier-g6rp" }, amends: true, pull_request: null, round: null },
+      ],
       changes: [
         {
           branch: "origin/backlog/file-bugs",
@@ -582,6 +594,7 @@ export const disputed: DisputedResponse = {
       repo: "atelier",
       commit,
       error: null,
+      fetched,
       rebuttals: [
         {
           item: "atelier-uwxy",

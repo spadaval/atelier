@@ -105,12 +105,10 @@ impl News {
                     {
                         NewsKind::Proposed
                     }
-                    (_, true)
-                        if was.proposed.contains(&mission.id)
-                            && !was.agreed.contains(&mission.id) =>
-                    {
-                        NewsKind::Merged
-                    }
+                    // A plan reaches the base only by merging, so a mission
+                    // agreed now and not before merged, whether or not a
+                    // look saw it proposed.
+                    (_, true) if !was.agreed.contains(&mission.id) => NewsKind::Merged,
                     _ => continue,
                 };
                 events.push(NewsEvent {
@@ -283,12 +281,24 @@ mod tests {
         assert!(news
             .observe("demo", &[seen("demo-new1", false, true)])
             .is_empty());
+        // A plan proposed and merged between two looks is news that it
+        // merged, as is one merged while the Desk was down.
+        let quick = news.observe(
+            "demo",
+            &[
+                seen("demo-new1", false, true),
+                seen("demo-new2", false, true),
+            ],
+        );
+        assert_eq!(quick.len(), 1);
+        assert_eq!(quick[0].mission, "demo-new2");
+        assert_eq!(quick[0].kind, NewsKind::Merged);
         let recent = news.recent();
-        assert_eq!(recent.len(), 2);
-        assert_eq!(recent[0].kind, NewsKind::Merged);
+        assert_eq!(recent.len(), 3);
+        assert_eq!(recent[1].kind, NewsKind::Merged);
         let sent = std::fs::read_to_string(sent).unwrap();
         let lines: Vec<&str> = sent.lines().collect();
-        assert_eq!(lines.len(), 2, "{sent}");
+        assert_eq!(lines.len(), 3, "{sent}");
         assert!(lines[0]
             .starts_with("Plan proposed: Mission demo-new1|Mission demo-new1 in demo is proposed"));
         assert!(lines[0].ends_with("|http://desk:3780/r/demo/mission/demo-new1"));
