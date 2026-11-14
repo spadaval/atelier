@@ -51,9 +51,10 @@ trait Stored: Record + Sized {
 
 /// The base's tip as the commands read it. Where a forge is configured the
 /// forge makes every merge, so its remote-tracking base, as last fetched,
-/// is read when it holds the local base, as after a merge by the forge that
-/// could not move the local base. Otherwise, as with no forge, the local
-/// base is read.
+/// is read: after a merge by the forge that could not move the local base,
+/// whether that base was behind or had diverged, the merge counts. Only a
+/// local base strictly ahead of it, or with no forge, is read instead; its
+/// own commits no merge made are not lost.
 pub fn base_tip(root: &Path, config: &Config) -> Result<String> {
     let base = &config.base_branch;
     let local = git::branch_tip(root, base)?.with_context(|| {
@@ -63,7 +64,7 @@ pub fn base_tip(root: &Path, config: &Config) -> Result<String> {
         return Ok(local);
     };
     match git::remote_tip(root, &forge.remote, base)? {
-        Some(tracking) if tracking != local && git::is_ancestor(root, &local, &tracking)? => {
+        Some(tracking) if tracking != local && !git::is_ancestor(root, &tracking, &local)? => {
             Ok(tracking)
         }
         _ => Ok(local),

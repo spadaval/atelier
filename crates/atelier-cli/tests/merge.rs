@@ -1949,6 +1949,43 @@ fn a_forge_merge_the_local_base_cannot_follow_still_reads_as_done() {
     assert_eq!(merges.lines().count(), 1);
 }
 
+/// A local base with a commit the forge's lacks has diverged once the
+/// forge merges; the merge is read from the forge's base all the same, and
+/// the local base and its commit are left alone.
+#[test]
+fn a_forge_merge_onto_a_base_the_local_one_diverged_from_still_reads_as_done() {
+    let forge = Forge::new(None);
+    let root = forge.scratch.root();
+    let base = forge.scratch.worktree("base");
+    git(&base, &["switch", "-q", "main"]);
+    fs::write(base.join("local.txt"), "local\n").unwrap();
+    git(&base, &["add", "local.txt"]);
+    git(&base, &["commit", "-qm", "Local only"]);
+    let local = head(&root, "main");
+    let run = forge.merge();
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(
+        run.stdout.ends_with(
+            "The local main has commits origin/main does not, so it was left as it was; no merge made them. Move it to origin/main once they are on a branch.\n"
+        ),
+        "{}",
+        run.stdout
+    );
+    assert_eq!(head(&root, "main"), local);
+    assert_eq!(head(&base, "HEAD"), local);
+    let shown = forge.atelier(&root, "t1", &["show", ID]).stdout;
+    assert!(shown.contains("Status: done\n"), "{shown}");
+    let again = forge.merge();
+    assert_eq!(again.code, 0, "{}", again.stderr);
+    assert_eq!(
+        again.stdout,
+        format!("{ID} is already merged into main; nothing is left to do on it.\n")
+    );
+    let merges = fs::read_to_string(forge.gh.join("merged")).unwrap();
+    assert_eq!(merges.lines().count(), 1);
+    assert_eq!(head(&root, "main"), local);
+}
+
 #[test]
 fn a_forge_merge_whose_branch_moves_during_its_checks_pushes_nothing() {
     let forge = Forge::with(Some("ci.yml"), &waiting_check());
