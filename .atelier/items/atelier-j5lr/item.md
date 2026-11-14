@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-j5lr
 title: Bring the skill, AGENTS.md and the readiness checklist to the branch model
-status: in_review
+status: approved
 mission: atelier-to83
 labels:
 - redesign
