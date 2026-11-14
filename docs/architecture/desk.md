@@ -18,10 +18,10 @@ The core can feed every page. Nothing in the strategy's Design has to
 change. Two facts shape the order of work:
 
 - **Reads need atelier-psjw too, not only acts.** On master, `Located`,
-  `Entry` and `entries` are in `atelier-app`, but the code that builds a
+  `Entry` and `entries` are in `atelier-core`, but the code that builds a
   `Located` for every item (the base's record plus the branch named for it,
   `Repo::everything`) is in `atelier-cli/src/repo.rs`. The atelier-psjw
-  branch moves `Repo` into `atelier-app`. Until it merges, the Desk cannot
+  branch moves `Repo` into `atelier-core`. Until it merges, the Desk cannot
   read items the way `status`, `list` and `show` do without copying CLI code.
 - **Seven views were missing**, listed with sizes in
   [Missing views](#missing-views). Six were small moves or exposures of code
@@ -42,7 +42,7 @@ For each repository under its configured roots, a request does this, inside
 one blocking task:
 
 1. Open the repository for reading with the human's identity as caller:
-   `atelier_app::Repo::open_committed(dir, caller, &skip)` (M1).
+   `atelier_core::Repo::open_committed(dir, caller, &skip)` (M1).
    The caller is the name the Desk is configured with, such as `sumeet`,
    never a value from the request.
 2. `Repo::everything()` gives a `Located` for every item on the base, on
@@ -51,7 +51,7 @@ one blocking task:
    `Repo::all_missions()` does the same for missions, and
    `Repo::published_stops` marks dropped a mission the forge's base holds
    dropped, as `list` does.
-3. `atelier_app::entries(&items, &missions, &caller)` (master) gives one
+3. `atelier_core::entries(&items, &missions, &caller)` (master) gives one
    `Entry` per item, with the record the cross-branch rule picks
    (`Located::record`, master).
 4. Pages are built from those values and the record readers below.
@@ -69,7 +69,7 @@ from that branch's tip, where `Repo::open` reads both from the checkout's
 files. `HEAD` can still be an old commit: on this host the main atelier
 checkout is detached far behind master, so its `HEAD` holds the config of
 that old commit, not the base's. The server opens the checkout that has the
-base out, `atelier_app::git::checkout_of(root, base)`, where there is one.
+base out, `atelier_core::git::checkout_of(root, base)`, where there is one.
 Planning's and the acts' methods of `Repo` (`store`, `checkout_item`,
 `locate_planned`, `planned`, `new_id`, `uncommitted`) read the checkout,
 and the server does not call them.
@@ -320,7 +320,7 @@ strings, and enums are their record names, such as `in_review`. A refused
 leaves the root is `400`, an unknown repository, record or route is `404`,
 and a read that fails is `500`; each has `error`. `{repo}` is the
 name the Desk's configuration gives a repository. An item or mission ID is
-checked with `atelier_records::validate_id` (master) before use. A thread
+checked with `atelier_core::records::validate_id` (master) before use. A thread
 identity never appears in a path: it can hold `/`, `:` and `%`, as
 `thread:delegated-task:command%3Amcp%3A...` does.
 
@@ -368,10 +368,10 @@ cached, and so are pull requests and T3 Code's threads.
 | `name`, `path` | The Desk's configuration | Desk |
 | `base` | `Repo::base`, from `config.toml` at `HEAD` | M1: `Repo::open_committed` |
 | `base_tip` | `Repo::base_tip` | psjw |
-| `in_progress` | Count of missions where `atelier_app::in_progress(mission, &entries)` | master |
+| `in_progress` | Count of missions where `atelier_core::in_progress(mission, &entries)` | master |
 | `proposed` | Count of missions whose `state` is `proposed` | Desk |
-| `waiting` | Item count of `atelier_app::list(&entries, &missions, &caller, &Filter { needs_human: true, .. })` | master |
-| `error` | The error text when the repository does not open or a record does not read (`atelier_records::ReadError`, master); then `base` and `base_tip` are `null` and the counts `0` | Desk |
+| `waiting` | Item count of `atelier_core::list(&entries, &missions, &caller, &Filter { needs_human: true, .. })` | master |
+| `error` | The error text when the repository does not open or a record does not read (`atelier_core::records::ReadError`, master); then `base` and `base_tip` are `null` and the counts `0` | Desk |
 
 Beside `repos`, `built_from` is the commit the server was built from
 (`atelier_desk::BUILT_FROM`), or `unknown`. The app shows its first nine
@@ -384,10 +384,10 @@ included, in ID order, as `list` orders groups:
 
 | Field | Given by | State |
 | --- | --- | --- |
-| `id`, `title`, `status`, `labels`, `lead`, `created_at` | `atelier_core::Mission` of `Located::record`, the copy that counts | master |
+| `id`, `title`, `status`, `labels`, `lead`, `created_at` | `atelier_core::model::Mission` of `Located::record`, the copy that counts | master |
 | `state` | `proposed` when `Located::proposed` or an old `draft`; `stop_pending` for a drop on an unmerged branch of an agreed mission, or a plan dropped on its branch whose drop is not on the forge's copy of the branch or whose pull request is still open; `stopped` once dropped and published; `open` (shown "Agreed"); `done` | Desk, from the reader |
 | `branch` | `Located::source`'s `name`: the ref the record was read from; `null` for the base | atelier-dciw |
-| `in_progress` | `atelier_app::in_progress` | master |
+| `in_progress` | `atelier_core::in_progress` | master |
 | `counts[] {status, count}` | `items_of(id, &entries)` grouped by `Entry::status` in `LIFECYCLE` order, as `show <mission>` groups them; a status with no item is left out | master |
 | `waiting[]` | The IDs of the open items of `items_of` with `Entry::needs_human` | master |
 
@@ -400,7 +400,7 @@ request is still open stays with the unfinished.
 
 ### `GET /api/repos/{repo}/missions/{id}`
 
-The page is read from `atelier_app::mission_view`, as `show <mission>` is.
+The page is read from `atelier_core::mission_view`, as `show <mission>` is.
 Its item rows also need each item's records, which `MissionView::located`
 gives (added by atelier-uwxy).
 
@@ -418,7 +418,7 @@ gives (added by atelier-uwxy).
 | `documents[] {path, title}` | Every file of `.atelier/missions/<id>/` but `mission.md` and `reviews/`, at `read_at`; `title` is its first `# ` heading, else its name | M2: `CommitReader::mission_documents(commit, id)` |
 | `items[]` | `MissionView::items`, each as an item row (below) | master |
 | `plan_reviews[]` | `MissionDir::reviews`, each as a review (below) | master |
-| `plan_reviews[].changed_since[]` | The plan's paths that differ between the commit reviewed and `read_at`; `null` when this clone lacks that commit | M6: `atelier_app::plan::plan_changed_at(&mut repo, id, commit, read_at)` |
+| `plan_reviews[].changed_since[]` | The plan's paths that differ between the commit reviewed and `read_at`; `null` when this clone lacks that commit | M6: `atelier_core::plan::plan_changed_at(&mut repo, id, commit, read_at)` |
 | `threads[]` | Its planners, its lead and the reviewers of its plan reviews, with `item: null`, then each of its items' agents (below) with `item` naming the item, so a mission with no lead still shows who works on its items; joined as in [Tying a thread to an item](#tying-a-thread-to-an-item) | Desk, T3 Code |
 | `t3` | Whether T3 Code could be read, as on `/api/threads` | Desk |
 
@@ -434,17 +434,17 @@ An **item row**, in a mission, the inbox and the rail's loose work:
 | `needs[]` | For a started item, `say::condition_text` for each of `Entry::needs`, what its holder's next act lacks | master values, psjw text |
 | `branch {merged, name}` | The branch the record was read from, else the one named for it; absent when there is none | atelier-dciw |
 | `report_written`, `dropped` | `ItemDir::report_written`, `ItemDir::dropped` | master |
-| `approved_at` | `Entry::approved`, which `atelier_app::annotate` fills, from `atelier_app::git::approved_at`; `mission_view` and `item_view` annotate their entries, and the inbox annotates its rows | M4 |
+| `approved_at` | `Entry::approved`, which `atelier_core::annotate` fills, from `atelier_core::git::approved_at`; `mission_view` and `item_view` annotate their entries, and the inbox annotates its rows | M4 |
 
 A **review**, of an item or a mission's plan:
 
 | Field | Given by | State |
 | --- | --- | --- |
 | `name`, `round` | `ReviewFile::name` | master |
-| `commit`, `reviewers`, `model`, `verdict`, `created_at` | `atelier_core::Review` | master |
+| `commit`, `reviewers`, `model`, `verdict`, `created_at` | `atelier_core::model::Review` | master |
 | `findings[] {name, title, recommendation, was, now, decided, settlement}` | `ReviewFile::findings` | master |
 | `findings[].text` | `ReviewFile::finding_text` | master |
-| `findings[].open`, `findings[].deferred` | `atelier_core::is_open`, `is_deferred`, over all the record's findings and its decisions (none for a mission) | master |
+| `findings[].open`, `findings[].deferred` | `atelier_core::model::is_open`, `is_deferred`, over all the record's findings and its decisions (none for a mission) | master |
 | `changed_since` | On a plan review, as above; `null` on an item's | M6 |
 
 ### `GET /api/repos/{repo}/doc?path=<path>`
@@ -461,7 +461,7 @@ app resolves them against `path`, as the spike's `DocReader` does.
 | Field | Given by | State |
 | --- | --- | --- |
 | `row` | The item row, as above, from `ItemView::entry`; it holds `id`, `title`, `status`, `priority` and `labels` | psjw |
-| `mission`, `blocked_by`, `implementers`, `ready`, `trivial`, `caused_by`, `created_at` | `atelier_core::Item` of `Located::record` | master |
+| `mission`, `blocked_by`, `implementers`, `ready`, `trivial`, `caused_by`, `created_at` | `atelier_core::model::Item` of `Located::record` | master |
 | `read_from` | `base` or `branch`: whether the record is the base's or the branch's | M7: `ItemView::read_from`, `Located::read_from` |
 | `body` | `Item::body`, the whole Markdown | master |
 | `goal`, `scope`, `report` | `ItemDir::section` | master |
@@ -564,7 +564,7 @@ response's `t3` says which.
 ### `GET /api/disputed`
 
 `repos[]`, each with `repo`, `commit`, `error` and what
-`atelier_app::disputes(&items, &missions, None)` gives, which `atelier list
+`atelier_core::disputes(&items, &missions, None)` gives, which `atelier list
 --disputed` prints:
 
 | Field | Given by |
@@ -602,8 +602,8 @@ The response is `200` with one of:
 
 | Result | Fields | From |
 | --- | --- | --- |
-| `done` | `text`, `paths[]`, `commit`, the drop's commit as pushed | `atelier_app::plan::Done` and [The stop](#the-stop) |
-| `refused` | `rules[]`, `text`, `next` (may be `null`) | `atelier_app::Refused`, or the stop's own checks |
+| `done` | `text`, `paths[]`, `commit`, the drop's commit as pushed | `atelier_core::plan::Done` and [The stop](#the-stop) |
+| `refused` | `rules[]`, `text`, `next` (may be `null`) | `atelier_core::Refused`, or the stop's own checks |
 
 A stop is refused, changing nothing, when the reason is empty or not one
 line, the mission is not found, is stopped already, or is agreed (its stop
@@ -728,7 +728,7 @@ pushed, and the pull request closed (`crates/atelier-desk/src/stop.rs`).
    configured caller. The clone has the forge's base as it is now, so it
    refuses, changing nothing, a plan that merged since the served
    repository last fetched: that is an agreed mission's stop. Otherwise it
-   calls `atelier_app::plan::drop_mission(&mut repo,
+   calls `atelier_core::plan::drop_mission(&mut repo,
    id, reason)`, the function `atelier drop <mission>` calls, which writes
    the mission dropped with `Dropped: <reason>` first in its Result and
    commits nothing. A refusal from it is the response.
@@ -806,11 +806,11 @@ What the server calls for the stop, and where it stands:
 
 | Step | Function | Returns |
 | --- | --- | --- |
-| Make the invocation's skip | `atelier_app::Skip::new(None)` | A `Skip` that passes nothing |
-| Open for reading only | `atelier_app::Repo::open_committed(dir: &Path, caller: Thread, skip: &Skip)` | `anyhow::Result<Repo>`; refuses a caller with a line break or `: ` |
-| Open the Desk's clone by path, naming the person | `atelier_app::Repo::open(dir: &Path, caller: Thread, skip: &Skip)` | The same |
-| Drop the mission | `atelier_app::plan::drop_mission(&mut Repo, id: &str, reason: &str)` | `anyhow::Result<Result<Done, Refused>>`. `Done` has the text and the paths written, and commits nothing |
-| Commit the paths written | `atelier_app::git::commit_paths` | The commit, with no trailer, since the skip passes nothing |
+| Make the invocation's skip | `atelier_core::Skip::new(None)` | A `Skip` that passes nothing |
+| Open for reading only | `atelier_core::Repo::open_committed(dir: &Path, caller: Thread, skip: &Skip)` | `anyhow::Result<Repo>`; refuses a caller with a line break or `: ` |
+| Open the Desk's clone by path, naming the person | `atelier_core::Repo::open(dir: &Path, caller: Thread, skip: &Skip)` | The same |
+| Drop the mission | `atelier_core::plan::drop_mission(&mut Repo, id: &str, reason: &str)` | `anyhow::Result<Result<Done, Refused>>`. `Done` has the text and the paths written, and commits nothing |
+| Commit the paths written | `atelier_core::git::commit_paths` | The commit, with no trailer, since the skip passes nothing |
 
 The caller is `Thread(caller)` with `caller` from the configuration, whole.
 The skip is always `Skip::new(None)`. The server runs no `atelier` binary
@@ -854,7 +854,7 @@ A record holds a thread's identity in five places, and nowhere else:
 review's `reviewers` (the open round's holder is `Entry::reviewer`),
 `Mission::lead`, `Mission::planners`, and `Answer::by` in a Decisions entry
 from before `escalate` was removed. Under T3 Code the
-identity is `T3CODE_THREAD_ID` (`atelier_app::identity`, master), which is
+identity is `T3CODE_THREAD_ID` (`atelier_core::identity`, master), which is
 the thread's `threadId`. The server builds one map from identity to what it
 holds, `{repo, kind, id, role}` with role `planner`, `implementer`, `reviewer`,
 `lead` or `decider`, and looks each T3 thread's `threadId` up in it, comparing
@@ -903,21 +903,21 @@ shows the holder's identity and "not running in T3 Code".
 
 ## Missing views
 
-Each is added to `atelier-app` or `atelier-records`, where the CLI uses it
+Each is added to `atelier-core`, where the CLI uses it
 too, in the order the mission page needs them. Sizes: complexity, value,
 risk. Item atelier-l5ai added all but M5; "Given by" names the function.
-The mission page's data is `atelier_app::mission_view(&mut repo, id)`, a
-`MissionView`, and the item page's `atelier_app::item_view(&mut repo, id)`,
+The mission page's data is `atelier_core::mission_view(&mut repo, id)`, a
+`MissionView`, and the item page's `atelier_core::item_view(&mut repo, id)`,
 an `ItemView`; `show` prints each.
 
 | ID | What it must compute | Given by | Complexity | Value | Risk |
 | --- | --- | --- | --- | --- | --- |
-| M1 | Open a repository for reading by path and caller, with the base branch from `config.toml` at a commit (the commit `HEAD` names) and every item read from commits, never from the opened checkout's files | `atelier_app::Repo::open_committed` | Low | High: the strategy's rule | Low |
-| M3 | A mission's page as `show <mission>` prints it: the `MissionDir`, `in_progress`, its entries, its disputes, its plan reviews | `atelier_app::mission_view`, returning `MissionView` (plan reviews in `MissionView::dir.reviews`, and its items' records in `MissionView::located`, which atelier-uwxy added); `show` calls it | Low | High: keeps the Desk and `show` agreeing, which desk-matches-cli checks | Low |
-| M2 | The paths of a mission's documents at a commit: the files of its directory but `mission.md` and `reviews/` | `atelier_records::CommitReader::mission_documents` | Low | High: the strategy is a document now | Low |
-| M4 | An approved item's approval time on `Entry` | `atelier_app::annotate` and `annotate_all`, with `atelier_app::git::approved_at`; the CLI calls them | Low | Medium | Low |
-| M7 | An item's page as `show <item>` prints it, with whether its record came from the base or the branch | `atelier_app::item_view`, returning `ItemView`, and `Located::read_from` (`ReadFrom::Base` or `ReadFrom::Branch`); `show` calls it | Low | Medium | Low |
-| M6 | What in a mission's plan changed between a reviewed commit and the base's tip | `atelier_app::plan::plan_changed_at`, comparing two commits; `plan_changed`, which `ready` and `review` use, still compares the checkout | Low | Medium: tells the human at go whether the review is stale | Low |
+| M1 | Open a repository for reading by path and caller, with the base branch from `config.toml` at a commit (the commit `HEAD` names) and every item read from commits, never from the opened checkout's files | `atelier_core::Repo::open_committed` | Low | High: the strategy's rule | Low |
+| M3 | A mission's page as `show <mission>` prints it: the `MissionDir`, `in_progress`, its entries, its disputes, its plan reviews | `atelier_core::mission_view`, returning `MissionView` (plan reviews in `MissionView::dir.reviews`, and its items' records in `MissionView::located`, which atelier-uwxy added); `show` calls it | Low | High: keeps the Desk and `show` agreeing, which desk-matches-cli checks | Low |
+| M2 | The paths of a mission's documents at a commit: the files of its directory but `mission.md` and `reviews/` | `atelier_core::records::CommitReader::mission_documents` | Low | High: the strategy is a document now | Low |
+| M4 | An approved item's approval time on `Entry` | `atelier_core::annotate` and `annotate_all`, with `atelier_core::git::approved_at`; the CLI calls them | Low | Medium | Low |
+| M7 | An item's page as `show <item>` prints it, with whether its record came from the base or the branch | `atelier_core::item_view`, returning `ItemView`, and `Located::read_from` (`ReadFrom::Base` or `ReadFrom::Branch`); `show` calls it | Low | Medium | Low |
+| M6 | What in a mission's plan changed between a reviewed commit and the base's tip | `atelier_core::plan::plan_changed_at`, comparing two commits; `plan_changed`, which `ready` and `review` use, still compares the checkout | Low | Medium: tells the human at go whether the review is stale | Low |
 | M5 | The history of acts with the commit, time and thread of each, as `atelier log` is specified (`redesign-architecture.md`, The log), for a mission and its items | Missing. The old debrief's reader follows first parents only | High: a Git walk of both merge parents and branch tips, with record diffs per commit | Medium: the timeline, planned against added, and when an item merged | Medium: the walk is unsettled in the specification |
 
 M1 to M4 come before the mission page can match `show`. M5 can follow the

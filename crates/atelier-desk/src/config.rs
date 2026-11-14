@@ -192,7 +192,7 @@ fn resolve(here: &Path, path: &Path) -> PathBuf {
 /// configuration is looked up in the commit.
 fn is_repository(dir: &Path) -> bool {
     dir.join(".git").exists()
-        && atelier_app::git::output(dir, &["cat-file", "-e", "HEAD:.atelier/config.toml"], None)
+        && atelier_core::git::output(dir, &["cat-file", "-e", "HEAD:.atelier/config.toml"], None)
             .is_ok_and(|output| output.status.success())
 }
 

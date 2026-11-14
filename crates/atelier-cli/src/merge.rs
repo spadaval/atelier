@@ -23,12 +23,12 @@ use crate::forge::{CiRun, ForgeError, Github, MergeState, PullRequest};
 use crate::git;
 use crate::output;
 use anyhow::{Context, Result};
-use atelier_app::acts::{check, Act, MissionFacts, Refusal, STARTED};
-use atelier_app::plan::{approvals, plan_diff};
-use atelier_app::repo::{facts, item_dir, item_path, write_and_commit};
-use atelier_app::{refused, Located, Repo, Skip};
-use atelier_core::{Config, Forge, MissionStatus, Named, Status, Thread};
-use atelier_records::{is_record, load, render_item, CommitReader, CONFIG};
+use atelier_core::acts::{check, Act, MissionFacts, Refusal, STARTED};
+use atelier_core::model::{Config, Forge, MissionStatus, Named, Status, Thread};
+use atelier_core::plan::{approvals, plan_diff};
+use atelier_core::records::{is_record, load, render_item, CommitReader, CONFIG};
+use atelier_core::repo::{facts, item_dir, item_path, write_and_commit};
+use atelier_core::{refused, Located, Repo, Skip};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions, TryLockError};
 use std::io::{Read, Write};
@@ -663,7 +663,7 @@ fn read_records(repo: &mut Repo, head: String, branch: String) -> Result<Result<
     let config = repo.base_config()?;
     let merged = git::is_ancestor(&root, &head, &repo.base_tip)?;
     let mut uncommitted = git::uncommitted(&root)?;
-    uncommitted.extend(atelier_app::repo::planning(&root)?);
+    uncommitted.extend(atelier_core::repo::planning(&root)?);
     uncommitted.sort();
     uncommitted.dedup();
     let text = output::records_pull_request_text(&branch, &repo.base);
@@ -1077,7 +1077,7 @@ fn moved(
     if git::branch_tip(root, branch)?.as_deref() != Some(head) {
         return Ok(Some(Moved::Branch));
     }
-    if atelier_app::repo::base_tip(root, &repo.config)? != base_tip {
+    if atelier_core::repo::base_tip(root, &repo.config)? != base_tip {
         return Ok(Some(Moved::Base));
     }
     let unchanged = |path: &Path, branch: &str, tip: &str| -> Result<bool> {
@@ -1115,7 +1115,7 @@ fn now_uncommitted(repo: &Repo, id: &str, records: bool) -> Result<Vec<String>> 
         return repo.uncommitted(id);
     }
     let mut paths = git::uncommitted(&repo.root)?;
-    paths.extend(atelier_app::repo::planning(&repo.root)?);
+    paths.extend(atelier_core::repo::planning(&repo.root)?);
     paths.sort();
     paths.dedup();
     Ok(paths)

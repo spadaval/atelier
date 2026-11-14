@@ -18,7 +18,7 @@
 //! error codes and wording, which `output.rs` holds.
 
 use crate::git;
-use atelier_core::Forge;
+use atelier_core::model::Forge;
 use serde_json::Value;
 use std::fs::File;
 use std::io::{Read, Seek};

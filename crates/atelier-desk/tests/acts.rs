@@ -6,8 +6,8 @@
 //! shown pending until its branch merges, and then stopped. Each test works
 //! against a bare remote with a forge, and a `gh` stand-in.
 
-use atelier_app::{Repo, Skip};
-use atelier_core::Thread;
+use atelier_core::model::Thread;
+use atelier_core::{Repo, Skip};
 use atelier_desk::{router_for, Config, Desk};
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
@@ -243,7 +243,7 @@ fn drop_as_the_cli_does(dir: &Path, origin: &Path, branch: &str, at: &str, id: &
     git(&clone, &["switch", "-qC", branch, at]);
     let skip = Skip::new(None);
     let mut repo = Repo::open(&clone, Thread(CALLER.into()), &skip).unwrap();
-    let done = atelier_app::plan::drop_mission(&mut repo, id, REASON)
+    let done = atelier_core::plan::drop_mission(&mut repo, id, REASON)
         .unwrap()
         .unwrap();
     assert_eq!(done.paths, [format!(".atelier/missions/{id}/mission.md")]);
@@ -364,7 +364,7 @@ async fn an_open_missions_stop_is_pending_until_its_branch_merges_and_the_desk_d
     git(&world.planner, &["switch", "-qc", &branch, "main"]);
     let skip = Skip::new(None);
     let mut repo = Repo::open(&world.planner, Thread("p1".into()), &skip).unwrap();
-    atelier_app::plan::drop_mission(&mut repo, OPEN, REASON)
+    atelier_core::plan::drop_mission(&mut repo, OPEN, REASON)
         .unwrap()
         .unwrap();
     git(&world.planner, &["commit", "-qam", &format!("Drop {OPEN}")]);
@@ -491,7 +491,7 @@ async fn an_agreed_missions_drop_on_its_own_branch_is_pending_in_both_lists_unti
     git(&world.planner, &["switch", "-qc", OPEN, "main"]);
     let skip = Skip::new(None);
     let mut repo = Repo::open(&world.planner, Thread("p1".into()), &skip).unwrap();
-    atelier_app::plan::drop_mission(&mut repo, OPEN, REASON)
+    atelier_core::plan::drop_mission(&mut repo, OPEN, REASON)
         .unwrap()
         .unwrap();
     git(&world.planner, &["commit", "-qam", &format!("Drop {OPEN}")]);
@@ -740,7 +740,7 @@ async fn an_amendment_and_a_stop_on_another_branch_are_each_shown_as_they_are() 
     git(&world.planner, &["switch", "-qc", &stop, "main"]);
     let skip = Skip::new(None);
     let mut repo = Repo::open(&world.planner, Thread("p1".into()), &skip).unwrap();
-    atelier_app::plan::drop_mission(&mut repo, OPEN, REASON)
+    atelier_core::plan::drop_mission(&mut repo, OPEN, REASON)
         .unwrap()
         .unwrap();
     git(&world.planner, &["commit", "-qam", &format!("Drop {OPEN}")]);
@@ -822,7 +822,7 @@ async fn a_drop_pushed_from_another_clone_is_not_confirmed_by_an_older_list() {
     git(&world.planner, &["switch", "-q", PLAN]);
     let skip = Skip::new(None);
     let mut repo = Repo::open(&world.planner, Thread("p1".into()), &skip).unwrap();
-    atelier_app::plan::drop_mission(&mut repo, PLAN, REASON)
+    atelier_core::plan::drop_mission(&mut repo, PLAN, REASON)
         .unwrap()
         .unwrap();
     git(&world.planner, &["commit", "-qam", &format!("Drop {PLAN}")]);

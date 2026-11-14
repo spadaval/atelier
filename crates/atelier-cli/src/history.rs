@@ -1,11 +1,11 @@
-//! `log`: the history of acts that `atelier-app` returns, one line each
+//! `log`: the history of acts that `atelier-core` returns, one line each
 //! (docs/design.md, The log). The layout lives here.
 
 use crate::commands::Outcome;
 use crate::view_output;
 use anyhow::Result;
-use atelier_app::{history, Happened, Logged, Move, Repo};
-use atelier_core::{Settlement, Status, Verdict};
+use atelier_core::model::{Settlement, Status, Verdict};
+use atelier_core::{history, Happened, Logged, Move, Repo};
 use chrono::{DateTime, Utc};
 
 pub fn log(repo: &mut Repo, id: Option<&str>, since: Option<DateTime<Utc>>) -> Result<Outcome> {
@@ -98,7 +98,7 @@ fn changed(act: &Happened) -> Vec<String> {
 /// a record the commit added.
 fn shown(status: &Move) -> String {
     let spelled = |s: Status| match status.mission {
-        true => atelier_core::MissionStatus::of(s).map_or(spelled(s), |s| s.name()),
+        true => atelier_core::model::MissionStatus::of(s).map_or(spelled(s), |s| s.name()),
         false => spelled(s),
     };
     let from = status.from.map_or("new", spelled);

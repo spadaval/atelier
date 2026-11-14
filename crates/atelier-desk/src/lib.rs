@@ -1,9 +1,9 @@
 //! The Desk's server (docs/architecture/desk.md): the reading routes as
 //! JSON, read from commits and branches, local and fetched, through
-//! `atelier-app`'s views; each repository's remote fetched on a timer; the
+//! `atelier-core`'s views; each repository's remote fetched on a timer; the
 //! human told when a plan is proposed and when it merges; T3 Code's live
 //! threads, joined to the records; the stop of a proposed plan, written by
-//! `atelier-app`'s own function in a clone of the Desk's and published;
+//! `atelier-core`'s own function in a clone of the Desk's and published;
 //! planning sessions started in T3 Code; and the built app's files. Its
 //! pages read no working tree's records. It runs `git`, `gh`, the
 //! configured `t3` command and the configured notify command, and never

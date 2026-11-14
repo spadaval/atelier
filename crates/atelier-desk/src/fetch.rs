@@ -6,7 +6,7 @@
 use crate::api::{FetchMark, PrMark};
 use crate::read::PrState;
 use anyhow::{bail, Context, Result};
-use atelier_app::git;
+use atelier_core::git;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;

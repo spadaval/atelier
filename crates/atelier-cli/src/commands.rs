@@ -3,13 +3,13 @@
 use crate::forge::Github;
 use crate::{git, merge, output, plan, setup};
 use anyhow::{anyhow, Context, Result};
-use atelier_app::acts::{check, row, unmet, Act, Checkout, Facts, MissionFacts, STARTED};
-use atelier_app::repo::{facts, item_dir, item_path, mission_path, planning, write_and_commit};
-use atelier_app::{
+use atelier_core::acts::{check, row, unmet, Act, Checkout, Facts, MissionFacts, STARTED};
+use atelier_core::model::{validate_slug, Forge, MissionStatus, Named, Status};
+use atelier_core::records::{render_item, render_mission, validate_id};
+use atelier_core::repo::{facts, item_dir, item_path, mission_path, planning, write_and_commit};
+use atelier_core::{
     annotate, annotate_all, entry, overview, refused, Done, Entry, Located, Refused, Repo,
 };
-use atelier_core::{validate_slug, Forge, MissionStatus, Named, Status};
-use atelier_records::{render_item, render_mission, validate_id};
 
 pub enum Outcome {
     Done(String),
@@ -69,7 +69,7 @@ fn orientation(repo: &mut Repo) -> Result<String> {
         };
         let unsaved = unsaved(repo)?;
         // Dropped on this branch, with the base's copy not dropped yet.
-        let unreached = !atelier_app::unreached(std::slice::from_ref(&located)).is_empty();
+        let unreached = !atelier_core::unreached(std::slice::from_ref(&located)).is_empty();
         return Ok(output::item(
             &repo.caller,
             &entry,
@@ -98,7 +98,7 @@ fn orientation(repo: &mut Repo) -> Result<String> {
         .map(|(located, record)| (located.id.clone(), record.dropped().map(str::to_string)))
         .collect();
     // An item dropped on its branch whose drop the base has not taken.
-    let unreached: Vec<(String, Option<String>)> = atelier_app::unreached(&items)
+    let unreached: Vec<(String, Option<String>)> = atelier_core::unreached(&items)
         .into_iter()
         .map(|(id, _, why)| (id, why))
         .collect();
@@ -113,7 +113,7 @@ fn orientation(repo: &mut Repo) -> Result<String> {
     // A stop of a mission this checkout holds dropped, until published.
     for id in repo.store().ids("missions")? {
         let dropped =
-            |dir: &atelier_records::MissionDir| dir.mission.status == MissionStatus::Dropped;
+            |dir: &atelier_core::records::MissionDir| dir.mission.status == MissionStatus::Dropped;
         let base = repo.base_tip.clone();
         if !dropped(&repo.store().mission(&id)?)
             || repo.mission_at(&base, &id)?.is_some_and(|d| dropped(&d))
@@ -140,7 +140,7 @@ fn orientation(repo: &mut Repo) -> Result<String> {
 /// and items.
 fn record_changes(repo: &Repo) -> Result<Vec<String>> {
     let mut records = planning(&repo.root)?;
-    let config = atelier_records::CONFIG;
+    let config = atelier_core::records::CONFIG;
     if git::uncommitted(&repo.root)?
         .iter()
         .any(|path| path == config)
@@ -158,7 +158,7 @@ fn unsaved(repo: &Repo) -> Result<String> {
     let remote = repo.remote();
     let unpushed: Vec<String> = match (&repo.branch, remote) {
         (Some(branch), Some(remote)) => {
-            let since = match atelier_app::git::remote_tip(&repo.root, remote, branch)? {
+            let since = match atelier_core::git::remote_tip(&repo.root, remote, branch)? {
                 Some(tip) => tip,
                 None => repo.base_tip.clone(),
             };
@@ -458,17 +458,17 @@ fn claim_push(
     remote: &str,
     commit: &str,
     branch: &str,
-    skip: &atelier_app::Skip,
+    skip: &atelier_core::Skip,
 ) -> Result<()> {
     let to = format!("{commit}:refs/heads/{branch}");
     let lease = format!("--force-with-lease=refs/heads/{branch}:");
-    let mut command = atelier_app::git::git(root);
+    let mut command = atelier_core::git::git(root);
     command
         .args(["push", "--porcelain", &lease, remote, &to])
         .stdin(std::process::Stdio::null());
     match skip.reason() {
-        Some(reason) => command.env(atelier_app::SKIP_VARIABLE, reason),
-        None => command.env_remove(atelier_app::SKIP_VARIABLE),
+        Some(reason) => command.env(atelier_core::SKIP_VARIABLE, reason),
+        None => command.env_remove(atelier_core::SKIP_VARIABLE),
     };
     let output = command.output().context("cannot start git push")?;
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -617,7 +617,7 @@ fn submit_records(repo: &mut Repo) -> Result<Outcome> {
     // The forge's copy is ahead, as after a reviewer pushed its file: a
     // submit from here would publish a branch without it.
     if let Some(remote) = repo.remote().map(str::to_string) {
-        let fetched = atelier_app::git::remote_tip(&repo.root, &remote, &branch)?;
+        let fetched = atelier_core::git::remote_tip(&repo.root, &remote, &branch)?;
         let head = git::head(&repo.root)?;
         if let Some(tip) = fetched.filter(|tip| *tip != head) {
             if !git::is_ancestor(&repo.root, &tip, &head)? {
@@ -670,7 +670,7 @@ fn planned_here(repo: &mut Repo) -> Result<Result<Vec<(String, u32)>, Outcome>> 
     // A plan on its own branch is submitted with nothing changed yet, as
     // after `start --mission`.
     let own = match repo.named() {
-        Some(Named::Record(id)) if !atelier_app::plan::agreed(repo, &id)? => Some(id),
+        Some(Named::Record(id)) if !atelier_core::plan::agreed(repo, &id)? => Some(id),
         _ => None,
     };
     if let Some(id) = own.as_ref().filter(|id| !ids.contains(id)) {
@@ -726,7 +726,7 @@ fn planned_here(repo: &mut Repo) -> Result<Result<Vec<(String, u32)>, Outcome>> 
 
 /// The round of plan review a submit of `dir`'s plan opens: the latest
 /// round while a review of it has no verdict, else the next.
-fn next_round(dir: &atelier_records::MissionDir) -> u32 {
+fn next_round(dir: &atelier_core::records::MissionDir) -> u32 {
     let latest = dir.reviews.iter().map(|r| r.name.round).max().unwrap_or(0);
     let open = (dir.reviews.iter()).any(|r| r.name.round == latest && r.review.verdict.is_none());
     match latest > 0 && open {

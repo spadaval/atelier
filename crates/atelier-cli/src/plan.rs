@@ -1,23 +1,23 @@
-//! The planner's commands besides `ready` (`atelier_app::ready`): `new`,
+//! The planner's commands besides `ready` (`atelier_core::ready`): `new`,
 //! `set`, `drop` and `close`. Each reads and writes records in the checkout
 //! it runs in, on the branch the change belongs on, validates what it
-//! writes (`atelier_app::plan`), commits nothing, and ends with the Git
+//! writes (`atelier_core::plan`), commits nothing, and ends with the Git
 //! command that commits what it wrote.
 
 use crate::commands::Outcome;
 use crate::output;
 use anyhow::{anyhow, Result};
-use atelier_app::acts::{check, settle_refusals, Act, MissionFacts, Refusal, PLANNED, STARTED};
-use atelier_app::plan::{
-    agreed, drop_mission, is_mission, misplaced, planned_facts, save, save_with, Belongs,
-};
-use atelier_app::repo::{item_dir, mission_path};
-use atelier_app::{refused as refused_act, Located, Refused, Repo};
-use atelier_core::{
+use atelier_core::acts::{check, settle_refusals, Act, MissionFacts, Refusal, PLANNED, STARTED};
+use atelier_core::model::{
     Finding, FindingName, Item, ItemSchema, Mission, MissionSchema, MissionStatus, Priority,
     SchemaVersion, Settlement, Status, Thread, Threads,
 };
-use atelier_records::{put_first, validate_id, ReviewFile};
+use atelier_core::plan::{
+    agreed, drop_mission, is_mission, misplaced, planned_facts, save, save_with, Belongs,
+};
+use atelier_core::records::{put_first, validate_id, ReviewFile};
+use atelier_core::repo::{item_dir, mission_path};
+use atelier_core::{refused as refused_act, Located, Refused, Repo};
 
 const ITEM_BODY: &str = "\n## Goal\n\n## Done when\n\n## Scope\n";
 const MISSION_BODY: &str =
@@ -437,7 +437,7 @@ fn settle(repo: &mut Repo, command: &str, name: &str, how: Settle) -> Result<Out
     };
     let located = repo.locate_planned(id)?;
     let Some(record) = located.record() else {
-        let none = Refusal::Unmet(vec![atelier_app::acts::Condition::NoFinding(finding)]);
+        let none = Refusal::Unmet(vec![atelier_core::acts::Condition::NoFinding(finding)]);
         return Ok(Outcome::Refused(output::settle_refused(
             command,
             name,
