@@ -1,20 +1,14 @@
 import type { ActRequest } from "../api/ActRequest";
 import type { ActResponse } from "../api/ActResponse";
 import type { ApiError } from "../api/ApiError";
-import type { Outcome } from "../api/Outcome";
-import type { Question } from "../api/Question";
 import type { SessionRequest } from "../api/SessionRequest";
 import type { SessionResponse } from "../api/SessionResponse";
 
 /** The header the server requires on an act or a session; a page of another site cannot send it. */
 export const APP_HEADER = "x-atelier-desk";
 
-export function readyRequest(repo: string, mission: string): ActRequest {
-  return { act: "ready", repo, ids: [mission] };
-}
-
-export function decideRequest(repo: string, item: string, answer: string, settle: Outcome | null): ActRequest {
-  return { act: "decide", repo, id: item, answer, settle };
+export function stopRequest(repo: string, mission: string, reason: string): ActRequest {
+  return { act: "stop", repo, id: mission, reason };
 }
 
 export function sessionRequest(repo: string, mission: string): SessionRequest {
@@ -56,22 +50,4 @@ export const startSession = (body: SessionRequest, fetcher?: typeof fetch) => se
 /** Whether a sent control has finished with nothing left to do: the act was done or the session started. */
 export function succeeded(sent: Sent<ActResponse> | Sent<SessionResponse>): boolean {
   return sent.state === "answered" && (sent.response.result === "done" || sent.response.result === "started");
-}
-
-/**
- * An item's questions, each with the answer the Desk gave and no commit
- * holds yet, where there is one. The server knows a pending answer by its
- * place among the item's decisions; a page is sent the pending answers in
- * order, so each is matched to the first unanswered question of the same
- * item with the same text and finding.
- */
-export function withPending(questions: Question[], pending: Question[]): { question: Question; pending: Question | null }[] {
-  const left = [...pending];
-  return questions.map((question) => {
-    if (question.answer !== null) return { question, pending: null };
-    const at = left.findIndex((p) => p.item === question.item && p.question === question.question && p.finding === question.finding);
-    if (at < 0) return { question, pending: null };
-    const [match] = left.splice(at, 1);
-    return { question, pending: match };
-  });
 }

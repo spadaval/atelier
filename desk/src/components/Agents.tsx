@@ -52,7 +52,7 @@ export function T3Notice({ t3 }: { t3: T3State }) {
   );
 }
 
-function AgentRow({ repo, agent, known }: { repo: string; agent: Agent; known: boolean }) {
+export function AgentRow({ repo, agent, known }: { repo: string; agent: Agent; known: boolean }) {
   const thread = agent.thread;
   return (
     <div className="agent" data-testid="agent">

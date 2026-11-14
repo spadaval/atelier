@@ -30,17 +30,17 @@ export async function load(page: Page, path: string) {
 }
 
 /**
- * The Desk's only act controls are Say go, the answer form and Start a
- * planning session: no other button names an act, and no form but an
- * answer's is on the page.
+ * The Desk's only act controls are a plan's stop and Start a planning
+ * session: no other button names an act, and no form but the stop's is on
+ * the page.
  */
 export async function expectOnlyTheActs(page: Page) {
   // A button that only opens or folds part of the page is no act.
   const names = await page
     .getByRole("button")
     .evaluateAll((buttons) => buttons.filter((b) => !b.hasAttribute("aria-expanded")).map((b) => (b.getAttribute("aria-label") ?? b.textContent ?? "").trim()));
-  const acts = names.filter((n) => /go|answer|decide|ready|start|session|close|drop|merge|approve|submit|review|note|transition|history|activity/i.test(n));
-  for (const name of acts) expect(name).toMatch(/^(Say go|Answer the question on [a-z0-9-]+|Start a planning session)$/);
+  const acts = names.filter((n) => /go|answer|decide|ready|start|session|close|drop|merge|approve|submit|review|note|transition|history|activity|stop/i.test(n));
+  for (const name of acts) expect(name).toMatch(/^(Stop this plan|Yes, stop it|Start a planning session|Yes, start it)$/);
   const forms = await page.locator("form").evaluateAll((all) => all.map((f) => f.getAttribute("aria-label") ?? ""));
-  for (const form of forms) expect(form).toMatch(/^Answer on [a-z0-9-]+$/);
+  for (const form of forms) expect(form).toBe("Stop this plan");
 }

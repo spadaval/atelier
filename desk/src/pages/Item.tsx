@@ -2,14 +2,11 @@ import { CircleCheck, Square } from "lucide-react";
 import { Link, useParams } from "react-router";
 import type { ItemPage } from "../api/ItemPage";
 import type { MissionPage } from "../api/MissionPage";
-import { AnswerForm } from "../components/Acts";
 import { AgentsCard, Identity } from "../components/Agents";
 import { Crumbs } from "../components/Crumbs";
-import { PendingMark, questionKey } from "../components/Questions";
 import { itemFacts } from "../components/ItemLine";
 import { ReviewList } from "../components/Reviews";
 import { Card, Empty, ErrorBanner, Markdown, Priority, Skeleton, StatusGlyph } from "../components/ui";
-import { withPending } from "../lib/acts";
 import { api, to, useData } from "../lib/api";
 import { recordPath } from "../lib/links";
 import { dateTime, shortCommit, shortDate, statusName, statusTitle } from "../lib/words";
@@ -25,9 +22,6 @@ function ItemDetail({ repo, page }: { repo: string; page: ItemPage }) {
   const md = (text: string) => <Markdown text={text} from={from} docHref={docHref} />;
   const facts = itemFacts(row);
   const ticked = page.done_when.filter((d) => d.ticked).length;
-  const decisions = withPending(page.decisions, page.pending_answers);
-  // Only the oldest open question can be answered; one answered from the Desk is no longer open.
-  const answerable = decisions.findIndex((d) => d.question.answer === null && d.pending === null);
   return (
     <div className="issue">
       <article className="issue-main">
@@ -91,45 +85,29 @@ function ItemDetail({ repo, page }: { repo: string; page: ItemPage }) {
             <h2>
               Questions and decisions <span className="tally">{page.decisions.length}</span>
             </h2>
+            <p className="muted">Asked before questions went to the thread that started an item; kept as the record has them.</p>
             <ol className="decisions">
-              {decisions.map(({ question: q, pending }, at) => {
-                const answer = q.answer ?? pending?.answer ?? null;
-                const outcome = q.answer ? q.outcome : (pending?.outcome ?? null);
-                return (
-                  <li key={at} data-testid="decision">
-                    <div className="q">{q.question}</div>
-                    {answer ? (
-                      <div className="a">
-                        {answer.text}
-                        {outcome ? <span className="tag">{outcome === "defer" ? "deferred" : "no action"}</span> : null}
-                        {pending ? <PendingMark /> : null}
-                      </div>
-                    ) : (
-                      <div className="a open">Not answered yet.</div>
-                    )}
-                    <div className="sub">
-                      {q.finding ? <>About finding {q.finding}. </> : null}
-                      {answer ? (
-                        <>
-                          Answered by <Identity id={answer.by} />
-                          {pending ? ". It is written in the item's checkout, and its implementer's next submit commits it." : null}
-                        </>
-                      ) : null}
+              {page.decisions.map((q, at) => (
+                <li key={at} data-testid="decision">
+                  <div className="q">{q.question}</div>
+                  {q.answer ? (
+                    <div className="a">
+                      {q.answer.text}
+                      {q.outcome ? <span className="tag">{q.outcome === "defer" ? "deferred" : "no action"}</span> : null}
                     </div>
-                    {at === answerable ? (
-                      page.can_decide ? (
-                        <AnswerForm key={questionKey(q)} repo={repo} item={row.id} finding={q.finding} />
-                      ) : (
-                        <p className="sub">
-                          {page.decide_at === null
-                            ? "It can be answered here once a checkout has the item's branch out, since the answer is written there."
-                            : "You cannot answer it from here now."}
-                        </p>
-                      )
+                  ) : (
+                    <div className="a open">Never answered.</div>
+                  )}
+                  <div className="sub">
+                    {q.finding ? <>About finding {q.finding}. </> : null}
+                    {q.answer ? (
+                      <>
+                        Answered by <Identity id={q.answer.by} />
+                      </>
                     ) : null}
-                  </li>
-                );
-              })}
+                  </div>
+                </li>
+              ))}
             </ol>
           </section>
         ) : null}

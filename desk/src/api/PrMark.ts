@@ -3,7 +3,7 @@
 /**
  * A pull request on the forge, as `gh pr list` gives it.
  */
-export type PrMark = { number: bigint, url: string,
+export type PrMark = { number: number, url: string,
 /**
  * `OPEN`, `CLOSED` or `MERGED`.
  */

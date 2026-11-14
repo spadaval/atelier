@@ -77,7 +77,7 @@ impl Fetches {
             remote: remote.map(str::to_string),
             at: last_fetched(dir),
             error: kept.and_then(|k| k.error.clone()),
-            every_seconds: self.every,
+            every_seconds: u32::try_from(self.every).unwrap_or(u32::MAX),
         }
     }
 
@@ -115,7 +115,7 @@ fn last_fetched(dir: &Path) -> Option<String> {
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Listed {
-    number: u64,
+    number: u32,
     url: String,
     state: String,
     head_ref_name: String,

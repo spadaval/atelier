@@ -1,10 +1,9 @@
-import { CircleCheck, MessagesSquare, TriangleAlert } from "lucide-react";
+import { CircleCheck, MessagesSquare, OctagonX, TriangleAlert } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
 import type { ActResponse } from "../api/ActResponse";
 import type { MissionPage } from "../api/MissionPage";
-import type { Outcome } from "../api/Outcome";
 import type { SessionResponse } from "../api/SessionResponse";
-import { act, decideRequest, readyRequest, sessionRequest, startSession, succeeded, type Sent } from "../lib/acts";
+import { act, sessionRequest, startSession, stopRequest, succeeded, type Sent } from "../lib/acts";
 import { reloadAll } from "../lib/api";
 import { shortCommit } from "../lib/words";
 import { ThreadTitle } from "./Agents";
@@ -76,138 +75,99 @@ function Confirm({ label, children, yes, onYes, onNo }: { label: string; childre
 }
 
 /**
- * Say go on a draft mission: `ready` with the mission's ID. Shown while the
- * mission is a draft; the button only when the server says go would be
- * accepted. After it is done every page is read again, so this page shows
- * the mission ready, and this keeps the act's own words beneath.
+ * Stop a mission. A proposed plan is stopped here: the Desk writes the
+ * drop with his reason, commits it, pushes the plan's branch and closes its
+ * pull request, and every page is read again. An open mission's stop is
+ * published by a record-only branch that merges, which the Desk does not
+ * make yet (atelier-yclc), so its page gives the commands; a stop someone
+ * has written shows as pending until that branch merges.
  */
-export function SayGo({ repo, page }: { repo: string; page: MissionPage }) {
+export function StopControl({ repo, page }: { repo: string; page: MissionPage }) {
   const [sent, setSent] = useState<Sent<ActResponse>>({ state: "idle" });
+  const [reason, setReason] = useState("");
+  const id = useId();
   const m = page.mission;
-  const draft = m.status === "draft";
-  if (!draft && sent.state !== "answered") return null;
-  const go = async () => {
+  const stopped = sent.state === "answered" && sent.response.result === "done";
+  if (m.state === "stop_pending") {
+    return (
+      <div className="go-note" data-testid="stop">
+        <p>
+          <b>A stop is written and not published yet.</b>{" "}
+          {page.stop_on
+            ? `It is on ${page.stop_on}, and counts once that branch merges.`
+            : page.pull_request
+              ? `It is pushed; it counts once pull request #${page.pull_request.number} is closed.`
+              : "It counts once it is pushed."}
+        </p>
+      </div>
+    );
+  }
+  if (m.state === "open") {
+    return (
+      <details className="stop-how" data-testid="stop">
+        <summary>How to stop this mission</summary>
+        <p className="muted">It is agreed, so its stop reaches the base by a branch that merges. The Desk does not make that branch yet; in a checkout of {repo}, run:</p>
+        <pre className="commands">{page.stop_commands.join("\n")}</pre>
+        <p className="muted">From the push of that branch this page shows the stop as pending, and once it merges, as stopped.</p>
+      </details>
+    );
+  }
+  if (m.state !== "proposed" && !stopped) return null;
+  const send = async () => {
     setSent({ state: "sending" });
-    const result = await act(readyRequest(repo, m.id));
+    const result = await act(stopRequest(repo, m.id, reason.trim()));
     if (succeeded(result)) await reloadAll();
     setSent(result);
   };
-  const ask = sent.state === "idle" || (sent.state !== "confirming" && sent.state !== "sending" && !succeeded(sent));
+  const sending = sent.state === "sending";
   return (
-    <div className={draft ? "go-note" : "go-done"} data-testid="say-go">
-      {draft ? (
+    <div className="go-note" data-testid="stop">
+      {!stopped ? (
         <p>
-          <b>This mission is a draft.</b> Agents start its items only after you say go.
-          {!page.can_ready ? " Its plan cannot be made ready yet, so there is no go to give." : null}
+          <b>This plan is proposed.</b> It merges once two reviewers approve it, and its items start after that. Stop it if it should not go ahead.
+          {!page.can_stop ? " The Desk cannot publish a stop in this repository, so stop it from its planner's checkout with atelier drop." : null}
         </p>
       ) : null}
-      {draft && page.can_ready && ask ? (
+      {page.can_stop && (sent.state === "idle" || sent.state === "failed" || (sent.state === "answered" && !stopped)) ? (
         <div className="row act-bar">
-          <button type="button" className="btn primary" onClick={() => setSent({ state: "confirming" })}>
-            Say go
+          <button type="button" className="btn" onClick={() => setSent({ state: "confirming" })}>
+            <OctagonX size={14} aria-hidden /> Stop this plan
           </button>
         </div>
       ) : null}
-      {sent.state === "confirming" ? (
-        <Confirm label="Confirm saying go" yes="Yes, say go" onYes={() => void go()} onNo={() => setSent({ state: "idle" })}>
-          Say go on this mission? Your go is committed to the repository, and agents may then start its ready items.
-        </Confirm>
-      ) : null}
-      {sent.state === "sending" ? (
-        <p className="muted" role="status">
-          Saying go…
-        </p>
+      {sent.state === "confirming" || sending ? (
+        <form
+          className="answer-form"
+          aria-label="Stop this plan"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (reason.trim() !== "" && !sending) void send();
+          }}
+        >
+          <label htmlFor={`${id}-reason`}>Why, in one line. It is written into the mission's Result.</label>
+          <input id={`${id}-reason`} className="field" type="text" autoFocus value={reason} disabled={sending} onChange={(event) => setReason(event.target.value)} />
+          <p className="muted">The Desk drops the mission on its branch, pushes it and closes its pull request. Its planner and reviewers are refused from then on.</p>
+          <div className="row">
+            <button type="submit" className="btn primary" disabled={reason.trim() === "" || sending}>
+              {sending ? "Stopping…" : "Yes, stop it"}
+            </button>
+            <button type="button" className="btn ghost" disabled={sending} onClick={() => setSent({ state: "idle" })}>
+              Not yet
+            </button>
+          </div>
+        </form>
       ) : null}
       <ActOutcome
         sent={sent}
-        refusedTitle="Your go was refused."
+        refusedTitle="The stop was refused."
         done={(text, commit) => (
           <>
-            <b>You said go{commit ? `, committed as ${shortCommit(commit)}` : ""}.</b>
+            <b>You stopped this plan{commit ? `, committed as ${shortCommit(commit)}` : ""}.</b>
             <p className="act-text">{text}</p>
           </>
         )}
       />
     </div>
-  );
-}
-
-/**
- * The answer to an item's oldest open question, with the settlement of the
- * finding it is about when it names one: `decide`. After it is done every
- * page is read again, `onAnswered` runs with the act's text and the answer
- * sent, and the form
- * closes empty: the page shows the answer as pending, and the next question
- * of the item, which may be shown in the same place, starts with none.
- */
-export function AnswerForm({ repo, item, finding, onAnswered }: { repo: string; item: string; finding: string | null; onAnswered?: (text: string, answer: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const [answer, setAnswer] = useState("");
-  const [settle, setSettle] = useState<Outcome | null>(null);
-  const [sent, setSent] = useState<Sent<ActResponse>>({ state: "idle" });
-  const id = useId();
-  const sending = sent.state === "sending";
-  if (!open) {
-    return (
-      <div className="act-bar">
-        <button type="button" className="btn sm" onClick={() => setOpen(true)} aria-label={`Answer the question on ${item}`}>
-          Answer
-        </button>
-      </div>
-    );
-  }
-  const submit = async () => {
-    setSent({ state: "sending" });
-    const result = await act(decideRequest(repo, item, answer.trim(), finding ? settle : null));
-    if (succeeded(result)) {
-      await reloadAll();
-      if (result.state === "answered" && result.response.result === "done") onAnswered?.(result.response.text, answer.trim());
-      setOpen(false);
-      setAnswer("");
-      setSettle(null);
-      setSent({ state: "idle" });
-      return;
-    }
-    setSent(result);
-  };
-  const settlements: [Outcome | null, string][] = [
-    [null, "Leave it to the implementer"],
-    ["defer", "Defer it"],
-    ["no_action", "No action needed"],
-  ];
-  return (
-    <form
-      className="answer-form"
-      aria-label={`Answer on ${item}`}
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (answer.trim() !== "" && !sending) void submit();
-      }}
-    >
-      <label htmlFor={`${id}-answer`}>Your answer, in one line</label>
-      <input id={`${id}-answer`} className="field" type="text" autoFocus value={answer} disabled={sending} onChange={(event) => setAnswer(event.target.value)} />
-      {finding ? (
-        <fieldset disabled={sending}>
-          <legend>
-            What becomes of finding <span className="mono">{finding}</span>
-          </legend>
-          {settlements.map(([value, words]) => (
-            <label key={value ?? "none"} className="choice">
-              <input type="radio" name={`${id}-settle`} checked={settle === value} onChange={() => setSettle(value)} /> {words}
-            </label>
-          ))}
-        </fieldset>
-      ) : null}
-      <div className="row">
-        <button type="submit" className="btn primary" disabled={answer.trim() === "" || sending}>
-          {sending ? "Sending…" : "Send the answer"}
-        </button>
-        <button type="button" className="btn ghost" disabled={sending} onClick={() => setOpen(false)}>
-          Cancel
-        </button>
-      </div>
-      <ActOutcome sent={sent} refusedTitle="Your answer was refused." done={(text) => <p className="act-text">{text}</p>} />
-    </form>
   );
 }
 

@@ -44,7 +44,7 @@ pub struct FetchMark {
     /// Why the Desk's last fetch failed.
     pub error: Option<String>,
     /// How often the Desk fetches, in seconds; `0` when it does not.
-    pub every_seconds: u64,
+    pub every_seconds: u32,
 }
 
 /// `GET /api/repos/{repo}/missions`.
@@ -100,7 +100,7 @@ pub enum MissionState {
 /// A pull request on the forge, as `gh pr list` gives it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 pub struct PrMark {
-    pub number: u64,
+    pub number: u32,
     pub url: String,
     /// `OPEN`, `CLOSED` or `MERGED`.
     pub state: String,

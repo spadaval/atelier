@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { answers, codexChild, live, secondQuestion, type World } from "./fixtures";
+import { answers, codexChild, live, planPr, type World } from "./fixtures";
 import { expectFits, expectOnlyTheActs, load, serve } from "./helpers";
 
 let world: World;
@@ -97,186 +97,65 @@ test("the inbox lists the threads waiting on a person, each linking to T3 Code",
   await expect(waiting.getByRole("link", { name: "atelier-aab1", exact: true })).toHaveAttribute("href", "/r/atelier/item/atelier-aab1");
 });
 
-test("Say go asks once, sends ready with the app's header, and the page then shows the mission ready", async ({ page }) => {
+test("a proposed plan's page shows its branch, pull request and last round, and Stop asks for a reason before it sends", async ({ page }) => {
   await load(page, "/r/atelier/mission/atelier-295u");
-  await expect(page.getByTestId("status")).toHaveText("Draft");
-  await expect(page.getByRole("link", { name: "Inbox" })).toContainText("6");
-  await page.getByRole("button", { name: "Say go" }).click();
-  const confirm = page.getByRole("group", { name: "Confirm saying go" });
-  await expect(confirm).toBeVisible();
-  expect(world.sent).toEqual([]);
-  await confirm.getByRole("button", { name: "Yes, say go" }).click();
-  await expect(page.getByTestId("status")).toHaveText("Open");
-  expect(world.sent).toEqual([{ path: "/api/act", header: "1", body: { act: "ready", repo: "atelier", ids: ["atelier-295u"] } }]);
-  const done = page.getByTestId("done");
-  await expect(done).toContainText("You said go, committed as 76cbb6c0.");
-  await expect(done).toContainText("Made ready, as sumeet said: atelier-295u.");
-  await expect(page.getByRole("button", { name: "Say go" })).toHaveCount(0);
-  await expect(page.locator(".paper-head")).not.toContainText("This mission is a draft");
-  // The rest of the app is read again too: the sidebar's inbox count drops the draft.
+  await expect(page.getByTestId("status")).toHaveText("Proposed");
+  await expect(page.getByTestId("read-from")).toHaveText("Read from origin/atelier-295u");
+  await expect(page.locator(".paper-head").getByTestId("pull-request")).toHaveAttribute("href", planPr.url);
+  await expect(page.getByTestId("round")).toContainText("Round 1: approved (gpt-6.1-sol), changes asked (grok-4.6).");
   await expect(page.getByRole("link", { name: "Inbox" })).toContainText("5");
+  await page.getByRole("button", { name: "Stop this plan" }).click();
+  const form = page.getByRole("form", { name: "Stop this plan" });
+  await expect(form.getByRole("button", { name: "Yes, stop it" })).toBeDisabled();
+  expect(world.sent).toEqual([]);
+  await expectOnlyTheActs(page);
+  await form.getByRole("textbox").fill("Not this month");
+  await form.getByRole("button", { name: "Yes, stop it" }).click();
+  await expect(page.getByTestId("status")).toHaveText("Stopped");
+  expect(world.sent).toEqual([{ path: "/api/act", header: "1", body: { act: "stop", repo: "atelier", id: "atelier-295u", reason: "Not this month" } }]);
+  const done = page.getByTestId("done");
+  await expect(done).toContainText("You stopped this plan, committed as 76cbb6c0.");
+  await expect(done).toContainText("closed its pull request");
+  await expect(page.getByRole("button", { name: "Stop this plan" })).toHaveCount(0);
+  await expect(page.locator(".banner.quiet")).toContainText("Not this month");
+  // The rest of the app is read again too: the inbox no longer lists the plan.
+  await expect(page.getByRole("link", { name: "Inbox" })).toContainText("4");
 });
 
-test("Say go is offered only where go would be accepted, and Not yet sends nothing", async ({ page }) => {
-  await load(page, "/r/atelier/mission/atelier-z4cr");
-  await expect(page.getByRole("button", { name: "Say go" })).toHaveCount(0);
+test("Not yet sends no stop, and an open mission offers no stop act, only the commands that stop it", async ({ page }) => {
   await load(page, "/r/atelier/mission/atelier-295u");
-  await page.getByRole("button", { name: "Say go" }).click();
+  await page.getByRole("button", { name: "Stop this plan" }).click();
   await page.getByRole("button", { name: "Not yet" }).click();
-  await expect(page.getByRole("button", { name: "Say go" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Stop this plan" })).toBeVisible();
   expect(world.sent).toEqual([]);
+
+  await load(page, "/r/atelier/mission/atelier-z4cr");
+  await expect(page.getByTestId("status")).toHaveText("Open");
+  await expect(page.getByRole("button", { name: "Stop this plan" })).toHaveCount(0);
+  const how = page.getByTestId("stop");
+  await how.getByText("How to stop this mission").click();
+  await expect(how.locator("pre")).toContainText('atelier drop atelier-z4cr --reason "<why>"');
+  await expect(how.locator("pre")).toContainText("atelier merge");
+  await expectFits(page);
 });
 
-test("a refused go shows the refusal's text and next step as given, and nothing else changes", async ({ page }) => {
+test("a stop someone else wrote shows as pending, naming the branch it waits on", async ({ page }) => {
+  await load(page, "/r/atelier/mission/atelier-st0p");
+  await expect(page.getByTestId("status")).toHaveText("Stop not published yet");
+  await expect(page.getByTestId("stop")).toContainText("It is on origin/backlog/stop-atelier-st0p, and counts once that branch merges.");
+  await expect(page.getByRole("button", { name: "Stop this plan" })).toHaveCount(0);
+});
+
+test("a refused stop shows the refusal's text and next step as given, and nothing else changes", async ({ page }) => {
   await load(page, "/r/atelier/mission/atelier-k9rf");
-  await page.getByRole("button", { name: "Say go" }).click();
-  await page.getByRole("button", { name: "Yes, say go" }).click();
+  await page.getByRole("button", { name: "Stop this plan" }).click();
+  await page.getByRole("textbox").fill("Changed my mind");
+  await page.getByRole("button", { name: "Yes, stop it" }).click();
   const refusal = page.getByRole("alert");
-  await expect(refusal).toContainText(answers.goRefused.text);
-  await expect(refusal).toContainText(answers.goRefused.next);
-  await expect(refusal).toContainText(answers.goRefused.rules[0]);
-  await expect(page.getByTestId("status")).toHaveText("Draft");
-  await expect(page.getByRole("button", { name: "Say go" })).toBeVisible();
-  await expectFits(page);
-});
-
-test("an answer on an item's page is sent with its settlement and then shows as not yet committed", async ({ page }) => {
-  await load(page, "/r/atelier/item/atelier-uwxy");
-  const decision = page.getByTestId("decision").first();
-  await expect(decision).toContainText("Not answered yet.");
-  await decision.getByRole("button", { name: "Answer the question on atelier-uwxy" }).click();
-  const form = page.getByRole("form", { name: "Answer on atelier-uwxy" });
-  await expect(form.getByRole("button", { name: "Send the answer" })).toBeDisabled();
-  await form.getByLabel("Your answer, in one line").fill("Yes, key it by HEAD too.");
-  await form.getByLabel("Defer it").check();
-  await form.getByRole("button", { name: "Send the answer" }).click();
-  await expect(decision.getByTestId("pending")).toHaveText("Answered from the Desk, not committed yet");
-  expect(world.sent).toEqual([
-    { path: "/api/act", header: "1", body: { act: "decide", repo: "atelier", id: "atelier-uwxy", answer: "Yes, key it by HEAD too.", settle: "defer" } },
-  ]);
-  await expect(decision).toContainText("Yes, key it by HEAD too.");
-  await expect(decision).toContainText("deferred");
-  await expect(decision).not.toContainText("Not answered yet.");
-  await expect(page.getByRole("form")).toHaveCount(0);
-  await expectFits(page);
-
-  // The mission's page shows it pending too, and no longer waiting on you.
-  await load(page, "/r/atelier/mission/atelier-z4cr");
-  const decided = page.locator(".prose-sect").filter({ has: page.getByRole("heading", { name: /^Decided on the way/ }) });
-  await expect(decided).toContainText("Yes, key it by HEAD too.");
-  await expect(decided.getByTestId("pending")).toBeVisible();
-  await expect(page.getByTestId("question")).toHaveCount(1);
-  await expect(page.getByTestId("question")).toContainText(secondQuestion);
-});
-
-/** Reads the pages on screen again, as the app does when the page becomes visible. */
-async function poll(page: Page) {
-  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
-}
-
-test("after an answer the item's next question gets an empty, closed form", async ({ page }) => {
-  await load(page, "/r/atelier/mission/atelier-z4cr");
-  const waiting = page.getByTestId("question");
-  await waiting.getByRole("button", { name: "Answer the question on atelier-uwxy" }).click();
-  const form = page.getByRole("form", { name: "Answer on atelier-uwxy" });
-  await form.getByLabel("Your answer, in one line").fill("Yes, key it by HEAD too.");
-  await form.getByLabel("Defer it").check();
-  await form.getByRole("button", { name: "Send the answer" }).click();
-  await expect(waiting).toHaveCount(1);
-  await expect(waiting).toContainText(secondQuestion);
-  await expect(page.getByRole("form")).toHaveCount(0);
-  await expect(page.getByTestId("done")).toHaveCount(0);
-  await waiting.getByRole("button", { name: "Answer the question on atelier-uwxy" }).click();
-  await expect(form.getByLabel("Your answer, in one line")).toHaveValue("");
-  await expect(form.getByRole("radio")).toHaveCount(0);
-  await expect(form.getByRole("button", { name: "Send the answer" })).toBeDisabled();
-  await form.getByLabel("Your answer, in one line").fill("No.");
-  await form.getByRole("button", { name: "Send the answer" }).click();
-  await expect(waiting).toHaveCount(0);
-  expect(world.sent.map((s) => s.body)).toEqual([
-    { act: "decide", repo: "atelier", id: "atelier-uwxy", answer: "Yes, key it by HEAD too.", settle: "defer" },
-    { act: "decide", repo: "atelier", id: "atelier-uwxy", answer: "No.", settle: null },
-  ]);
-  await load(page, "/r/atelier/item/atelier-uwxy");
-  await expect(page.getByTestId("decision").getByTestId("pending")).toHaveCount(2);
-});
-
-test("an open answer form does not carry over to a question a poll put in its place", async ({ page }) => {
-  await load(page, "/inbox");
-  const atelier = page.getByRole("region", { name: "atelier" });
-  await atelier.getByRole("button", { name: "Answer the question on atelier-uwxy" }).click();
-  await atelier.getByRole("form", { name: "Answer on atelier-uwxy" }).getByLabel("Your answer, in one line").fill("Delete it.");
-  world.answerElsewhere("atelier-uwxy", "Yes.");
-  await poll(page);
-  const line = atelier.getByTestId("question").filter({ hasText: "atelier-uwxy" });
-  await expect(line).toContainText(secondQuestion);
-  await expect(atelier.getByRole("form")).toHaveCount(0);
-  await line.getByRole("button", { name: "Answer the question on atelier-uwxy" }).click();
-  await expect(atelier.getByLabel("Your answer, in one line")).toHaveValue("");
-  expect(world.sent).toEqual([]);
-});
-
-test("an open answer form does not follow the human to another item's page", async ({ page }) => {
-  // Two items that link to each other, each with an open question at the same place.
-  const other = world.items["atelier-u1ko"];
-  other.can_decide = true;
-  other.decide_at = "/clones/atelier-u1ko";
-  other.decisions = [{ item: "atelier-u1ko", question: "May the old workspace go before the runbook is tried?", finding: null, answer: null, outcome: null }];
-  other.row.blockers = [{ id: "atelier-uwxy", status: "building" }];
-  world.items["atelier-uwxy"].caused_by = "atelier-u1ko";
-  await load(page, "/r/atelier/item/atelier-u1ko");
-  // Client-side navigation, so the item read first is still in the app's cache when it comes back.
-  await page.locator('a.doc-link[href="/r/atelier/item/atelier-uwxy"]').click();
-  await page.getByRole("button", { name: "Answer the question on atelier-uwxy" }).click();
-  await page.getByLabel("Your answer, in one line").fill("Yes, key it by HEAD too.");
-  await page.locator('.kv a[href="/r/atelier/item/atelier-u1ko"]').click();
-  await expect(page.getByTestId("decision").first()).toContainText("May the old workspace go");
-  await expect(page.getByRole("form")).toHaveCount(0);
-  await page.getByRole("button", { name: "Answer the question on atelier-u1ko" }).click();
-  await expect(page.getByLabel("Your answer, in one line")).toHaveValue("");
-  expect(world.sent).toEqual([]);
-});
-
-test("the inbox drops an answer's not-committed mark once a commit holds it", async ({ page }) => {
-  await load(page, "/inbox");
-  const atelier = page.getByRole("region", { name: "atelier" });
-  await atelier.getByRole("button", { name: "Answer the question on atelier-uwxy" }).click();
-  await atelier.getByLabel("Your answer, in one line").fill("Yes.");
-  await atelier.getByRole("button", { name: "Send the answer" }).click();
-  await expect(atelier.getByTestId("answered").getByTestId("pending")).toBeVisible();
-  // A poll while the answer is still pending keeps it.
-  await poll(page);
-  await expect(atelier.getByTestId("answered")).toHaveCount(1);
-  world.commitAnswers("atelier-uwxy");
-  await poll(page);
-  await expect(atelier.getByTestId("answered")).toHaveCount(0);
-  await expect(atelier.getByTestId("pending")).toHaveCount(0);
-});
-
-test("an answer from the inbox shows as answered and not committed, and a refused one as given", async ({ page }) => {
-  await load(page, "/inbox");
-  const atelier = page.getByRole("region", { name: "atelier" });
-  await atelier.getByRole("button", { name: "Answer the question on atelier-u1ko" }).click();
-  let form = atelier.getByRole("form", { name: "Answer on atelier-u1ko" });
-  await expect(form.getByRole("radio")).toHaveCount(0);
-  await form.getByLabel("Your answer, in one line").fill("Not yet.");
-  await form.getByRole("button", { name: "Send the answer" }).click();
-  await expect(form.getByRole("alert")).toContainText(answers.answerRefused.text);
-  await expect(form.getByRole("alert")).toContainText(answers.answerRefused.next);
-  await expect(atelier.getByTestId("question")).toHaveCount(2);
-
-  await atelier.getByRole("button", { name: "Answer the question on atelier-uwxy" }).click();
-  form = atelier.getByRole("form", { name: "Answer on atelier-uwxy" });
-  await form.getByLabel("Your answer, in one line").fill("Yes.");
-  await form.getByRole("button", { name: "Send the answer" }).click();
-  const answered = atelier.getByTestId("answered");
-  await expect(answered.getByTestId("pending")).toHaveText("Answered from the Desk, not committed yet");
-  await expect(answered.getByRole("link", { name: /Should the cache key/ })).toHaveAttribute("href", "/r/atelier/item/atelier-uwxy");
-  // The item's next question takes its place, with a closed form.
-  await expect(atelier.getByTestId("question")).toHaveCount(2);
-  await expect(atelier.getByTestId("question").filter({ hasText: "atelier-uwxy" })).toContainText(secondQuestion);
-  await expect(atelier.getByRole("form", { name: "Answer on atelier-uwxy" })).toHaveCount(0);
-  expect(world.sent.at(-1)).toEqual({ path: "/api/act", header: "1", body: { act: "decide", repo: "atelier", id: "atelier-uwxy", answer: "Yes.", settle: null } });
+  await expect(refusal).toContainText(answers.stopRefused.text);
+  await expect(refusal).toContainText(answers.stopRefused.next);
+  await expect(page.getByTestId("status")).toHaveText("Proposed");
+  await expect(page.getByRole("button", { name: "Stop this plan" })).toBeVisible();
   await expectFits(page);
 });
 

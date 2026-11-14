@@ -22,4 +22,4 @@ error: string | null,
 /**
  * How often the Desk fetches, in seconds; `0` when it does not.
  */
-every_seconds: bigint, };
+every_seconds: number, };
