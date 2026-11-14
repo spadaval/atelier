@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-6hb2
 title: 'Release 0.6.0: the branch model, atelier log, and merging through the forge''s pull request'
-status: in_review
+status: changes_requested
 mission: null
 labels: []
 priority: medium
