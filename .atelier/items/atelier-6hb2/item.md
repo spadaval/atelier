@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-6hb2
 title: 'Release 0.6.0: the branch model, atelier log, and merging through the forge''s pull request'
-status: changes_requested
+status: in_review
 mission: null
 labels: []
 priority: medium
@@ -55,3 +55,7 @@ before it starts, so nothing else there names the version.
 Minor, not semver-major: the project is pre-1.0 and 0.5 records read
 unchanged, but commands were removed (`escalate`, `decide`, `new
 --mission`), so a patch release would undersell it.
+
+### Responses
+
+- 1-amhk.1: fixed in 342759dbe. The changelog has an Upgrading from 0.5 section: a `ready` or `open` mission carries on, a `draft` one continues on a branch named for its ID through `submit` and two plan approvals, and `ready` takes items only.
