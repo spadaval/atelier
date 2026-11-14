@@ -10,6 +10,7 @@ priority: medium
 blocked_by:
 - atelier-ni3d
 - atelier-yclc
+- atelier-nl43
 implementers: []
 ready:
   by: sumeet, in conversation on 2026-11-14

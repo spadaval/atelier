@@ -7,8 +7,7 @@ status: ready
 mission: atelier-dy62
 labels: []
 priority: low
-blocked_by:
-- atelier-x5al
+blocked_by: []
 implementers: []
 ready:
   by: sumeet, in conversation on 2026-11-14
@@ -42,4 +41,4 @@ Out: any other rename; `CHANGELOG.md`'s past entries; the wording of old records
 
 ## Context
 
-On 2026-11-14 `Act` and `acts::` occurred 262 times in 19 files under `crates/`, and the word about 76 times in `docs/design.md`, 27 in `docs/architecture/desk.md` and 6 in `docs/product.md`. It waits on atelier-x5al only so that two wide edits do not overlap. The mission's Authority names this item as the one to drop if the mission has to shrink.
+On 2026-11-14 `Act` and `acts::` occurred 262 times in 19 files under `crates/`, and the word about 76 times in `docs/design.md`, 27 in `docs/architecture/desk.md` and 6 in `docs/product.md`. It runs before atelier-x5al, which waits on it so that two wide edits do not overlap: atelier-x5al also waits on atelier-yclc, which has no go yet, and this item does not need it. The mission's Authority names this item as the one to drop if the mission has to shrink.
