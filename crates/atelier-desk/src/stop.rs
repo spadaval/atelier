@@ -13,8 +13,8 @@
 use crate::api::ActResponse;
 use crate::{fetch, read};
 use anyhow::{bail, Context, Result};
-use atelier_app::{git, Done, Refused, Repo, Skip};
-use atelier_core::{MissionStatus, Thread};
+use atelier_core::model::{MissionStatus, Thread};
+use atelier_core::{git, Done, Refused, Repo, Skip};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -116,14 +116,14 @@ pub fn stop(at: &Stopping, id: &str, reason: &str) -> Result<ActResponse> {
     // The plan may have merged since the served repository last fetched:
     // the clone has the forge's base as it is now. An agreed mission's stop
     // reaches the base by a merge, which the Desk does not make yet.
-    if atelier_app::plan::agreed(&mut repo, id)? {
+    if atelier_core::plan::agreed(&mut repo, id)? {
         let _ = fetch::fetch(at.served, &remote);
         return Ok(refused(
             format!("Mission {id} merged since the Desk last fetched, so it is agreed now: its stop reaches the base by a merge, which the Desk does not make yet (atelier-yclc). Nothing changed."),
             Some("Run the commands its page gives in a checkout of the repository.".into()),
         ));
     }
-    let done = match atelier_app::plan::drop_mission(&mut repo, id, reason)? {
+    let done = match atelier_core::plan::drop_mission(&mut repo, id, reason)? {
         Ok(done) => done,
         Err(Refused { rules, text, next }) => {
             return Ok(ActResponse::Refused { rules, text, next })

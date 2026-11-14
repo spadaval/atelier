@@ -1,4 +1,4 @@
-//! Each response, built from `atelier-app`'s views of a repository opened
+//! Each response, built from `atelier-core`'s views of a repository opened
 //! for reading from commits, local branches and the forge's
 //! remote-tracking branches. Nothing here decides what an item's status,
 //! holder or conditions are, or which copy of a record counts: that is the
@@ -6,18 +6,18 @@
 
 use crate::api::*;
 use anyhow::Result;
-use atelier_app::acts::{unsettled, STARTED};
-use atelier_app::plan::plan_changed_at;
-use atelier_app::say::condition_text;
-use atelier_app::{
-    annotate, disputes, entries, git, in_progress, item_view, items_of, list, mission_view, Entry,
-    Filter, Judged, Located, Record, Repo, Skip, LIFECYCLE,
-};
-use atelier_core::{
+use atelier_core::acts::{unsettled, STARTED};
+use atelier_core::model::{
     is_deferred, is_open, Decision, Finding, MissionStatus as Stored, Named, Outcome as Settled,
     Recommendation as Rec, Thread, Time,
 };
-use atelier_records::{CommitReader, ItemDir, MissionDir, ReadError, ReviewFile};
+use atelier_core::plan::plan_changed_at;
+use atelier_core::records::{CommitReader, ItemDir, MissionDir, ReadError, ReviewFile};
+use atelier_core::say::condition_text;
+use atelier_core::{
+    annotate, disputes, entries, git, in_progress, item_view, items_of, list, mission_view, Entry,
+    Filter, Judged, Located, Record, Repo, Skip, LIFECYCLE,
+};
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -553,7 +553,7 @@ fn mission_row(
 fn item_row(entry: &Entry, located: &[Located]) -> Result<ItemRow> {
     let located = located.iter().find(|l| l.id == entry.id);
     let record = located.and_then(Located::record);
-    let conditions = |conditions: &[atelier_app::acts::Condition]| {
+    let conditions = |conditions: &[atelier_core::acts::Condition]| {
         let texts = conditions.iter().map(|c| condition_text(&entry.id, c));
         texts.collect::<Vec<_>>()
     };
@@ -579,7 +579,7 @@ fn item_row(entry: &Entry, located: &[Located]) -> Result<ItemRow> {
         holder: entry.holder.as_ref().map(Thread::to_string),
         reviewer: entry.reviewer.as_ref().map(Thread::to_string),
         cannot_start: match entry.status {
-            atelier_core::Status::Ready => conditions(&entry.unmet),
+            atelier_core::model::Status::Ready => conditions(&entry.unmet),
             _ => Vec::new(),
         },
         needs: conditions(&entry.needs),
@@ -622,11 +622,11 @@ fn review(
         now: f.now.map(Into::into),
         decided: f.decided.map(Into::into),
         settlement: f.settlement.as_ref().map(|settlement| match settlement {
-            atelier_core::Settlement::Taken { item, by } => Settlement::Taken {
+            atelier_core::model::Settlement::Taken { item, by } => Settlement::Taken {
                 item: item.clone(),
                 by: by.to_string(),
             },
-            atelier_core::Settlement::Dropped { by, reason } => Settlement::Dropped {
+            atelier_core::model::Settlement::Dropped { by, reason } => Settlement::Dropped {
                 by: by.to_string(),
                 reason: reason.clone(),
             },
@@ -664,11 +664,11 @@ pub fn item(repo: &mut Repo, id: &str) -> Result<Option<ItemPage>> {
         .responses()?
         .into_iter()
         .map(|response| match response {
-            atelier_core::Response::Fixed { finding, commit } => ResponseLine::Fixed {
+            atelier_core::model::Response::Fixed { finding, commit } => ResponseLine::Fixed {
                 finding: finding.to_string(),
                 commit,
             },
-            atelier_core::Response::Rebutted { finding, fact } => ResponseLine::Rebutted {
+            atelier_core::model::Response::Rebutted { finding, fact } => ResponseLine::Rebutted {
                 finding: finding.to_string(),
                 fact,
             },
@@ -954,7 +954,7 @@ pub fn motion(repo: &mut Repo, name: &str) -> Result<Option<MotionRepo>> {
 pub fn disputed(repo: &mut Repo, name: &str) -> Result<Option<DisputedRepo>> {
     let records = Records::read(repo)?;
     let found = disputes(&records.items, &records.missions, None)?;
-    let reviewer_of = |item: &ItemDir, review: &atelier_core::ReviewName| {
+    let reviewer_of = |item: &ItemDir, review: &atelier_core::model::ReviewName| {
         let file = item.reviews.iter().find(|r| r.name == *review)?;
         let identity = file.review.reviewers.holder()?.to_string();
         Some(side(identity, file.review.model.clone()))

@@ -6,14 +6,14 @@
 use crate::commands::{self, Outcome};
 use crate::{git, output, setup};
 use anyhow::{bail, Context, Result};
-use atelier_app::acts::changes;
-use atelier_app::repo::planning;
-use atelier_app::Skip;
-use atelier_core::Status;
-use atelier_records::{
+use atelier_core::acts::changes;
+use atelier_core::model::Status;
+use atelier_core::records::{
     is_record, load, parse_config, parse_item, parse_mission, CommitReader, Problem, ReadError,
     Store, CONFIG,
 };
+use atelier_core::repo::planning;
+use atelier_core::Skip;
 use clap::ValueEnum;
 use std::io::{ErrorKind, Read, Write};
 use std::panic::{catch_unwind, AssertUnwindSafe};

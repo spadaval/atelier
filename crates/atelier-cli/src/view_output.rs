@@ -5,12 +5,12 @@ use crate::output::{
     condition, handoff, holder, mission_status_name, priority_name, settled, status_name,
     verdict_name,
 };
-use atelier_app::acts::{Condition, PLANNED, STARTED};
-use atelier_app::{Disputes, Entry, Filter, Group, Judged, Overview, LIFECYCLE};
-use atelier_core::{
+use atelier_core::acts::{Condition, PLANNED, STARTED};
+use atelier_core::model::{
     Finding, Mission, MissionStatus, Outcome, Ready, Recommendation, Status, Thread,
 };
-use atelier_records::{ItemDir, MissionDir, ReviewFile};
+use atelier_core::records::{ItemDir, MissionDir, ReviewFile};
+use atelier_core::{Disputes, Entry, Filter, Group, Judged, Overview, LIFECYCLE};
 use std::time::SystemTime;
 
 /// Where `show` read a record from, and the other unmerged branches that
@@ -353,10 +353,12 @@ pub fn item(
         text += &review_line(review);
         for finding in findings.iter().filter(|f| f.name.review == review.name) {
             let state = match finding.recommendation {
-                atelier_core::Recommendation::FixNow if open.contains(finding) => "fix now, open",
-                atelier_core::Recommendation::FixNow => "fix now, closed",
-                atelier_core::Recommendation::Defer => "defer",
-                atelier_core::Recommendation::NoAction => "no action",
+                atelier_core::model::Recommendation::FixNow if open.contains(finding) => {
+                    "fix now, open"
+                }
+                atelier_core::model::Recommendation::FixNow => "fix now, closed",
+                atelier_core::model::Recommendation::Defer => "defer",
+                atelier_core::model::Recommendation::NoAction => "no action",
             };
             let settled = finding.settlement.as_ref().map(settled);
             let settled = settled.map_or(String::new(), |s| format!(", {s}"));

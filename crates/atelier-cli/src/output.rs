@@ -1,20 +1,20 @@
 //! Everything `status` and the commands print. The wording lives here, in
 //! one place, so it is cheap to change, but for what the acts that live in
-//! `atelier-app` say and the wording of a refusal, which live in
-//! `atelier_app::say` and are used from here.
+//! `atelier-core` say and the wording of a refusal, which live in
+//! `atelier_core::say` and are used from here.
 
 use crate::forge::{CiRun, ForgeError, MergeState, PullRequest};
 use crate::merge::Moved;
 use crate::setup::{Harness, Step};
-use atelier_app::acts::{Act, Condition, Refusal};
-use atelier_app::plan::{Approvals, NotCounted, APPROVALS};
-use atelier_app::{Carried, Entry, Overview};
-use atelier_core::{Config, Priority, Response, Status, Thread, Verdict};
-use atelier_records::Problem;
+use atelier_core::acts::{Act, Condition, Refusal};
+use atelier_core::model::{Config, Priority, Response, Status, Thread, Verdict};
+use atelier_core::plan::{Approvals, NotCounted, APPROVALS};
+use atelier_core::records::Problem;
+use atelier_core::{Carried, Entry, Overview};
 use std::path::Path;
 use std::time::Duration;
 
-pub(crate) use atelier_app::say::*;
+pub(crate) use atelier_core::say::*;
 
 pub(crate) fn priority_name(priority: Priority) -> &'static str {
     match priority {
@@ -55,7 +55,7 @@ pub fn item(
     } else if entry.holds {
         format!(
             "You are the implementer of {id} (thread {caller}).\nItem: {}\n",
-            atelier_app::repo::item_path(id)
+            atelier_core::repo::item_path(id)
         )
     } else if let (Some((name, verdict)), false) = (&entry.reviewed, entry.holds) {
         let verdict = verdict.map_or("no verdict", verdict_name);
@@ -108,7 +108,7 @@ pub fn item(
                 (true, false) => "Goal",
                 (false, _) => "Done when lines",
             },
-            atelier_app::repo::item_path(id),
+            atelier_core::repo::item_path(id),
             match unwritten {
                 (false, _) => ", each as `- [ ] <result>`",
                 _ => "",
@@ -589,7 +589,7 @@ pub(crate) fn rule_status(path: &str, from: Status, to: Status) -> String {
 /// A commit refused because no config, `HEAD`'s or the checkout's, names
 /// the base.
 pub fn commit_no_base() -> String {
-    let config = atelier_records::CONFIG;
+    let config = atelier_core::records::CONFIG;
     format!("Atelier's pre-commit hook refused this commit; nothing was committed.\nNeither HEAD's {config} nor this checkout's reads, so the hook cannot tell whether this commit is on the base, where no record changes. Fix {config}, stage it with git add, and commit again.\n")
 }
 
@@ -1309,7 +1309,7 @@ pub fn no_result(id: &str) -> String {
 pub fn close_mission_text(id: &str) -> String {
     format!(
         "`atelier close {id}` refused; nothing changed.\n{id} is a mission, whose result is written in {} under `## Result`. Write it there.\nThen: atelier close {id}\n",
-        atelier_app::repo::mission_path(id)
+        atelier_core::repo::mission_path(id)
     )
 }
 

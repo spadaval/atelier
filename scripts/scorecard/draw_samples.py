@@ -77,7 +77,7 @@ def reviews(repo, commit):
 
 def unfenced(text):
     """The text's lines outside fenced code blocks, fence lines left out, as the records read them
-    (`unfenced_lines` in crates/atelier-records/src/document.rs): an example is never a heading or a field."""
+    (`unfenced_lines` in crates/atelier-core/src/records/document.rs): an example is never a heading or a field."""
     lines, open_ = [], None  # the open fence's marks
     for line in text.split("\n"):
         fence = FENCE.fullmatch(line)

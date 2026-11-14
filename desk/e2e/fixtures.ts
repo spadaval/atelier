@@ -155,7 +155,7 @@ export const z4crItems: ItemRow[] = [
   row("atelier-h3hl", "Let Sumeet start a planning session from a page", "draft", { priority: "medium" }),
   row("atelier-va99", "Install the Desk as a service on this host, on converted clones", "draft", { priority: "medium" }),
   row("atelier-qxmr", "Point the Desk at the live repositories after this host's cutover", "draft", { priority: "low" }),
-  row("atelier-psjw", "Move the acts and repository access into atelier-app", "ready", {
+  row("atelier-psjw", "Move the acts and repository access into atelier-core", "ready", {
     cannot_start: ["atelier-psjw is blocked by atelier-uwxy"],
   }),
   row("atelier-aab1", "Find how atelier serve can read T3 thread status", "ready", { labels: ["needs-human"], needs_human: true, startable: true }),

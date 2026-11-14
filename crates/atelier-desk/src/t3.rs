@@ -392,7 +392,7 @@ impl Client {
                 self.command.display()
             )
         })?;
-        let expires_at = atelier_core::Time::parse_from_rfc3339(&issued.expires_at)
+        let expires_at = atelier_core::model::Time::parse_from_rfc3339(&issued.expires_at)
             .context("the token's expiry is not a time")?;
         Ok(Token {
             secret: issued.token,

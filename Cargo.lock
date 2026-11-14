@@ -68,24 +68,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
-name = "atelier-app"
-version = "0.6.0"
-dependencies = [
- "anyhow",
- "atelier-core",
- "atelier-records",
- "chrono",
- "tempfile",
-]
-
-[[package]]
 name = "atelier-cli"
 version = "0.6.0"
 dependencies = [
  "anyhow",
- "atelier-app",
  "atelier-core",
- "atelier-records",
  "chrono",
  "clap",
  "serde_json",
@@ -96,8 +83,12 @@ dependencies = [
 name = "atelier-core"
 version = "0.6.0"
 dependencies = [
+ "anyhow",
  "chrono",
  "serde",
+ "serde_yaml",
+ "tempfile",
+ "toml",
 ]
 
 [[package]]
@@ -105,9 +96,7 @@ name = "atelier-desk"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "atelier-app",
  "atelier-core",
- "atelier-records",
  "axum",
  "chrono",
  "serde",
@@ -119,18 +108,6 @@ dependencies = [
  "tower-http",
  "ts-rs",
  "ureq",
-]
-
-[[package]]
-name = "atelier-records"
-version = "0.6.0"
-dependencies = [
- "atelier-core",
- "chrono",
- "serde",
- "serde_yaml",
- "tempfile",
- "toml",
 ]
 
 [[package]]

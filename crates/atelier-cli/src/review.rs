@@ -6,14 +6,14 @@ use crate::forge::Github;
 use crate::output::{self, Brief, Landing, PlanBrief};
 use crate::{git, merge};
 use anyhow::{anyhow, Context, Result};
-use atelier_app::acts::{check, plan_round, row, Act, Facts, MissionFacts, Refusal};
-use atelier_app::plan::{misplaced, plan_changed, Belongs};
-use atelier_app::repo::{facts, item_dir, item_path, mission_dir, mission_path};
-use atelier_app::{carried, carried_plan, refused, Repo};
-use atelier_core::{
+use atelier_core::acts::{check, plan_round, row, Act, Facts, MissionFacts, Refusal};
+use atelier_core::model::{
     Forge, Review, ReviewName, ReviewSchema, SchemaVersion, Thread, Threads, Verdict,
 };
-use atelier_records::{create_review, validate_id, ReviewFile};
+use atelier_core::plan::{misplaced, plan_changed, Belongs};
+use atelier_core::records::{create_review, validate_id, ReviewFile};
+use atelier_core::repo::{facts, item_dir, item_path, mission_dir, mission_path};
+use atelier_core::{carried, carried_plan, refused, Repo};
 
 /// Opens this round's review file, or takes it over, and prints the brief.
 /// The file is committed by `verdict`, not here.
@@ -102,7 +102,7 @@ fn new_review(
     caller: &Thread,
     round: u32,
     commit: String,
-    carried: &[atelier_app::Carried],
+    carried: &[atelier_core::Carried],
     item: bool,
 ) -> Review {
     Review {
@@ -121,7 +121,7 @@ fn new_review(
 /// A review write refused while the forge's copy of the item's branch is
 /// ahead of this clone's, as after a fetch of another reviewer's push: the
 /// files here are not the record read, so pull first.
-fn behind(repo: &Repo, located: &atelier_app::Located) -> Option<Outcome> {
+fn behind(repo: &Repo, located: &atelier_core::Located) -> Option<Outcome> {
     let branch = located.branch.as_ref().filter(|branch| branch.remote)?;
     let remote = repo.remote().unwrap_or("the remote");
     let name = repo.branch_of(&located.id);
@@ -308,7 +308,7 @@ fn plan_verdict(repo: &mut Repo, verdict: Verdict, model: Option<String>) -> Res
 /// Where a review of mission `id`'s plan goes once committed: its branch,
 /// while it is proposed, on the forge's remote or in this clone.
 fn landing(repo: &mut Repo, id: &str) -> Result<Landing> {
-    if atelier_app::plan::agreed(repo, id)? {
+    if atelier_core::plan::agreed(repo, id)? {
         return Ok(Landing {
             branch: None,
             remote: repo.remote().map(str::to_string),

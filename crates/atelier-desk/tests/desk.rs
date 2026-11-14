@@ -1,7 +1,7 @@
 //! The Desk's routes, served from scratch repositories on the new records.
 
-use atelier_app::{list, mission_view, Filter, Repo, Skip, LIFECYCLE};
-use atelier_core::Thread;
+use atelier_core::model::Thread;
+use atelier_core::{list, mission_view, Filter, Repo, Skip, LIFECYCLE};
 use atelier_desk::{router_for, Config, Desk};
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
@@ -214,7 +214,7 @@ async fn each_mission_agrees_with_show_and_the_inbox_with_list() {
     let served_ids: Vec<String> = groups.iter().flat_map(|g| ids(&g["items"])).collect();
     let items = repo.everything().unwrap();
     let missions = repo.missions().unwrap();
-    let entries = atelier_app::entries(&items, &missions, &repo.caller).unwrap();
+    let entries = atelier_core::entries(&items, &missions, &repo.caller).unwrap();
     // An old `draft` on the base reads as proposed.
     let beta = ok(&served.app, &format!("/api/repos/demo/missions/{BETA}")).await;
     assert_eq!(beta["mission"]["state"], "proposed");

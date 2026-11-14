@@ -743,7 +743,7 @@ macro_rules! named {
 
 named!(
     Status,
-    atelier_core::Status,
+    atelier_core::model::Status,
     Draft,
     Ready,
     Building,
@@ -755,7 +755,7 @@ named!(
 );
 named!(
     MissionStatus,
-    atelier_core::MissionStatus,
+    atelier_core::model::MissionStatus,
     Open,
     Done,
     Dropped,
@@ -763,23 +763,23 @@ named!(
 );
 named!(
     Priority,
-    atelier_core::Priority,
+    atelier_core::model::Priority,
     Critical,
     High,
     Medium,
     Low
 );
-named!(Verdict, atelier_core::Verdict, Approve, Changes);
+named!(Verdict, atelier_core::model::Verdict, Approve, Changes);
 named!(
     Recommendation,
-    atelier_core::Recommendation,
+    atelier_core::model::Recommendation,
     FixNow,
     Defer,
     NoAction
 );
-named!(Now, atelier_core::Now, Fixed, Withdrawn, Kept);
-named!(Outcome, atelier_core::Outcome, Defer, NoAction);
-named!(ReadFrom, atelier_app::ReadFrom, Base, Branch);
+named!(Now, atelier_core::model::Now, Fixed, Withdrawn, Kept);
+named!(Outcome, atelier_core::model::Outcome, Defer, NoAction);
+named!(ReadFrom, atelier_core::ReadFrom, Base, Branch);
 
 /// Writes the TypeScript type of every response, and of everything they
 /// hold, into `dir`, one file per type.

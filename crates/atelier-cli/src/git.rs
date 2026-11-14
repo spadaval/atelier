@@ -1,14 +1,14 @@
 //! The Git calls the commands that stay in this crate make, on the
-//! helpers of `atelier_app::git`, which holds the calls a repository and
+//! helpers of `atelier_core::git`, which holds the calls a repository and
 //! the acts there make.
 
 use anyhow::{bail, Context, Result};
-pub use atelier_app::git::{
+pub use atelier_core::git::{
     branch_tip, changed, checkout_of, current_branch, has_commit, head, is_ancestor, relayed, root,
     run, uncommitted, untracked,
 };
-use atelier_app::git::{git, listing, names, output, run_with, with_skips};
-use atelier_app::Skip;
+use atelier_core::git::{git, listing, names, output, run_with, with_skips};
+use atelier_core::Skip;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 

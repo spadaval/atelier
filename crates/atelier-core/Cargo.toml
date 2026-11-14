@@ -1,6 +1,6 @@
 [package]
 name = "atelier-core"
-description = "Atelier's domain values: missions, items, reviews, findings, statuses, threads and config"
+description = "The tracker: Atelier's domain values, its records, and its use cases, which the atelier command and the Desk call"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -8,5 +8,11 @@ publish.workspace = true
 version.workspace = true
 
 [dependencies]
+anyhow.workspace = true
 chrono.workspace = true
 serde.workspace = true
+serde_yaml.workspace = true
+toml.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

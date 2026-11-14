@@ -14,9 +14,9 @@ use crate::stop::{self, Stopping};
 use crate::threads::Threads;
 use crate::{read, sessions};
 use anyhow::Result;
-use atelier_app::{Repo, Skip};
-use atelier_core::ForgeProvider;
-use atelier_records::validate_id;
+use atelier_core::model::ForgeProvider;
+use atelier_core::records::validate_id;
+use atelier_core::{Repo, Skip};
 use axum::extract::{Path as UrlPath, Query, Request, State};
 use axum::http::{header, StatusCode};
 use axum::middleware::{self, Next};
@@ -164,7 +164,7 @@ impl Desk {
     /// `shown` in `name`, at that branch's tip now.
     fn pr_state(&self, name: &str, dir: &Path, shown: &str) -> PrState {
         let (branch, full) = self.branch_ref(name, dir, shown);
-        let tip = atelier_app::git::run(dir, &["rev-parse", "--verify", "--quiet", &full]).ok();
+        let tip = atelier_core::git::run(dir, &["rev-parse", "--verify", "--quiet", &full]).ok();
         self.fetches.pr_state(name, &branch, tip.as_deref())
     }
 

@@ -5,12 +5,7 @@ use serde_json::Value;
 use std::collections::{BTreeSet, HashMap};
 use std::process::Command;
 
-const TRACKER: [&str; 4] = [
-    "atelier-cli",
-    "atelier-app",
-    "atelier-records",
-    "atelier-core",
-];
+const TRACKER: [&str; 2] = ["atelier-cli", "atelier-core"];
 const SERVER: [&str; 5] = ["axum", "tokio", "ts-rs", "tower-http", "ureq"];
 
 /// Each package's dependencies by ID, with whether each is only for its

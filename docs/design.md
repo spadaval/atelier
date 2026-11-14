@@ -77,20 +77,23 @@ piece. The new tool has its own.
 ## Workspace and crates
 
 The tool is the Cargo workspace at the repository root, built to
-`target/`. It has four crates under `crates/`, those of the old tool less
-`atelier-workflow` and `atelier-site`, under the same names, and the Desk's
-crate beside them:
+`target/`. It has three crates under `crates/`:
 
 | Crate | Owns |
 | --- | --- |
-| `atelier-core` | Domain values: Mission, Item, Review, Finding, Status, Thread, Config |
-| `atelier-records` | Reading and writing the three record kinds and `config.toml`, from a checkout or from a commit; IDs; validation |
-| `atelier-app` | Use cases: the status view, each lifecycle act, the merge checks, cross-branch reads, the views the Desk reads; a repository opened by path (`Repo`) and the Git calls it and the acts here make; the history of acts `log` prints; the disagreements `list --disputed` prints; `ready` and a mission's `drop`, as functions that return what they did or a refusal as data; the refusal and skip policy, and the wording of the refusals and results of the acts here |
-| `atelier-cli` | Arguments, dispatch, the other commands' Git and shell calls, on `atelier-app`'s Git helpers, and the forge; output |
+| `atelier-core` | The core, which both programs call. `model`: the domain values, Mission, Item, Review, Finding, Status, Thread and Config, with no I/O. `records`: reading and writing the three record kinds and `config.toml`, from a checkout or from a commit; IDs; validation. The rest: the use cases, which are the status view, each lifecycle act (`acts`), the merge checks, cross-branch reads, the views the Desk reads; a repository opened by path (`Repo`) and the Git calls it and the acts here make (`git`); the history of acts `log` prints; the disagreements `list --disputed` prints; `ready` and a mission's `drop`, as functions that return what they did or a refusal as data; the refusal and skip policy, and the wording of the refusals and results of the acts here |
+| `atelier-cli` | Arguments, dispatch, the other commands' Git and shell calls, on `atelier-core`'s Git helpers, and the forge; output |
+| `atelier-desk` | The Desk's server and its T3 Code client |
 
-The dependency direction is `cli` to `app` to `records` to `core`. The
-Desk's crate, `atelier-desk`, depends on `app` and `records`, and nothing
-depends on it.
+`atelier-cli` and `atelier-desk` depend on `atelier-core`, and nothing
+depends on the Desk. Inside the core, `model` uses nothing else of the
+crate, `records` uses `model`, and the rest uses both.
+
+Until 2026-11-14 the core was three crates, under the old tool's names:
+`atelier-core` held what is now `model`, `atelier-records` what is now
+`records`, and `atelier-app` the rest. Nothing used one without the others,
+and the split put same-named files in different crates and helpers out of
+reach of the crate below, so atelier-ni3d merged them as modules.
 
 The tool was built in `next/`, a workspace of its own beside the old one,
 with its crates at `next/crates/<name>/`, so that the switch moved them to
@@ -113,7 +116,7 @@ binary serves every repository on the host.
 ## Records
 
 All records are Markdown with YAML front matter, `schema_version: 3`.
-`atelier-records` writes the front matter in one form: the fields in the
+`atelier-core`'s `records` writes the front matter in one form: the fields in the
 order shown, block style (`labels:` then `- review`, `ready:` then indented
 `by:` and `at:`), absent values as `null`, and times in RFC 3339 with their
 offset, UTC as `Z`; the examples below show the fields and their values,
@@ -153,7 +156,7 @@ The front matter has no field for why an item ended without a merge, so
 the body holds it. `drop` writes `Dropped: <reason>`, the reason on one
 line, as the first line under `## Report`, before any other text or
 subsection, adding the section at the end when the item has none.
-`atelier-records` reads it back (`ItemDir::dropped`): the section's first
+`records` reads it back (`ItemDir::dropped`): the section's first
 line that is not blank, when it starts `Dropped: `. `close` writes an
 item's result first under `## Report` the same way.
 
@@ -358,7 +361,7 @@ accepts either kind.
 
 ## Status
 
-Status is a stored field. One table in `atelier-app` (`acts::TABLE`) lists
+Status is a stored field. One table in `atelier-core` (`acts::TABLE`) lists
 every act: the command, the role that may run it, the statuses it may run
 from, the status it sets, and its conditions. Each command and the `status`
 view read that table, so what `status` says a thing needs is what the command
@@ -501,7 +504,7 @@ Two facts are checked live and never stored:
   and Scope are unchanged. So a Report, a response or a review file never
   makes an approval stale, while code, `config.toml`, a mission's documents,
   another item or the item's own requirements do. If it is stale, `status`
-  and `merge` say to run `submit`. `atelier-app`'s `Repo::checkout`
+  and `merge` say to run `submit`. `atelier-core`'s `Repo::checkout`
   gathers what this reads, as `acts::Checkout`: the paths that differ between the reviewed commit and
   the head, the item's record at the reviewed commit and at the head, and
   what the checkout has not committed; `acts::unmet` applies the rule. `status` gathers
@@ -527,7 +530,7 @@ finding whose rebuttal a reviewer kept says the rebuttal has had its one
 try, and the implementer is shown the round. Nothing stops one thread
 reviewing every round, and nothing counts rounds against a limit.
 
-A disagreement is found, not enforced (`atelier_app::disputes`). Each
+A disagreement is found, not enforced (`atelier_core::disputes`). Each
 finding whose line in Responses is `rebutted` is one, with what each review
 of a later round that carries it, and has a verdict, made of it: kept,
 withdrawn, fixed, kept at defer or no action, or, in an old review, decided;
@@ -573,7 +576,7 @@ waiting to be asked. Told less, a Codex thread waited for its user's word
 (atelier-t747), and a Claude Code thread started as a T3 Code child stopped
 for its lead (the first real item under the new tool, mission atelier-qr5s).
 
-That rule is the command's. A program that links `atelier-app`, such as the
+That rule is the command's. A program that links `atelier-core`, such as the
 Desk, names the caller itself when it opens a repository (`Repo::open`),
 and that name is the identity the records get: an act it makes for
 `sumeet` records `sumeet`, where the command run by a person with
@@ -794,7 +797,7 @@ reads; nothing is written there.
   the push and the `gh pr close` that publish it. Dropping a mission
   changes no item; `start` and a take-over on one of its items, and an
   item's `merge`, are refused once the drop is found, saying the mission
-  was dropped. A mission's drop is `atelier_app::plan::drop_mission`, which
+  was dropped. A mission's drop is `atelier_core::plan::drop_mission`, which
   the command and the Desk's stop both call. The Desk publishes a proposed
   plan's stop itself; an agreed mission's waits on atelier-yclc, which
   moves `submit` and `merge` into the core.
@@ -892,12 +895,12 @@ reads; nothing is written there.
   pushed and only local refs are read; the claim is the local branch, and
   threads in one clone and its worktrees are coordinated as before.
 - Records can be read at any commit, without a checkout, through
-  `atelier-records`' `CommitReader`: one `git cat-file --batch` process
+  `atelier_core::records::CommitReader`: one `git cat-file --batch` process
   serves every read, and it tells a path the commit lacks, an entry that is
   not a regular file and a failing Git apart. The Desk reads this way, and
   so does anything that compares a record now with the same record at the
-  commit of an earlier act. A program that links `atelier-app`, such as the
-  Desk, opens a `Repo` by path; `atelier-app` reads no environment variable
+  commit of an earlier act. A program that links `atelier-core`, such as the
+  Desk, opens a `Repo` by path; `atelier-core` reads no environment variable
   to find the directory, the caller or a skip's reason, which its caller
   gives it.
 
@@ -1086,8 +1089,8 @@ from then on, and the forge may delete it.
 `atelier log` prints the history of acts. Nothing stores it. It is derived
 from Git history, by finding the commits where a record changed in one of
 the ways below. Each is one line, and each carries the commit it was found
-in. `atelier-app` returns the same history as data (`history`, in
-`crates/atelier-app/src/log.rs`), which is how the Desk reads it, and the
+in. `atelier-core` returns the same history as data (`history`, in
+`crates/atelier-core/src/log.rs`), which is how the Desk reads it, and the
 command only formats it (`crates/atelier-cli/src/history.rs`).
 
 `atelier log` prints everything; `atelier log <item>` that item's acts;
@@ -1263,7 +1266,7 @@ The cutover's rollback restores a clone's hooks directory from a copy, so
 
 `atelier check` reads every record in the checkout, tracked or not and
 ignored or not, as the commands do, one file at a time
-(`atelier-records`' `load`), so one that does not parse leaves the rest
+(`records::load`), so one that does not parse leaves the rest
 read and validated. It prints each problem with its file and field, exits 1
 when it found one, and lists the record changes not committed yet, those
 `status` lists and `config.toml`, whatever it found. A review
@@ -1309,7 +1312,7 @@ pass. A rule is a refusal that depends on the state of the work or on who
 asks. The variable is the whole interface: no flag, no config, no list of
 rule names.
 
-- **One place.** Every refusal of a rule goes through `atelier-app`'s
+- **One place.** Every refusal of a rule goes through `atelier-core`'s
   `Skip::refuse`, given the rules it breaks, each said in one line, and its
   text, which ends with the way out. A refusal is data (`Refused`): its
   rules, its text and its way out. Without a reason the command's refusal
@@ -1326,7 +1329,7 @@ rule names.
   push` pass on what the hooks printed, so a rule a hook skips there is
   printed too. The reason and the rules passed are one value per
   invocation, a `Skip`, which its caller makes: the command once per
-  process, from `ATELIER_SKIP`, and a program that links `atelier-app` once
+  process, from `ATELIER_SKIP`, and a program that links `atelier-core` once
   per act it calls. It needs no repository, since `check` and the hooks
   pass rules before one is opened, and it outlives any one, since `merge`
   opens several and prints its skips after the last. Whatever opens a
@@ -1413,7 +1416,7 @@ were not carried over. A merge killed during its checks leaves its temporary
 worktree behind; the next merge, holding the lock, removes it.
 
 `forge.rs` and the merge code live in `atelier-cli`, with the Git calls
-only they make; `atelier-app` runs no forge command and no merge.
+only they make; `atelier-core` runs no forge command and no merge.
 
 Nothing else from the old merge was carried over: not the gate code, the
 polling in `merge_wait.rs`, nor `merge_sync.rs`. The wait for CI was written
@@ -1439,7 +1442,7 @@ atelier-z4cr; see [Decisions](#decisions) and the Desk's
 [product page](product/desk.md) and [API](architecture/desk.md)). Its
 crate, `atelier-desk`, and its app, `desk/`, are built in this workspace,
 and the app has a CI job of its own. It reads records through
-`atelier-records` and `atelier-app`, at any commit, so it can load a
+`atelier-core`, at any commit, so it can load a
 mission's directory and items as they stood at the merge of its plan and
 compare them with how they stand now. It reads the live repositories, the
 base and every branch the convention names, as `list` and `show` do, and
@@ -1692,6 +1695,8 @@ carried here when the ADRs were deleted on 2026-11-11; Git keeps the ADR.
 | A merged item is done; nothing writes `done` at the merge (2026-11-13) | A started item's record reaches the base only through its own merge, so its base copy in a started status means merged. Chosen in atelier-ogpg, under the Authority atelier-to83 gives its lead, over a last commit setting `done`; see [How `done` is recorded](#how-done-is-recorded) |
 | A record-writing command refuses in the base's own checkout, and `start` there makes the branch without switching (2026-11-13) | Files written there could be committed nowhere and would block other threads; see [The base's own checkout](#the-bases-own-checkout) |
 | `ready.at` and `created_at` are read from Git (2026-11-13) | The commit holds the time, and `atelier log` already reads times there. A mission's record drops both; an item's keeps them until an item of its own removes them, since none of atelier-to83's items changes the item's format |
+| An action's doing moves from the command's file into the core when a second caller needs it, and not before (2026-11-14, atelier-dy62) | Code with one caller is plainest beside it. `ready` and a mission's `drop` moved when the Desk needed them, and `submit` and `merge` move with atelier-yclc; nothing else has a second caller |
+| A new crate is made when a second program needs part of the core without the rest. Until then, a module (2026-11-14, atelier-dy62) | The core was three crates for about 8,000 lines that nothing used apart. The split put same-named files in different crates, which agents guessed wrong, and left helpers out of reach of the crate below |
 
 Three points of the design went beyond what he had confirmed when it was
 written, and were put to him with it:

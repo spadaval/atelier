@@ -6,16 +6,16 @@
 use crate::commands::Outcome;
 use crate::view_output;
 use anyhow::{anyhow, Result};
-use atelier_app::acts::{check_mission, unsettled, Act, MissionFacts, Refusal};
-use atelier_app::plan::{misplaced, save, Belongs};
-use atelier_app::repo::{mission_path, on_base};
-use atelier_app::say::status_name;
-use atelier_app::{
+use atelier_core::acts::{check_mission, unsettled, Act, MissionFacts, Refusal};
+use atelier_core::model::{MissionStatus, Named};
+use atelier_core::plan::{misplaced, save, Belongs};
+use atelier_core::records::{validate_id, ItemDir, MissionDir};
+use atelier_core::repo::{mission_path, on_base};
+use atelier_core::say::status_name;
+use atelier_core::{
     disputes, entries, git, item_view, items_of, list as groups, mission_view, narrows_item,
     narrows_mission, Entry, Filter, Located, Record, Repo,
 };
-use atelier_core::{MissionStatus, Named};
-use atelier_records::{validate_id, ItemDir, MissionDir};
 use view_output::{Change, Whence};
 
 pub fn show(repo: &mut Repo, id: &str) -> Result<Outcome> {
@@ -62,7 +62,7 @@ fn whence<R: Record>(
         true => Some(git::fetched_at(&repo.root)?),
         false => None,
     };
-    let names = |branches: Vec<&atelier_app::Branch<R>>| {
+    let names = |branches: Vec<&atelier_core::Branch<R>>| {
         branches.iter().map(|b| b.name.clone()).collect::<Vec<_>>()
     };
     Ok(Whence {
@@ -207,7 +207,7 @@ pub fn list(repo: &mut Repo, filter: &Filter) -> Result<Outcome> {
             let found = items.iter().find(|located| located.id == id);
             found.and_then(|located| located.record())
         };
-        let unreached: Vec<_> = atelier_app::unreached(&items)
+        let unreached: Vec<_> = atelier_core::unreached(&items)
             .into_iter()
             .filter(|(id, _, _)| {
                 let Some(record) = record(id) else {
@@ -221,7 +221,7 @@ pub fn list(repo: &mut Repo, filter: &Filter) -> Result<Outcome> {
             })
             .collect();
         text += &view_output::unreached(&unreached);
-        let dropped: Vec<_> = atelier_app::unreached(&located)
+        let dropped: Vec<_> = atelier_core::unreached(&located)
             .into_iter()
             .filter(|(id, _, _)| filter.mission.as_ref().is_none_or(|m| m == id))
             .filter(|(id, _, _)| {

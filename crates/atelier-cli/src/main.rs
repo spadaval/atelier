@@ -13,8 +13,8 @@ mod setup;
 mod view_output;
 mod views;
 
-use atelier_app::{identity, Repo, Skip, SKIP_VARIABLE as SKIP};
-use atelier_core::{Priority, Verdict};
+use atelier_core::model::{Priority, Verdict};
+use atelier_core::{identity, Repo, Skip, SKIP_VARIABLE as SKIP};
 use clap::builder::NonEmptyStringValueParser;
 use clap::{ArgGroup, Parser, Subcommand, ValueEnum};
 use commands::Outcome;
@@ -206,7 +206,7 @@ enum Command {
 }
 
 fn since(text: &str) -> Result<chrono::DateTime<chrono::Utc>, String> {
-    atelier_app::log::since(text)
+    atelier_core::log::since(text)
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -296,7 +296,7 @@ fn main() -> ExitCode {
                 deferred: false,
                 disputed: false,
             } => {
-                let filter = atelier_app::Filter {
+                let filter = atelier_core::Filter {
                     ready,
                     blocked,
                     needs_human,
@@ -340,7 +340,7 @@ fn main() -> ExitCode {
                 plan::set(&mut repo, &id, fields)
             }
             Command::Ready { ids, by } => {
-                atelier_app::ready(&mut repo, &ids, &by).map(Outcome::from)
+                atelier_core::ready(&mut repo, &ids, &by).map(Outcome::from)
             }
             Command::Drop { id, reason } => plan::drop(&mut repo, &id, reason.as_deref()),
             Command::Close { id, result } => plan::close(&mut repo, &id, result.as_deref()),
