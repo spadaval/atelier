@@ -117,7 +117,8 @@ fn world() -> World {
     // The forge's pull requests, by the mode in `pr_state`: the plan's #7
     // in that state (OPEN, CLOSED); NONE, no pull request at all; FAIL, no
     // answer; HOLD, a list that waits on `<pr_state>.fifo` and then fails;
-    // MANY, #7 open but older than the last 200 of any state.
+    // MANY, #7 open but older than the last 200 of any state; TWO, #7 open
+    // and a newer #9 of the same branch closed.
     let script = r#"#!/bin/sh
 mode=$(cat STATE)
 fail() { echo 'gh: the forge did not answer' >&2; exit 1; }
@@ -127,15 +128,16 @@ case "$1 $2" in
   [ "$mode" = FAIL ] && fail
   [ "$mode" = HOLD ] && { cat STATE.fifo >/dev/null; fail; }
   case "$*" in
-    *'--state open'*) case "$mode" in OPEN|MANY) pr7 OPEN ;; *) echo '[]' ;; esac ;;
+    *'--state open'*) case "$mode" in OPEN|MANY|TWO) pr7 OPEN ;; *) echo '[]' ;; esac ;;
     *) case "$mode" in
          NONE) echo '[]' ;;
+         TWO) printf '[{"number":9,"url":"https://forge.example/pull/9","state":"CLOSED","headRefName":"PLAN"},'; pr7 OPEN | cut -c2- ;;
          MANY) printf '['; seq 8 207 | awk -v ORS= 'NR > 1 { print "," } { print "{\"number\":" $1 ",\"url\":\"https://forge.example/pull/" $1 "\",\"state\":\"CLOSED\",\"headRefName\":\"other-" $1 "\"}" }'; printf ']' ;;
          *) pr7 "$mode" ;;
        esac ;;
   esac ;;
 'pr close')
-  case "$mode" in FAIL|HOLD|MANY) fail ;; esac
+  case "$mode" in FAIL|HOLD|MANY|TWO) fail ;; esac
   printf '%s\n' "$*" >> LOGFILE
   printf CLOSED > STATE ;;
 *) exit 1 ;;
@@ -870,4 +872,31 @@ async fn an_open_pull_request_older_than_the_recent_list_keeps_a_stop_pending() 
         page["pull_request"]["number"], 7,
         "the open list keeps its link"
     );
+}
+
+#[tokio::test]
+async fn an_open_pull_request_is_not_hidden_by_a_newer_closed_one_of_its_branch() {
+    let world = world();
+    fs::write(&world.pr_state, "OPEN").unwrap();
+    world.desk.fetch_all();
+    // #7 is open; a newer #9 of the same branch is closed; closing fails.
+    fs::write(&world.pr_state, "TWO").unwrap();
+    let done = act(
+        &world.app,
+        json!({"act": "stop", "repo": "demo", "id": PLAN, "reason": REASON}),
+    )
+    .await;
+    assert!(
+        done["text"]
+            .as_str()
+            .unwrap()
+            .contains("its pull request was not closed"),
+        "{done}"
+    );
+    assert_eq!(
+        shown(&world.app, PLAN).await,
+        (json!("stop_pending"), true, false)
+    );
+    let page = get(&world.app, &format!("/api/repos/demo/missions/{PLAN}")).await;
+    assert_eq!(page["pull_request"]["number"], 7, "the open one is linked");
 }

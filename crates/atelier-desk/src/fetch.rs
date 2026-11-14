@@ -29,10 +29,7 @@ struct Fetched {
     github: bool,
     /// The pull requests of the forge, by head branch, as last read; `None`
     /// while none has been read.
-    prs: Option<HashMap<String, PrMark>>,
-    /// Whether that list holds every open pull request, so a branch with
-    /// none open in it has none.
-    every_open: bool,
+    prs: Option<Prs>,
     /// The tip of each of the remote's branches, as fetched just before
     /// that list was read. The list says what the forge held of a branch
     /// at that tip, and of no later one.
@@ -83,10 +80,7 @@ impl Fetches {
         kept.github = github;
         match read {
             None => (kept.prs, kept.forge_error) = (None, None),
-            Some(Ok((prs, every_open))) => {
-                (kept.prs, kept.every_open, kept.tips) = (Some(prs), every_open, tips);
-                kept.forge_error = None;
-            }
+            Some(Ok(prs)) => (kept.prs, kept.tips, kept.forge_error) = (Some(prs), tips, None),
             // A failed read keeps the last list, which still says what was
             // open, and says why it failed.
             Some(Err(e)) => kept.forge_error = Some(format!("{e:#}")),
@@ -114,7 +108,7 @@ impl Fetches {
     pub fn pull_request(&self, name: &str, branch: &str) -> Option<PrMark> {
         let state = self.state.lock().unwrap();
         let prs = state.get(name)?.prs.as_ref()?;
-        prs.get(branch).cloned()
+        (prs.open.get(branch).or(prs.recent.get(branch))).cloned()
     }
 
     /// What the forge says of the pull request whose head is `branch` in
@@ -131,16 +125,14 @@ impl Fetches {
             Some(kept) if !kept.github => PrState::Known(None),
             Some(Fetched {
                 prs: Some(prs),
-                every_open,
                 tips,
                 ..
             }) if tip.is_some() && tips.get(branch).map(String::as_str) == tip => {
-                match prs.get(branch) {
-                    Some(pr) if pr.state == "OPEN" => PrState::Known(Some(pr.clone())),
-                    // Not open, or not listed: it has none open only if
-                    // every open one was listed.
-                    pr if *every_open => PrState::Known(pr.cloned()),
-                    _ => PrState::Unknown,
+                match prs.open.get(branch) {
+                    Some(open) => PrState::Known(Some(open.clone())),
+                    // None open: so only if every open one was listed.
+                    None if prs.every_open => PrState::Known(prs.recent.get(branch).cloned()),
+                    None => PrState::Unknown,
                 }
             }
             _ => PrState::Unknown,
@@ -200,19 +192,37 @@ struct Listed {
 const RECENT: usize = 200;
 const OPEN: usize = 1000;
 
-/// The forge's pull requests, by head branch, the newest for each: its
-/// last `RECENT` of any state, with every open one over them; and whether
-/// the open ones were all listed, fewer than `OPEN` of them, so a branch
-/// missing from them has none open.
-fn pull_requests(gh: &Path, dir: &Path) -> Result<(HashMap<String, PrMark>, bool)> {
-    let recent = listed(gh, dir, "all", RECENT)?;
+/// The forge's pull requests, by head branch: the newest of its last
+/// `RECENT` of any state, for links; every open one, the newest open where a
+/// branch has several, since a newer closed one does not close it; and
+/// whether the open ones were all listed, fewer than `OPEN` of them, so a
+/// branch missing from them has none open.
+fn pull_requests(gh: &Path, dir: &Path) -> Result<Prs> {
+    let recent = newest(listed(gh, dir, "all", RECENT)?);
     let open = listed(gh, dir, "open", OPEN)?;
     let every_open = open.len() < OPEN;
+    Ok(Prs {
+        recent,
+        open: newest(open),
+        every_open,
+    })
+}
+
+/// The pull requests of a forge, as one round read them.
+#[derive(Default, Clone)]
+struct Prs {
+    recent: HashMap<String, PrMark>,
+    open: HashMap<String, PrMark>,
+    every_open: bool,
+}
+
+/// `listed`, the newest for each head branch.
+fn newest(listed: Vec<Listed>) -> HashMap<String, PrMark> {
     let mut prs: HashMap<String, PrMark> = HashMap::new();
-    for pr in recent.into_iter().chain(open) {
+    for pr in listed {
         let newer = prs
             .get(&pr.head_ref_name)
-            .is_none_or(|kept| kept.number <= pr.number);
+            .is_none_or(|kept| kept.number < pr.number);
         if newer {
             let mark = PrMark {
                 number: pr.number,
@@ -222,7 +232,7 @@ fn pull_requests(gh: &Path, dir: &Path) -> Result<(HashMap<String, PrMark>, bool
             prs.insert(pr.head_ref_name, mark);
         }
     }
-    Ok((prs, every_open))
+    prs
 }
 
 /// `gh pr list` of the pull requests in `state`, at most `limit`.
