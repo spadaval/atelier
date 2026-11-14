@@ -30,7 +30,7 @@ proposed plan itself and, for an open mission, shows the commands to run.
 
 ## Done when
 
-- [ ] `submit` and `merge` are functions of `atelier-app` that the command calls, with the forge code they need. The command's behaviour, output and exit statuses do not change, and its tests pass unchanged.
+- [ ] `submit` and `merge` are functions of `atelier-core` that the command calls, with the forge code they need. The command's behaviour, output and exit statuses do not change, and its tests pass unchanged.
 - [ ] The Desk's "stop" on an open mission writes the drop on a `backlog/` branch in a checkout of its own, commits it, and calls the core's submit and merge. It runs no `atelier` binary.
 - [ ] The mission's page shows the stop as pending until the branch has merged, and then as stopped. When merge returns "not finished yet", the Desk tries again on its fetch timer and the page says what it waits on.
 - [ ] The interface test covers an open mission's stop from the click to the base.
@@ -38,10 +38,10 @@ proposed plan itself and, for an open mission, shows the commands to run.
 
 ## Scope
 
-In: `crates/atelier-app`, `crates/atelier-cli`, `crates/atelier-desk`, `desk/`, and the two documents named.
+In: `crates/atelier-core`, `crates/atelier-cli`, `crates/atelier-desk`, `desk/`, and the two documents named.
 
 Out: any change to what `merge` checks or refuses; moving `new`, `set` or `close`, which gardener run atelier-qb4f proposes and Sumeet has not agreed.
 
 ## Context
 
-atelier-v958 moves a mission's `drop` into `atelier-app` and builds the stop of a proposed plan. Its Report says what it left for this item.
+atelier-v958 moved a mission's `drop` into the core and built the stop of a proposed plan. atelier-ni3d of atelier-dy62, which this item waits on, merges `atelier-app` and `atelier-records` into `atelier-core`, so the core is that one crate. Its Report says what it left for this item.

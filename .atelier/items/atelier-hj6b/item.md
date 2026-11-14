@@ -23,7 +23,7 @@ Give the Desk's mission page the parts of the old debrief that need the history 
 
 ## Done when
 
-- [ ] Provisional: once `atelier-app` has the history view that atelier-8b0a builds, `atelier-desk` serves `GET /api/repos/{repo}/missions/{id}/history` from it and the mission page has an Activity tab; nothing in the Desk walks Git history itself.
+- [ ] Provisional: once the core (`atelier-app`, or `atelier-core` once atelier-ni3d has merged the two) has the history view that atelier-8b0a builds, `atelier-desk` serves `GET /api/repos/{repo}/missions/{id}/history` from it and the mission page has an Activity tab; nothing in the Desk walks Git history itself.
 - [ ] Each done item on the page shows how many files and lines its merge changed, read from its merge commit, so a finished mission's size is plain without opening a diff.
 
 ## Context

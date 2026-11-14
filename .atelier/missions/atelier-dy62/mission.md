@@ -35,6 +35,9 @@ not say so plainly. Three things are in the way.
   `atelier-records/src/at_commit.rs`, which sits below the helper and so
   cannot call it; and the Desk's `fetch.rs` and `stop.rs`. `gh` is spawned
   from `atelier-cli/src/forge.rs` and from the same two files of the Desk.
+  The Desk's build script, `build.rs`, also runs `git` to stamp the commit
+  it is built from. That runs at compile time, cannot call the crate it is
+  building for, and is left as it is.
 
 He also found "act" an odd word for a command that changes a record, and
 agreed that "action" is the plain one.
@@ -43,8 +46,9 @@ agreed that "action" is the plain one.
 
 The workspace has three crates. `atelier-core` is the tracker: the domain
 values in a `model` module that does no I/O, the record files in `records`,
-every `git` call in `git`, every `gh` call in `forge`, the actions and the
-views. `atelier-cli` parses arguments and prints. `atelier-desk` is the
+every `git` call a program makes when it runs in `git`, every `gh` call in
+`forge`, the actions and the views. The module of the actions is `acts`
+until atelier-nl43 renames it `actions`. `atelier-cli` parses arguments and prints. `atelier-desk` is the
 server and the T3 Code client. "The core" in the documents and the crate
 named `atelier-core` are the same thing.
 
@@ -66,17 +70,22 @@ a drift:
 - three-crates: `cargo metadata --no-deps` lists exactly `atelier-core`,
   `atelier-cli` and `atelier-desk`, and `atelier-core` depends on neither
   of the others.
-- nothing-changed: every test that existed before atelier-ni3d passes
-  after the mission, and the diff of each test file is its `use` lines,
-  the names atelier-nl43 renames, and the wording of "act" in expected
-  output.
+- nothing-changed: each of the three items leaves every test that passed
+  on its own base passing, and changes no test's inputs or assertions. A
+  test file's diff is the paths of crates and modules wherever they occur,
+  the paths of fixtures that moved, the list of crate names in
+  `crates/atelier-desk/tests/dependencies.rs`, and in atelier-nl43 the
+  renamed identifiers and the word "act" in expected output. What
+  atelier-yclc changes between them is that item's own and is not judged
+  here.
 - model-is-pure: no file under `crates/atelier-core/src/model/` names
   `std::fs`, `std::process` or a module of the crate outside `model`.
-- one-git: outside `tests/` directories, `Command::new("git")` occurs in
-  one source file of the workspace, and a `gh` program is spawned from one
-  source file.
-- one-word: `atelier --help`, `docs/product.md`, `docs/design.md`,
-  `docs/architecture/desk.md` and `skills/agent-factory` say "action", and
+- one-git: outside `tests/` directories and build scripts
+  (`build.rs`), `Command::new("git")` occurs in one source file of the
+  workspace, and a `gh` program is spawned from one source file.
+- one-word: `atelier --help`, `docs/product.md`, `docs/product/desk.md`,
+  `docs/design.md`, `docs/architecture/desk.md` and `skills/agent-factory`
+  say "action", and
   no "act" is left in them as the noun for a state-changing command.
 - the-rules-are-written: `docs/design.md`'s crate table has three rows and
   its Decisions hold the two rules of the Outcome.
@@ -84,7 +93,8 @@ a drift:
 ## Scope
 
 In: `crates/`, `Cargo.toml`, `Cargo.lock`, the Desk's app where it names an
-act, `docs/design.md`, `docs/product.md`, `docs/architecture/desk.md`,
+act, `docs/design.md`, `docs/product.md`, `docs/product/desk.md`,
+`docs/architecture/desk.md`,
 `skills/agent-factory`, and any script or CI file that names a crate.
 
 Out:
@@ -103,19 +113,20 @@ Out:
 Order against atelier-to83: atelier-ni3d merges before atelier-yclc starts,
 so that item moves `submit`, `merge` and the forge code once, into the
 merged crate. atelier-x5al follows atelier-yclc, which puts the forge code
-where the Desk can reach it. Once atelier-ni3d has merged, the planner
-rewords the draft items that name the old crates (atelier-yclc,
-atelier-hj6b, atelier-o91z) on the base.
+where the Desk can reach it. atelier-yclc is reworded with this plan to
+name `atelier-core`, the crate it will meet, and atelier-hj6b to name the
+core by either name, since nothing orders it against atelier-ni3d.
 
 ## Authority
 
 The lead may choose the layout inside `atelier-core` other than the module
-names `model`, `records`, `git`, `forge` and `actions`, the names of
+names `model`, `records`, `git` and `forge`, the names of
 re-exports, and the order of atelier-x5al and atelier-nl43. It may not add
 a crate or a dependency, change what any command does or prints beyond the
 word "act", move code between `atelier-cli` and the core beyond what an
 item names, or change the record format. atelier-nl43 is the item to drop
 if the mission has to shrink: it is a rename of about 400 places and
-nothing else rests on it.
+nothing else rests on it. If it is dropped the module stays `acts`, and
+the criterion one-word is not met and the Result says so.
 
 ## Result

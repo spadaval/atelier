@@ -28,13 +28,13 @@ changes nothing else.
 - [ ] In `crates/`, `Act` is `Action`, the `acts` module is `actions`, and the other identifiers built on the noun follow (`ActRequest`, `ActResponse` and the like). The compiler finds the rest.
 - [ ] The Desk's app follows: its generated API types, `Acts.tsx`, `lib/acts.ts` and their tests. If the server's routes name an act, they change with the app, which ships with it.
 - [ ] `atelier --help` and each command's help say "action", as does every line a command prints. The Report lists each changed line of output, and the tests that expect them change by that word alone.
-- [ ] `docs/product.md`, `docs/design.md`, `docs/architecture/desk.md` and `skills/agent-factory` say "action" for the noun. The verb stays where it is plain English ("three commands act on Git").
+- [ ] `docs/product.md`, `docs/product/desk.md`, `docs/design.md`, `docs/architecture/desk.md` and `skills/agent-factory` say "action" for the noun. The verb stays where it is plain English ("three commands act on Git").
 - [ ] No record format changes, and no record under `.atelier/` is edited. If a stored field or a file name holds the word, the item stops and the Report says where.
 - [ ] `cargo nextest run`, `pnpm test` and `pnpm e2e` pass.
 
 ## Scope
 
-In: `crates/`, `desk/`, the three documents, `skills/agent-factory`.
+In: `crates/`, `desk/`, the four documents, `skills/agent-factory`.
 
 Out: any other rename; `CHANGELOG.md`'s past entries; the wording of old records and reviews; the live copy of the skill at `~/projects/atelier-skill`, which the host's move to the branch model (atelier-ql64) brings forward.
 
