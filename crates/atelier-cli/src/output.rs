@@ -1767,7 +1767,7 @@ pub fn item_changes_plan(id: &str, planned: &[(String, String)]) -> String {
     for (mission, what) in planned {
         text += &format!("  Mission {mission}: it {what}.\n");
     }
-    text + &format!("Take those changes off this branch. A new mission is planned with `atelier start --mission \"<title>\"`, and an amendment of an agreed mission's plan goes on a backlog branch, `atelier start --backlog <slug>`, where two plan reviews approve it.\n")
+    text + "Take those changes off this branch. A new mission is planned with `atelier start --mission \"<title>\"`, and an amendment of an agreed mission's plan goes on a backlog branch, `atelier start --backlog <slug>`, where two plan reviews approve it.\n"
 }
 
 pub fn rule_item_changes_plan(id: &str) -> String {
