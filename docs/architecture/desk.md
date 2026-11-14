@@ -693,9 +693,11 @@ terminal prompt and SSH in batch mode. The remote is the forge's, as
 is not fetched. A fetch writes only the repository's remote-tracking refs
 and `FETCH_HEAD`, never a checkout. A failed fetch keeps the refs as they
 were and its error is shown in `fetched.error`. Where the forge is GitHub's,
-the same round reads its last 200 pull requests of any state with `gh pr
-list --json number,url,state,headRefName`, and keeps the newest for each
-head branch; a page's `pull_request` is the one whose head is the branch the
+the same round reads its last 200 pull requests of any state and up to 1,000
+open ones with `gh pr list --json number,url,state,headRefName`, and keeps
+the newest for each head branch. The open list is complete when it holds
+fewer than 1,000, and only then does a branch missing from it count as
+having none open; a page's `pull_request` is the one whose head is the branch the
 record was read from. A failed read keeps the last list. After each round
 the Desk looks for news (below). With `fetch_seconds = 0` it fetches nothing
 and looks for news every five minutes.

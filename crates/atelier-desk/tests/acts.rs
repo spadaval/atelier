@@ -114,17 +114,36 @@ fn world() -> World {
     let closed = dir.path().join("closed");
     fs::write(&pr_state, "OPEN").unwrap();
     let gh = dir.path().join("gh");
-    let script = format!(
-        "#!/bin/sh\n[ \"$(cat {state})\" = FAIL ] && {{ echo 'gh: the forge did not answer' >&2; exit 1; }}\n\
-         [ \"$1 $2 $(cat {state})\" = 'pr close HOLD' ] && {{ echo 'gh: the forge did not answer' >&2; exit 1; }}\n\
-         [ \"$1 $2 $(cat {state})\" = 'pr list HOLD' ] && {{ cat {state}.fifo >/dev/null; echo 'gh: the forge did not answer' >&2; exit 1; }}\n\
-         [ \"$1 $2 $(cat {state})\" = 'pr list NONE' ] && {{ echo '[]'; exit 0; }}\ncase \"$1 $2\" in\n\
-         'pr list') printf '[{{\"number\":7,\"url\":\"https://forge.example/pull/7\",\"state\":\"%s\",\"headRefName\":\"{PLAN}\"}}]' \"$(cat {state})\" ;;\n\
-         'pr close') printf '%s\\n' \"$*\" >> {closed}; printf CLOSED > {state} ;;\n\
-         *) exit 1 ;;\nesac\n",
-        state = pr_state.display(),
-        closed = closed.display(),
-    );
+    // The forge's pull requests, by the mode in `pr_state`: the plan's #7
+    // in that state (OPEN, CLOSED); NONE, no pull request at all; FAIL, no
+    // answer; HOLD, a list that waits on `<pr_state>.fifo` and then fails;
+    // MANY, #7 open but older than the last 200 of any state.
+    let script = r#"#!/bin/sh
+mode=$(cat STATE)
+fail() { echo 'gh: the forge did not answer' >&2; exit 1; }
+pr7() { printf '[{"number":7,"url":"https://forge.example/pull/7","state":"%s","headRefName":"PLAN"}]' "$1"; }
+case "$1 $2" in
+'pr list')
+  [ "$mode" = FAIL ] && fail
+  [ "$mode" = HOLD ] && { cat STATE.fifo >/dev/null; fail; }
+  case "$*" in
+    *'--state open'*) case "$mode" in OPEN|MANY) pr7 OPEN ;; *) echo '[]' ;; esac ;;
+    *) case "$mode" in
+         NONE) echo '[]' ;;
+         MANY) printf '['; seq 8 207 | awk -v ORS= 'NR > 1 { print "," } { print "{\"number\":" $1 ",\"url\":\"https://forge.example/pull/" $1 "\",\"state\":\"CLOSED\",\"headRefName\":\"other-" $1 "\"}" }'; printf ']' ;;
+         *) pr7 "$mode" ;;
+       esac ;;
+  esac ;;
+'pr close')
+  case "$mode" in FAIL|HOLD|MANY) fail ;; esac
+  printf '%s\n' "$*" >> LOGFILE
+  printf CLOSED > STATE ;;
+*) exit 1 ;;
+esac
+"#
+    .replace("STATE", &pr_state.display().to_string())
+    .replace("LOGFILE", &closed.display().to_string())
+    .replace("PLAN", PLAN);
     fs::write(&gh, script).unwrap();
     chmod(&gh);
 
@@ -819,5 +838,36 @@ async fn a_drop_pushed_from_another_clone_is_not_confirmed_by_an_older_list() {
     assert_eq!(
         shown(&world.app, PLAN).await,
         (json!("stopped"), false, true)
+    );
+}
+
+#[tokio::test]
+async fn an_open_pull_request_older_than_the_recent_list_keeps_a_stop_pending() {
+    let world = world();
+    fs::write(&world.pr_state, "OPEN").unwrap();
+    world.desk.fetch_all();
+    // The plan's pull request is open, but 200 newer ones are closed, and
+    // closing it fails.
+    fs::write(&world.pr_state, "MANY").unwrap();
+    let done = act(
+        &world.app,
+        json!({"act": "stop", "repo": "demo", "id": PLAN, "reason": REASON}),
+    )
+    .await;
+    assert!(
+        done["text"]
+            .as_str()
+            .unwrap()
+            .contains("its pull request was not closed"),
+        "{done}"
+    );
+    assert_eq!(
+        shown(&world.app, PLAN).await,
+        (json!("stop_pending"), true, false)
+    );
+    let page = get(&world.app, &format!("/api/repos/demo/missions/{PLAN}")).await;
+    assert_eq!(
+        page["pull_request"]["number"], 7,
+        "the open list keeps its link"
     );
 }

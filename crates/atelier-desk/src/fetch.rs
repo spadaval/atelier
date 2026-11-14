@@ -30,6 +30,9 @@ struct Fetched {
     /// The pull requests of the forge, by head branch, as last read; `None`
     /// while none has been read.
     prs: Option<HashMap<String, PrMark>>,
+    /// Whether that list holds every open pull request, so a branch with
+    /// none open in it has none.
+    every_open: bool,
     /// The tip of each of the remote's branches, as fetched just before
     /// that list was read. The list says what the forge held of a branch
     /// at that tip, and of no later one.
@@ -80,7 +83,10 @@ impl Fetches {
         kept.github = github;
         match read {
             None => (kept.prs, kept.forge_error) = (None, None),
-            Some(Ok(prs)) => (kept.prs, kept.tips, kept.forge_error) = (Some(prs), tips, None),
+            Some(Ok((prs, every_open))) => {
+                (kept.prs, kept.every_open, kept.tips) = (Some(prs), every_open, tips);
+                kept.forge_error = None;
+            }
             // A failed read keeps the last list, which still says what was
             // open, and says why it failed.
             Some(Err(e)) => kept.forge_error = Some(format!("{e:#}")),
@@ -113,20 +119,29 @@ impl Fetches {
 
     /// What the forge says of the pull request whose head is `branch` in
     /// `name` while that branch's tip is `tip`: the last list's word, when
-    /// that list was read with the branch at `tip`; unknown when no list
-    /// has been read, or the branch has moved since the last one, as when
+    /// that list was read with the branch at `tip`, and for a branch with
+    /// none open there, when it listed every open one; unknown when no list
+    /// has been read, when the branch has moved since the last one, as when
     /// a drop was pushed after it, since that list says nothing of the
-    /// drop; and none for a repository with no GitHub forge.
+    /// drop, or when the open ones were too many to list; and none for a
+    /// repository with no GitHub forge.
     pub fn pr_state(&self, name: &str, branch: &str, tip: Option<&str>) -> PrState {
         let state = self.state.lock().unwrap();
         match state.get(name) {
             Some(kept) if !kept.github => PrState::Known(None),
             Some(Fetched {
                 prs: Some(prs),
+                every_open,
                 tips,
                 ..
             }) if tip.is_some() && tips.get(branch).map(String::as_str) == tip => {
-                PrState::Known(prs.get(branch).cloned())
+                match prs.get(branch) {
+                    Some(pr) if pr.state == "OPEN" => PrState::Known(Some(pr.clone())),
+                    // Not open, or not listed: it has none open only if
+                    // every open one was listed.
+                    pr if *every_open => PrState::Known(pr.cloned()),
+                    _ => PrState::Unknown,
+                }
             }
             _ => PrState::Unknown,
         }
@@ -179,37 +194,25 @@ struct Listed {
     head_ref_name: String,
 }
 
-/// The forge's last 200 pull requests of any state, by head branch, the
-/// newest for each, through `gh` in `dir`.
-fn pull_requests(gh: &Path, dir: &Path) -> Result<HashMap<String, PrMark>> {
-    let output = Command::new(gh)
-        .current_dir(dir)
-        .env("GH_PROMPT_DISABLED", "1")
-        .args([
-            "pr",
-            "list",
-            "--state",
-            "all",
-            "--limit",
-            "200",
-            "--json",
-            "number,url,state,headRefName",
-        ])
-        .output()
-        .with_context(|| format!("cannot run {}", gh.display()))?;
-    if !output.status.success() {
-        bail!(
-            "gh pr list failed: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        );
-    }
-    let listed: Vec<Listed> =
-        serde_json::from_slice(&output.stdout).context("gh pr list gave unreadable JSON")?;
+/// How many pull requests a list asks for: the recent ones of any state,
+/// for links, and the open ones, which settle whether a branch has one
+/// open.
+const RECENT: usize = 200;
+const OPEN: usize = 1000;
+
+/// The forge's pull requests, by head branch, the newest for each: its
+/// last `RECENT` of any state, with every open one over them; and whether
+/// the open ones were all listed, fewer than `OPEN` of them, so a branch
+/// missing from them has none open.
+fn pull_requests(gh: &Path, dir: &Path) -> Result<(HashMap<String, PrMark>, bool)> {
+    let recent = listed(gh, dir, "all", RECENT)?;
+    let open = listed(gh, dir, "open", OPEN)?;
+    let every_open = open.len() < OPEN;
     let mut prs: HashMap<String, PrMark> = HashMap::new();
-    for pr in listed {
+    for pr in recent.into_iter().chain(open) {
         let newer = prs
             .get(&pr.head_ref_name)
-            .is_none_or(|kept| kept.number < pr.number);
+            .is_none_or(|kept| kept.number <= pr.number);
         if newer {
             let mark = PrMark {
                 number: pr.number,
@@ -219,5 +222,24 @@ fn pull_requests(gh: &Path, dir: &Path) -> Result<HashMap<String, PrMark>> {
             prs.insert(pr.head_ref_name, mark);
         }
     }
-    Ok(prs)
+    Ok((prs, every_open))
+}
+
+/// `gh pr list` of the pull requests in `state`, at most `limit`.
+fn listed(gh: &Path, dir: &Path, state: &str, limit: usize) -> Result<Vec<Listed>> {
+    let limit = limit.to_string();
+    let output = Command::new(gh)
+        .current_dir(dir)
+        .env("GH_PROMPT_DISABLED", "1")
+        .args(["pr", "list", "--state", state, "--limit", &limit])
+        .args(["--json", "number,url,state,headRefName"])
+        .output()
+        .with_context(|| format!("cannot run {}", gh.display()))?;
+    if !output.status.success() {
+        bail!(
+            "gh pr list failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    serde_json::from_slice(&output.stdout).context("gh pr list gave unreadable JSON")
 }
