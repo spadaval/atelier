@@ -260,6 +260,7 @@ const otherMissions: [string, string, MissionRow["state"], ItemRow[], Partial<Mi
   ["atelier-k9rf", "Try a plan whose stop is refused", "proposed", [row("atelier-k9r1", "Write the plan", "draft")]],
   ["atelier-g6rp", "Ship Agent Factory from this repository", "open", []],
   ["atelier-st0p", "A mission someone is stopping", "stop_pending", []],
+  ["atelier-pr0x", "A plan whose pull request will not close", "proposed", []],
   [
     "atelier-qr5s",
     "Move all five repositories and Agent Factory onto the new loop, one cutover per host",
@@ -632,6 +633,12 @@ export const answers = {
     paths: [".atelier/missions/atelier-295u/mission.md"],
     commit: "76cbb6c0ffee0000000000000000000000000000",
   },
+  stopHalfDone: {
+    result: "done",
+    text: "Dropped the proposed plan of mission atelier-pr0x: Not now\nPushed atelier-pr0x to origin, but its pull request was not closed: gh pr close failed: HTTP 403. The stop is published once it is closed: gh pr close atelier-pr0x.",
+    paths: [".atelier/missions/atelier-pr0x/mission.md"],
+    commit: "88aa000000000000000000000000000000000000",
+  },
   stopRefused: {
     result: "refused",
     rules: [],
@@ -687,6 +694,15 @@ export class World {
   }
 
   private act(request: ActRequest): ActResponse {
+    if (request.id === "atelier-pr0x") {
+      // Pushed, and its pull request is still open.
+      const page = this.missionPages["atelier-pr0x"];
+      page.mission = { ...page.mission, status: "dropped", state: "stop_pending" };
+      page.dropped = request.reason;
+      page.pull_request = { number: 413, url: "https://github.com/spadaval/atelier/pull/413", state: "OPEN" };
+      page.can_stop = false;
+      return answers.stopHalfDone;
+    }
     if (request.id !== "atelier-295u") return answers.stopRefused;
     // The stop is pushed and its pull request closed: stopped, and no longer proposed.
     const page = this.missionPages["atelier-295u"];

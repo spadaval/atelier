@@ -139,6 +139,23 @@ test("Not yet sends no stop, and an open mission offers no stop act, only the co
   await expectFits(page);
 });
 
+test("a stop pushed whose pull request did not close stays pending and keeps the error and the command that finishes it", async ({ page }) => {
+  await load(page, "/r/atelier/mission/atelier-pr0x");
+  await page.getByRole("button", { name: "Stop this plan" }).click();
+  await page.getByRole("textbox").fill("Not now");
+  await page.getByRole("button", { name: "Yes, stop it" }).click();
+  await expect(page.getByTestId("status")).toHaveText("Stop not published yet");
+  const stop = page.getByTestId("stop");
+  await expect(stop).toContainText("pull request #413 is closed");
+  await expect(stop).not.toContainText("once it is pushed");
+  const done = stop.getByTestId("done");
+  await expect(done).toContainText("Your stop is written as 88aa0000 and not finished.");
+  await expect(done).toContainText("its pull request was not closed: gh pr close failed: HTTP 403");
+  await expect(done).toContainText("gh pr close atelier-pr0x");
+  await expect(page.getByText("You stopped this plan")).toHaveCount(0);
+  await expectFits(page);
+});
+
 test("a stop someone else wrote shows as pending, naming the branch it waits on", async ({ page }) => {
   await load(page, "/r/atelier/mission/atelier-st0p");
   await expect(page.getByTestId("status")).toHaveText("Stop not published yet");

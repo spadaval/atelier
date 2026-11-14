@@ -95,10 +95,19 @@ export function StopControl({ repo, page }: { repo: string; page: MissionPage })
           <b>A stop is written and not published yet.</b>{" "}
           {page.stop_on
             ? `It is on ${page.stop_on}, and counts once that branch merges.`
-            : page.pull_request
-              ? `It is pushed; it counts once pull request #${page.pull_request.number} is closed.`
-              : "It counts once it is pushed."}
+            : `It counts once the drop is on the forge's copy of ${m.branch ?? "its branch"} and ${page.pull_request ? `pull request #${page.pull_request.number}` : "its pull request"} is closed.`}
         </p>
+        {/* A stop sent from here that was pushed and not closed says why, and what finishes it. */}
+        <ActOutcome
+          sent={sent}
+          refusedTitle="The stop was refused."
+          done={(text, commit) => (
+            <>
+              <b>Your stop is written{commit ? ` as ${shortCommit(commit)}` : ""} and not finished.</b>
+              <p className="act-text">{text}</p>
+            </>
+          )}
+        />
       </div>
     );
   }

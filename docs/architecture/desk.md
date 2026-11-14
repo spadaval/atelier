@@ -295,7 +295,10 @@ the tables below suggest:
   value in its text and title. No link holds one.
 - "Stop this plan" and Start a planning session are the app's only act
   controls. The stop asks for his reason, on one line, before it sends; a
-  session asks once. After a `done`, the app reads every page on screen
+  session asks once. A stop that was pushed and whose pull request did not
+  close stays on the page as the server gave it, with the error and the `gh
+  pr close` that finishes it, under the note that the stop is not
+  published yet. After a `done`, the app reads every page on screen
   again before showing the act's text. An agreed mission's page shows the
   commands that stop it instead (`stop_commands`), folded.
 - A mission's state is its pill: Proposed, Agreed (with "Work in progress"
