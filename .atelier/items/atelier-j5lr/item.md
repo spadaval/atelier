@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-j5lr
 title: Bring the skill, AGENTS.md and the readiness checklist to the branch model
-status: ready
+status: building
 mission: atelier-to83
 labels:
 - redesign
@@ -12,7 +12,8 @@ blocked_by:
 - atelier-2vdq
 - atelier-t5am
 - atelier-xbog
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A93b1b51f-2095-4d1f-af23-677aa6ba570d%3Adelegate-task%3A7c0b369c-e261-4886-ab41-7850db3f9d4c
 ready:
   by: 'sumeet, on 2026-11-13: execute atelier-to83, relayed by the planner thread'
   at: 2026-11-14T01:30:23.044847409Z
