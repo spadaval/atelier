@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-yclc
 title: Move submit and merge into the core, so the Desk can carry an open mission's stop through to the base
-status: draft
+status: dropped
 mission: atelier-to83
 labels: []
 priority: medium
@@ -45,3 +45,7 @@ Out: any change to what `merge` checks or refuses; moving `new`, `set` or `close
 ## Context
 
 atelier-v958 moved a mission's `drop` into the core and built the stop of a proposed plan. atelier-ni3d of atelier-dy62, which this item waits on, merges `atelier-app` and `atelier-records` into `atelier-core`, so the core is that one crate. Its Report says what it left for this item.
+
+## Report
+
+Dropped: Sumeet, in conversation on 2026-11-14: dropped for now. It solves a problem that has not been faced, a stop of an agreed mission from the Desk, and moving submit and merge into the core for it felt like the wrong design. Until it is wanted, an agreed mission's page keeps showing the commands that stop it.
