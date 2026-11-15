@@ -131,7 +131,8 @@ async function showDesk(reference) {
   desiredOpen = true; preferences.openThreads[threadKey(current)] = true; save();
   if (location.hash.includes('/settings')) location.hash = `/${current.environmentId}/${encodeURIComponent(current.threadId)}`;
   scheduleDOM();
-  if (await host.panel.show(current)) return;
+  // A stop or reinjection during the wait must not open anything afterwards.
+  if (await host.panel.show(current) || api.signal.aborted) return;
   // T3's panel did not render a slot (the probe now names the missing hook): use the browser.
   hideDesk();
   const repo = selectedRepository();
