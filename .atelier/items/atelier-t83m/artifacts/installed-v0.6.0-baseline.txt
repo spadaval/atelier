@@ -1,0 +1,12 @@
+Installed atelier 0.6.0; SHA-256 a3afcf1feae859603c3ca62941e6ba47ffd1773f51879035d8277493c658a3e0
+Command: ATELIER_TEST_IMPORT_BINARY=/root/.cargo/bin/atelier cargo test -p atelier-cli --test base_imports unchanged_verified_base_import_commits_through_hook -- --nocapture
+Expected baseline: exit 101; real pre-commit hook rejected a byte-identical base import.
+
+assertion `left == right` failed: Atelier's pre-commit hook refused this commit; nothing was committed.
+Rule: a status changes only as an act of the lifecycle changes it. These change it as no act does:
+  .atelier/items/demo-ab12/item.md: status: ready to approved. Put back the status HEAD has; atelier status names the command for what comes next.
+Fix each file named, stage it with git add, and commit again.
+If the rule is wrong for this case, go past it on purpose: run the same command again with ATELIER_SKIP="<why>" in front of it.
+
+  left: 1
+ right: 0

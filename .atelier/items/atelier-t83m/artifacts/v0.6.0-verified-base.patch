@@ -1,0 +1,98 @@
+--- a/crates/atelier-cli/src/check.rs
++++ b/crates/atelier-cli/src/check.rs
+@@ -198,6 +198,7 @@
+     let unread: Vec<Problem> = loaded.unread.into_iter().filter(staged).collect();
+     let invalid: Vec<Problem> = loaded.invalid.into_iter().filter(staged).collect();
+ 
++    let imported_from = verified_base_import(root, &mut reader)?;
+     let mut acts = Vec::new();
+     if git::has_commit(root, "HEAD")? {
+         let head = git::head(root)?;
+@@ -213,6 +214,15 @@
+             };
+             let mission = path.ends_with("/mission.md");
+             if before != now && !changes(mission, before, now) {
++                // Only the lifecycle comparison is waived. Parsing and full
++                // staged-record validation above still apply.
++                if let Some(base) = &imported_from {
++                    if let Ok(text) = reader.text(base, &path) {
++                        if reader.staged(&path)? == text.as_bytes() {
++                            continue;
++                        }
++                    }
++                }
+                 acts.push((path.into_owned(), before, now));
+             }
+         }
+@@ -267,6 +277,71 @@
+     Ok(rules(skip, &unread, broken, text).unwrap_or(Outcome::Done(String::new())))
+ }
+ 
++/// A catch-up import has exactly one incoming parent, at the configured
++/// local base or its configured forge remote's tracking ref. Neither staged
++/// nor unstaged config can supply that authority. A config change must be
++/// committed separately; even importing a changed config is not exempted.
++fn verified_base_import(root: &Path, reader: &mut CommitReader) -> Result<Option<String>> {
++    if !git::has_commit(root, "HEAD")? {
++        return Ok(None);
++    }
++    let head = git::head(root)?;
++    let Ok(text) = reader.text(&head, CONFIG) else {
++        return Ok(None);
++    };
++    let Ok(config) = parse_config(Path::new(CONFIG), &text) else {
++        return Ok(None);
++    };
++    if git::current_branch(root)?.as_deref() == Some(config.base_branch.as_str())
++        || reader.staged(CONFIG).ok().as_deref() != Some(text.as_bytes())
++    {
++        return Ok(None);
++    }
++    // --git-path also finds a linked worktree's own merge state.
++    let path = git::run(
++        root,
++        &[
++            "rev-parse",
++            "--path-format=absolute",
++            "--git-path",
++            "MERGE_HEAD",
++        ],
++    )?;
++    let incoming = match std::fs::read_to_string(path) {
++        Ok(text) => text,
++        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
++        Err(error) => return Err(error.into()),
++    };
++    let parents: Vec<_> = incoming.lines().collect();
++    let [parent] = parents.as_slice() else {
++        return Ok(None);
++    };
++    // A MERGE_HEAD is an object ID, never an arbitrary rev expression.
++    if parent.len() != head.len() || !parent.bytes().all(|b| b.is_ascii_hexdigit()) {
++        return Ok(None);
++    }
++    let mut refs = vec![format!("refs/heads/{}", config.base_branch)];
++    if let Some(forge) = config.forge {
++        refs.push(format!(
++            "refs/remotes/{}/{}",
++            forge.remote, config.base_branch
++        ));
++    }
++    for reference in refs {
++        if git::run(
++            root,
++            &["rev-parse", "--verify", &format!("{reference}^{{commit}}")],
++        )
++        .ok()
++        .as_deref()
++            == Some(*parent)
++        {
++            return Ok(Some((*parent).to_owned()));
++        }
++    }
++    Ok(None)
++}
++
+ /// The pre-push hook: the base receives only merges. With a forge
+ /// configured the forge makes every merge, so any push that moves the base
+ /// is refused. Without one, each new commit on the base's first-parent

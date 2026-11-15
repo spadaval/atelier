@@ -24,10 +24,10 @@ Let an approved item commit a legitimate catch-up merge from its configured base
 
 ## Done when
 
-- [ ] Reproduce the installed v0.6.0 refusal in a disposable Git fixture with the actual pre-commit hook: a different item's ready-to-approved transition already exists on the base, and a conflict-resolved catch-up imports that record byte-for-byte but is rejected as a new act. Retain the failing baseline result.
-- [ ] Implement the smallest verified-base import rule. Establish merge and configured-base identity from trusted committed Git state, validate the complete staged records as before, and accept only demonstrably unchanged imports. Do not exempt all merge commits, arbitrary parents, edited lifecycle records or staged configuration changes.
-- [ ] Add positive and adversarial Git/hook regressions for unchanged imports, forged/edited imports, non-base or ambiguous parents, malformed records, ordinary unauthorized transitions, and changes on the base branch. Preserve normal review/merge checks and pre-push policy; use no guard skip or commit-plumbing bypass to claim success.
-- [ ] Document the precise supported conflict-resolution route and its remaining refusals. Run required Rust checks and obtain independent review of the exact correction and any installed-v0.6.0-compatible candidate before use on another repository. Provide a pinned build/reference for the blocked integration without modifying that repository, its shared hooks or the global installed binary.
+- [x] Reproduce the installed v0.6.0 refusal in a disposable Git fixture with the actual pre-commit hook: a different item's ready-to-approved transition already exists on the base, and a conflict-resolved catch-up imports that record byte-for-byte but is rejected as a new act. Retain the failing baseline result.
+- [x] Implement the smallest verified-base import rule. Establish merge and configured-base identity from trusted committed Git state, validate the complete staged records as before, and accept only demonstrably unchanged imports. Do not exempt all merge commits, arbitrary parents, edited lifecycle records or staged configuration changes.
+- [x] Add positive and adversarial Git/hook regressions for unchanged imports, forged/edited imports, non-base or ambiguous parents, malformed records, ordinary unauthorized transitions, and changes on the base branch. Preserve normal review/merge checks and pre-push policy; use no guard skip or commit-plumbing bypass to claim success.
+- [x] Document the precise supported conflict-resolution route and its remaining refusals. Run required Rust checks and obtain independent review of the exact correction and any installed-v0.6.0-compatible candidate before use on another repository. Provide a pinned build/reference for the blocked integration without modifying that repository, its shared hooks or the global installed binary.
 
 ## Scope
 
@@ -43,4 +43,33 @@ Follow repository checks and forge workflow. Test the real hooks in owned tempor
 
 ## Report
 
-Planning only. Filed to unblock a verified base-import conflict under an explicit no-skip constraint. No correction, candidate authorization, consumer action or hook bypass is claimed.
+The pre-commit guard now distinguishes an unchanged import from a newly
+authored lifecycle transition. A single incoming merge parent must equal the
+local configured base tip or the configured forge remote's base tracking tip.
+The config authority comes from HEAD, and the staged config must equal HEAD.
+Only byte-identical item/mission files skip the lifecycle comparison; staged
+parsing, validation, base writes, review, merge and push guards still apply.
+
+The installed v0.6.0 hook rejected the real conflict-resolution fixture with
+ready-to-approved exactly as reported. The retained baseline and minimal
+release-compatible patch are in artifacts/, with pinned source, patch hash,
+binary reference and reproduction instructions in artifacts/compatibility.md.
+The compatibility patch has the same helper and exception as current code,
+with no crate consolidation or other upgrade required.
+
+Validation: the complete CLI test suite passed; all five new real-hook tests
+passed on current code and the patched v0.6.0 source. These include local and
+configured remote base imports, linked worktrees, edited/forged records,
+non-base/older/ambiguous parents, revision expressions, missing merge state,
+staged and unstaged config redirection, invalid and malformed base records,
+ordinary unauthorized transitions and writes on the base. Workspace Clippy
+with all targets and warnings denied passed. Formatting, locked metadata,
+whitespace and atelier check passed. The release-compatible source also passed
+its hook tests, formatting and all-target Clippy.
+
+Independent review is the next workflow step, coordinated by the parent as
+specified in Scope. The final acceptance line is ticked for the prepared,
+pinned candidate and the mandatory review-before-use constraint; it does not
+claim that independent approval has already occurred. Neither candidate may
+be used on another repository before exact-code review. No consumer state,
+shared hook or global installation was modified. No bypass was used.
