@@ -11,8 +11,11 @@ const root = process.cwd();
 const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'atelier-extension-test-'));
 const debugPort = 19222;
 let deskBase;
-const fixtureRepositoryKey = 'example.com/owner/example';
-const referenceId = 'example-i5ph';
+const fixtureRepositoryKey = 'example.com/owner/atelier';
+const referenceId = 'atelier-plr9';
+const missionId = 'atelier-g961';
+// A Chromium browser for the isolated fixture page; set BROWSER to override.
+const browserPath = process.env.BROWSER ?? (process.platform === 'win32' ? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe' : '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
 let browser, injector, page;
 async function until(check, label, timeout = 20000) {
   const end = Date.now() + timeout; let lastError;
@@ -29,8 +32,8 @@ async function control(action) {
   if (code) throw new Error(`${action}: ${output}`);
   return JSON.parse(output);
 }
-const html = `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-src 'none'"><title>Atelier extension fixture</title><style>html{--background:#202124;--foreground:#eee;--border:#555;--secondary:#353639;--primary:#9bbcff}body{margin:0;background:#202124;color:#eee;font:14px system-ui}#app{height:100vh;display:flex;flex-direction:column}header{padding:12px;border-bottom:1px solid #555}#workspace{display:flex;flex:1;min-height:0}[data-workspace-area=conversation]{flex:1;padding:20px;min-width:0;overflow:auto}[data-workspace-area=panel]{width:750px;display:flex;flex-direction:column;min-width:0}[data-right-panel-tabbar]{height:52px;display:flex;align-items:center}[data-right-panel-tabbar]>div{display:flex;align-items:center}[data-right-panel-surface-content]{position:relative;flex:1;min-height:0}#native-content{padding:20px}#settings{overflow:auto;padding:24px;max-width:850px}#composer{margin-top:30px;border:1px solid #555;padding:12px}</style></head><body><div id="app"><header><span data-panel-layout-controls>Workspace controls</span></header><div id="workspace"><main data-workspace-area="conversation"><h1>Conversation</h1><p id="reference-prose">Investigate ${referenceId}, then <code>${referenceId}</code>. Ignore atelier-xabc and not-${referenceId}-extra.</p><pre>${referenceId}</pre><div id="composer" contenteditable="true">${referenceId}</div><p id="stream"></p></main><div data-workspace-area="panel"><div data-right-panel-tabbar><div><div data-active-tab="true"><button id="native-tab">Files</button></div><button aria-label="Add panel surface">+</button></div></div><div data-right-panel-surface-content><div id="native-content"><button id="native-control">Native file viewer</button></div></div></div></div><div id="settings" hidden><div data-settings-page-scroll><div><h1>General</h1><p>T3 settings fixture</p></div></div></div></div><script>
-globalThis.fixtureContext={environmentId:'env',threadId:'thread-a',projectId:'project-a',projectName:'example',repositoryKey:'${fixtureRepositoryKey}'};
+const html = `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; connect-src 'self' blob: http: https: ws: wss:; style-src 'self' 'unsafe-inline'; frame-src 'self' blob: http: https:"><title>Atelier extension fixture</title><style>html{--background:#202124;--foreground:#eee;--border:#555;--secondary:#353639;--primary:#9bbcff}body{margin:0;background:#202124;color:#eee;font:14px system-ui}#app{height:100vh;display:flex;flex-direction:column}header{padding:12px;border-bottom:1px solid #555}#workspace{display:flex;flex:1;min-height:0}[data-workspace-area=conversation]{flex:1;padding:20px;min-width:0;overflow:auto}[data-workspace-area=panel]{width:750px;display:flex;flex-direction:column;min-width:0}[data-right-panel-tabbar]{height:52px;display:flex;align-items:center}[data-right-panel-tabbar]>div{display:flex;align-items:center}[data-right-panel-surface-content]{position:relative;flex:1;min-height:0}#native-content{padding:20px}#settings{overflow:auto;padding:24px;max-width:850px}#composer{margin-top:30px;border:1px solid #555;padding:12px}</style></head><body><div id="app"><header><span data-panel-layout-controls>Workspace controls</span></header><div id="workspace"><main data-workspace-area="conversation"><h1>Conversation</h1><p id="reference-prose">Investigate ${referenceId}, then <code>${referenceId}</code>. Ignore other-xabc and not-${referenceId}-extra.</p><pre>${referenceId}</pre><div id="composer" contenteditable="true">${referenceId}</div><p id="stream"></p></main><div data-workspace-area="panel"><div data-right-panel-tabbar><div><div data-active-tab="true"><button id="native-tab">Files</button></div><button aria-label="Add panel surface">+</button></div></div><div data-right-panel-surface-content><div id="native-content"><button id="native-control">Native file viewer</button></div></div></div></div><div id="settings" hidden><div data-settings-page-scroll><div><h1>General</h1><p>T3 settings fixture</p></div></div></div></div><script>
+globalThis.fixtureContext={environmentId:'env',threadId:'thread-a',projectId:'project-a',projectName:'atelier',repositoryKey:'${fixtureRepositoryKey}'};
 globalThis.fixturePanel={isOpen:true,activeSurfaceId:'files'}; globalThis.fixtureListeners=new Set();
 addEventListener('hashchange',()=>{const settings=location.hash.includes('/settings');document.querySelector('#settings').hidden=!settings;document.querySelector('#workspace').style.display=settings?'none':'flex'});
 </script></body></html>`;
@@ -41,17 +44,22 @@ try {
   const configPath = path.join(root, 'config.json');
   const config = JSON.parse(await fs.readFile(await fs.access(configPath).then(() => configPath, () => path.join(root, 'config.example.json')), 'utf8'));
   deskBase = config.desk.baseUrl.replace(/\/$/, '');
-  const repository = config.desk.repositories.find(repo => repo.repo === 'example');
-  assert(repository, 'Integration tests require an example repository in config.json');
+  const repository = config.desk.repositories.find(repo => repo.repo === 'atelier');
+  assert(repository, 'Integration tests require an atelier repository in config.json');
   repository.repositoryKeys = [fixtureRepositoryKey];
   config.debugPort = debugPort; config.targetPrefixes = [base];
   await fs.writeFile(path.join(temp, 'config.json'), JSON.stringify(config));
   await fs.copyFile(path.join(root, 'custom.js'), path.join(temp, 'custom.js'));
   await fs.copyFile(path.join(root, 'custom.css'), path.join(temp, 'custom.css'));
-  await fs.writeFile(path.join(temp, 'host-adapter.js'), `async function createHostAdapter(api){globalThis.fixtureApi=api;return {context:async()=>globalThis.fixtureContext,panelState:()=>globalThis.fixturePanel,showPanel:()=>{globalThis.fixturePanel.isOpen=true;for(const callback of globalThis.fixtureListeners)callback()},subscribe:callback=>{globalThis.fixtureListeners.add(callback);return()=>globalThis.fixtureListeners.delete(callback)}}}`);
+  // The real adapter's selectors and probes, with T3's private modules replaced by fixtures.
+  await fs.writeFile(path.join(temp, 'host-adapter.js'), await fs.readFile(path.join(root, 'host-adapter.js'), 'utf8') + `
+createHostAdapter = async api => { globalThis.fixtureApi = api; return { context: async () => globalThis.fixtureContext, panel: {
+  state: () => globalThis.fixturePanel,
+  show: () => { globalThis.fixturePanel.isOpen = true; for (const callback of globalThis.fixtureListeners) callback(); },
+  subscribe: callback => { globalThis.fixtureListeners.add(callback); return () => globalThis.fixtureListeners.delete(callback); } } }; };`);
   const browserLog = await fs.open(path.join(temp, 'browser.log'), 'w');
   const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE; delete env.NODE_OPTIONS;
-  browser = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--no-first-run', '--no-default-browser-check', '--disable-background-networking', `--user-data-dir=${path.join(temp, 'profile')}`, `--remote-debugging-port=${debugPort}`, '--remote-debugging-address=127.0.0.1', '--window-size=1600,1000', base + '/#/env/thread-a'], { env, stdio: ['ignore', browserLog.fd, browserLog.fd] });
+  browser = spawn(browserPath, ['--headless=new', '--no-first-run', '--no-default-browser-check', '--disable-background-networking', `--user-data-dir=${path.join(temp, 'profile')}`, `--remote-debugging-port=${debugPort}`, '--remote-debugging-address=127.0.0.1', '--window-size=1600,1000', base + '/#/env/thread-a'], { env, stdio: ['ignore', browserLog.fd, browserLog.fd] });
   await browserLog.close();
   page = await until(() => connectPage(debugPort, base), 'Browser startup');
   const injectorLog = await fs.open(path.join(temp, 'injector.log'), 'w');
@@ -62,7 +70,7 @@ try {
   await evaluate('document.querySelector("[data-t3-desk-launch]").click()');
   await until(() => evaluate('Boolean(document.querySelector("[data-right-panel-surface-content] > [data-t3-desk-mount]:not([hidden])"))'), 'Docked Desk');
   const iframeSrc = await evaluate('document.querySelector("[data-t3-desk-mount]").shadowRoot.querySelector("iframe").src');
-  assert.equal(iframeSrc, deskBase + '/r/example');
+  assert.equal(iframeSrc, deskBase + '/r/atelier');
   assert(await evaluate('document.querySelector("#native-content").inert'));
   const geometry = await evaluate('(()=>{const host=document.querySelector("[data-right-panel-surface-content]").getBoundingClientRect();const frame=document.querySelector("[data-t3-desk-mount]").getBoundingClientRect();return {hostWidth:host.width,frameWidth:frame.width,hostLeft:host.left,frameLeft:frame.left}})()');
   assert.equal(geometry.hostWidth, geometry.frameWidth); assert.equal(geometry.hostLeft, geometry.frameLeft);
@@ -72,9 +80,9 @@ try {
 
   const iframeTarget = await until(async () => (await (await fetch(`http://127.0.0.1:${debugPort}/json/list`)).json()).find(target => target.type === 'iframe' && target.url.startsWith(deskBase)), 'Real Desk iframe');
   const child = await page.call('Target.attachToTarget', { targetId: iframeTarget.id, flatten: true });
-  await until(async () => (await page.call('Runtime.evaluate', { expression: 'document.readyState === "complete" && document.body.innerText.includes("example") && !document.querySelector(".skel")', returnByValue: true }, child.sessionId)).result.value, 'Real Desk application rendering');
+  await until(async () => (await page.call('Runtime.evaluate', { expression: 'document.readyState === "complete" && document.body.innerText.includes("atelier") && !document.querySelector(".skel")', returnByValue: true }, child.sessionId)).result.value, 'Real Desk application rendering');
   // Real backend data is checked through the same allow-listed bridge as hovercards.
-  const record = await evaluate(`fixtureApi.request('desk-get',{path:'/api/repos/example/items/${referenceId}'})`);
+  const record = await evaluate(`fixtureApi.request('desk-get',{path:'/api/repos/atelier/items/${referenceId}'})`);
   assert.equal(record.row.id, referenceId);
   const denied = await evaluate(`fixtureApi.request('desk-get',{path:'/api/action'}).then(()=>false,error=>error.message)`);
   assert.match(denied, /not allowed/);
@@ -101,10 +109,10 @@ try {
   await until(() => evaluate('!document.querySelector("[data-t3-desk-mount]").hidden'), 'Desk on second thread');
   assert(await evaluate('document.querySelector("[data-t3-desk-mount]").shadowRoot.querySelector("iframe") === globalThis.keptFrame'));
   assert((await evaluate('globalThis.keptFrame.src')).endsWith('/item/' + referenceId));
-  await evaluate(`(()=>{const p=document.createElement('p');p.id='mission-reference';p.textContent='example-bzmd';document.querySelector('[data-workspace-area=conversation]').append(p)})()`);
-  await until(() => evaluate('Boolean(document.querySelector("#t3-custom-root").shadowRoot.querySelector("[data-atelier-id=example-bzmd]"))'), 'Mission reference scanning');
+  await evaluate(`(()=>{const p=document.createElement('p');p.id='mission-reference';p.textContent='${missionId}';document.querySelector('[data-workspace-area=conversation]').append(p)})()`);
+  await until(() => evaluate(`Boolean(document.querySelector("#t3-custom-root").shadowRoot.querySelector("[data-atelier-id=${missionId}]"))`), 'Mission reference scanning');
   await evaluate(`(()=>{document.getSelection().removeAllRanges();const p=document.querySelector('#mission-reference');const range=document.createRange();range.selectNodeContents(p);const r=range.getBoundingClientRect();p.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,clientX:r.left+3,clientY:r.top+3}))})()`);
-  await until(() => evaluate('globalThis.keptFrame.src.endsWith("/mission/example-bzmd")'), 'Direct mission reference click');
+  await until(() => evaluate(`globalThis.keptFrame.src.endsWith("/mission/${missionId}")`), 'Direct mission reference click');
   console.log('PASS: direct mouse activation resolves missions before navigating, without requiring a hovercard');
   await evaluate('fixtureContext={...fixtureContext,threadId:"thread-c",projectId:"project-c",projectName:"unlinked",repositoryKey:"elsewhere/unlinked"};location.hash="/env/thread-c"');
   await delay(500); await evaluate('document.querySelector("[data-t3-desk-launch]").click()');
@@ -118,7 +126,7 @@ try {
 
   await evaluate('document.querySelector("#t3-custom-root").shadowRoot.querySelector("#extension-settings").click()');
   await until(() => evaluate('Boolean(document.querySelector("#t3-custom-settings"))'), 'Settings section');
-  await evaluate('(()=>{const select=document.querySelector("#t3-custom-settings").shadowRoot.querySelector("select");select.value="example";select.dispatchEvent(new Event("change"))})()');
+  await evaluate('(()=>{const select=document.querySelector("#t3-custom-settings").shadowRoot.querySelector("select");select.value="atelier";select.dispatchEvent(new Event("change"))})()');
   await evaluate('location.hash="/env/thread-c"');
   await until(() => evaluate('!document.querySelector("[data-t3-desk-mount]").shadowRoot.querySelector("iframe").hidden'), 'Explicit project mapping');
   await evaluate('document.querySelector("#native-tab").click()');
@@ -137,7 +145,7 @@ try {
   await delay(500); await evaluate('document.querySelector("[data-t3-desk-launch]").click()');
   const finalFrame = await until(async () => (await (await fetch(`http://127.0.0.1:${debugPort}/json/list`)).json()).find(target => target.type === 'iframe' && target.url.startsWith(deskBase)), 'Reinjected Desk iframe');
   const finalChild = await page.call('Target.attachToTarget', { targetId: finalFrame.id, flatten: true });
-  await until(async () => (await page.call('Runtime.evaluate', { expression: 'document.readyState === "complete" && document.body.innerText.includes("example") && !document.querySelector(".skel")', returnByValue: true }, finalChild.sessionId)).result.value, 'Reinjected Desk rendering');
+  await until(async () => (await page.call('Runtime.evaluate', { expression: 'document.readyState === "complete" && document.body.innerText.includes("atelier") && !document.querySelector(".skel")', returnByValue: true }, finalChild.sessionId)).result.value, 'Reinjected Desk rendering');
   await fs.mkdir(path.join(root, 'artifacts'), { recursive: true });
   const screenshot = await page.call('Page.captureScreenshot', { format: 'png' });
   await fs.writeFile(path.join(root, 'artifacts/extension-docked.png'), Buffer.from(screenshot.data, 'base64'));
