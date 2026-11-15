@@ -1,25 +1,39 @@
-# Prototype verification
+# Verification
 
-Validated on macOS on November 15, 2026, against T3 Code Nightly
-`0.1.10-nightly.20261114.4669` and an existing Atelier Desk server.
+## Windows, November 15, 2026
 
-The isolated Chromium integration suite checks:
+T3 Code Nightly `0.1.10-nightly.20261115.4749` on Windows 11, Atelier Desk at
+`http://buildbot:3780`. All runs used a second T3 instance of the installed app
+(own `APPDATA`, `T3CODE_HOME`, debugging port 9333, auto-update off), paired
+read-only with the daily T3 server; the daily instance was never attached to.
 
-- Desk docking, host panel resizing, and completed rendering of real Desk data.
-- Repository identity matching, manual mapping, same-repository navigation
-  preservation, and hiding previous content for unmapped projects.
-- Configured-slug recognition in prose and inline code, excluding fenced code
-  and editors, without rewriting React's text nodes.
-- Hovercards using real item data, stable references while messages stream,
-  direct mission clicks before hover, and cross-project reference navigation.
-- Settings reinjection without refreshing the document, subscription cleanup,
-  restoration of native surfaces, and full injector removal.
-- Rejection of action endpoints by the read bridge.
+- Loader: `launch` cold-starts the instance and injects in about 2 seconds;
+  `launch` with the instance already debuggable hands off and reinjects;
+  `launch` with the instance running without a debugging port shows the
+  "already running" dialog (the second process exits with code 130) and leaves
+  it running. `status`, `reload` and `stop` work over the named pipe; `stop`
+  removes every custom element without reloading the document
+  (`performance.timeOrigin` unchanged).
+- Injection works with T3's content security policy in force: the Desk iframe
+  loads `http://buildbot:3780/r/atelier` and renders; no `Page.reload` is used.
+- `test-contract.mjs` reports all 13 hooks present; with a renamed store shape
+  and settings selector, or a non-existent thread, it exits 1 naming them.
+- In a real thread of the `atelier` project (repository key
+  `github.com/spadaval/atelier`): the Desk tab, a hovercard for `atelier-plr9`
+  with Desk data, and the Customizations section with every probe.
+- `test-extension.mjs` passes with Edge.
+- The installer upgrades a modified installed `custom.js` (kept as
+  `custom.js.previous`) and the running injector reapplies it.
 
-The actual installed T3 application was additionally used to verify private
-module discovery, project context, native panel placement, item hovercards,
-Settings, reinjection, and document reload during connection startup. The
-official application bundle was not modified.
+Not verified: macOS after these changes, and the Start menu shortcut and
+injection into the daily instance (that needs the daily T3 restarted).
+
+## macOS prototype, November 15, 2026
+
+Validated against T3 Code Nightly `0.1.10-nightly.20261114.4669` with the
+isolated Chromium suite (docking, repository matching, references, hovercards,
+reinjection, native-surface restoration, read-bridge restrictions) and the
+installed T3 application. The official application bundle was not modified.
 
 The tests use existing backend records; they do not cover Desk mutations.
 They are not a compatibility guarantee for other T3 builds. Runtime logs,

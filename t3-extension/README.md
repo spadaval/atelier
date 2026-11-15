@@ -4,40 +4,65 @@ An external T3 Code extension using Atelier Desk as its backend. The official
 T3 application stays untouched. The local injector owns T3-specific presentation
 and context; Desk owns repository records, item/mission data, and its web UI.
 
-This is a rough macOS prototype, tested with T3 Code Nightly
-`0.1.10-nightly.20261114.4669`. It uses private T3 interfaces and the Chrome
-DevTools Protocol rather than a supported extension API.
+It works on Windows and macOS. It uses private T3 interfaces and the Chrome
+DevTools Protocol rather than a supported extension API; every private hook it
+uses is checked by name at startup (see [T3 hooks](#t3-hooks)). Last verified on
+Windows against T3 Code Nightly `0.1.10-nightly.20261115.4749`.
+
+Three layers:
+
+- `t3-custom.mjs` (loader): launches T3 with a debugging port, attaches, injects,
+  reloads on file change. It knows nothing about Atelier. Launching, process
+  detection, dialogs and the control channel differ per platform, all in its
+  `platform` object.
+- `host-adapter.js`: the only code coupled to T3 internals.
+- `custom.js`: the Atelier extension, written against the adapter and Desk's HTTP
+  API. The Desk panel is an iframe.
 
 ## Install
 
-Requires macOS, T3 Code Nightly in `/Applications/T3 Code (Nightly).app`,
-Python 3, and an accessible Atelier Desk server. The launcher uses T3's bundled
-Electron runtime; a separate Node installation is only needed for development.
+Requires T3 Code Nightly, Python 3 for the installer, and an Atelier Desk server
+reachable from this machine. At run time the loader uses T3's own executable in
+Node mode, so no separate Node installation is needed.
 
 ```sh
 git clone git@github.com:spadaval/t3-code-atelier.git
 cd t3-code-atelier
 cp config.example.json config.json
-# Edit config.json with your Desk URL and repository identities/slugs.
-python3 install.py
-open "$HOME/Applications/T3 Custom.app"
+# Edit config.json: desk.baseUrl and repository identities/slugs.
+python3 install.py        # Windows: py install.py
 ```
 
+| | macOS | Windows |
+|---|---|---|
+| T3 found at | `/Applications/T3 Code (Nightly).app` | `%LOCALAPPDATA%\Programs\t3code\T3 Code (Nightly).exe` |
+| Installed to | `~/Library/Application Support/T3 Custom` | `%APPDATA%\T3 Custom` |
+| Launcher | `~/Applications/T3 Custom.app` | Start menu: **T3 Custom** |
+| Control command | `t3-custom` in the install folder | `t3-custom.cmd` in the install folder |
+| Control channel | Unix socket `injector.sock` | named pipe `\\.\pipe\t3-custom-<hash of folder>` |
+
 `config.json` is local and ignored by Git. Set `desk.baseUrl` to a URL reachable
-from both the Mac's injector and the embedded browser. Each repository entry
-needs Desk's repository name, its Atelier `slug`, and T3's canonical repository
-key. The supplied `example.com/owner/example` key is a placeholder. An
-explicit project mapping in Settings can also select a configured repository.
-Existing installed configuration is preserved; edit the installed copy when
-updating an existing installation.
+from both the injector and the embedded browser. Each repository entry needs
+Desk's repository name, its Atelier `slug`, and T3's canonical repository key.
+An explicit project mapping in Settings can also select a configured repository.
+If `appPath` does not exist, the installer fills in the T3 it finds.
+
+Running the installer again upgrades an installation: it replaces the managed
+files (`t3-custom.mjs`, `host-adapter.js`, `custom.js`, `README.md`), keeping a
+modified `custom.js` as `custom.js.previous`. It keeps `custom.css` and
+`config.json`, only adding missing top-level keys. A running injector picks up
+the new `custom.js` and adapter at once; restart it (`stop`, then the launcher)
+after a change to `t3-custom.mjs`.
 
 ## Use
 
-Open `~/Applications/T3 Custom.app`, or drag it into the Dock. The launcher starts
-the official T3 Code Nightly with debugging on `127.0.0.1:9222` and starts or reuses
-one background injector. Opening the launcher again forces reinjection. It never
-quits T3; if the app was launched without debugging, quit it once and use this
-launcher. The original icon and update relaunches are not intercepted.
+Open the launcher. It starts the official T3 Code Nightly with debugging on
+`127.0.0.1:9222` and starts or reuses one background injector. Opening the
+launcher again forces reinjection. It never quits T3: if T3 is already running
+without the debugging port, the launcher says so and leaves it running; quit T3
+once and open the launcher. On Windows the check is that a second T3 process
+hands off to the running one and exits. The original icon and update relaunches
+are not intercepted.
 
 **Desk** is available beside T3's panel controls and in its right-panel tab strip.
 It uses the existing workspace-panel content area and follows the host's resize,
@@ -48,10 +73,10 @@ hidden/inert only while Desk occupies the slot.
 
 The panel header has only Desk controls: Refresh, Open externally, and Close.
 A small bottom-right gear opens **Settings → General → Customizations**. That
-section contains injector status/errors, Reload scripts, Open customization
-folder, feature toggles, project mapping, and the follow-project/pinned setting.
-The controls are created before loading the private T3 adapter, so an adapter
-failure still leaves a path to diagnostics and reloading.
+section contains injector status/errors, the state of each T3 hook, Reload
+scripts, Open customization folder, feature toggles, project mapping, and the
+follow-project/pinned setting. The controls are created before the T3 hooks are
+looked up, so a broken hook still leaves a path to diagnostics and reloading.
 
 ## Project context
 
@@ -60,9 +85,8 @@ metadata using T3's existing authenticated connection. It keeps those credential
 inside T3's renderer. Neither Desk nor its iframe receives T3 credentials.
 
 `config.json` maps canonical repository identities to Desk repository names and
-Atelier slugs. The example uses repository and slug `example`; replace its
-placeholder identity for your installation. Names and local directory paths are
-not used as identity.
+Atelier slugs. The example maps T3's `github.com/spadaval/atelier` to Desk's
+`atelier` repository. Names and local directory paths are not used as identity.
 Manual mappings are keyed by T3 environment ID and project ID. Worktrees or
 clones with the same repository identity resolve to the same Desk repository.
 
@@ -79,7 +103,7 @@ changes. Desk retains its own existing user-authorized actions.
 
 ## Smart references
 
-The configured slug recognizes item/mission tokens such as `example-i5ph`.
+The configured slug recognizes item/mission tokens such as `atelier-plr9`.
 Suffixes follow Atelier's lowercase-letter/digit format; four characters are not
 assumed. Unknown prefixes are not interpreted as Atelier references.
 
@@ -89,6 +113,9 @@ React's text nodes intact; separate keyboard links provide focus and activation.
 Mouse selection and copying continue to operate on the original message text.
 Visible link geometry updates on scrolling/resizing and references are rescanned
 as messages stream. Existing focus/hover targets are retained across scans.
+
+References need only T3's conversation DOM, so they keep working when the hooks
+behind the Desk panel are missing; clicks then open Desk externally.
 
 Hover or keyboard focus opens a card with title, state, priority, holder,
 blockers, completion checks, and an optional goal excerpt. Click opens the record
@@ -105,67 +132,113 @@ other bridge actions are injector status and opening its fixed local folder.
 
 ## Edit and control
 
-Installed files are under `~/Library/Application Support/T3 Custom/`:
+Installed files, in the install folder above:
 
 - `custom.js`: extension UI, settings, project behavior, and references.
 - `custom.css`: optional CSS for T3 itself.
-- `host-adapter.js`: the small boundary coupled to T3's private module exports.
-- `config.json`: app path, port, URL matching, Desk backend, repository/slug map.
+- `host-adapter.js`: the boundary coupled to T3's private DOM and modules.
+- `config.json`: app path, port, URL matching, Desk backend, repository/slug map,
+  and optional `appEnv` (environment for a test instance, Windows only).
 - `t3-custom.mjs`: launcher, file watcher, CDP attachment, and read bridge.
 - `injector.log`: timestamped operations and concrete errors.
 
 Saving client/adapter/CSS/config files reapplies them without refreshing T3.
-Reload scripts forces reinjection even when files did not change. Command-R also
+Reload scripts forces reinjection even when files did not change. A T3 reload
 reruns the registered script after refreshing the document. Syntax errors keep
 the last working customization. Script runtime errors appear in diagnostics.
-Changes to the injector process itself require restarting that helper.
-`window.__t3Custom.diagnostics()` reports the current project, selected repository,
-reference override, and panel selection without exposing connection credentials.
+`window.__t3Custom.diagnostics()` reports the hook probes, current project,
+selected repository, reference override, and panel selection without exposing
+connection credentials.
 
 ```sh
-"$HOME/Library/Application Support/T3 Custom/t3-custom" status
-"$HOME/Library/Application Support/T3 Custom/t3-custom" check
-"$HOME/Library/Application Support/T3 Custom/t3-custom" reload
-"$HOME/Library/Application Support/T3 Custom/t3-custom" stop
+t3-custom status   # injector state, attached pages, and every hook probe
+t3-custom check    # validate the files without injecting
+t3-custom reload
+t3-custom stop
 ```
 
 A clean stop removes custom DOM, highlights, native visibility/inert overrides,
-listeners, and future-document injection. It refreshes the main renderer to
-restore CSP. Quit/reopen the original app to remove the debugging listener too.
-To uninstall, stop, then remove the launcher and the Application Support folder.
+listeners, and future-document injection, without reloading T3. Quit and reopen
+T3 normally to remove the debugging listener too. To uninstall, stop, then
+remove the launcher and the install folder.
 
 Only main page targets matching `t3code://app/` are injected. Preview pages and
-Desk's iframe are not injected separately. The first attachment and clean stop
-refresh the renderer because Chromium establishes CSP when initializing a
-new document. `bypassCSP: true` is required for the current iframe implementation;
-it bypasses CSP for that inspected renderer session, not just one frame-src rule.
-No main-process inspector or network-facing debugging listener is enabled.
+Desk's iframe are not injected separately. T3's own content security policy is
+left in force: it already allows `frame-src http: https:` for the Desk iframe,
+and CDP-injected scripts are not subject to `script-src`. Desk reads go through
+the injector because Desk sends no CORS headers. No main-process inspector or
+network-facing debugging listener is enabled.
+
+## T3 hooks
+
+`host-adapter.js` names each private hook and probes it at startup:
+
+- `module:workspace-panel-store`, `module:atom-registry`,
+  `module:prepared-connection-atom`: found by the shape of their exports across
+  every loaded T3 module, not by chunk or minified export names (the registry is
+  recognised by Effect's `~effect/reactivity/AtomRegistry` type id).
+- `http:orchestration-shell` and `route:thread`: the project metadata read and
+  the `#/<environment>/<thread>` route, checked when a thread is opened.
+- `dom:*`: the DOM attributes the panel, references and settings attach to.
+  They are confirmed when first seen, since T3 renders them only on demand.
+
+A missing hook is reported by name in Customizations, in `t3-custom status`, and
+in `injector.log`, and turns off only the surface that needs it: the Desk panel
+needs the panel store, the registry and the connection atom; references need the
+conversation DOM; the settings section needs the settings page.
+
+## A test instance (Windows)
+
+A second instance of the installed T3 can run beside the daily one with its own
+data, so changes can be tried without touching the daily app. T3 takes its
+Electron data folder from `APPDATA` (its main process sets it, so
+`--user-data-dir` is not the switch to use) and its
+server state from `T3CODE_HOME`; separate values give it its own single-instance
+lock, server and port. Install a second copy of the extension with `--home`
+(this creates no Start menu entry) and give it its own port and environment in
+that copy's `config.json`:
+
+```json
+"debugPort": 9333,
+"appEnv": {
+  "APPDATA": "C:\\Users\\you\\AppData\\Local\\T3 Custom Test\\Roaming",
+  "T3CODE_HOME": "C:\\Users\\you\\AppData\\Local\\T3 Custom Test\\t3home",
+  "T3CODE_DISABLE_AUTO_UPDATE": "1"
+}
+```
+
+```bat
+py install.py --home "%LOCALAPPDATA%\T3 Custom Test\custom-home"
+"%LOCALAPPDATA%\T3 Custom Test\custom-home\t3-custom.cmd" launch
+```
+
+Keep auto-update off in a test instance: an update installs over the shared
+program folder. Before its first launch, create an empty
+`<T3CODE_HOME>\userdata\cli-command-first-launch`; otherwise T3 adds the test
+instance's `t3` command to your user PATH (its Settings can remove it again).
+To see the daily server's threads in it, mint a pairing code with `t3 pair`
+(for example `--scope orchestration:read`) and add `http://127.0.0.1:3773` under
+Settings → Environments → Add environment.
 
 ## Development and verification
 
-`python3 install.py` installs the runtime and adapter, creates the launcher, and
-adds missing configuration defaults. It preserves existing custom JS/CSS/config.
-When upgrading the managed extension client, back up and copy `custom.js`
-explicitly. No npm dependencies or separate Node installation are needed at run
-time: the launcher uses T3's bundled Electron binary in Node mode.
+No npm dependencies are needed. The tests need Node.js 22 or newer.
 
-`node test-extension.mjs` requires Node.js 22 or newer and Google Chrome at its
-standard macOS application path. It runs an isolated Chromium fixture with T3's panel DOM
-contract and real Desk reads. It checks docking/resizing, project matching and
-manual mappings, safe reference rendering, keyboard hovercards, click-through,
-Settings reinjection, native-surface coexistence, and clean removal. The private
-host adapter also needs verification against the actual installed T3 build.
-It discovers modules from preload links as well as resource timings and waits
-for T3's prepared connection during startup. These private interfaces can change
-with T3 updates; adapter errors identify the missing interface or environment.
-`devtools.mjs` is a development helper and is not installed in the app.
+`node test-contract.mjs --port 9333 --thread <environmentId>/<threadId>` checks
+every hook against a running T3 (use a test instance): it opens the thread, the
+workspace panel and Settings, prints each probe, and exits non-zero naming each
+broken hook. Run it after every T3 update.
 
-This suite is an integration test against the configured live Desk backend. It
-expects repository `example`, item `example-i5ph`, and mission
-`example-bzmd`; replace those fixtures to test another dataset. It uses
-only backend reads and isolated browser state. Generated screenshots go under
-the ignored `artifacts/` directory. See [verification notes](docs/VERIFICATION.md)
-for the initial prototype's validation scope.
+`node test-extension.mjs` tests the extension logic in an isolated browser
+fixture with T3's panel DOM contract, T3's content security policy, and real
+Desk reads. It uses Edge on Windows and Chrome on macOS; set `BROWSER` to use
+another Chromium. It checks docking/resizing, project matching and manual
+mappings, safe reference rendering, keyboard hovercards, click-through, Settings
+reinjection, native-surface coexistence, and clean removal. It reads Desk
+repository `atelier`, item `atelier-plr9` and mission `atelier-g961` from the
+configured Desk; replace those fixtures to test another dataset. Screenshots go
+under the ignored `artifacts/` directory. `devtools.mjs` is a development helper
+and is not installed. See [verification notes](docs/VERIFICATION.md).
 
 ## Proposed Desk backend increment
 
