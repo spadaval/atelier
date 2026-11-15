@@ -46,7 +46,8 @@ if windows:
     # T3's own executable runs the loader in Node mode, so no separate Node is needed.
     runtime = Path(config['appPath'])
     cli = support / 't3-custom.cmd'
-    cli.write_text(f'@echo off\r\nset "ELECTRON_RUN_AS_NODE=1"\r\n"{runtime}" "%~dp0t3-custom.mjs" %*\r\n')
+    # setlocal keeps Electron's Node mode out of the calling cmd.exe session.
+    cli.write_text(f'@echo off\nsetlocal\nset "ELECTRON_RUN_AS_NODE=1"\n"{runtime}" "%~dp0t3-custom.mjs" %*\nexit /b %ERRORLEVEL%\n')
     launcher = Path(os.environ['APPDATA']) / 'Microsoft/Windows/Start Menu/Programs/T3 Custom.lnk'
     if make_launcher:
         # A minimized cmd sets the variable and exits at once; the loader itself has no window.
