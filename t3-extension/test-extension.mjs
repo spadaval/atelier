@@ -1,0 +1,159 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
+import http from 'node:http';
+import { spawn } from 'node:child_process';
+import { setTimeout as delay } from 'node:timers/promises';
+import { connectPage } from './devtools.mjs';
+
+const root = process.cwd();
+const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'atelier-extension-test-'));
+const debugPort = 19222;
+let deskBase;
+const fixtureRepositoryKey = 'example.com/owner/example';
+const referenceId = 'example-i5ph';
+let browser, injector, page;
+async function until(check, label, timeout = 20000) {
+  const end = Date.now() + timeout; let lastError;
+  while (Date.now() < end) {
+    try { const result = await check(); if (result) return result; } catch (error) { lastError = error; }
+    await delay(100);
+  }
+  throw new Error(`${label} timed out${lastError ? ': ' + lastError.message : ''}`);
+}
+async function control(action) {
+  const child = spawn(process.execPath, [path.join(root, 't3-custom.mjs'), action, '--home', temp]);
+  let output = ''; child.stdout.on('data', chunk => output += chunk); child.stderr.on('data', chunk => output += chunk);
+  const code = await new Promise(resolve => child.on('close', resolve));
+  if (code) throw new Error(`${action}: ${output}`);
+  return JSON.parse(output);
+}
+const html = `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-src 'none'"><title>Atelier extension fixture</title><style>html{--background:#202124;--foreground:#eee;--border:#555;--secondary:#353639;--primary:#9bbcff}body{margin:0;background:#202124;color:#eee;font:14px system-ui}#app{height:100vh;display:flex;flex-direction:column}header{padding:12px;border-bottom:1px solid #555}#workspace{display:flex;flex:1;min-height:0}[data-workspace-area=conversation]{flex:1;padding:20px;min-width:0;overflow:auto}[data-workspace-area=panel]{width:750px;display:flex;flex-direction:column;min-width:0}[data-right-panel-tabbar]{height:52px;display:flex;align-items:center}[data-right-panel-tabbar]>div{display:flex;align-items:center}[data-right-panel-surface-content]{position:relative;flex:1;min-height:0}#native-content{padding:20px}#settings{overflow:auto;padding:24px;max-width:850px}#composer{margin-top:30px;border:1px solid #555;padding:12px}</style></head><body><div id="app"><header><span data-panel-layout-controls>Workspace controls</span></header><div id="workspace"><main data-workspace-area="conversation"><h1>Conversation</h1><p id="reference-prose">Investigate ${referenceId}, then <code>${referenceId}</code>. Ignore atelier-xabc and not-${referenceId}-extra.</p><pre>${referenceId}</pre><div id="composer" contenteditable="true">${referenceId}</div><p id="stream"></p></main><div data-workspace-area="panel"><div data-right-panel-tabbar><div><div data-active-tab="true"><button id="native-tab">Files</button></div><button aria-label="Add panel surface">+</button></div></div><div data-right-panel-surface-content><div id="native-content"><button id="native-control">Native file viewer</button></div></div></div></div><div id="settings" hidden><div data-settings-page-scroll><div><h1>General</h1><p>T3 settings fixture</p></div></div></div></div><script>
+globalThis.fixtureContext={environmentId:'env',threadId:'thread-a',projectId:'project-a',projectName:'example',repositoryKey:'${fixtureRepositoryKey}'};
+globalThis.fixturePanel={isOpen:true,activeSurfaceId:'files'}; globalThis.fixtureListeners=new Set();
+addEventListener('hashchange',()=>{const settings=location.hash.includes('/settings');document.querySelector('#settings').hidden=!settings;document.querySelector('#workspace').style.display=settings?'none':'flex'});
+</script></body></html>`;
+const server = http.createServer((_request, response) => { response.writeHead(200, { 'content-type': 'text/html' }); response.end(html); });
+await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+const base = `http://127.0.0.1:${server.address().port}`;
+try {
+  const configPath = path.join(root, 'config.json');
+  const config = JSON.parse(await fs.readFile(await fs.access(configPath).then(() => configPath, () => path.join(root, 'config.example.json')), 'utf8'));
+  deskBase = config.desk.baseUrl.replace(/\/$/, '');
+  const repository = config.desk.repositories.find(repo => repo.repo === 'example');
+  assert(repository, 'Integration tests require an example repository in config.json');
+  repository.repositoryKeys = [fixtureRepositoryKey];
+  config.debugPort = debugPort; config.targetPrefixes = [base];
+  await fs.writeFile(path.join(temp, 'config.json'), JSON.stringify(config));
+  await fs.copyFile(path.join(root, 'custom.js'), path.join(temp, 'custom.js'));
+  await fs.copyFile(path.join(root, 'custom.css'), path.join(temp, 'custom.css'));
+  await fs.writeFile(path.join(temp, 'host-adapter.js'), `async function createHostAdapter(api){globalThis.fixtureApi=api;return {context:async()=>globalThis.fixtureContext,panelState:()=>globalThis.fixturePanel,showPanel:()=>{globalThis.fixturePanel.isOpen=true;for(const callback of globalThis.fixtureListeners)callback()},subscribe:callback=>{globalThis.fixtureListeners.add(callback);return()=>globalThis.fixtureListeners.delete(callback)}}}`);
+  const browserLog = await fs.open(path.join(temp, 'browser.log'), 'w');
+  const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE; delete env.NODE_OPTIONS;
+  browser = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--no-first-run', '--no-default-browser-check', '--disable-background-networking', `--user-data-dir=${path.join(temp, 'profile')}`, `--remote-debugging-port=${debugPort}`, '--remote-debugging-address=127.0.0.1', '--window-size=1600,1000', base + '/#/env/thread-a'], { env, stdio: ['ignore', browserLog.fd, browserLog.fd] });
+  await browserLog.close();
+  page = await until(() => connectPage(debugPort, base), 'Browser startup');
+  const injectorLog = await fs.open(path.join(temp, 'injector.log'), 'w');
+  injector = spawn(process.execPath, [path.join(root, 't3-custom.mjs'), 'daemon', '--home', temp], { stdio: ['ignore', injectorLog.fd, injectorLog.fd] });
+  await injectorLog.close();
+  const evaluate = expression => page.evaluate(expression);
+  await until(() => evaluate('Boolean(document.querySelector("[data-t3-desk-launch]"))'), 'Extension initialization');
+  await evaluate('document.querySelector("[data-t3-desk-launch]").click()');
+  await until(() => evaluate('Boolean(document.querySelector("[data-right-panel-surface-content] > [data-t3-desk-mount]:not([hidden])"))'), 'Docked Desk');
+  const iframeSrc = await evaluate('document.querySelector("[data-t3-desk-mount]").shadowRoot.querySelector("iframe").src');
+  assert.equal(iframeSrc, deskBase + '/r/example');
+  assert(await evaluate('document.querySelector("#native-content").inert'));
+  const geometry = await evaluate('(()=>{const host=document.querySelector("[data-right-panel-surface-content]").getBoundingClientRect();const frame=document.querySelector("[data-t3-desk-mount]").getBoundingClientRect();return {hostWidth:host.width,frameWidth:frame.width,hostLeft:host.left,frameLeft:frame.left}})()');
+  assert.equal(geometry.hostWidth, geometry.frameWidth); assert.equal(geometry.hostLeft, geometry.frameLeft);
+  await evaluate('document.querySelector("[data-workspace-area=panel]").style.width="900px"');
+  assert.equal(await evaluate('document.querySelector("[data-t3-desk-mount]").getBoundingClientRect().width'), 900);
+  console.log('PASS: Desk uses the real panel content slot, follows repository identity, and resizes with the host');
+
+  const iframeTarget = await until(async () => (await (await fetch(`http://127.0.0.1:${debugPort}/json/list`)).json()).find(target => target.type === 'iframe' && target.url.startsWith(deskBase)), 'Real Desk iframe');
+  const child = await page.call('Target.attachToTarget', { targetId: iframeTarget.id, flatten: true });
+  await until(async () => (await page.call('Runtime.evaluate', { expression: 'document.readyState === "complete" && document.body.innerText.includes("example") && !document.querySelector(".skel")', returnByValue: true }, child.sessionId)).result.value, 'Real Desk application rendering');
+  // Real backend data is checked through the same allow-listed bridge as hovercards.
+  const record = await evaluate(`fixtureApi.request('desk-get',{path:'/api/repos/example/items/${referenceId}'})`);
+  assert.equal(record.row.id, referenceId);
+  const denied = await evaluate(`fixtureApi.request('desk-get',{path:'/api/action'}).then(()=>false,error=>error.message)`);
+  assert.match(denied, /not allowed/);
+  console.log('PASS: authenticated-free Desk reads work through the bridge; action endpoints are rejected');
+
+  await until(() => evaluate('document.querySelector("#t3-custom-root").shadowRoot.querySelectorAll("[data-atelier-id]").length === 2'), 'Reference scanning');
+  const prose = await evaluate('document.querySelector("#reference-prose").textContent');
+  await evaluate('globalThis.originalTextNode=document.querySelector("#reference-prose").firstChild;document.querySelector("#t3-custom-root").shadowRoot.querySelector("[data-atelier-id]").focus()');
+  await until(() => evaluate('document.querySelector("#t3-custom-root").shadowRoot.querySelector("#atelier-hovercard h3")?.textContent'), 'Hovercard backend response');
+  assert.equal(await evaluate('document.querySelector("#t3-custom-root").shadowRoot.querySelector("#atelier-hovercard h3").textContent'), record.row.title);
+  assert.equal(await evaluate('document.querySelector("#reference-prose").textContent'), prose);
+  assert(await evaluate('document.querySelector("#reference-prose").firstChild === globalThis.originalTextNode'));
+  await evaluate(`document.querySelector('#stream').append(document.createTextNode('Streaming ${referenceId}'));`);
+  await until(() => evaluate('document.querySelector("#t3-custom-root").shadowRoot.querySelectorAll("[data-atelier-id]").length === 3'), 'Streaming reference update');
+  assert.equal(await evaluate('document.querySelector("#stream").textContent'), `Streaming ${referenceId}`);
+  await evaluate('(()=>{const link=document.querySelector("#t3-custom-root").shadowRoot.querySelector("[data-atelier-id]");link.blur();link.focus()})()');
+  await until(() => evaluate('Boolean(document.querySelector("#t3-custom-root").shadowRoot.querySelector("#atelier-hovercard button"))'), 'Cached hovercard');
+  await evaluate('document.querySelector("#t3-custom-root").shadowRoot.querySelector("#atelier-hovercard button").click()');
+  await until(() => evaluate(`document.querySelector('[data-t3-desk-mount]').shadowRoot.querySelector('iframe').src.endsWith('/item/${referenceId}')`), 'Reference opens in Desk');
+  console.log('PASS: configured-prefix references, inline code, real hovercards, click-through, and streaming without text rewriting');
+
+  await evaluate('globalThis.keptFrame=document.querySelector("[data-t3-desk-mount]").shadowRoot.querySelector("iframe");fixtureContext={...fixtureContext,threadId:"thread-b"};location.hash="/env/thread-b"');
+  await delay(500); await evaluate('document.querySelector("[data-t3-desk-launch]").click()');
+  await until(() => evaluate('!document.querySelector("[data-t3-desk-mount]").hidden'), 'Desk on second thread');
+  assert(await evaluate('document.querySelector("[data-t3-desk-mount]").shadowRoot.querySelector("iframe") === globalThis.keptFrame'));
+  assert((await evaluate('globalThis.keptFrame.src')).endsWith('/item/' + referenceId));
+  await evaluate(`(()=>{const p=document.createElement('p');p.id='mission-reference';p.textContent='example-bzmd';document.querySelector('[data-workspace-area=conversation]').append(p)})()`);
+  await until(() => evaluate('Boolean(document.querySelector("#t3-custom-root").shadowRoot.querySelector("[data-atelier-id=example-bzmd]"))'), 'Mission reference scanning');
+  await evaluate(`(()=>{document.getSelection().removeAllRanges();const p=document.querySelector('#mission-reference');const range=document.createRange();range.selectNodeContents(p);const r=range.getBoundingClientRect();p.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,clientX:r.left+3,clientY:r.top+3}))})()`);
+  await until(() => evaluate('globalThis.keptFrame.src.endsWith("/mission/example-bzmd")'), 'Direct mission reference click');
+  console.log('PASS: direct mouse activation resolves missions before navigating, without requiring a hovercard');
+  await evaluate('fixtureContext={...fixtureContext,threadId:"thread-c",projectId:"project-c",projectName:"unlinked",repositoryKey:"elsewhere/unlinked"};location.hash="/env/thread-c"');
+  await delay(500); await evaluate('document.querySelector("[data-t3-desk-launch]").click()');
+  await until(() => evaluate('document.querySelector("[data-t3-desk-mount]").shadowRoot.querySelector("iframe").hidden'), 'Unmapped project empty state');
+  console.log('PASS: same-project thread switches preserve Desk navigation; unmapped projects hide stale repository content');
+  await evaluate('document.querySelector("#t3-custom-root").shadowRoot.querySelector("[data-atelier-id]").focus()');
+  await until(() => evaluate('Boolean(document.querySelector("#t3-custom-root").shadowRoot.querySelector("#atelier-hovercard h3"))'), 'Reference in unmapped project');
+  await evaluate('document.querySelector("#t3-custom-root").shadowRoot.querySelector("#atelier-hovercard button").click()');
+  await until(() => evaluate('!document.querySelector("[data-t3-desk-mount]").shadowRoot.querySelector("iframe").hidden'), 'Cross-project reference override');
+  console.log('PASS: explicit reference navigation works from an unmapped project');
+
+  await evaluate('document.querySelector("#t3-custom-root").shadowRoot.querySelector("#extension-settings").click()');
+  await until(() => evaluate('Boolean(document.querySelector("#t3-custom-settings"))'), 'Settings section');
+  await evaluate('(()=>{const select=document.querySelector("#t3-custom-settings").shadowRoot.querySelector("select");select.value="example";select.dispatchEvent(new Event("change"))})()');
+  await evaluate('location.hash="/env/thread-c"');
+  await until(() => evaluate('!document.querySelector("[data-t3-desk-mount]").shadowRoot.querySelector("iframe").hidden'), 'Explicit project mapping');
+  await evaluate('document.querySelector("#native-tab").click()');
+  await until(() => evaluate('document.querySelector("[data-t3-desk-mount]").hidden && !document.querySelector("#native-content").inert'), 'Native tab restoration');
+  console.log('PASS: Settings project mapping and switching back to native surfaces');
+
+  const timeOrigin = await evaluate('performance.timeOrigin');
+  await evaluate('document.querySelector("#t3-custom-root").shadowRoot.querySelector("#extension-settings").click()');
+  await until(() => evaluate('Boolean(document.querySelector("#t3-custom-settings"))'), 'Settings remount');
+  await evaluate('globalThis.previousRoot=document.querySelector("#t3-custom-root");document.querySelector("#t3-custom-settings").shadowRoot.querySelector("#reload-scripts").click()');
+  await until(() => evaluate('Boolean(document.querySelector("#t3-custom-root")) && document.querySelector("#t3-custom-root") !== globalThis.previousRoot'), 'Settings reinjection control');
+  assert.equal(await evaluate('performance.timeOrigin'), timeOrigin);
+  assert.equal(await evaluate('fixtureListeners.size'), 1);
+  assert.equal(await evaluate('document.querySelector("#t3-custom-settings").shadowRoot.querySelector("select").disabled'), false);
+  await evaluate('location.hash="/env/thread-c"');
+  await delay(500); await evaluate('document.querySelector("[data-t3-desk-launch]").click()');
+  const finalFrame = await until(async () => (await (await fetch(`http://127.0.0.1:${debugPort}/json/list`)).json()).find(target => target.type === 'iframe' && target.url.startsWith(deskBase)), 'Reinjected Desk iframe');
+  const finalChild = await page.call('Target.attachToTarget', { targetId: finalFrame.id, flatten: true });
+  await until(async () => (await page.call('Runtime.evaluate', { expression: 'document.readyState === "complete" && document.body.innerText.includes("example") && !document.querySelector(".skel")', returnByValue: true }, finalChild.sessionId)).result.value, 'Reinjected Desk rendering');
+  await fs.mkdir(path.join(root, 'artifacts'), { recursive: true });
+  const screenshot = await page.call('Page.captureScreenshot', { format: 'png' });
+  await fs.writeFile(path.join(root, 'artifacts/extension-docked.png'), Buffer.from(screenshot.data, 'base64'));
+  console.log('PASS: Settings reinjection preserves the document and cleans up old subscriptions');
+  await control('stop');
+  await until(() => evaluate('!document.querySelector("#t3-custom-root") && !document.querySelector("[data-t3-desk-mount]") && !document.querySelector("[data-t3-desk-launch]")'), 'Full extension removal');
+  assert.equal(await evaluate('document.querySelector("#native-content").inert'), false);
+  console.log('PASS: stop removes custom panel, settings controls, links, and native-content overrides');
+  console.log('Test logs:', temp);
+} catch (error) {
+  console.error(error.stack); console.error('Test logs:', temp);
+  try { console.error(await fs.readFile(path.join(temp, 'injector.log'), 'utf8')); } catch {}
+  process.exitCode = 1;
+} finally {
+  try { await control('stop'); } catch {}
+  page?.close();
+  for (const child of [injector, browser]) if (child && child.exitCode === null) { child.kill('SIGTERM'); await Promise.race([new Promise(resolve => child.once('close', resolve)), delay(4000)]); if (child.exitCode === null) child.kill('SIGKILL'); }
+  await new Promise(resolve => server.close(resolve));
+}

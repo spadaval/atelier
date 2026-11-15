@@ -1,0 +1,20 @@
+{
+  "appPath": "/Applications/T3 Code (Nightly).app",
+  "debugPort": 9222,
+  "targetPrefixes": [
+    "t3code://app/"
+  ],
+  "bypassCSP": true,
+  "desk": {
+    "baseUrl": "http://127.0.0.1:3780",
+    "repositories": [
+      {
+        "repo": "example",
+        "slug": "example",
+        "repositoryKeys": [
+          "example.com/owner/example"
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,8 @@
+# Machine-specific configuration and generated runtime files
+/config.json
+/artifacts/
+*.log
+*.sock
+*.pid
+.DS_Store
+__pycache__/
