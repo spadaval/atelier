@@ -9,10 +9,10 @@
     "baseUrl": "http://127.0.0.1:3780",
     "repositories": [
       {
-        "repo": "example",
-        "slug": "example",
+        "repo": "atelier",
+        "slug": "atelier",
         "repositoryKeys": [
-          "example.com/owner/example"
+          "github.com/spadaval/atelier"
         ]
       }
     ]

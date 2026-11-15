@@ -2,7 +2,6 @@ import fs from 'node:fs/promises';
 import { watch } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
-import os from 'node:os';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
@@ -12,24 +11,67 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 const execute = promisify(execFile);
 const entry = fileURLToPath(import.meta.url);
+
+// Everything that differs between Windows and macOS lives in this object.
+const platform = process.platform === 'win32' ? {
+  controlPath: home => `\\\\.\\pipe\\t3-custom-${createHash('sha256').update(home.toLowerCase()).digest('hex').slice(0, 12)}`,
+  openFolder: folder => spawn('explorer.exe', [folder], { detached: true, stdio: 'ignore' }).unref(),
+  dialog: (title, message) => execute('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+    'Add-Type -AssemblyName PresentationFramework; [void][System.Windows.MessageBox]::Show($env:T3_CUSTOM_MESSAGE, $env:T3_CUSTOM_TITLE)'],
+    { env: { ...process.env, T3_CUSTOM_MESSAGE: message, T3_CUSTOM_TITLE: title } }),
+  // A second process for a data directory that is already in use hands off to
+  // the running instance and exits, so an early exit means "already running".
+  async launch(config, args) {
+    const child = spawn(config.appPath, args, { detached: true, stdio: 'ignore', env: appEnvironment(config) });
+    let exitCode = null;
+    child.once('exit', code => { exitCode = code; });
+    child.unref();
+    for (let attempt = 0; attempt < 60 && exitCode === null; attempt++) {
+      if (await debugPortOpen(config)) return null;
+      await delay(500);
+    }
+    return exitCode === null ? null : `${config.appPath} exited with code ${exitCode} before opening its debugging port`;
+  },
+} : {
+  controlPath: home => path.join(home, 'injector.sock'),
+  openFolder: folder => execute('/usr/bin/open', [folder], { env: appEnvironment({}) }),
+  dialog: (title, message) => execute('/usr/bin/osascript', ['-e', `display dialog ${JSON.stringify(message)} with title ${JSON.stringify(title)} buttons {"OK"} default button "OK"`]),
+  async launch(config, args) {
+    if (Object.keys(config.appEnv ?? {}).length) throw new Error('config.appEnv (a separate test instance) is only supported on Windows');
+    const executable = path.join(config.appPath, 'Contents/MacOS', path.basename(config.appPath, '.app'));
+    const { stdout } = await execute('/bin/ps', ['-axo', 'args=']);
+    const running = stdout.split('\n').some(line => line.trim() === executable || line.trim().startsWith(`${executable} -`));
+    if (running && !(await debugPortOpen(config))) return `${executable} is running`;
+    await execute('/usr/bin/open', ['-a', config.appPath, '--args', ...args], { env: appEnvironment(config) });
+    return null;
+  },
+};
+
 const homeIndex = process.argv.indexOf('--home');
-const home = homeIndex < 0 ? path.join(os.homedir(), 'Library/Application Support/T3 Custom') : path.resolve(process.argv[homeIndex + 1]);
+// The installed loader lives in its own home folder beside config.json.
+const home = homeIndex < 0 ? path.dirname(entry) : path.resolve(process.argv[homeIndex + 1]);
 const command = process.argv[2] ?? 'launch';
-const socketPath = path.join(home, 'injector.sock');
-const cleanEnvironment = () => {
+const controlPath = platform.controlPath(home);
+// A shell inside T3 inherits T3CODE_* variables that would tie a new instance to the running one.
+const appEnvironment = config => {
   const env = { ...process.env };
-  delete env.ELECTRON_RUN_AS_NODE;
-  delete env.NODE_OPTIONS;
-  return env;
+  for (const name of Object.keys(env)) if (/^(T3CODE_|ELECTRON_RUN_AS_NODE$|NODE_OPTIONS$)/i.test(name)) delete env[name];
+  return { ...env, ...config.appEnv };
 };
 const loadConfig = async () => JSON.parse(await fs.readFile(path.join(home, 'config.json'), 'utf8'));
 const log = (message, extra = {}) => console.log(JSON.stringify({ time: new Date().toISOString(), message, ...extra }));
+async function debugPortOpen(config) {
+  try {
+    const response = await fetch(`http://127.0.0.1:${config.debugPort}/json/version`, { signal: AbortSignal.timeout(1000) });
+    return Boolean((await response.json()).webSocketDebuggerUrl);
+  } catch { return false; }
+}
 
 function control(action) {
   return new Promise((resolve, reject) => {
-    const socket = net.createConnection(socketPath);
+    const socket = net.createConnection(controlPath);
     let text = '';
-    socket.setTimeout(3000, () => socket.destroy(new Error(`Injector control timed out: ${socketPath}`)));
+    socket.setTimeout(3000, () => socket.destroy(new Error(`Injector control timed out: ${controlPath}`)));
     socket.on('connect', () => socket.write(`${JSON.stringify({ action })}\n`));
     socket.on('data', chunk => {
       text += chunk;
@@ -186,7 +228,7 @@ async function daemon() {
       let data;
       if (report.action === 'status') data = { ...state, home, targets: targets.size };
       else if (report.action === 'open-folder') {
-        await execute('/usr/bin/open', [home], { env: cleanEnvironment() }); data = { opened: true };
+        await platform.openFolder(home); data = { opened: true };
       } else if (report.action === 'desk-get') {
         const requested = report.payload.path;
         const match = /^\/api\/repos(?:\/([^/]+)\/(?:items|missions)\/([a-z0-9-]+))?$/.exec(requested);
@@ -247,7 +289,6 @@ async function daemon() {
     }));
     for (const result of cleanupResults) if (result.status === 'rejected') problem('Removing customizations', result.reason);
     await new Promise(resolve => server.close(resolve));
-    await fs.rm(socketPath, { force: true });
     log('Injector stopped', { cleanupComplete: cleanupResults.every(result => result.status === 'fulfilled') });
   }
   const server = net.createServer(socket => {
@@ -267,8 +308,8 @@ async function daemon() {
     });
     socket.on('error', error => log('Control client disconnected', { error: error.message }));
   });
-  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(socketPath, resolve); });
-  await fs.chmod(socketPath, 0o600);
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(controlPath, resolve); });
+  if (process.platform !== 'win32') await fs.chmod(controlPath, 0o600);
   process.once('SIGTERM', () => void stop());
   process.once('SIGINT', () => void stop());
   await reload();
@@ -301,9 +342,9 @@ async function startDaemon() {
   try { return await control('status'); } catch (error) {
     if (!['ENOENT', 'ECONNREFUSED'].includes(error.code)) throw error;
   }
-  await fs.rm(socketPath, { force: true });
+  if (process.platform !== 'win32') await fs.rm(controlPath, { force: true });
   const logHandle = await fs.open(path.join(home, 'injector.log'), 'a', 0o600);
-  const child = spawn(process.execPath, [entry, 'daemon', '--home', home], { detached: true, stdio: ['ignore', logHandle.fd, logHandle.fd] });
+  const child = spawn(process.execPath, [entry, 'daemon', '--home', home], { detached: true, windowsHide: true, stdio: ['ignore', logHandle.fd, logHandle.fd] });
   child.unref(); await logHandle.close();
   for (let attempt = 0; attempt < 40; attempt++) {
     await delay(100);
@@ -315,21 +356,15 @@ async function startDaemon() {
 async function launch() {
   const config = await loadConfig();
   await startDaemon();
-  let debugAvailable = false;
-  try {
-    const response = await fetch(`http://127.0.0.1:${config.debugPort}/json/version`, { signal: AbortSignal.timeout(1000) });
-    debugAvailable = Boolean((await response.json()).webSocketDebuggerUrl);
-  } catch {}
-  const executable = path.join(config.appPath, 'Contents/MacOS', path.basename(config.appPath, '.app'));
-  const { stdout } = await execute('/bin/ps', ['-axo', 'args=']);
-  const appRunning = stdout.split('\n').some(line => line.trim() === executable || line.trim().startsWith(`${executable} --remote-debugging-`) || line.trim().startsWith(`${executable} -psn_`));
-  if (!debugAvailable && appRunning) {
-    const message = 'T3 Code is already running without its debugging port. Quit T3 Code completely (Command-Q), then open T3 Custom. Your current session has been left running.';
-    await execute('/usr/bin/osascript', ['-e', `display dialog ${JSON.stringify(message)} with title "T3 Custom" buttons {"OK"} default button "OK"`]);
+  const debugAvailable = await debugPortOpen(config);
+  if (debugAvailable) await control('reload');
+  const notLaunched = await platform.launch(config, ['--remote-debugging-address=127.0.0.1', `--remote-debugging-port=${config.debugPort}`]);
+  if (notLaunched && !debugAvailable) {
+    const message = `T3 Code is already running without its debugging port (${notLaunched}). Quit T3 Code completely, then open T3 Custom again. Your current session has been left running.`;
+    log(message);
+    await platform.dialog('T3 Custom', message);
     return;
   }
-  if (debugAvailable) await control('reload');
-  await execute('/usr/bin/open', ['-a', config.appPath, '--args', '--remote-debugging-address=127.0.0.1', `--remote-debugging-port=${config.debugPort}`], { env: cleanEnvironment() });
   for (let attempt = 0; attempt < 60; attempt++) {
     const status = await control('status');
     if (status.lastError) throw new Error(status.lastError);
@@ -349,7 +384,7 @@ try {
 } catch (error) {
   console.error(`T3 Custom ${command} failed: ${error.stack ?? error}`);
   if (command === 'launch') {
-    await execute('/usr/bin/osascript', ['-e', `display dialog ${JSON.stringify(error.message)} with title "T3 Custom failed" buttons {"OK"} default button "OK" with icon stop`]).catch(() => {});
+    await platform.dialog('T3 Custom failed', error.message).catch(() => {});
   }
   process.exitCode = 1;
 }
