@@ -3,12 +3,13 @@ schema: atelier.item
 schema_version: 3
 id: atelier-t83m
 title: Permit unchanged base records in a catch-up merge without weakening lifecycle guards
-status: ready
+status: building
 mission: null
 labels: []
 priority: medium
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3Ab4fa2cab-3330-4c69-8257-673a9c07a7c0%3Adelegate-task%3A38b51059-4012-497c-b7ab-c6f0d002f223
 ready:
   by: parent executing the requested guard-compliant tool repair
   at: 2026-11-15T06:11:41.633267875Z
