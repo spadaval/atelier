@@ -178,6 +178,29 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   await fs.writeFile(path.join(root, 'artifacts/extension-docked.png'), Buffer.from(screenshot.data, 'base64'));
   console.log('PASS: Settings reinjection preserves the document and cleans up old subscriptions');
 
+  // If T3 renames its panel slot, reference clicks open Desk externally and the probe names the hook.
+  await evaluate('window.open = url => { globalThis.openedExternally = url; }; const slot = document.querySelector("[data-right-panel-surface-content]"); slot.removeAttribute("data-right-panel-surface-content"); slot.setAttribute("data-renamed-surface-content", "")');
+  const openReference = async () => {
+    await evaluate('(()=>{const link=document.querySelector("#t3-custom-root").shadowRoot.querySelector("[data-atelier-id]");link.blur();link.focus()})()');
+    await until(() => evaluate('Boolean(document.querySelector("#t3-custom-root").shadowRoot.querySelector("#atelier-hovercard button"))'), 'Hovercard with renamed panel slot');
+    const clicked = Date.now();
+    await evaluate('document.querySelector("#t3-custom-root").shadowRoot.querySelector("#atelier-hovercard button").click()');
+    const url = await until(() => evaluate('globalThis.openedExternally'), 'External Desk fallback', 10000);
+    return { url, elapsed: Date.now() - clicked };
+  };
+  assert.equal((await openReference()).url, `${deskBase}/r/atelier/item/${referenceId}`);
+  const slotProbe = await evaluate('__t3Custom.diagnostics().probes["dom:panelContent"]');
+  assert.equal(slotProbe.ok, false); assert.match(slotProbe.detail, /not found 3 seconds after opening/);
+  await evaluate('globalThis.openedExternally = null');
+  const second = await openReference();
+  assert.equal(second.url, `${deskBase}/r/atelier/item/${referenceId}`);
+  assert(second.elapsed < 2500, `once the slot is known missing, references open externally without the 3 second wait (took ${second.elapsed} ms)`);
+  assert.equal(await evaluate('__t3Custom.diagnostics().deskAvailable'), false);
+  // DOM sync runs on setTimeout, which headless browsers may delay by up to a second.
+  await until(() => evaluate('[...document.querySelectorAll("[data-t3-desk-launch], [data-t3-desk-tab]")].every(button => button.hidden)'), 'Desk buttons hidden without a panel slot');
+  await evaluate('document.querySelector("#t3-custom-root").shadowRoot.querySelector("#extension-settings").click()');
+  await until(() => evaluate('document.querySelector("#t3-custom-settings")?.shadowRoot.textContent.includes("Desk panel: off, missing dom:panelContent")'), 'Settings names the missing panel hook');
+  console.log('PASS: a renamed panel slot turns the Desk panel off by name and reference clicks open Desk externally');
   await control('stop');
   await until(() => evaluate('!document.querySelector("#t3-custom-root") && !document.querySelector("[data-t3-desk-mount]") && !document.querySelector("[data-t3-desk-launch]")'), 'Full extension removal');
   assert.equal(await evaluate('document.querySelector("#native-content").inert'), false);

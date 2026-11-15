@@ -22,8 +22,8 @@ const { probes, imported, declared } = await page.evaluate(`(async api => {
     if (!context) hostProbes['route:thread'] ??= { ok: false, detail: location.hash + ' is not a thread with a project; pass --thread <environmentId>/<threadId>' };
     await wait(() => document.querySelector(hostSelectors.conversation));
     if (context && host.panel) {
-      host.panel.show(context);
-      await wait(() => document.querySelector(hostSelectors.panelContent));
+      await host.panel.show(context);
+      observeHostDom();
       // A native tab only exists once a surface is open; open the first one T3 offers.
       if (!document.querySelector(hostSelectors.panelTab)) document.querySelector(hostSelectors.panelContent + ' button')?.click();
       await wait(() => document.querySelector(hostSelectors.panelTab));

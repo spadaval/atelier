@@ -73,9 +73,11 @@ function selectedRepository() {
   if (referenceOverride?.projectKey === projectKey(current)) return repositories.find(repo => repo.repo === referenceOverride.repo) ?? null;
   return preferences.followProject ? mappedRepository() : repositories.find(repo => repo.repo === preferences.pinnedRepo) ?? mappedRepository() ?? repositories[0] ?? null;
 }
-// The Desk panel needs T3's panel store and project context; references need only the conversation DOM.
-const deskAvailable = () => Boolean(host?.panel && host?.context);
-globalThis.__t3Custom.diagnostics = () => ({ probes: hostProbes, modules: hostImportedModules, context: current, mappedRepository: mappedRepository()?.repo ?? null, selectedRepository: selectedRepository()?.repo ?? null, referenceOverride, desiredOpen });
+// The Desk panel needs T3's panel store, project context and a slot to mount in;
+// references need only the conversation DOM and otherwise open Desk externally.
+const deskHooks = ['module:workspace-panel-store', 'module:atom-registry', 'module:prepared-connection-atom', 'dom:panel', 'dom:panelContent'];
+const deskAvailable = () => Boolean(host?.panel && host?.context) && !deskHooks.some(name => hostProbes[name]?.ok === false);
+globalThis.__t3Custom.diagnostics = () => ({ probes: hostProbes, modules: hostImportedModules, context: current, mappedRepository: mappedRepository()?.repo ?? null, selectedRepository: selectedRepository()?.repo ?? null, referenceOverride, desiredOpen, deskAvailable: deskAvailable() });
 
 // The independent recovery/settings button is created before any host adapter is used.
 const settingsButton = element('button', { id: 'extension-settings', text: '⚙', 'aria-label': 'T3 Custom settings', title: 'Customizations' });
@@ -128,7 +130,12 @@ async function showDesk(reference) {
   }
   desiredOpen = true; preferences.openThreads[threadKey(current)] = true; save();
   if (location.hash.includes('/settings')) location.hash = `/${current.environmentId}/${encodeURIComponent(current.threadId)}`;
-  host.panel.show(current); scheduleDOM();
+  scheduleDOM();
+  if (await host.panel.show(current)) return;
+  // T3's panel did not render a slot (the probe now names the missing hook): use the browser.
+  hideDesk();
+  const repo = selectedRepository();
+  window.open(reference ? referenceUrl(reference) : repo ? `${deskBase}/r/${encodeURIComponent(repo.repo)}` : deskBase, '_blank', 'noopener');
 }
 function hideDesk() {
   desiredOpen = false;
@@ -219,7 +226,7 @@ async function readStatus() {
 }
 function syncProbes() {
   const missing = name => hostProbes[name]?.ok === false;
-  const deskMissing = ['module:workspace-panel-store', 'module:atom-registry', 'module:prepared-connection-atom'].filter(missing);
+  const deskMissing = deskHooks.filter(missing);
   const rows = Object.entries(hostProbes).map(([name, probe]) => element('li', { class: probe.ok === false ? 'missing' : '', text: `${probe.ok ? '✓' : probe.ok === false ? '✗' : '…'} ${name}: ${probe.detail}` }));
   rows.unshift(element('li', { class: deskMissing.length ? 'missing' : '', text: host ? `Desk panel: ${deskMissing.length ? `off, missing ${deskMissing.join(', ')}` : 'on'}` : 'Desk panel: looking for T3 hooks…' }));
   probeList.replaceChildren(...rows);

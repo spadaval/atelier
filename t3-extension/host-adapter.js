@@ -114,7 +114,17 @@ async function createHostAdapter(api) {
     context: registry && connections ? context : null,
     panel: panelStore ? {
       state: context => panelStore.getState().byThreadKey[`${context.environmentId}:${context.threadId}`],
-      show: context => panelStore.getState().show({ environmentId: context.environmentId, threadId: context.threadId }),
+      // Opens T3's panel and resolves to its content slot, or to null with the missing hook recorded.
+      async show(context) {
+        panelStore.getState().show({ environmentId: context.environmentId, threadId: context.threadId });
+        const slot = () => document.querySelector(hostSelectors.panel)?.querySelector(hostSelectors.panelContent);
+        for (let attempt = 0; attempt < 30 && !slot(); attempt++) await new Promise(resolve => setTimeout(resolve, 100));
+        if (slot()) return slot();
+        for (const name of ['panel', 'panelContent']) {
+          if (!document.querySelector(hostSelectors[name])) setHostProbe(`dom:${name}`, false, `${hostSelectors[name]} not found 3 seconds after opening T3's workspace panel`);
+        }
+        return null;
+      },
       subscribe: listener => panelStore.subscribe(listener),
     } : null,
   };
