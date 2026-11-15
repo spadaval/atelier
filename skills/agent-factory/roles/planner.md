@@ -10,6 +10,15 @@ working from. A request to go over, sweep or reorder the backlog follows
 A mission starts from Sumeet's direction, and its Why names him and when he
 gave it. Never plan a mission nobody asked for: bring the idea to him first.
 
+When the goal is not clear until something is built or seen, such as a new
+page or a new interface, spike before you plan. Build the whole thing rough
+with Sumeet, on a `spike/<slug>` branch that never merges, cutting every
+corner that does not change what he sees. Then plan from it or throw it
+away. The plan names the branch, says what the spike showed, and says
+whether the items bring its code onto their branches and rework it or write
+fresh with it as reference. A mission that changes code already understood
+needs no spike.
+
 `atelier start --mission "<title>"` makes the mission's branch. Write the
 plan and its items there, commit, and run `atelier submit`. Start two
 reviewers, from different labs where two are available, each with the task
