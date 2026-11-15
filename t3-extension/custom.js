@@ -75,7 +75,7 @@ function selectedRepository() {
 }
 // The Desk panel needs T3's panel store and project context; references need only the conversation DOM.
 const deskAvailable = () => Boolean(host?.panel && host?.context);
-globalThis.__t3Custom.diagnostics = () => ({ probes: hostProbes, context: current, mappedRepository: mappedRepository()?.repo ?? null, selectedRepository: selectedRepository()?.repo ?? null, referenceOverride, desiredOpen });
+globalThis.__t3Custom.diagnostics = () => ({ probes: hostProbes, modules: hostImportedModules, context: current, mappedRepository: mappedRepository()?.repo ?? null, selectedRepository: selectedRepository()?.repo ?? null, referenceOverride, desiredOpen });
 
 // The independent recovery/settings button is created before any host adapter is used.
 const settingsButton = element('button', { id: 'extension-settings', text: '⚙', 'aria-label': 'T3 Custom settings', title: 'Customizations' });

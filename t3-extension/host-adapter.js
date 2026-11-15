@@ -24,25 +24,37 @@ function observeHostDom() {
   }
 }
 
+// Every module discovery imported, for diagnostics and the contract test.
+const hostImportedModules = [];
+
 async function createHostAdapter(api) {
   // Modules are matched by the shape of their exports, not by chunk or export names,
-  // which change with every T3 build. T3 loads chunks lazily, so keep looking for a while.
+  // which change with every T3 build.
   const shapes = {
     'workspace-panel-store': value => typeof value.subscribe === 'function' && ['byThreadKey', 'show', 'openBrowser'].every(key => key in value.getState()),
     'atom-registry': value => '~effect/reactivity/AtomRegistry' in value && typeof value.get === 'function',
     'prepared-connection-atom': value => typeof value.preparedConnectionValueAtom === 'function',
   };
+  // Last seen chunk names only decide the search order, so a renamed chunk costs time, not a hook.
+  const likelyChunks = /\/(terminalFocus|session|utils)-[^/]*\.js$/;
   const found = {};
   const searched = new Set();
+  const complete = () => Object.keys(found).length === Object.keys(shapes).length;
   const deadline = Date.now() + 15000;
-  while (!api.signal.aborted && Object.keys(found).length < Object.keys(shapes).length && Date.now() < deadline) {
-    const urls = [...document.querySelectorAll('link[rel="modulepreload"]')].map(link => link.href)
-      .concat(performance.getEntriesByType('resource').map(entry => entry.name))
-      .filter(url => url.startsWith(location.origin + '/') && url.endsWith('.js') && !searched.has(url));
+  while (!api.signal.aborted && !complete() && Date.now() < deadline) {
+    // Only modules the renderer itself loads as modules: its entry script and the modulepreload
+    // links Vite adds for static and lazy chunks. Never other script resources such as workers,
+    // whose top-level code would run in the window and outlive the extension.
+    const urls = [...document.querySelectorAll('script[type="module"][src], link[rel="modulepreload"][href]')]
+      .map(node => node.src || node.href)
+      .filter(url => url.startsWith(location.origin + '/') && !searched.has(url))
+      .sort((a, b) => likelyChunks.test(b) - likelyChunks.test(a));
     for (const url of new Set(urls)) {
+      if (complete()) break;
       searched.add(url);
       let module;
       try { module = await import(url); } catch { continue; }
+      hostImportedModules.push(url);
       for (const value of Object.values(module)) {
         if (!value || (typeof value !== 'object' && typeof value !== 'function')) continue;
         for (const [name, test] of Object.entries(shapes)) {
@@ -50,11 +62,11 @@ async function createHostAdapter(api) {
         }
       }
     }
-    await new Promise(resolve => setTimeout(resolve, 200));
+    if (!complete()) await new Promise(resolve => setTimeout(resolve, 200));
   }
   if (api.signal.aborted) throw new DOMException('Extension was reloaded', 'AbortError');
   for (const name of Object.keys(shapes)) {
-    setHostProbe(`module:${name}`, Boolean(found[name]), found[name] ? 'found' : `no export with this shape in ${searched.size} loaded T3 modules after 15 seconds`);
+    setHostProbe(`module:${name}`, Boolean(found[name]), found[name] ? 'found' : `no export with this shape in ${searched.size} T3 modules after 15 seconds`);
   }
   const panelStore = found['workspace-panel-store'];
   const registry = found['atom-registry'];

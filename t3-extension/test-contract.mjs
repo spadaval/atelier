@@ -1,7 +1,8 @@
 // Checks every T3 hook host-adapter.js relies on against a running T3 build.
 // Usage: node test-contract.mjs [--port 9333] [--thread <environmentId>/<threadId>]
 // It shows a thread, the workspace panel and Settings in that T3 window, then
-// restores the route. Exits non-zero naming each hook that is missing.
+// restores the route. Exits non-zero naming each hook that is missing, or if
+// discovery imported anything but the renderer's own modules (never a worker).
 import fs from 'node:fs/promises';
 import { connectPage } from './devtools.mjs';
 
@@ -10,7 +11,7 @@ const port = Number(option('--port', 9333));
 const thread = option('--thread', null);
 const adapter = await fs.readFile(new URL('./host-adapter.js', import.meta.url), 'utf8');
 const page = await connectPage(port);
-const probes = await page.evaluate(`(async api => {
+const { probes, imported, declared } = await page.evaluate(`(async api => {
   ${adapter}
   const wait = async (check, ms = 10000) => { const end = Date.now() + ms; while (!check() && Date.now() < end) await new Promise(r => setTimeout(r, 100)); observeHostDom(); };
   const original = location.hash;
@@ -29,11 +30,15 @@ const probes = await page.evaluate(`(async api => {
     }
     location.hash = '/settings/general';
     await wait(() => document.querySelector(hostSelectors.settingsPage));
-    return hostProbes;
+    const declared = [...document.querySelectorAll('script[type="module"][src], link[rel="modulepreload"][href]')].map(node => node.src || node.href);
+    return { probes: hostProbes, imported: hostImportedModules, declared };
   } finally { location.hash = original; }
 })({ signal: new AbortController().signal })`, 90000);
 page.close();
 
+// Worker chunks must never be imported into the window: their top-level code would run there.
+const stray = imported.filter(url => !declared.includes(url) || /worker/i.test(url.split('/').pop()));
+probes['discovery:imports'] = { ok: stray.length === 0, detail: stray.length ? `imported non-module or worker scripts: ${stray.join(', ')}` : `${imported.length} of ${declared.length} renderer modules imported: ${imported.map(url => url.split('/').pop()).join(', ')}` };
 const broken = Object.entries(probes).filter(([, probe]) => probe.ok !== true);
 for (const [name, probe] of Object.entries(probes)) console.log(`${probe.ok === true ? 'ok     ' : 'BROKEN '} ${name}: ${probe.detail}`);
 if (broken.length) {
