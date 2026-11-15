@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-t83m
 title: Permit unchanged base records in a catch-up merge without weakening lifecycle guards
-status: building
+status: in_review
 mission: null
 labels: []
 priority: medium
