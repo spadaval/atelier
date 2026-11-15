@@ -32,6 +32,7 @@ const css = `
   label { display: flex; align-items: center; gap: 8px; line-height: 1.5; }
   select { max-width: 100%; background: var(--background, #202124); border: 1px solid var(--border, #60636a); padding: 6px; border-radius: 6px; }
   code { overflow-wrap: anywhere; font-size: 12px; }
+  .probes { margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.6; } .probes .missing { color: var(--destructive, #ff9292); }
 `;
 const addStyle = root => root.append(element('style', { text: css }));
 addStyle(api.root);
@@ -40,7 +41,7 @@ const globalStyle = element('style', { text: `
   [data-t3-desk-tab][aria-pressed="true"] { background: var(--accent); box-shadow: inset 0 0 0 1px var(--border); }
   [data-t3-desk-tab]:focus-visible, [data-t3-desk-launch]:focus-visible { outline: 2px solid var(--ring); }
   [data-t3-desk-selected] > :not([data-t3-desk-mount]) { visibility: hidden !important; }
-  [data-t3-desk-tabbar] [data-active-tab="true"] { background: transparent !important; color: var(--muted-foreground) !important; }
+  [data-t3-desk-tabbar] ${hostSelectors.panelTab} { background: transparent !important; color: var(--muted-foreground) !important; }
   ::highlight(t3-atelier-refs) { color: var(--primary, #8ab4ff); text-decoration: underline; }
 ` });
 document.head.append(globalStyle);
@@ -72,7 +73,9 @@ function selectedRepository() {
   if (referenceOverride?.projectKey === projectKey(current)) return repositories.find(repo => repo.repo === referenceOverride.repo) ?? null;
   return preferences.followProject ? mappedRepository() : repositories.find(repo => repo.repo === preferences.pinnedRepo) ?? mappedRepository() ?? repositories[0] ?? null;
 }
-globalThis.__t3Custom.diagnostics = () => ({ context: current, mappedRepository: mappedRepository()?.repo ?? null, selectedRepository: selectedRepository()?.repo ?? null, referenceOverride, desiredOpen });
+// The Desk panel needs T3's panel store and project context; references need only the conversation DOM.
+const deskAvailable = () => Boolean(host?.panel && host?.context);
+globalThis.__t3Custom.diagnostics = () => ({ probes: hostProbes, context: current, mappedRepository: mappedRepository()?.repo ?? null, selectedRepository: selectedRepository()?.repo ?? null, referenceOverride, desiredOpen });
 
 // The independent recovery/settings button is created before any host adapter is used.
 const settingsButton = element('button', { id: 'extension-settings', text: '⚙', 'aria-label': 'T3 Custom settings', title: 'Customizations' });
@@ -117,7 +120,7 @@ function navigateDesk(repo, path = `/r/${encodeURIComponent(repo.repo)}`) {
 }
 async function showDesk(reference) {
   if (!preferences.enabled) { preferences.enabled = true; save(); }
-  if (!current || !host) { openSettings(); return; }
+  if (!current || !deskAvailable()) { openSettings(); return; }
   if (reference) {
     referenceOverride = { projectKey: projectKey(current), repo: reference.repo };
     const repo = repositories.find(repo => repo.repo === reference.repo);
@@ -125,7 +128,7 @@ async function showDesk(reference) {
   }
   desiredOpen = true; preferences.openThreads[threadKey(current)] = true; save();
   if (location.hash.includes('/settings')) location.hash = `/${current.environmentId}/${encodeURIComponent(current.threadId)}`;
-  host.showPanel(current); scheduleDOM();
+  host.panel.show(current); scheduleDOM();
 }
 function hideDesk() {
   desiredOpen = false;
@@ -142,19 +145,20 @@ listen(tab, 'click', () => desiredOpen ? hideDesk() : void showDesk());
 listen(launch, 'click', () => void showDesk());
 listen(document, 'click', event => {
   const target = event.target instanceof Element ? event.target : null;
-  if (target?.closest('[data-right-panel-tabbar] [data-active-tab]')) hideDesk();
+  if (target?.closest(`${hostSelectors.panelTabbar} ${hostSelectors.panelTab}`)) hideDesk();
 }, { capture: true });
 function syncPanel() {
-  const area = document.querySelector('[data-workspace-area="panel"]');
-  const content = area?.querySelector('[data-right-panel-surface-content]');
-  const tabbar = area?.querySelector('[data-right-panel-tabbar]');
-  const add = tabbar?.querySelector('button[aria-label="Add panel surface"]');
+  observeHostDom();
+  const area = document.querySelector(hostSelectors.panel);
+  const content = area?.querySelector(hostSelectors.panelContent);
+  const tabbar = area?.querySelector(hostSelectors.panelTabbar);
+  const add = tabbar?.querySelector(hostSelectors.panelAddButton);
   if (add && tab.parentElement !== add.parentElement) add.before(tab);
-  const toolbar = [...document.querySelectorAll('[data-panel-layout-controls]')].find(node => node.getBoundingClientRect().width > 0);
+  const toolbar = [...document.querySelectorAll(hostSelectors.layoutControls)].find(node => node.getBoundingClientRect().width > 0);
   if (toolbar && launch.parentElement !== toolbar) toolbar.prepend(launch);
-  const allowed = preferences.enabled && Boolean(current) && !location.hash.includes('/settings');
+  const allowed = preferences.enabled && deskAvailable() && Boolean(current) && !location.hash.includes('/settings');
   tab.hidden = launch.hidden = !allowed;
-  const state = current && host?.panelState(current);
+  const state = allowed && host.panel.state(current);
   const visible = allowed && desiredOpen && state?.isOpen && Boolean(content) && area.getBoundingClientRect().width > 0;
   tab.setAttribute('aria-pressed', String(Boolean(visible)));
   if (!visible) { mount.hidden = true; restoreNative(); return; }
@@ -179,6 +183,7 @@ const settingsRoot = settingsHost.attachShadow({ mode: 'open' }); addStyle(setti
 const statusText = element('p', { class: 'muted', text: 'Reading injector status…' });
 const statusError = element('p', { class: 'error', hidden: '' });
 const contextText = element('p', { class: 'muted' });
+const probeList = element('ul', { class: 'probes', 'aria-label': 'T3 hooks used by this extension' });
 const mapping = element('select', { 'aria-label': 'Atelier repository for current T3 project' }, element('option', { value: '', text: 'Not linked' }), ...repositories.map(repo => element('option', { value: repo.repo, text: repo.repo })));
 const pinned = element('select', { 'aria-label': 'Pinned Atelier repository' }, ...repositories.map(repo => element('option', { value: repo.repo, text: repo.repo })));
 function checkbox(key, title) {
@@ -192,6 +197,7 @@ const refreshStatus = element('button', { text: 'Refresh status' });
 const deskAction = element('button', { text: 'Open Desk' });
 settingsRoot.append(element('div', { class: 'stack' }, element('h2', { text: 'Customizations' }), statusText, statusError,
   element('div', { class: 'row' }, reloadScripts, refreshStatus, openFolder, deskAction),
+  element('h3', { text: 'T3 hooks' }), probeList,
   checkbox('enabled', 'Enable the Atelier Desk surface'), checkbox('references', 'Show Atelier reference links and hovercards'), checkbox('followProject', 'Follow the current T3 project'),
   contextText, element('label', {}, document.createTextNode('Project repository'), mapping), element('label', { id: 'pinned-row' }, document.createTextNode('Pinned repository'), pinned),
   element('p', { class: 'muted', text: `Desk backend: ${deskBase}` }), element('code', { text: api.home })));
@@ -211,13 +217,21 @@ async function readStatus() {
     statusError.textContent = hostError?.message ?? status.lastError ?? '';
   } catch (error) { if (!api.signal.aborted) displayError(error); }
 }
+function syncProbes() {
+  const missing = name => hostProbes[name]?.ok === false;
+  const deskMissing = ['module:workspace-panel-store', 'module:atom-registry', 'module:prepared-connection-atom'].filter(missing);
+  const rows = Object.entries(hostProbes).map(([name, probe]) => element('li', { class: probe.ok === false ? 'missing' : '', text: `${probe.ok ? '✓' : probe.ok === false ? '✗' : '…'} ${name}: ${probe.detail}` }));
+  rows.unshift(element('li', { class: deskMissing.length ? 'missing' : '', text: host ? `Desk panel: ${deskMissing.length ? `off, missing ${deskMissing.join(', ')}` : 'on'}` : 'Desk panel: looking for T3 hooks…' }));
+  probeList.replaceChildren(...rows);
+}
 function syncSettings() {
+  syncProbes();
   contextText.textContent = current ? `Current project: ${current.projectName}${current.repositoryKey ? ` (${current.repositoryKey})` : ''}` : 'Open a T3 thread to link its project.';
   mapping.disabled = !current; mapping.value = mappedRepository()?.repo ?? '';
   pinned.value = selectedRepository()?.repo ?? repositories[0]?.repo ?? '';
   settingsRoot.querySelector('#pinned-row').hidden = preferences.followProject;
   deskAction.disabled = !current || !host;
-  const target = location.hash.startsWith('#/settings/general') && document.querySelector('[data-settings-page-scroll]');
+  const target = location.hash.startsWith('#/settings/general') && document.querySelector(hostSelectors.settingsPage);
   if (target) {
     const container = target.firstElementChild ?? target;
     if (settingsHost.parentElement !== container) { container.append(settingsHost); void readStatus(); }
@@ -229,6 +243,7 @@ async function updateContext() {
   const generation = ++contextGeneration;
   if (location.hash.includes('/settings')) { scheduleDOM(); return; }
   current = null; desiredOpen = false; scheduleDOM();
+  if (!host.context) return;
   try {
     const next = await host.context();
     if (api.signal.aborted || generation !== contextGeneration) return;
@@ -237,7 +252,7 @@ async function updateContext() {
     const key = projectKey(current);
     if (key !== lastProject) { referenceOverride = null; lastProject = key; }
     desiredOpen = Boolean(preferences.openThreads[threadKey(current)]);
-    nativeActiveId = current && host.panelState(current)?.activeSurfaceId;
+    nativeActiveId = current && (host.panel?.state(current)?.activeSurfaceId ?? null);
     scheduleDOM(); queueScan();
   } catch (error) { if (!api.signal.aborted && generation === contextGeneration) { hostError = error; displayError(error); api.reportError(error); } }
 }
@@ -292,7 +307,7 @@ async function activateReference(ref, external = false) {
     if (api.signal.aborted) return;
     ref.anchor.href = referenceUrl(ref);
     hideCard();
-    if (external) window.open(referenceUrl(ref), '_blank', 'noopener');
+    if (external || !deskAvailable()) window.open(referenceUrl(ref), '_blank', 'noopener');
     else await showDesk(ref);
   } catch { if (!api.signal.aborted) void showCard(ref); }
 }
@@ -332,7 +347,7 @@ function queueRects() { if (!rectFrame) rectFrame = requestAnimationFrame(() => 
 function scanReferences() {
   if (api.signal.aborted) return;
   const previous = references; references = []; CSS.highlights?.delete('t3-atelier-refs');
-  const conversation = document.querySelector('[data-workspace-area="conversation"]');
+  const conversation = document.querySelector(hostSelectors.conversation);
   if (!preferences.references || !pattern || !conversation) { hideCard(); referenceLayer.replaceChildren(); return; }
   const existing = new Map();
   for (const ref of previous) {
@@ -367,14 +382,14 @@ function queueScan() { clearTimeout(scanTimer); scanTimer = setTimeout(scanRefer
 const hitReference = event => references.find(ref => ref.rects.some(rect => event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom));
 let pointerReference = null;
 listen(document, 'pointermove', event => {
-  const ref = event.target instanceof Element && event.target.closest('[data-workspace-area="conversation"]') ? hitReference(event) : null;
+  const ref = event.target instanceof Element && event.target.closest(hostSelectors.conversation) ? hitReference(event) : null;
   if (ref === pointerReference) return;
   pointerReference = ref; clearTimeout(hoverTimer);
   if (ref) { clearTimeout(dismissTimer); hoverTimer = setTimeout(() => void showCard(ref), 220); }
   else dismissSoon();
 });
 listen(document, 'click', event => {
-  const ref = event.target instanceof Element && event.target.closest('[data-workspace-area="conversation"]') ? hitReference(event) : null;
+  const ref = event.target instanceof Element && event.target.closest(hostSelectors.conversation) ? hitReference(event) : null;
   if (!ref || event.button !== 0 || !document.getSelection()?.isCollapsed) return;
   event.preventDefault(); event.stopPropagation();
   void activateReference(ref, event.metaKey || event.ctrlKey);
@@ -384,7 +399,7 @@ listen(document, 'visibilitychange', () => { scheduleDOM(); queueRects(); });
 
 const observer = new MutationObserver(records => {
   scheduleDOM();
-  if (records.some(record => (record.target.nodeType === Node.ELEMENT_NODE ? record.target : record.target.parentElement)?.closest('[data-workspace-area="conversation"]'))) queueScan();
+  if (records.some(record => (record.target.nodeType === Node.ELEMENT_NODE ? record.target : record.target.parentElement)?.closest(hostSelectors.conversation))) queueScan();
 });
 observer.observe(document.body, { childList: true, subtree: true, characterData: true });
 disposers.push(() => {
@@ -397,8 +412,8 @@ disposers.push(() => clearInterval(routeTimer));
 listen(window, 'hashchange', () => { routeSeen = location.hash; if (host) void updateContext(); });
 try {
   host = await createHostAdapter(api);
-  disposers.push(host.subscribe(() => {
-    const active = current && host.panelState(current)?.activeSurfaceId;
+  if (host.panel) disposers.push(host.panel.subscribe(() => {
+    const active = current && (host.panel.state(current)?.activeSurfaceId ?? null);
     if (active !== nativeActiveId) { nativeActiveId = active; hideDesk(); }
     scheduleDOM();
   }));

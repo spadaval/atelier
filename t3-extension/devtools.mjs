@@ -11,16 +11,16 @@ export async function connectPage(port = 9222, prefix = 't3code://app/') {
     clearTimeout(entry.timer); pending.delete(message.id);
     message.error ? entry.reject(new Error(message.error.message)) : entry.resolve(message.result);
   });
-  function call(method, params = {}, sessionId) {
+  function call(method, params = {}, sessionId, timeout = 15000) {
     const requestId = ++id;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { pending.delete(requestId); reject(new Error(`${method} timed out`)); }, 15000);
+      const timer = setTimeout(() => { pending.delete(requestId); reject(new Error(`${method} timed out after ${timeout} ms`)); }, timeout);
       pending.set(requestId, { resolve, reject, timer });
       socket.send(JSON.stringify({ id: requestId, method, params, sessionId }));
     });
   }
-  return { target, call, async evaluate(expression) {
-    const result = await call('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
+  return { target, call, async evaluate(expression, timeout) {
+    const result = await call('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }, undefined, timeout);
     if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text);
     return result.result.value;
   }, close() { socket.close(); } };

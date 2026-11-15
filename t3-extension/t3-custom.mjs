@@ -166,6 +166,7 @@ async function buildBundle(config) {
           requests.set(id, { resolve, reject, timer }); report('request', { id, action, payload });
         }),
         reportError: error => { state.error = String(error); report('script-error', { error: state.error }); },
+        reportProbes: probes => report('probes', { probes }),
         version: state.version
       };
       try {
@@ -183,7 +184,7 @@ async function buildBundle(config) {
 async function daemon() {
   let config = await loadConfig();
   const targets = new Map();
-  const state = { pid: process.pid, startedAt: new Date().toISOString(), port: config.debugPort, phase: 'waiting', version: null, lastAppliedAt: null, lastError: null, targets: [], home };
+  const state = { pid: process.pid, startedAt: new Date().toISOString(), port: config.debugPort, phase: 'waiting', version: null, lastAppliedAt: null, lastError: null, probes: null, targets: [], home };
   let bundle;
   let stopping = false;
   let watcher;
@@ -253,6 +254,10 @@ async function daemon() {
         state.lastError = null;
         state.phase = 'connected';
         log('Customizations applied', { target: info.id, version: report.version });
+      } else if (report.type === 'probes') {
+        state.probes = report.probes;
+        const missing = Object.entries(report.probes).filter(([, probe]) => probe.ok === false).map(([name]) => name);
+        if (missing.length) log('Missing T3 hooks', { target: info.id, missing });
       } else if (report.type === 'script-error') problem('custom.js', report.error, { target: info.id });
       else if (report.type === 'reload-request') void reload(true);
       else if (report.type === 'request') void request(target, report, message.params.executionContextId);

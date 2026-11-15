@@ -1,28 +1,65 @@
-// This file is the only client code coupled to T3's private module exports.
-async function createHostAdapter(api) {
-  // Electron can omit cached module loads from resource timings after Cmd+R.
-  // Vite's modulepreload links still identify the modules in that document.
-  const resources = () => [
-    ...document.querySelectorAll('link[rel="modulepreload"]'),
-  ].map(link => link.href).concat(performance.getEntriesByType('resource').map(entry => entry.name));
-  async function moduleStarting(prefix) {
-    const deadline = Date.now() + 15000;
-    while (!api.signal.aborted && Date.now() < deadline) {
-      const url = resources().find(url => url.split('/').pop().startsWith(prefix) && url.endsWith('.js') && !(prefix === 'session-' && url.includes('/session-logic-')));
-      if (url) return import(url);
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-    if (api.signal.aborted) throw new DOMException('Extension was reloaded', 'AbortError');
-    throw new Error(`T3 adapter: no loaded ${prefix} module after 15 seconds. The installed T3 build may have changed.`);
+// The only client code coupled to T3 internals. Every hook has a named probe:
+// a missing hook is reported by name and turns off only the surfaces that need it.
+const hostSelectors = {
+  panel: '[data-workspace-area="panel"]',
+  panelContent: '[data-right-panel-surface-content]',
+  panelTabbar: '[data-right-panel-tabbar]',
+  panelAddButton: 'button[aria-label="Add panel surface"]',
+  panelTab: '[data-active-tab]',
+  layoutControls: '[data-panel-layout-controls]',
+  conversation: '[data-workspace-area="conversation"]',
+  settingsPage: '[data-settings-page-scroll]',
+};
+// ok: true (found), false (missing), null (DOM hook not on screen yet).
+const hostProbes = Object.fromEntries(Object.keys(hostSelectors).map(name => [`dom:${name}`, { ok: null, detail: `${hostSelectors[name]} not seen yet` }]));
+function setHostProbe(name, ok, detail) {
+  if (hostProbes[name]?.ok === ok && hostProbes[name]?.detail === detail) return;
+  hostProbes[name] = { ok, detail };
+  api.reportProbes?.(hostProbes);
+}
+// DOM hooks only exist while their part of T3 is shown, so they are confirmed when seen.
+function observeHostDom() {
+  for (const [name, selector] of Object.entries(hostSelectors)) {
+    if (!hostProbes[`dom:${name}`].ok && document.querySelector(selector)) setHostProbe(`dom:${name}`, true, selector);
   }
-  const panelModule = await moduleStarting('terminalFocus-');
-  const panelStore = Object.values(panelModule).find(value => typeof value?.getState === 'function' && typeof value.getState().openBrowser === 'function');
-  if (!panelStore?.subscribe || !panelStore.getState().show) throw new Error('T3 adapter: workspace-panel store is not compatible with this build.');
-  const session = await moduleStarting('session-');
-  const connections = Object.values(session).find(value => value?.preparedConnectionValueAtom);
-  const utils = await moduleStarting('utils-');
-  const registry = utils.Ol;
-  if (!connections || !registry?.get) throw new Error('T3 adapter: the prepared-connection reader is not available.');
+}
+
+async function createHostAdapter(api) {
+  // Modules are matched by the shape of their exports, not by chunk or export names,
+  // which change with every T3 build. T3 loads chunks lazily, so keep looking for a while.
+  const shapes = {
+    'workspace-panel-store': value => typeof value.subscribe === 'function' && ['byThreadKey', 'show', 'openBrowser'].every(key => key in value.getState()),
+    'atom-registry': value => '~effect/reactivity/AtomRegistry' in value && typeof value.get === 'function',
+    'prepared-connection-atom': value => typeof value.preparedConnectionValueAtom === 'function',
+  };
+  const found = {};
+  const searched = new Set();
+  const deadline = Date.now() + 15000;
+  while (!api.signal.aborted && Object.keys(found).length < Object.keys(shapes).length && Date.now() < deadline) {
+    const urls = [...document.querySelectorAll('link[rel="modulepreload"]')].map(link => link.href)
+      .concat(performance.getEntriesByType('resource').map(entry => entry.name))
+      .filter(url => url.startsWith(location.origin + '/') && url.endsWith('.js') && !searched.has(url));
+    for (const url of new Set(urls)) {
+      searched.add(url);
+      let module;
+      try { module = await import(url); } catch { continue; }
+      for (const value of Object.values(module)) {
+        if (!value || (typeof value !== 'object' && typeof value !== 'function')) continue;
+        for (const [name, test] of Object.entries(shapes)) {
+          try { if (!found[name] && test(value)) found[name] = value; } catch {}
+        }
+      }
+    }
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
+  if (api.signal.aborted) throw new DOMException('Extension was reloaded', 'AbortError');
+  for (const name of Object.keys(shapes)) {
+    setHostProbe(`module:${name}`, Boolean(found[name]), found[name] ? 'found' : `no export with this shape in ${searched.size} loaded T3 modules after 15 seconds`);
+  }
+  const panelStore = found['workspace-panel-store'];
+  const registry = found['atom-registry'];
+  const connections = found['prepared-connection-atom'];
+
   async function connectionFor(environmentId) {
     const deadline = Date.now() + 15000;
     while (!api.signal.aborted && Date.now() < deadline) {
@@ -49,20 +86,24 @@ async function createHostAdapter(api) {
       if (connection.httpAuthorization?.token) headers.Authorization = `Bearer ${connection.httpAuthorization.token}`;
       const url = connection.httpBaseUrl.replace(/\/$/, '') + '/api/orchestration/shell';
       const response = await fetch(url, { headers, signal: api.signal });
-      if (!response.ok) throw new Error(`Read T3 project metadata for ${environmentId}: HTTP ${response.status}`);
+      setHostProbe('http:orchestration-shell', response.ok, `GET ${url}: HTTP ${response.status}`);
+      if (!response.ok) throw new Error(`Read T3 project metadata for ${environmentId}: GET ${url}: HTTP ${response.status}`);
       const value = await response.json();
       cached = { at: Date.now(), value }; shells.set(environmentId, cached);
     }
     const thread = cached.value.threads.find(thread => thread.id === threadId);
     const project = cached.value.projects.find(project => project.id === thread?.projectId);
+    setHostProbe('route:thread', Boolean(project), project ? `#/${environmentId}/<thread>` : `#/${environmentId}/${threadId} names no thread with a project in that environment`);
     if (!project) return null;
     return { environmentId, threadId, projectId: project.id, projectName: project.title, repositoryKey: project.repositoryIdentity?.canonicalKey ?? null };
   }
   return {
-    context,
-    panelState: context => panelStore.getState().byThreadKey[`${context.environmentId}:${context.threadId}`],
-    showPanel: context => panelStore.getState().show({ environmentId: context.environmentId, threadId: context.threadId }),
-    subscribe: listener => panelStore.subscribe(listener),
-    openSettings() { location.hash = '/settings/general'; },
+    // null means the surfaces that need this hook are off; hostProbes says why.
+    context: registry && connections ? context : null,
+    panel: panelStore ? {
+      state: context => panelStore.getState().byThreadKey[`${context.environmentId}:${context.threadId}`],
+      show: context => panelStore.getState().show({ environmentId: context.environmentId, threadId: context.threadId }),
+      subscribe: listener => panelStore.subscribe(listener),
+    } : null,
   };
 }
