@@ -73,3 +73,13 @@ pinned candidate and the mandatory review-before-use constraint; it does not
 claim that independent approval has already occurred. Neither candidate may
 be used on another repository before exact-code review. No consumer state,
 shared hook or global installation was modified. No bypass was used.
+
+### Publication follow-up
+
+Independent normal review 1-wzd0 approved the exact correction and pinned
+v0.6.0 candidate without findings; committed as b9d690f8. Current-head CI
+initially rejected the preserved patch's required blank unified-diff context
+lines as trailing whitespace. An artifact-local Git attribute disables only
+blank-at-eol checking for that exact patch. Its bytes, hash, reviewed source
+and candidate binary remain unchanged. No lifecycle guard or CI command was
+bypassed. The complete base-to-head whitespace check now passes.
