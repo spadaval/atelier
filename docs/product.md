@@ -422,6 +422,13 @@ Rules:
   `log` already reads; a mission's record stores no time.
 - A small mission may put a short Design section in `mission.md` and have no
   other document.
+- Where a mission builds something whose goal is not clear until it is seen,
+  it is derisked by a spike: a rough build of the whole thing, made with
+  Sumeet before the plan is written, on a `spike/<slug>` branch that never
+  merges. Derisking says what the spike showed and whether the items rework
+  its code or write fresh with it as reference. Its code reaches the base
+  only through those items and their reviews. Any other mission's Derisking
+  names its riskiest assumption and how that is settled.
 - A question for Sumeet is an item labelled `needs-human`. He answers, and an
   agent closes it with the answer.
 

@@ -29,7 +29,8 @@ lead. A garden or audit task also reads
 
 ## Who Works With Sumeet
 
-The planner works with Sumeet in conversation. A gardener takes its focus
+The planner works with Sumeet in conversation, and builds a spike with him
+when the plan needs one. A gardener takes its focus
 from him when he names one at the start, and settles its run's page with him
 in a session once the run is approved. Every other role
 runs unattended: it never waits on him, and takes a question to the thread
