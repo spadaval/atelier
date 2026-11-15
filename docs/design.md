@@ -1264,6 +1264,29 @@ The cutover's rollback restores a clone's hooks directory from a copy, so
 | pre-push | The base receives only merges. With a forge configured, any push that moves the base is refused, naming `atelier merge`, since the forge makes every merge. Without one, each new commit on the base's first-parent line must be an Atelier merge: two parents, and the `Atelier-Merge:` trailer that `merge` writes in its message's last paragraph. What a merge brings in on its second parent is not examined. |
 | post-checkout | None. On a branch switch it prints what `status` prints. |
 
+A conflict-resolved catch-up commit on an item branch may import a lifecycle
+record whose status differs from `HEAD` when the staged file is byte-for-byte
+identical to the incoming base's file. The hook reads the base name and forge
+remote only from `HEAD`'s committed config. Git's worktree-specific `MERGE_HEAD`
+must name exactly one full commit ID, equal to the current tip of either
+`refs/heads/<base>` or `refs/remotes/<configured-forge-remote>/<base>`.
+The staged config must equal `HEAD`'s config. Parsing and staged-record
+validation still run, and commits on the base still cannot change records.
+
+The supported route is to fetch the configured forge remote's base, then run
+`git merge <remote>/<base>` on the item branch (or `git merge <base>` for a
+local base). Resolve conflicts, retain imported lifecycle records exactly as
+that base committed them, stage the result and run `git commit`. If a lifecycle
+record needs edits too, commit the unchanged import first and make those edits
+through the lifecycle commands afterwards. A config change must be handled
+separately before retrying the catch-up. An older base tip, another remote,
+multiple incoming parents, an ordinary commit without merge state, an edited
+import, or malformed or invalid records receives no exception. This changes
+only the hook's lifecycle comparison; review, merge and pre-push policy stay
+in force. Git refs and merge state are the authority within the local clone;
+this rule is not authentication of a remote server or a defense against someone
+who can rewrite that clone's refs.
+
 `atelier check` reads every record in the checkout, tracked or not and
 ignored or not, as the commands do, one file at a time
 (`records::load`), so one that does not parse leaves the rest

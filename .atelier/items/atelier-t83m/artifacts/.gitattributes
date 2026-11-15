@@ -1,0 +1,3 @@
+# Unified-diff blank context lines contain one required space. Preserve the
+# reviewed patch bytes while retaining all other whitespace checks.
+v0.6.0-verified-base.patch whitespace=-blank-at-eol
