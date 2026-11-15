@@ -16,12 +16,20 @@ read-only with the daily T3 server; the daily instance was never attached to.
   (`performance.timeOrigin` unchanged).
 - Injection works with T3's content security policy in force: the Desk iframe
   loads `http://buildbot:3780/r/atelier` and renders; no `Page.reload` is used.
-- `test-contract.mjs` reports all 13 hooks present; with a renamed store shape
-  and settings selector, or a non-existent thread, it exits 1 naming them.
+- `test-contract.mjs` reports all 13 hooks present and that discovery imported
+  4 of 320 declared renderer modules (80 when the chunk-name hint misses), no
+  workers; with a renamed store shape and settings selector, or a non-existent
+  thread, it exits 1 naming them.
+- With the panel slot attribute renamed in the live instance, a reference click
+  opened `http://buildbot:3780/r/atelier/item/atelier-plr9` externally and
+  `dom:panelContent` was reported missing.
+- `t3-custom.cmd` leaves `ELECTRON_RUN_AS_NODE` unset in the calling `cmd.exe`.
 - In a real thread of the `atelier` project (repository key
   `github.com/spadaval/atelier`): the Desk tab, a hovercard for `atelier-plr9`
   with Desk data, and the Customizations section with every probe.
-- `test-extension.mjs` passes with Edge.
+- `test-extension.mjs` passes with Edge (5 of 5 runs). With the previous
+  discovery (all resource-timing scripts) it fails: reinjection imports the
+  fixture's worker into the window.
 - The installer upgrades a modified installed `custom.js` (kept as
   `custom.js.previous`) and the running injector reapplies it.
 

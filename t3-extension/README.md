@@ -174,18 +174,26 @@ network-facing debugging listener is enabled.
 `host-adapter.js` names each private hook and probes it at startup:
 
 - `module:workspace-panel-store`, `module:atom-registry`,
-  `module:prepared-connection-atom`: found by the shape of their exports across
-  every loaded T3 module, not by chunk or minified export names (the registry is
-  recognised by Effect's `~effect/reactivity/AtomRegistry` type id).
+  `module:prepared-connection-atom`: found by the shape of their exports, not by
+  chunk or minified export names (the registry is recognised by Effect's
+  `~effect/reactivity/AtomRegistry` type id). Discovery only imports modules the
+  renderer itself loads as modules (its entry script and `modulepreload` links),
+  never workers or other scripts, and stops as soon as all three are found. The
+  last seen chunk names are tried first, so it normally imports 4 modules; if
+  they change it searches the rest (80 of 320 on the current build).
+  `__t3Custom.diagnostics().modules` lists what it imported.
 - `http:orchestration-shell` and `route:thread`: the project metadata read and
   the `#/<environment>/<thread>` route, checked when a thread is opened.
 - `dom:*`: the DOM attributes the panel, references and settings attach to.
   They are confirmed when first seen, since T3 renders them only on demand.
+  Opening Desk checks that T3's panel renders its content slot within 3 seconds;
+  if not, `dom:panel` or `dom:panelContent` is reported missing.
 
 A missing hook is reported by name in Customizations, in `t3-custom status`, and
 in `injector.log`, and turns off only the surface that needs it: the Desk panel
-needs the panel store, the registry and the connection atom; references need the
-conversation DOM; the settings section needs the settings page.
+needs the panel store, the registry, the connection atom and the panel slot;
+references need the conversation DOM, and open Desk in the browser while the
+panel is off; the settings section needs the settings page.
 
 ## A test instance (Windows)
 
@@ -227,11 +235,15 @@ No npm dependencies are needed. The tests need Node.js 22 or newer.
 `node test-contract.mjs --port 9333 --thread <environmentId>/<threadId>` checks
 every hook against a running T3 (use a test instance): it opens the thread, the
 workspace panel and Settings, prints each probe, and exits non-zero naming each
-broken hook. Run it after every T3 update.
+broken hook, or if discovery imported a script that is not a declared renderer
+module (such as a worker). Run it after every T3 update.
 
 `node test-extension.mjs` tests the extension logic in an isolated browser
 fixture with T3's panel DOM contract, T3's content security policy, and real
-Desk reads. It uses Edge on Windows and Chrome on macOS; set `BROWSER` to use
+Desk reads. The fixture serves modules shaped like T3's hooks, so the real
+discovery code runs, and a worker script that must never run in the window. It
+also renames the panel slot and checks that references then open Desk
+externally. It uses Edge on Windows and Chrome on macOS; set `BROWSER` to use
 another Chromium. It checks docking/resizing, project matching and manual
 mappings, safe reference rendering, keyboard hovercards, click-through, Settings
 reinjection, native-surface coexistence, and clean removal. It reads Desk
