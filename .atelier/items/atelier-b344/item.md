@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-b344
 title: Tell planners to spike first when the goal is not clear until something is built
-status: building
+status: in_review
 mission: null
 labels: []
 priority: medium
