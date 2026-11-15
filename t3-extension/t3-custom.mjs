@@ -195,12 +195,10 @@ async function daemon() {
     state.lastError = `${operation}: ${error.message ?? error}`;
     log(state.lastError, extra);
   }
-  async function apply(target, refreshDocument = false) {
+  async function apply(target) {
     if (target.scriptId) await target.cdp.call('Page.removeScriptToEvaluateOnNewDocument', { identifier: target.scriptId });
     const result = await target.cdp.call('Page.addScriptToEvaluateOnNewDocument', { source: bundle.source });
     target.scriptId = result.identifier;
-    // Chromium chooses CSP enforcement when it initializes a document.
-    if (refreshDocument) { await target.cdp.call('Page.reload'); return; }
     const evaluated = await target.cdp.call('Runtime.evaluate', { expression: bundle.source, returnByValue: true });
     if (evaluated.exceptionDetails) throw new Error(evaluated.exceptionDetails.exception?.description ?? evaluated.exceptionDetails.text);
   }
@@ -266,10 +264,9 @@ async function daemon() {
       await target.cdp.call('Page.enable');
       await target.cdp.call('Runtime.enable');
       await target.cdp.call('Runtime.addBinding', { name: '__t3CustomReport' });
-      if (config.bypassCSP) await target.cdp.call('Page.setBypassCSP', { enabled: true });
       target.ready = true;
-      if (bundle) await apply(target, config.bypassCSP);
-      log('Attached to T3 renderer', { target: info.id, url: info.url, bypassCSP: config.bypassCSP });
+      if (bundle) await apply(target);
+      log('Attached to T3 renderer', { target: info.id, url: info.url });
     } catch (error) { problem('Attaching renderer', error, { target: info.id }); target.cdp.close(); }
   }
   async function stop() {
@@ -280,10 +277,6 @@ async function daemon() {
       try {
         if (target.scriptId) await target.cdp.call('Page.removeScriptToEvaluateOnNewDocument', { identifier: target.scriptId });
         await target.cdp.call('Runtime.evaluate', { expression: 'globalThis.__t3Custom?.dispose()' });
-        if (config.bypassCSP) {
-          await target.cdp.call('Page.setBypassCSP', { enabled: false });
-          await target.cdp.call('Page.reload');
-        }
         await target.cdp.call('Runtime.removeBinding', { name: '__t3CustomReport' });
       } finally { target.cdp.close(); }
     }));

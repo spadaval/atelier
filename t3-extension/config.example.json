@@ -4,7 +4,6 @@
   "targetPrefixes": [
     "t3code://app/"
   ],
-  "bypassCSP": true,
   "desk": {
     "baseUrl": "http://127.0.0.1:3780",
     "repositories": [
