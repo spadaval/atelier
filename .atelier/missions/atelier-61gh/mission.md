@@ -3,7 +3,7 @@ schema: atelier.mission
 schema_version: 3
 id: atelier-61gh
 title: 'Make the Desk feel native inside T3 Code: an embedded layout, a host contract, and pages that follow the thread'
-status: open
+status: done
 labels: []
 lead: null
 planners:
@@ -126,3 +126,37 @@ The contract treats what the host sends as data. A colour is applied only if
 it parses as a colour, and a thread identity is only ever looked up.
 
 ## Result
+
+The Desk has an embedded mode under `/embed`, a host contract over
+`postMessage`, and three reads for a host, and the service on this host runs
+them at `6bd438232`. All four items merged on 2026-11-15, each after an
+independent review: atelier-vg1l (#170), atelier-prx5 (#171), atelier-fnm5
+(#172) and atelier-knx8 (#173).
+
+Each success criterion is checked by a test that merged with its item:
+no-chrome by `desk/e2e/embedded.spec.ts`; follows-the-thread, themed-by-the-host,
+asks-the-host and only-listed-origins by `desk/e2e/host.spec.ts`;
+one-read-lookups by the tests in `crates/atelier-desk` and by the live
+service, whose `/api/repos` gives `github.com/spadaval/atelier`; and
+unchanged-outside by the interface tests from the base, which pass unchanged.
+
+Three things differ from the plan.
+
+- atelier-vg1l fixed the disputed page outside the embedded mode, where each
+  row's text was squeezed into a column two characters wide at every width.
+  The implementer did not ask first, as Authority says to, because the page
+  could not be read.
+- A plan reviewer stays current until the whole round ends, including after
+  it has given its own verdict.
+- The Desk does not rewrite a remote's key for the hosts T3 Code rewrites,
+  such as Azure DevOps over SSH, so those repositories will not match a T3
+  project.
+
+The extension in `spadaval/t3-code-atelier` uses all of it. In the second T3
+Code instance on Sumeet's Windows machine, against the live Desk, the panel
+shows the Desk with no chrome of its own in T3's light and dark colours,
+opens the inbox for a thread that holds nothing, and maps the project to its
+repository by identity. A thread that holds an item was not seen there,
+because no thread of that instance holds one.
+
+A mission control page is next and starts with a spike with Sumeet.
