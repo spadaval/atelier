@@ -77,6 +77,9 @@ item in `items/<id>/item.md` with its reviews beside it, and the rules in
   the one design record.
 - The Desk, the human's web tool: `docs/product/desk.md` and
   `docs/architecture/desk.md`.
+- The T3 Code extension, which shows the Desk inside T3 Code:
+  `t3-extension/README.md`, and `t3-extension/AGENTS.md` for how to write its
+  code.
 - Agent Factory's evals: `evals/agent-factory`.
 
 ## Command References
@@ -84,6 +87,8 @@ item in `items/<id>/item.md` with its reviews beside it, and the rules in
 - Installed CLI: `atelier`, installed from this tree with `cargo install
   --path crates/atelier-cli --locked`.
 - The Desk's app: `desk/` (`pnpm test`, `pnpm e2e`; see `desk/README.md`).
+- The T3 Code extension: `t3-extension/` (`node t3-extension/test-extension.mjs`
+  with a Desk running and Chrome; set `DESK` and `BROWSER`, see its README).
 - Formatting: `cargo fmt -- --check`
 - Lints: `cargo clippy --all-targets -- -D warnings`
 - Rust tests: `cargo nextest run`
@@ -92,7 +97,8 @@ item in `items/<id>/item.md` with its reviews beside it, and the rules in
   (`cargo nextest run -p <crate>` or a filter). The full suite runs on Linux
   in CI on the pull request (`.github/workflows/ci.yml`), and that run gates
   the merge. CI skips the Rust jobs when a change touches only tracker
-  records, Markdown outside `crates/`, and the Desk's app outside
-  `desk/src/api/` (`scripts/ci-jobs.sh` holds the rule).
+  records, Markdown outside `crates/`, the Desk's app outside
+  `desk/src/api/`, and the T3 Code extension (`scripts/ci-jobs.sh` holds the
+  rule). No CI job tests the extension yet.
 - The cutover kit, `scripts/cutover/`, stays until the work host has
   adopted the new tool (`scripts/cutover/README.md`).
