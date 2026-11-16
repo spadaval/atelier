@@ -12,6 +12,7 @@ import { Crumbs } from "../components/Crumbs";
 import { sinceAgo, who } from "../components/Glance";
 import { ErrorBanner, Priority, ScopeBar, Skeleton, StatusGlyph } from "../components/ui";
 import { api, to, useData, useThreads } from "../lib/api";
+import { begun } from "../lib/mission";
 import { statusName } from "../lib/words";
 
 const STARTED = new Set(["building", "in_review", "changes_requested", "approved"]);
@@ -225,8 +226,6 @@ export function ProjectHomePage() {
   const week = useData<HistoryResponse>(api.history(repo, { days: 7 }));
   const rows = missions.data?.missions ?? [];
   const loose = roadmap.data?.loose ?? [];
-  // A mission with any item started or done is under way.
-  const begun = (m: MissionRow) => m.in_progress || m.counts.some((c) => c.status !== "draft" && c.status !== "ready" && c.status !== "dropped" && c.count > 0);
   const now = rows.filter((m) => m.state === "open" && begun(m));
   const next = rows.filter((m) => m.state === "open" && !begun(m));
   const later = rows.filter((m) => m.state === "proposed");

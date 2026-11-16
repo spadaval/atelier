@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Frame, type Page } from "@playwright/test";
 import { World } from "./fixtures";
 
 /** Answers every /api request of `page` from a fresh fixture server, and returns it. */
@@ -43,4 +43,22 @@ export async function expectOnlyTheActions(page: Page) {
   for (const name of actions) expect(name).toMatch(/^(Stop this plan|Yes, stop it|Start a planning session|Yes, start it)$/);
   const forms = await page.locator("form").evaluateAll((all) => all.map((f) => f.getAttribute("aria-label") ?? ""));
   for (const form of forms) expect(form).toBe("Stop this plan");
+}
+
+/** Fails on a control that is visible but lies partly outside the window's width. */
+export async function expectNoControlCutOff(page: Page | Frame) {
+  const cut = await page.evaluate(() => {
+    const width = document.documentElement.clientWidth;
+    const controls = document.querySelectorAll<HTMLElement>("a, button, input, select, textarea, summary, [role=tab]");
+    const shown = [...controls].filter((c) => c.checkVisibility() && c.getBoundingClientRect().width > 0);
+    return {
+      checked: shown.length,
+      cut: shown
+        .map((c) => ({ c, box: c.getBoundingClientRect() }))
+        .filter(({ box }) => box.left < -0.5 || box.right > width + 0.5)
+        .map(({ c, box }) => `${c.tagName.toLowerCase()} "${(c.getAttribute("aria-label") ?? c.textContent ?? "").trim().slice(0, 40)}" spans ${Math.round(box.left)} to ${Math.round(box.right)} of ${width}`),
+    };
+  });
+  expect(cut.checked, "controls on the page").toBeGreaterThan(1);
+  expect(cut.cut, "controls cut off at the window's edge").toEqual([]);
 }

@@ -11,7 +11,7 @@ import type { Tie } from "../api/Tie";
 import type { TiesResponse } from "../api/TiesResponse";
 import { LiveThreadRow } from "../components/Agents";
 import { Crumbs } from "../components/Crumbs";
-import { ScopeBar, Skeleton, StatusGlyph } from "../components/ui";
+import { ErrorBanner, ScopeBar, Skeleton, StatusGlyph } from "../components/ui";
 import { api, to, useAll, useData, useThreads } from "../lib/api";
 import { openThread, useHostContext, type HostContext } from "../lib/host";
 import { countsLine, finished, roleWords, statusName, statusTitle, total } from "../lib/words";
@@ -284,7 +284,10 @@ function ThreadView({ context }: { context: HostContext }) {
   const now = Date.now();
   const [showDone, setShowDone] = useState(false);
 
-  if (!ties.data || !inbox.data || childTies.loading || named.loading) return <Skeleton rows={6} />;
+  // A read that fails leaves its part out, and the page still draws.
+  const settled = (read: { data?: unknown; error?: string }) => read.data !== undefined || read.error !== undefined;
+  if (!settled(ties) || !settled(inbox) || childTies.loading || named.loading) return <Skeleton rows={6} />;
+  const repos = inbox.data?.repos ?? [];
 
   // A record this thread holds is shown under Holds, not again here.
   const held = new Set(current.map((t) => t.id));
@@ -299,21 +302,23 @@ function ThreadView({ context }: { context: HostContext }) {
   for (const m of missions.data) for (const i of m?.items ?? []) records.add(i.id);
   for (const m of work.data) if (m && m.mission.status !== "done") for (const i of m.items) records.add(i.id);
   const threads = new Set([context.thread, ...context.children]);
-  const waitingItems = inbox.data.repos.flatMap((r) =>
+  const waitingItems = repos.flatMap((r) =>
     r.needs_human.flatMap((g) => g.items.filter((i) => records.has(i.id) || (g.mission !== null && records.has(g.mission))).map((row) => ({ repo: r.repo, row }))),
   );
-  const waitingThreads = inbox.data.repos.flatMap((r) => r.threads.filter((t) => threads.has(t.id) || t.holds.some((h) => records.has(h.id))));
-  const waitingPlans = inbox.data.repos.flatMap((r) => r.proposed.filter((m) => records.has(m.id)).map((m) => ({ repo: r.repo, m })));
+  const waitingThreads = repos.flatMap((r) => r.threads.filter((t) => threads.has(t.id) || t.holds.some((h) => records.has(h.id))));
+  const waitingPlans = repos.flatMap((r) => r.proposed.filter((m) => records.has(m.id)).map((m) => ({ repo: r.repo, m })));
   const waits = waitingItems.length + waitingThreads.length + waitingPlans.length;
 
   const holds = itemTies.length + missionTies.length;
   // A child that no record names: the work above does not show it.
   const others = context.children.map((id, at) => ({ id, at })).filter(({ at }) => (childTies.data[at]?.ties ?? []).length === 0);
-  const empty = holds === 0 && workTies.length === 0 && others.length === 0 && mentioned.length === 0 && waits === 0;
+  // Without its ties the page cannot say the thread holds nothing.
+  const empty = ties.data !== undefined && holds === 0 && workTies.length === 0 && others.length === 0 && mentioned.length === 0 && waits === 0;
   const earlier = tieLine(all.filter((t) => !t.current));
 
   return (
     <>
+      <ErrorBanner loaded={ties} />
       <div className="thread-head">
         <b>{self.data?.title ?? "This thread"}</b>
         {earlier && holds === 0 ? <span>Earlier it {earlier}.</span> : null}

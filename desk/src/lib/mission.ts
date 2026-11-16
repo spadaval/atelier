@@ -1,11 +1,13 @@
 /**
- * Mission control's reading of the records' history (`GET /api/history`,
- * read from commit subjects, so approximate): an item's stage and how long
- * it has been in it, and the progress log.
+ * Where a mission stands, for mission control and the project home: an
+ * item's stage and how long it has been in it, and the progress log, read
+ * from the records' history (`GET /api/history`, from commit subjects, so
+ * approximate); and whether a mission is under way.
  */
 import type { HistoryEvent } from "../api/HistoryEvent";
 import type { ItemPage } from "../api/ItemPage";
 import type { ItemRow } from "../api/ItemRow";
+import type { MissionRow } from "../api/MissionRow";
 
 /** An item's stage in a word or two, with its review round. */
 export function stage(row: ItemRow, events: HistoryEvent[]): string {
@@ -109,3 +111,8 @@ export function logEntries(missionId: string, items: ItemRow[], events: HistoryE
 
 /** A caller's name as a person's: `sumeet` is `Sumeet`. */
 const named = (caller: string) => caller.charAt(0).toUpperCase() + caller.slice(1);
+
+/** Whether a mission is under way, for the project home's Now: an item of it is started or done. */
+export function begun(m: Pick<MissionRow, "in_progress" | "counts">): boolean {
+  return m.in_progress || m.counts.some((c) => c.status !== "draft" && c.status !== "ready" && c.status !== "dropped" && c.count > 0);
+}

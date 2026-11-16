@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { z4cr } from "./fixtures";
-import { load, serve } from "./helpers";
+import { expectNoControlCutOff, load, serve } from "./helpers";
 
 // The embedded mode, for a host such as T3 Code that shows the Desk in a
 // panel 400 to 750 pixels wide: a path under /embed turns it on.
@@ -18,24 +18,6 @@ const pages = {
   "in motion": "/motion",
   disputed: "/disputed",
 };
-
-/** Fails on a control that is visible but lies partly outside the window's width. */
-async function expectNoControlCutOff(page: Page) {
-  const cut = await page.evaluate(() => {
-    const width = document.documentElement.clientWidth;
-    const controls = document.querySelectorAll<HTMLElement>("a, button, input, select, textarea, summary, [role=tab]");
-    const shown = [...controls].filter((c) => c.checkVisibility() && c.getBoundingClientRect().width > 0);
-    return {
-      checked: shown.length,
-      cut: shown
-        .map((c) => ({ c, box: c.getBoundingClientRect() }))
-        .filter(({ box }) => box.left < -0.5 || box.right > width + 0.5)
-        .map(({ c, box }) => `${c.tagName.toLowerCase()} "${(c.getAttribute("aria-label") ?? c.textContent ?? "").trim().slice(0, 40)}" spans ${Math.round(box.left)} to ${Math.round(box.right)} of ${width}`),
-    };
-  });
-  expect(cut.checked, "controls on the page").toBeGreaterThan(1);
-  expect(cut.cut, "controls cut off at the window's edge").toEqual([]);
-}
 
 /** Checks that the page draws no chrome of its own, keeps its breadcrumb, and links to the inbox. */
 async function expectNoChrome(page: Page) {

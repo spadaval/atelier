@@ -3445,6 +3445,13 @@ a.q:hover {
   .mcx-top .ttl {
     display: none;
   }
+  .mcx-top {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+  .mcx-top .right {
+    white-space: normal;
+  }
   .mcx-worker {
     grid-template-columns: 2ch 12ch 14ch minmax(0, 1fr);
   }
