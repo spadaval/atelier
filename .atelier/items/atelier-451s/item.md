@@ -3,14 +3,15 @@ schema: atelier.item
 schema_version: 3
 id: atelier-451s
 title: Release the extension as a bundle on its own tags, apart from the atelier release
-status: ready
+status: building
 mission: atelier-m8ye
 labels: []
 priority: medium
 blocked_by:
 - atelier-n4g7
 - atelier-7tg6
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A932557e7-853d-4352-845a-e9951a7775d5%3Adelegate-task%3A02b04ac7-4c09-4333-bb9a-e4607998c8f1
 ready:
   by: 'sumeet, in conversation on 2026-11-16: do this, and the rest of the mission'
   at: 2026-11-16T19:26:24.749789035Z
