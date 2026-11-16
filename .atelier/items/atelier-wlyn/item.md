@@ -102,5 +102,5 @@ Not proven:
 
 ### Responses
 
-- 1-4i4u.1: fixed in 99b178aa7. The item no longer ends with a blank line, and `git diff --check origin/master...HEAD` is clean. The CI run for round 2 is linked when the pull request runs it.
+- 1-4i4u.1: fixed in 99b178aa7. The item no longer ends with a blank line, and `git diff --check origin/master...HEAD` is clean. Round 2's CI run, at `b022596ac`: https://github.com/spadaval/atelier/actions/runs/43953385705, with the release workflow's at https://github.com/spadaval/atelier/actions/runs/43953385635. Both were running when this was written.
 - 1-4i4u.2: fixed in b723a8d77. `get` now reads the body (`json`, `text` or `arrayBuffer`) inside the same wrapper as the request. A failure while the body arrives now reads, for example, `Downloading t3-extension-0.2.0.zip: GET <url>: reading the response: terminated`. `test-update.mjs` has a new case: the fixture sends 200 with the full `Content-Length`, writes 100 bytes and drops the connection. The case asserts the message and that `VERSION` and `custom.js` are unchanged. With the wrapper removed, it fails with `actual: 'terminated'`.
