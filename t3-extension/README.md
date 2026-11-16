@@ -4,6 +4,10 @@ An external T3 Code extension using Atelier Desk as its backend. The official
 T3 application stays untouched. The local injector owns T3-specific presentation
 and context; Desk owns repository records, item/mission data, and its web UI.
 
+It lives in the `atelier` repository beside the Desk, so a change to their
+contract is one item and one review. It is not part of the `atelier` release.
+How to write its code is in [AGENTS.md](AGENTS.md).
+
 It works on Windows and macOS. It uses private T3 interfaces and the Chrome
 DevTools Protocol rather than a supported extension API; every private hook it
 uses is checked by name at startup (see [T3 hooks](#t3-hooks)). Last verified on
@@ -18,8 +22,9 @@ Three layers:
 - `host-adapter.js`: the only code coupled to T3 internals.
 - `custom.js`: the Atelier extension, written against the adapter and Desk's HTTP
   API. The Desk panel is an iframe showing the Desk's embedded mode, and the two
-  talk over the Desk's host contract (in the `atelier` repository,
-  `docs/architecture/desk.md`, "The embedded mode" and "The host contract").
+  talk over the Desk's host contract
+  ([docs/architecture/desk.md](../docs/architecture/desk.md), "The embedded
+  mode" and "The host contract").
 
 ## Install
 
@@ -28,8 +33,8 @@ reachable from this machine. At run time the loader uses T3's own executable in
 Node mode, so no separate Node installation is needed.
 
 ```sh
-git clone git@github.com:spadaval/t3-code-atelier.git
-cd t3-code-atelier
+git clone https://github.com/spadaval/atelier.git
+cd atelier/t3-extension
 cp config.example.json config.json
 # Edit config.json: desk.urls.
 python3 install.py        # Windows: py install.py

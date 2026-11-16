@@ -31,7 +31,8 @@ Building from source on macOS may work, but nothing tests it.
 What Atelier does is in the [product specification](docs/product.md), and
 how it is built in the [design record](docs/design.md). The human's tool, the
 Desk, is a separate server and web app in this repository
-([desk/](desk/README.md)).
+([desk/](desk/README.md)), and [t3-extension/](t3-extension/README.md) shows
+it inside T3 Code.
 
 Agents learn Atelier's workflow from the Agent Factory skill, which lives in
 [skills/agent-factory](skills/agent-factory). Install it globally with Vercel's

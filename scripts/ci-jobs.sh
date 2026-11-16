@@ -11,7 +11,8 @@
 #
 # rust (the workspace's build and tests, and `atelier check` on the records)
 # reads everything except tracker records under .atelier/issues, reviews,
-# evidence and runtime, Markdown outside crates/, and the Desk's app desk/.
+# evidence and runtime, Markdown outside crates/, the Desk's app desk/, and
+# the T3 Code extension t3-extension/.
 # It does read desk/src/api/, the app's types generated from atelier-desk's,
 # which a test there compares.
 #
@@ -27,7 +28,7 @@ head=${2:-HEAD}
 needs_rust() {
   case $1 in
     desk/src/api/*) return 0 ;;
-    .atelier/issues/* | .atelier/reviews/* | .atelier/evidence/* | .atelier/runtime/* | desk/*) return 1 ;;
+    .atelier/issues/* | .atelier/reviews/* | .atelier/evidence/* | .atelier/runtime/* | desk/* | t3-extension/*) return 1 ;;
     crates/*) return 0 ;;
     *.md) return 1 ;;
     *) return 0 ;;

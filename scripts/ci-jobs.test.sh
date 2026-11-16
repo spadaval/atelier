@@ -66,6 +66,8 @@ expect false true desk-readme desk/README.md
 expect false true desk-fixtures desk/e2e/fixtures.ts
 expect true true rust-and-desk crates/a/src/lib.rs desk/src/App.tsx
 expect true false toolchain rust-toolchain.toml
+expect false false t3-extension t3-extension/custom.js t3-extension/install.py t3-extension/README.md
+expect true true t3-extension-and-desk-api t3-extension/custom.js desk/src/api/MissionPage.ts
 
 # Moving a fixture out of crates/ changes crates/.
 repo="$scratch/rename"

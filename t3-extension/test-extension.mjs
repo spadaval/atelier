@@ -4,10 +4,12 @@ import path from 'node:path';
 import os from 'node:os';
 import http from 'node:http';
 import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { connectPage } from './devtools.mjs';
 
-const root = process.cwd();
+// The extension's folder, wherever the test is run from.
+const root = path.dirname(fileURLToPath(import.meta.url));
 const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'atelier-extension-test-'));
 const debugPort = 19222;
 let deskBase, realDesk;
