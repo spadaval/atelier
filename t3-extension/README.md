@@ -496,8 +496,11 @@ workspace panel, a new-thread screen (the first draft that names a project, or
 `--draft <id>`) and Settings, prints each probe, and exits non-zero naming each
 broken hook, or if discovery imported a script that is not a declared renderer
 module (such as a worker). It also reads the theme (`css:theme`), finds the
-thread among the connected environments (`state:find-thread`) and reads who
-started each thread (`state:thread-origin`). Run it after every T3 update.
+thread among the connected environments (`state:find-thread`), reads who
+started each thread (`state:thread-origin`), and on the new-thread screen fills
+T3's composer as the project strip does and checks that T3's own draft store
+holds the text (`state:composer-prompt`), then puts the draft's prompt back. Run
+it after every T3 update.
 
 `node test-extension.mjs` tests the extension logic in an isolated browser
 fixture with T3's panel, sidebar, breadcrumb and new-thread DOM, T3's content

@@ -177,6 +177,8 @@ async function createHostAdapter(api) {
     draftContext: registry && threads && drafts ? draftContext : null,
     // The new-thread drafts that name a project, for the contract test to open one.
     draftIds: drafts ? () => Object.entries(drafts.getState().draftThreadsByThreadKey).filter(([, draft]) => draft.projectId).map(([id]) => id) : null,
+    // The prompt T3's draft store holds for a new-thread draft, for the contract test.
+    draftPrompt: drafts ? draftId => drafts.getState().draftsByThreadKey[draftId]?.prompt ?? null : null,
     children: registry && threads && environments ? children : null,
     threadList: registry && threads && environments ? threadList : null,
     // null means the surfaces that need this hook are off; hostProbes says why.
@@ -199,6 +201,17 @@ async function createHostAdapter(api) {
       subscribe: listener => panelStore.subscribe(listener),
     } : null,
   };
+}
+
+// T3's composer is a ProseMirror (TipTap) editor: its content is selected and replaced with
+// execCommand('insertText'), which fires the beforeinput/input events ProseMirror handles, so T3's
+// draft keeps the text (test-contract.mjs checks the draft store). Empty text clears it.
+function fillHostComposer(text) {
+  const editor = document.querySelector(hostSelectors.composerEditor);
+  if (!editor) throw new Error(`T3's composer editor (${hostSelectors.composerEditor}) is not on screen`);
+  editor.focus();
+  getSelection().selectAllChildren(editor);
+  if (!document.execCommand(text ? 'insertText' : 'delete', false, text)) throw new Error(`T3's composer refused execCommand ${text ? 'insertText' : 'delete'}`);
 }
 
 // T3's theme, from its own CSS custom properties, in the form of the Desk's host:theme message.

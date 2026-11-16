@@ -924,14 +924,8 @@ const strip = element('div', { 'data-t3-strip': '', hidden: '' });
 // The composer's width changes without a window resize (panels, sidebar); follow the canvas.
 const stripResize = new ResizeObserver(() => scheduleDOM());
 let launchKey = null; let launchAt = 0;
-// T3's composer is a ProseMirror (TipTap) editor: select its content and insert the text with
-// execCommand('insertText'), which fires the beforeinput/input events ProseMirror handles.
 function setComposerText(text) {
-  const editor = document.querySelector(hostSelectors.composerEditor);
-  if (!editor) { api.reportError(new Error(`Project strip: T3's composer editor (${hostSelectors.composerEditor}) is not on screen`)); return; }
-  editor.focus();
-  getSelection().selectAllChildren(editor);
-  if (!document.execCommand('insertText', false, text)) api.reportError(new Error('Project strip: the composer refused execCommand insertText'));
+  try { fillHostComposer(text); } catch (error) { api.reportError(new Error(`Project strip: ${error.message}`)); }
 }
 const age = seconds => seconds < 3600 ? `${Math.max(1, Math.round(seconds / 60))}m` : seconds < 86400 ? `${Math.round(seconds / 3600)}h` : `${Math.round(seconds / 86400)}d`;
 function stripCard(name, title, count, rows, empty, onHeader) {

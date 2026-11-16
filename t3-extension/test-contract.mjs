@@ -43,9 +43,29 @@ const { probes, imported, declared } = await page.evaluate(`(async api => {
     // The project strip needs a new-thread screen of a project: T3's route, draft store and composer.
     const draftId = ${JSON.stringify(draft)} ?? host.draftIds?.()[0];
     if (draftId) {
+      // T3 renders a new editor for the draft; until then the thread's is still there, and text put
+      // in it would go to that thread's draft.
+      const threadEditor = document.querySelector(hostSelectors.composerEditor);
       location.hash = '/draft/' + encodeURIComponent(draftId);
-      await wait(() => ['composerOverlay', 'composerStack', 'composerEditor'].every(name => document.querySelector(hostSelectors[name])));
+      await wait(() => ['composerOverlay', 'composerStack', 'composerEditor'].every(name => document.querySelector(hostSelectors[name])) && document.querySelector(hostSelectors.composerEditor) !== threadEditor);
       if (!host.draftContext?.()) hostProbes['route:draft'] ??= { ok: false, detail: '#/draft/' + draftId + ' named no project' };
+      // The strip's Next up fills the composer as the extension does; T3's own draft must keep the
+      // text, not just the editor's DOM. The draft's prompt is put back afterwards.
+      if (host.draftPrompt && document.querySelector(hostSelectors.composerEditor)) {
+        const before = host.draftPrompt(draftId) ?? '';
+        const text = 'Atelier contract check: this text is removed again.';
+        try {
+          fillHostComposer(text);
+          await wait(() => host.draftPrompt(draftId) === text, 3000);
+          const kept = host.draftPrompt(draftId);
+          hostProbes['state:composer-prompt'] = kept === text ? { ok: true, detail: "text inserted into the composer reached T3's draft store (draftsByThreadKey[<draft>].prompt)" } : { ok: false, detail: "T3's draft store held " + JSON.stringify(kept) + ' after inserting text into the composer' };
+        } catch (error) { hostProbes['state:composer-prompt'] = { ok: false, detail: error.message }; }
+        finally {
+          fillHostComposer(before);
+          await wait(() => (host.draftPrompt(draftId) ?? '') === before, 3000);
+          if ((host.draftPrompt(draftId) ?? '') !== before) hostProbes['state:composer-prompt'] = { ok: false, detail: 'the draft prompt was not restored: ' + JSON.stringify(host.draftPrompt(draftId)) };
+        }
+      }
     } else hostProbes['route:draft'] = { ok: false, detail: host.draftIds ? 'T3 holds no new-thread draft with a project; open a new thread in a project, or pass --draft <id>' : 'module:composer-draft-store is missing' };
     location.hash = '/settings/general';
     await wait(() => document.querySelector(hostSelectors.settingsPage));
