@@ -381,11 +381,14 @@ host does not send are derived by mixing `--bg` and `--ink` (`--canvas`,
 `--hover`, `--line-strong`, `--ink-2`, and the surface, line and muted
 tokens when those are not sent). `scheme` picks the Desk's light or dark set
 for the colours a host cannot send, those of state (blue, green, red,
-violet); without it the scheme follows the background's luminance. A later
+violet); without it the scheme follows the background's luminance, read by
+painting the colour on a canvas so every colour form the browser parses
+counts. A later
 message merges over the earlier ones: what it sends replaces, what it omits
 stays, and a new `background` without a `scheme` has its scheme read from
 the colour. A value that does not parse as a colour or a family list, or
-that refers outside itself (`var()`, `env()`, `url()`, `inherit`), is
+that refers outside itself (`var()`, `env()`, `url()`, `inherit`, or
+`currentColor` anywhere in it), is
 dropped and its token keeps its value.
 
 What a host sends is only displayed. No message makes the Desk write, act,

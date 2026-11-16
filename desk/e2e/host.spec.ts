@@ -93,9 +93,19 @@ test("a listed host hears the Desk is ready and where it is, and themes it", asy
   await expect.poll(() => drawn(frame)).toMatchObject({ background: "rgb(18, 19, 20)", text: "rgb(224, 225, 226)" });
   expect(await frame.evaluate(() => document.documentElement.dataset.theme)).toBeUndefined();
 
+  // A modern colour form sets the scheme from its luminance too, either way.
+  const scheme = () => frame.evaluate(() => getComputedStyle(document.documentElement).colorScheme);
+  await send(page, { type: "host:theme", colors: { background: "oklch(0.98 0 0)", foreground: "oklch(0.1 0 0)" } });
+  await expect.poll(scheme).toBe("light");
+  await send(page, { type: "host:theme", colors: { background: "color(srgb 0.07 0.075 0.08)", foreground: "#e0e1e2" } });
+  await expect.poll(scheme).toBe("dark");
+  await send(page, { type: "host:theme", colors: { background: "#121314" } });
+  await expect.poll(() => drawn(frame)).toMatchObject({ background: "rgb(18, 19, 20)", text: "rgb(224, 225, 226)" });
+
   // A colour that does not parse is dropped, and the colour before it stays;
   // a message the Desk does not know is ignored.
   await send(page, { type: "host:theme", colors: { background: "not a colour", foreground: "var(--you)" } });
+  await send(page, { type: "host:theme", colors: { background: "color-mix(in srgb, currentColor 50%, white)" } });
   await send(page, { type: "host:navigate", path: "https://example.com/" });
   await send(page, "host:theme");
   await page.waitForTimeout(200);

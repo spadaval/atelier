@@ -78,10 +78,11 @@ works as on the base.
   the tokens in `styles.css`; the rest are derived with `color-mix` from
   `--bg` and `--ink`. A value is kept only if `CSS.supports` parses it and
   it does not refer outside itself (`var()`, `env()`, `url()`, `inherit`,
-  `currentcolor`); otherwise it is dropped and the token keeps its value.
+  or `currentColor` anywhere in it); otherwise it is dropped and the token keeps its value.
   Messages merge, so a later one changes only what it sends. `scheme` picks
   the Desk's light or dark set for its state colours; without it the
-  scheme follows the background's luminance. The e2e test caught a bug here
+  scheme follows the background's luminance, read from the colour painted
+  on a canvas. The e2e test caught a bug here
   that I fixed: a `scheme` sent with a light background stuck after the
   host sent dark colours without one. A new background without a scheme now
   clears it.
@@ -124,3 +125,16 @@ keeps the configuration), then add the line and restart the service.
 - I could not check that T3 Code's desktop app reports `t3code://app` as
   its origin to a framed page; that depends on how it registers the scheme,
   and the extension's side is out of scope.
+
+## Responses
+
+- **1-52g0 Finding 1 (scheme for modern colours): fixed.** `scheme()` now
+  paints the background on a 1-pixel canvas and reads its sRGB bytes, so
+  `oklch()`, `color()` and `color-mix()` backgrounds set the scheme as hex
+  ones do. `desk/e2e/host.spec.ts` sends an `oklch()` light background
+  after a dark one and a `color(srgb ...)` dark one after it, and checks
+  the computed `color-scheme` flips each time.
+- **1-52g0 Finding 2 (nested `currentColor`): fixed.** `currentColor` is
+  refused anywhere in a colour, not only as the whole value. The unit test
+  and the interface test send `color-mix(in srgb, currentColor 50%,
+  white)` and check it is dropped.

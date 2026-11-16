@@ -12,7 +12,7 @@ describe("colour", () => {
     expect(colour("red", supports)).toBe("red");
   });
   it("drops what does not parse, or names something other than a colour", () => {
-    for (const bad of ["not a colour", "", "#12", "inherit", "currentColor", "var(--bg)", "rgb(var(--x))", "red; color: blue", "url(x)", 3, null, {}])
+    for (const bad of ["not a colour", "", "#12", "inherit", "currentColor", "color-mix(in srgb, currentColor 50%, white)", "var(--bg)", "rgb(var(--x))", "red; color: blue", "url(x)", 3, null, {}])
       expect(colour(bad, supports), String(bad)).toBeNull();
   });
 });
@@ -58,8 +58,9 @@ describe("tokens", () => {
 
 describe("isLight", () => {
   it("tells light from dark by luminance", () => {
-    expect(isLight("rgb(255, 255, 255)")).toBe(true);
-    expect(isLight("rgb(15, 16, 14)")).toBe(false);
-    expect(isLight("oklch(0.5 0.1 200)")).toBeNull();
+    expect(isLight([255, 255, 255])).toBe(true);
+    expect(isLight([250, 250, 250])).toBe(true);
+    expect(isLight([15, 16, 14])).toBe(false);
+    expect(isLight([18, 19, 20])).toBe(false);
   });
 });

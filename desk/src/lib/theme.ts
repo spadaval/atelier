@@ -19,8 +19,8 @@ const browserSupports: Supports = (property, value) => typeof CSS !== "undefined
 
 /** Words that parse as a colour but name another value, not a colour of the host's. */
 const NOT_A_COLOUR = /^(inherit|initial|unset|revert|revert-layer|currentcolor)$/i;
-/** Functions that reach outside the value itself. */
-const REACHES_OUT = /\b(var|env|attr|url|image|calc)\s*\(/i;
+/** Functions and words that reach outside the value itself, anywhere in it. */
+const REACHES_OUT = /\b(var|env|attr|url|image|calc)\s*\(|currentcolor/i;
 
 /** `value` as a colour, or `null` when it is not one. */
 export function colour(value: unknown, supports: Supports = browserSupports): string | null {
@@ -102,27 +102,35 @@ export function tokens(theme: HostTheme): Record<string, string> {
   return out;
 }
 
-/** Whether a colour the browser computed as `rgb(r, g, b)` is light; `null` when it cannot tell. */
-export function isLight(computed: string): boolean | null {
-  const m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/.exec(computed);
-  if (!m) return null;
-  const [r, g, b] = [m[1], m[2], m[3]].map((x) => {
-    const s = Number(x) / 255;
+/** Whether a colour of red, green and blue bytes in sRGB is light, by its relative luminance. */
+export function isLight([red, green, blue]: [number, number, number]): boolean {
+  const [r, g, b] = [red, green, blue].map((x) => {
+    const s = x / 255;
     return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
   });
   return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.18;
+}
+
+/**
+ * `value`, a colour in any form the browser parses (`oklch()`, `color()`,
+ * `color-mix()`), as sRGB bytes: a canvas paints it and reads the pixel
+ * back. `null` where there is no canvas.
+ */
+function srgb(value: string): [number, number, number] | null {
+  const paint = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+  if (!paint) return null;
+  paint.fillStyle = value;
+  paint.fillRect(0, 0, 1, 1);
+  const [r, g, b] = paint.getImageData(0, 0, 1, 1).data;
+  return [r, g, b];
 }
 
 /** The scheme for `theme`: the one sent, else the one its background implies. */
 function scheme(theme: HostTheme): "light" | "dark" | null {
   if (theme.scheme) return theme.scheme;
   if (!theme.colours.background) return null;
-  const probe = document.createElement("span");
-  probe.style.color = theme.colours.background;
-  document.body.append(probe);
-  const light = isLight(getComputedStyle(probe).color);
-  probe.remove();
-  return light === null ? null : light ? "light" : "dark";
+  const bytes = srgb(theme.colours.background);
+  return bytes === null ? null : isLight(bytes) ? "light" : "dark";
 }
 
 /** The tokens set by the last theme applied, to clear those a later one drops. */
