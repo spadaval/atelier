@@ -81,18 +81,18 @@ function newer(version, than) {
 }
 // The installed loader: a running injector keeps the one it started with until it is restarted.
 const loaderHash = () => fs.readFile(path.join(home, 't3-custom.mjs')).then(text => createHash('sha256').update(text).digest('hex'), () => null);
-async function get(url, operation) {
+// GET url and read its body as json, text or arrayBuffer. A failure names the operation and URL,
+// including one while the body arrives, after fetch has already resolved on the headers.
+async function get(url, operation, as) {
   let response;
   try { response = await fetch(url, { signal: AbortSignal.timeout(30000), headers: { 'user-agent': 't3-custom' } }); } catch (error) { throw new Error(`${operation}: GET ${url}: ${error.cause?.message ?? error.message}`); }
   if (!response.ok) throw new Error(`${operation}: GET ${url}: HTTP ${response.status} ${response.statusText}`);
-  return response;
+  try { return await response[as](); } catch (error) { throw new Error(`${operation}: GET ${url}: reading the response: ${error.cause?.message ?? error.message}`); }
 }
 // The newest release that is not a draft or prerelease and whose tag is the extension's, or null.
 async function newestRelease(config) {
   const url = config.releases ?? defaultReleases;
-  const response = await get(url, 'Looking up releases');
-  let releases;
-  try { releases = await response.json(); } catch (error) { throw new Error(`Looking up releases: GET ${url} did not return JSON: ${error.message}`); }
+  const releases = await get(url, 'Looking up releases', 'json');
   if (!Array.isArray(releases)) throw new Error(`Looking up releases: GET ${url} did not return a list of releases`);
   let newest = null;
   for (const release of releases) {
@@ -105,13 +105,13 @@ async function newestRelease(config) {
 // and runs the bundle's own install.py on this home with the Python that installed it.
 async function install(config, release) {
   const name = `t3-extension-${release.version}.zip`;
-  const download = async file => {
+  const download = async (file, as) => {
     const asset = release.assets.find(asset => asset.name === file);
     if (!asset) throw new Error(`Downloading ${file}: release ${release.tag} has no asset ${file}`);
-    return get(asset.browser_download_url, `Downloading ${file}`);
+    return get(asset.browser_download_url, `Downloading ${file}`, as);
   };
-  const zip = Buffer.from(await (await download(name)).arrayBuffer());
-  const expected = (await (await download(`${name}.sha256`)).text()).trim().split(/\s+/)[0];
+  const zip = Buffer.from(await download(name, 'arrayBuffer'));
+  const expected = (await download(`${name}.sha256`, 'text')).trim().split(/\s+/)[0];
   const actual = createHash('sha256').update(zip).digest('hex');
   if (actual !== expected) throw new Error(`Checking ${name}: its SHA-256 is ${actual}, but ${name}.sha256 says ${expected}; nothing was installed`);
   const work = await fs.mkdtemp(path.join(os.tmpdir(), 't3-custom-update-'));

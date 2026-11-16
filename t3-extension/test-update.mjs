@@ -70,10 +70,12 @@ const server = http.createServer((request, response) => {
   const bundle = match && bundles[match[1]];
   if (!bundle) { response.writeHead(404); response.end(); return; }
   fixture.downloads.push(url.pathname);
+  // A connection that drops partway through the zip, after its headers said 200.
+  if (fixture.interrupted && !match[2]) { response.writeHead(200, { 'content-length': bundle.zip.length }); response.write(bundle.zip.subarray(0, 100)); setTimeout(() => response.destroy(), 200); return; }
   response.writeHead(200);
   response.end(match[2] ? (fixture.badChecksum ? `${'0'.repeat(64)}  t3-extension-${match[1]}.zip\n` : bundle.sum) : bundle.zip);
 });
-const fixture = { lookupFails: false, badChecksum: false, downloads: [] };
+const fixture = { lookupFails: false, badChecksum: false, interrupted: false, downloads: [] };
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
 
@@ -134,6 +136,16 @@ try {
   assert.equal(await read('custom.js'), customBefore);
   assert.equal(JSON.parse(await read('update.json')).error, refused.json.error);
   console.log('PASS: a bundle whose checksum does not match is refused by name and nothing changes');
+
+  // A download that breaks off is reported by name, and nothing changes.
+  fixture.interrupted = true;
+  const interrupted = await cli('update');
+  fixture.interrupted = false;
+  assert.equal(interrupted.code, 1, interrupted.output);
+  assert.match(interrupted.json.error, new RegExp(`^Downloading t3-extension-0\\.2\\.0\\.zip: GET ${base}/assets/t3-extension-0\\.2\\.0\\.zip: reading the response: .+`));
+  assert.equal((await read('VERSION')).trim(), '0.1.0');
+  assert.equal(await read('custom.js'), customBefore);
+  console.log('PASS: a download that breaks off is refused by name and nothing changes');
 
   // A failed lookup is reported by name.
   fixture.lookupFails = true;
