@@ -29,6 +29,14 @@ const { probes, imported, declared } = await page.evaluate(`(async api => {
       // The sidebar views, the layer and the project home need these on a thread's screen.
       const shown = ['sidebarSearch', 'mainInset', 'threadItem', 'sidebarRow', 'breadcrumbProject'];
       await wait(() => shown.every(name => document.querySelector(hostSelectors[name])));
+      // Missions sit in the boring sidebar's list, around folder rows with a Settle button.
+      const folder = document.querySelector(hostSelectors.projectFolder);
+      if (!folder) hostProbes['layout:threadList'] = { ok: false, detail: 'no project folder: turn on Settings → Labs → Boring sidebar' };
+      else {
+        const problem = hostListProblem(folder.parentElement);
+        hostProbes['layout:threadList'] = { ok: !problem, detail: problem ?? 'project folders and their thread rows in one flex column' };
+        if (folder.querySelector(hostSelectors.folderButton).getAttribute('aria-expanded') === 'true') await wait(() => document.querySelector(hostSelectors.settleButton));
+      }
       // Missions read who started each thread from the thread shells.
       if (!host.threadList?.().length) hostProbes['state:thread-origin'] ??= { ok: false, detail: host.threadList ? 'no thread in any connected environment' : 'a thread module hook is missing' };
       const found = host.findThread?.(context.threadId);

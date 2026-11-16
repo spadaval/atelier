@@ -1,5 +1,51 @@
 # Verification
 
+## Missions in T3's thread list (atelier-ytor), Windows, November 16, 2026
+
+T3 Code Nightly 0.1.10-nightly.20261115, test instance (port 9333), boring
+sidebar on, Desk `http://buildbot:3780`; the daily instance was not touched.
+The test instance's only threads come from a paired read-only environment, so
+T3 refuses to settle any of them.
+
+`node run-tests.mjs` passes on Linux (the fixture test's 30 checks and the update
+test). Each new check was run with only its piece undone, and failed:
+
+| Piece | Undone | Failure |
+| --- | --- | --- |
+| Settle press stopped | No capture-phase stop | "a press on Settle reached T3, or the click did not" |
+| T3's fading copies skipped | Copies walked as list rows | "A fading copy among the folder's rows" timed out (the mission's other threads fell out of it) |
+| Orders cleared when off | `clearLayout` leaving `order` on T3's rows | "T3's list whole with the views off" timed out |
+| Rows follow a new list | Rows left in T3's old, detached list | "A new list laid out" timed out |
+
+`node test-contract.mjs --port 9333 --thread <atelier test thread>` passes with
+every probe ok, including the new `dom:projectFolder`, `dom:folderButton`,
+`dom:settleButton` and `layout:threadList`.
+
+In the test instance, through its debug port with CDP mouse input:
+
+- Before any change, pressing a row's Settle button and dragging two rows down
+  marked all three rows swept (`bg-sidebar-row-selected`); Escape cancelled it.
+- With the extension, a synthetic mission naming two of the instance's threads
+  (put in for this check through a temporary copy of `custom.js`, since none of
+  the Desk's missions has a thread this instance lists) showed as in the
+  mockup: header with ring and `2/5`, the two threads indented with `build` and
+  `lead`, the folder's other thread after them, and "2 more missions" with its
+  dot in the atelier folder. The same drag swept no row, with Escape or
+  released; a plain click on Settle reached T3, which answered "Failed to
+  settle thread. This connection cannot change threads or projects."
+- Fold and unfold, a folder closed (no mission rows) and opened, a search
+  (T3's new list: no folders, no rows, no orders) and back (rows on the new
+  list), and N more missions opening the project home in the layer all worked.
+- Found and fixed: T3 fades a removed row by appending an inert, absolutely
+  placed copy (`Sidebar.motion.ts`), the extension's own rows included. In the
+  covered test window those animations never finish, so copies stayed; the
+  layout now leaves them out of its walk.
+- The real `custom.js` was put back; the instance shows "1 more mission".
+
+Not verified: that a settle actually happens on a click (the environment
+refuses it, after T3's handler ran), T3's slide animations against the
+reordered list (the covered window runs none), and macOS.
+
 ## Re-review fixes, against the merged Desk, Windows, November 16, 2026
 
 The Desk work has merged: these runs used the real Desk at

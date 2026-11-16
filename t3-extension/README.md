@@ -220,39 +220,58 @@ shown; the Desk is not told the current thread on those, only the next change.
 
 ## The sidebar and the layer
 
-Under T3's sidebar search the extension adds two things of its own, drawn with
-T3's sidebar colours and row metrics; T3's own rows are never moved:
+**Inbox** is one row under T3's sidebar search, drawn like T3's rows, with the
+count of what waits on the human across every Desk in `desk.urls`: needs-human
+items, proposed plans and waiting threads, from `GET /api/inbox`. A failed read
+shows `!`, with the Desk and error in the row's tooltip.
 
-- **Inbox**, with the count of what waits on the human across every Desk in
-  `desk.urls`: needs-human items, proposed plans and waiting threads, from
-  `GET /api/inbox`. A failed read shows `!`, with the Desk and error in the
-  row's tooltip.
-- **Missions**, one row per open mission from each Desk's `GET /api/sidebar`
-  (in progress, agreed or proposed): its title, then the repository, items done
-  of total and its state, and a dot when something in it waits on the human.
+**Missions sit in T3's own thread list**, around T3's own thread rows, so there
+is one list. They need T3's boring sidebar (Settings → Labs → Boring sidebar),
+which draws one flat list: a header per project folder with that folder's
+thread rows after it, then the Snoozed and Settled shelves. In each open
+folder whose threads include mission threads, the list reads:
 
-Both are read when the extension starts, every minute, and whenever the T3
-window is shown again (a covered window throttles timers).
+- the folder's header;
+- per open mission (from each Desk's `GET /api/sidebar`, in the Desks' order)
+  with a thread in this folder: a header with a progress ring, the title, items
+  done of total and a chevron, then those threads, indented on a guide line,
+  each with its role after it (`lead`, `plan`, `build`, `review`, `decide`).
+  Threads T3 started from a mission's threads, by `lineage.parentThreadId` or
+  `delegatedFrom.threadId`, go under that mission too, with no role;
+- one **N more missions** row for the repository's other open missions, with a
+  dot when one of them waits on the human; it opens the project home;
+- the folder's other threads, in T3's order.
 
-A mission starts collapsed. Its chevron expands it to its threads, grouped by
-item, then the mission's own threads, then **Other threads**: T3 threads whose
-creator is one of the mission's threads, by `lineage.parentThreadId` or
-`delegatedFrom.threadId`. Each shows its role; a thread T3 knows shows T3's live
-title and status (read every 3 seconds) and opens on click; one T3 does not know
-is dimmed, with its identity shortened and in full in its tooltip. Which missions
-are expanded is kept in localStorage (`t3-custom:atelier:missions:v1`).
+The pinned rows, other folders and the shelves stay as T3 draws them. A
+mission's title opens mission control; its chevron folds it, hiding its
+threads, and a folded mission shows how many of its threads are here, and a dot
+when something in it waits on the human. Which missions are folded is kept in
+localStorage (`t3-custom:atelier:missions:v1`); a mission starts open. A closed
+folder shows none of its threads, so it shows no mission rows either. A mission
+thread T3 does not list in the folder (unknown to this window, or pinned,
+snoozed or settled) is simply not under its mission.
 
-**Mission threads leave T3's list.** T3's own list items of every thread a
-mission holds, and of its Other threads, are hidden with a stylesheet keyed on
-T3's `data-thread-item` attribute; T3's nodes stay where React put them. The
-Missions title says how many ("· 4 hidden from T3's list"). **Show all
-threads**, at the head of the section, turns the hiding off (kept in the same
-localStorage entry). T3's own Working and Settled counts still include the
-hidden threads: T3 computes them from its data, and the extension cannot tell
-which shelf a hidden thread is on while a shelf is collapsed.
+The extension never moves, removes or edits T3's nodes. It appends its own
+`li` rows to T3's list and sets a CSS `order` on every child, read from T3's own
+DOM order each time T3 changes the list (before the browser paints), and a
+generated stylesheet keyed on `data-thread-item` indents, labels and folds the
+mission threads. When T3 draws a new list (a search, a route change), the rows
+move to it. With the boring sidebar off (no folders) nothing is reordered, and
+a note under Inbox says how to turn it on; the extension does not change T3's
+setting.
 
-**The layer.** The Inbox row and a mission row open the Desk over T3's main area
-(`/embed/inbox`, `/embed/mission/<repo>/<id>`), leaving the sidebar usable; the
+The Desks are read when the extension starts, every minute, and whenever the T3
+window is shown again (a covered window throttles timers); T3's threads are read
+again every 3 seconds.
+
+**Settle while missions are placed.** Pressing a row's Settle button and
+dragging settles every thread between, in T3's own order, which is no longer
+the order drawn. While a mission is placed, a press on Settle is stopped before
+T3 sees it, so no drag starts; a plain click still settles that one thread.
+
+**The layer.** The Inbox row, a mission's title and N more missions open the
+Desk over T3's main area (`/embed/inbox`, `/embed/mission/<repo>/<id>`,
+`/embed/home/<repo>`), leaving the sidebar usable; the
 row shows as selected. The layer is one frame filling the main area, with a
 close button and nothing else of the extension's. The frame takes focus as the
 layer appears, so the Desk's keys work at once. It closes on Escape in T3,
@@ -377,8 +396,8 @@ reloaded (`injector.log`: "Settings saved; applied in place"). Any other edit of
 `config.json`, by hand or by another program, reapplies the extension as before.
 With several T3 windows, the others pick up a saved setting when they next
 reload. T3's localStorage keeps only view state, which threads
-had the Desk open (`t3-custom:atelier:view:v1`) and which missions are expanded
-and whether T3's list shows all threads (`t3-custom:atelier:missions:v1`), and
+had the Desk open (`t3-custom:atelier:view:v1`) and which missions are folded
+(`t3-custom:atelier:missions:v1`), and
 sessionStorage the last
 project context while Settings is shown. Settings kept in localStorage by an
 earlier version are not carried over.
@@ -512,6 +531,11 @@ network-facing debugging listener is enabled.
   credentials.
 - `route:draft`: the `#/draft/<id>` route of T3's new-thread screen, whose
   project comes from the draft store's `draftThreadsByThreadKey`.
+- `layout:threadList`: T3's boring sidebar list, the parent of its project
+  folders, is one flex column holding every folder, each with its button
+  (`hostListProblem`). Checked each time missions are laid out; if it fails,
+  the missions view turns off and T3's list is left as T3 drew it, with no
+  order, row or rule of the extension's.
 - `state:thread-origin`: the `lineage` field on T3's thread shells
   (`lineage.parentThreadId`), with `delegatedFrom.threadId` where a linked
   environment started the thread, read for children and Other threads.
@@ -524,7 +548,12 @@ network-facing debugging listener is enabled.
   the Inbox row follows), `dom:mainInset` (`main[data-slot=sidebar-inset]`, the
   main area the layer covers) on any thread or new-thread screen;
   `dom:threadItem` (`li[data-thread-item]`) and `dom:sidebarRow`
-  (`[data-sidebar-row]`) when T3 lists threads; `dom:composerOverlay`,
+  (`[data-sidebar-row]`) when T3 lists threads; `dom:settleButton` (a thread
+  row's `button[aria-label="Settle thread"]`) when a project folder lists
+  threads. `dom:projectFolder` (`li[data-testid="sidebar-project-folder"]`)
+  and `dom:folderButton` (its `button[data-sidebar-row^="folder:"]` with
+  `aria-expanded`) are confirmed when seen and never reported missing: without
+  folders the boring sidebar is off, which the note under Inbox says; `dom:composerOverlay`,
   `dom:composerStack` and `dom:composerEditor` on a project's new-thread screen;
   `dom:breadcrumbProject` (the first button of `nav[aria-label="Thread
   breadcrumb"]`) on a thread. `dom:conversationThread`
@@ -540,25 +569,40 @@ slot; opening a thread from the Desk also needs the environment atoms, and says
 in the panel when they are missing; the Desk's controls go after
 `dom:panelTabList`; references need the conversation DOM, and open Desk in the
 browser while the panel is off; the settings section needs the settings page.
-The other views each need only their own: the Inbox row and Missions
-`dom:sidebarSearch`; the layer `dom:mainInset` (without it, its pages open in the
-browser); mission threads' titles and Other threads the registry, thread snapshot
-and environment atoms and `state:thread-origin`; hiding mission threads
-`dom:threadItem`; the project strip the draft store, `route:draft`,
+The other views each need only their own: the Inbox row `dom:sidebarSearch`;
+missions in T3's list `layout:threadList` and `dom:settleButton` (without a
+Settle button to stop, a drag could settle the wrong rows), and, to know which
+rows are mission threads, the registry, thread snapshot and environment atoms
+and `state:thread-origin`; the layer `dom:mainInset` (without it, its pages open
+in the browser); the project strip the draft store, `route:draft`,
 `dom:composerOverlay` and `dom:composerStack`, and filling the composer
 `dom:composerEditor`; the project home `dom:breadcrumbProject`.
 
 ## Known limits
 
-- T3's Working and Settled counts include threads hidden in Missions, as T3
-  computes them; the Missions title gives the number hidden instead.
+- Missions need the boring sidebar. A project with open missions but no T3
+  folder (no thread in the list) is not shown, and N more missions is shown
+  only in a folder with a thread of a project mapped to a Desk repository.
+- Arrow keys move through T3's list in T3's order, not the order drawn, so in a
+  folder with missions they jump between mission threads and loose threads.
+- T3 animates its list from positions it measures before the extension
+  reorders it, so a row whose place changes can slide in from the wrong spot
+  for T3's 150 ms motion. Not seen on the test instance, whose covered window
+  runs no animations.
+- While a mission is placed, Settle cannot be dragged across rows; each thread
+  is settled with its own click. If T3's Settle button is not found within 3
+  seconds of a folder listing threads (an environment without settling, or a
+  renamed button), missions in the list turn off rather than leave the drag
+  live.
+- A mission thread's item is not shown: T3's row is not changed, and the role
+  is drawn from a stylesheet.
 - Threads started with `t3_thread_launch` record no parent: T3 stores the caller
   only as `senderThreadId` on the first message, which the thread list does not
   carry. They appear in `children` and Other threads only when a linked
   environment started them (`delegatedFrom`).
-- A mission thread appears with its T3 title, status and a click only when the
-  T3 window is connected to the environment that runs it; the Desk names each by
-  the identity its T3 server reports.
+- A mission thread is placed under its mission only when this T3 window lists
+  it, so only when it is connected to the environment that runs it; the Desk
+  names each by the identity its T3 server reports.
 - Escape reaches the extension from inside the layer only through the Desk's
   `desk:key`; a Desk page that does not send it keeps Escape to itself.
 - The layer and the strip always use the first Desk in `desk.urls` for the
@@ -693,11 +737,16 @@ fixture page; each proxy records every path asked for. The second proxy is a
 second Desk serving the same repositories, and the first answers 404 for the
 closed mission's record. The first forwards `/api/sidebar` to the real Desk,
 whose fixture repository holds one open mission led by thread-b, with a plan
-reviewer T3 does not know and an item held by thread-a, and answers
+reviewer T3 does not know and an item held by thread-a, and a second open
+mission with no threads and a needs-human item, and answers
 `/api/launch?repo=atelier` itself, since its rows include IDs no record can
 have; the second lists no missions. The fixture's T3 state has a subagent of thread-a
 (`lineage.parentThreadId`) and a thread started from thread-b by a linked
-environment (`delegatedFrom`). The test's own `config.json` lists both and has
+environment (`delegatedFrom`). Its sidebar is shaped like T3's boring sidebar: one
+flex column of a pinned header, two project folders with their thread rows and
+a Settled header, whose folders close by removing their rows and leaving a
+faded copy of each, as T3 does, and whose Settle buttons record a press and a
+click. The test's own `config.json` lists both and has
 no repository table and no settings. It uses Edge on Windows, Chrome on macOS
 and `/usr/bin/google-chrome` elsewhere; set `BROWSER` to use another Chromium.
 It checks:
@@ -743,12 +792,19 @@ It checks:
   that `desk:key` and `desk:open-thread` are ignored from the Desk's origin in
   another window and from the layer's window with another origin; a reread of
   the inbox and missions when the window is shown;
-- Missions: one row from the first Desk, collapsed, its count and waiting mark;
-  expanded (kept in localStorage, and after a reinjection) to the threads by
-  item, the mission's threads and Other threads, a known thread opening on click
-  and an unknown one dimmed and not a button; T3's list items of those threads
-  hidden with the "4 hidden" note and shown again by Show all threads; a mission
-  row opening mission control in the layer, selected and focused;
+- missions in T3's list, read as drawn (each visible child by its top edge):
+  in the atelier folder the mission's header, its threads in T3's order,
+  indented, with their role (none on the threads they started), "1 more
+  mission" with its dot, then the folder's loose thread; the other folder
+  untouched; folding (kept in localStorage, and after a reinjection) to the
+  thread count and dot; a press on Settle not reaching T3 while a mission is
+  placed, and reaching it when none is, and a click on Settle reaching it; a
+  row T3 adds in place, a folder closed (no mission rows) and opened again,
+  T3's fading copies of removed rows, and a new list, each laid out again; the
+  boring sidebar off and the views off, each leaving no order, row or rule of
+  the extension's in T3's list, the first with its note; a mission's title
+  opening mission control in the layer, selected and focused, and N more
+  missions the project home;
 - the breadcrumb's project opening the project home without T3's own action;
 - the project strip: its three cards and their rows from the fixture's launch
   data, as wide as the composer and under it; a Next up row filling the
@@ -756,16 +812,19 @@ It checks:
   mission; In motion opening its holder's thread or the item, Waiting the inbox,
   the project name its home; the narrow layout under 700 pixels; nothing for an
   unmapped project and no launch read for it;
-- that without T3's search field the sidebar views turn off by name while the
-  panel and references keep working, and that the settings section names each
-  view and its hooks;
+- that without T3's search field the Inbox row turns off by name while
+  missions, the panel and references keep working; that a thread list not
+  shaped as missions need turns the missions view off by name and leaves no
+  order, row or rule of the extension's in it; and that the settings section
+  names each view and its hooks;
 - Settings reinjection, native-surface coexistence, the renamed panel slot
   fallback, and clean removal of every view.
 
 Its records are those `fixture-desk.mjs` writes, with fixed IDs, titles and
 statuses: repository `atelier` with identity `example.invalid/fixture/atelier`,
 open mission `atelier-fm01` with items `atelier-fi01` (building, on its branch),
-`atelier-fi02` (needs-human) and `atelier-fi03` (done), closed mission
+`atelier-fi02` (needs-human) and `atelier-fi03` (done), open mission
+`atelier-fm03` with item `atelier-fi04` (needs-human), closed mission
 `atelier-fm02`, and item `atelier-rf01` in no mission, which the conversations
 name. Every other read reaches the real Desk, except what the proxies answer
 themselves: `/api/embed`, `/api/launch`, the unreadable repository added to
