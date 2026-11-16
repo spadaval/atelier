@@ -151,6 +151,7 @@ try {
   assert.equal(updated.json.restartNeeded, false, 't3-custom.mjs did not change');
   assert.equal((await read('VERSION')).trim(), '0.2.0');
   assert.match(await read('custom.js'), /\/\/ release 0\.2\.0\n$/);
+  assert(!(await exists('custom.js.previous')), 'the update took the custom.js 0.1.0 installed for an edit');
   const keptConfig = JSON.parse(await read('config.json'));
   assert.equal(keptConfig.releases, `${base}/releases`);
   assert.deepEqual(keptConfig.desk.urls, ['http://desk.test:3780']);
@@ -161,7 +162,11 @@ try {
 
   // The injector checks for a release when it starts. A failed lookup is in status by name, and the
   // injector itself carries on.
+  // An edited custom.js is kept beside the new one.
+  await fs.appendFile(path.join(home, 'custom.js'), '// my edit\n');
   await installFrom('0.1.0');
+  assert.match(await read('custom.js.previous'), /\/\/ my edit\n$/);
+  assert.match(await read('custom.js'), /\/\/ release 0\.1\.0\n$/);
   await fs.rm(path.join(home, 'update.json'));
   fixture.lookupFails = true;
   assert.equal((await cli('prepare')).code, 0);

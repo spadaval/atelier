@@ -85,7 +85,8 @@ T3 it finds.
 
 Running the installer again upgrades an installation: it replaces the managed
 files (`t3-custom.mjs`, `host-adapter.js`, `custom.js`, `README.md`), keeping a
-modified `custom.js` as `custom.js.previous`. It keeps `custom.css` and
+`custom.js` edited since the last install as `custom.js.previous`
+(`custom.js.sha256` records the one installed). It keeps `custom.css` and
 `config.json`, only adding missing top-level keys. A running injector picks up
 the new `custom.js` and adapter at once; restart it (`stop`, then the launcher)
 after a change to `t3-custom.mjs`.

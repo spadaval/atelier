@@ -14,6 +14,7 @@ VERSION; `t3-custom update` downloads a newer bundle and runs its install.py
 with --home. Run from a checkout, it installs the checkout's files as a
 development install.
 """
+import hashlib
 import json
 import os
 import shlex
@@ -30,13 +31,20 @@ support = Path(sys.argv[sys.argv.index('--home') + 1]) if '--home' in sys.argv e
     Path(os.environ['APPDATA']) / 'T3 Custom' if windows else Path.home() / 'Library/Application Support/T3 Custom')
 
 support.mkdir(parents=True, exist_ok=True, mode=0o700)
-# Managed files are replaced on every install; a changed custom.js is kept beside it.
+# Managed files are replaced on every install; a custom.js edited since the last install is
+# kept beside it. custom.js.sha256 records the one installed, so an update that ships a new
+# custom.js does not count as an edit; without it, any difference from the new one does.
+digest = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
 for name in ['t3-custom.mjs', 'host-adapter.js', 'custom.js', 'README.md']:
     target = support / name
-    if name == 'custom.js' and target.exists() and target.read_bytes() != (source / name).read_bytes():
-        shutil.copy2(target, support / 'custom.js.previous')
-        print(f'Replaced a modified {target}; the old copy is custom.js.previous')
+    if name == 'custom.js' and target.exists():
+        installed = support / 'custom.js.sha256'
+        unedited = installed.read_text().strip() if installed.exists() else digest(source / name)
+        if digest(target) != unedited:
+            shutil.copy2(target, support / 'custom.js.previous')
+            print(f'Replaced a modified {target}; the old copy is custom.js.previous')
     shutil.copy2(source / name, target)
+(support / 'custom.js.sha256').write_text(digest(source / 'custom.js') + '\n')
 # A release bundle carries its version in VERSION, which the loader reports;
 # an install from a checkout has none, so a stale one is removed.
 if (source / 'VERSION').exists():
