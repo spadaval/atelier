@@ -91,7 +91,7 @@ Tests:
   Two mutations fail it as they should: dropping the draft filter fails the `--check` assertion, and skipping the checksum comparison fails the refusal assertion.
 - `test-extension.mjs` now points `releases` at its fixture server, which answers 503, so the test no longer reaches GitHub. It checks that the Customizations section shows `Release check failed: Looking up releases: GET <base>/releases: HTTP 503 Service Unavailable` with no Update button. It then writes an `update.json` reporting 0.5.0 and checks that `Update to 0.5.0` appears and that the toggle is off.
 - Locally, `node run-tests.mjs` passed both files: test-extension in 42s, run against the `atelier-desk` binary and `desk/dist` from the `atelier-spike-t3` checkout, and test-update in 2s. `scripts/t3-extension-release.sh bundle` then `verify` at `d3b82ca13` installed into an empty home, and `t3-custom check` printed `release` `0.0.0-dev.test`.
-- CI: pending; the run is linked after the pull request opens.
+- CI on pull request #186 at `10dbd7cfa` (code as of `d3b82ca13`): https://github.com/spadaval/atelier/actions/runs/43952390974. Its `extension` job runs `node run-tests.mjs`, which runs `test-extension.mjs` and `test-update.mjs`. The release workflow's bundle check on the same commit: https://github.com/spadaval/atelier/actions/runs/43952390934. Both were still running when this was written; the reviewer reads their outcome there.
 
 Not proven:
 
