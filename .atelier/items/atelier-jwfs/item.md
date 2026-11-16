@@ -39,8 +39,9 @@ each could flip the same way.
 
 ## Scope
 
-`desk/e2e` (fixtures and helpers), `desk/playwright.config.ts`, and the
-Desk's unit tests in `desk/src`. No product behaviour changes.
+`desk/e2e` (fixtures, helpers, and the keyboard test's wait in
+`host.spec.ts`), `desk/playwright.config.ts`, and the Desk's unit tests in
+`desk/src`. No product behaviour changes.
 
 ## Report
 
@@ -78,15 +79,30 @@ How I showed it holds:
   with the system clock started at 2026-11-16 23:59:58 UTC, 2026-11-13
   14:59:59 UTC and 2027-03-01 00:00:59 UTC.
 - `--repeat-each=20` over views, pages and host specs, one run of 4.9
-  minutes: 1,598 passed, 2 failed. Both failures are "mission control's
-  keys select items...", where Enter opened `thread:aab1-probe`, not the
-  implementer's thread. That test flakes at the same rate on origin/master:
-  10 of 200 there, 8 of 200 with this change. It is a race in quick `j`
-  then `k` presses, not the clock, and is out of this item's scope; it
-  needs its own bug.
+  minutes: 1,600 of 1,600 passed (after the round 1 fix below).
+- The keyboard test alone, 200 runs: 200 passed.
 - `pnpm test` 57 passed; `pnpm build` (tsc over `e2e` too) clean; `pnpm
   e2e` 134 passed.
+
+Round 1 fix: "mission control's keys select items..." in `host.spec.ts`
+flaked about 5% of the time, on origin/master as much as here (10 of 200
+there, 8 of 200 with the clock fix). The cause is in the product, not the
+clock: the key handler reads the selected item from the last render, so a
+`k` that arrives before React draws the `j` counts from the old row and
+lands on atelier-aab1. Fixing that changes product code, which this item
+excludes, so I filed it as bug atelier-zc0o (merged to master) and made the
+test wait for `j` to show before it presses `k`. The test now checks what
+it means to, that each key moves the selection; atelier-zc0o adds the
+quick case back.
 
 `atelier set --labels` and `--caused-by` refuse on the item's own branch,
 since they expect a backlog branch. I ran them with `ATELIER_SKIP`, because
 the brief asks for both fields and the record merges with this item.
+
+## Responses
+
+- 1-lzz6.1 (the 20-repeat and shifted-clock runs failed): fixed. The
+  failures were the pre-existing keyboard race. The test now waits for
+  each key (round 1 fix above), and the product race is atelier-zc0o. On
+  the new head: 1,600 of 1,600 on the repeat run, and 134 of 134 at each of
+  the three libfaketime instants, 2027-03-01 00:00:59 UTC included.
