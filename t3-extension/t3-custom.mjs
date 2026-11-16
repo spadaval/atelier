@@ -145,6 +145,8 @@ async function buildBundle(config) {
   const cssPath = path.join(home, 'custom.css');
   const [js, css, adapter] = await Promise.all([fs.readFile(jsPath, 'utf8'), fs.readFile(cssPath, 'utf8'), fs.readFile(path.join(home, 'host-adapter.js'), 'utf8')]);
   const version = createHash('sha256').update(js).update(css).update(adapter).update(JSON.stringify(config)).digest('hex').slice(0, 12);
+  // Everything but the settings, to tell a change of settings alone.
+  const base = createHash('sha256').update(js).update(css).update(adapter).update(JSON.stringify({ ...config, settings: null })).digest('hex');
   const source = `(() => {
     if (window.top !== window || !${JSON.stringify(config.targetPrefixes)}.some(prefix => location.href.startsWith(prefix))) return;
     globalThis.__t3Custom?.dispose();
@@ -196,7 +198,7 @@ async function buildBundle(config) {
     else void run();
   })();\n//# sourceURL=t3-custom-loader.js`;
   new vm.Script(source, { filename: jsPath });
-  return { source, version };
+  return { source, version, base };
 }
 
 async function daemon() {
@@ -209,15 +211,21 @@ async function daemon() {
   let updateTimer;
   let discoveryError;
   let reloadQueue = Promise.resolve();
+  // config.json as save-settings last wrote it: the page already applied that change itself.
+  let savedConfig = null;
 
   function problem(operation, error, extra = {}) {
     state.lastError = `${operation}: ${error.message ?? error}`;
     log(state.lastError, extra);
   }
-  async function apply(target) {
+  // The script a reloaded T3 document runs.
+  async function register(target) {
     if (target.scriptId) await target.cdp.call('Page.removeScriptToEvaluateOnNewDocument', { identifier: target.scriptId });
     const result = await target.cdp.call('Page.addScriptToEvaluateOnNewDocument', { source: bundle.source });
     target.scriptId = result.identifier;
+  }
+  async function apply(target) {
+    await register(target);
     const evaluated = await target.cdp.call('Runtime.evaluate', { expression: bundle.source, returnByValue: true });
     if (evaluated.exceptionDetails) throw new Error(evaluated.exceptionDetails.exception?.description ?? evaluated.exceptionDetails.text);
   }
@@ -227,16 +235,20 @@ async function daemon() {
   }
   async function reloadFiles(force) {
     try {
-      config = await loadConfig();
+      const raw = await fs.readFile(configPath, 'utf8');
+      config = JSON.parse(raw);
       const next = await buildBundle(config);
       if (!force && bundle?.version === next.version) return;
+      // A save from the Customizations section changed only settings the page has already
+      // applied, so the running page is left alone; only a reloaded document needs the new bundle.
+      const inPlace = !force && raw === savedConfig && bundle?.base === next.base;
       bundle = next;
       state.version = next.version;
       state.lastError = null;
       for (const target of targets.values()) {
-        if (target.ready) await apply(target);
+        if (target.ready) await (inPlace ? register(target) : apply(target));
       }
-      log('Customization files loaded', { version: next.version });
+      log(inPlace ? 'Settings saved; applied in place' : 'Customization files loaded', { version: next.version });
     } catch (error) { problem('Loading custom.js/custom.css', error); }
   }
   async function request(target, report, executionContextId) {
@@ -260,7 +272,8 @@ async function daemon() {
         // Written into config.json, which the watcher then reapplies.
         const next = await loadConfig();
         next.settings = checkSettings(report.payload);
-        await fs.writeFile(configPath, JSON.stringify(next, null, 2) + '\n');
+        savedConfig = JSON.stringify(next, null, 2) + '\n';
+        await fs.writeFile(configPath, savedConfig);
         data = { saved: configPath };
       } else throw new Error(`Unsupported injector request: ${report.action}`);
       response = { data };

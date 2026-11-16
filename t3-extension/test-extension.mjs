@@ -117,7 +117,7 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   await evaluate('document.querySelector("[data-t3-desk-launch]").click()');
   await until(() => evaluate('Boolean(document.querySelector("[data-right-panel-surface-content] > [data-t3-desk-mount]:not([hidden])"))'), 'Docked Desk');
   const iframeSrc = await evaluate('document.querySelector("[data-t3-desk-mount]").shadowRoot.querySelector("iframe").src');
-  assert.equal(iframeSrc, deskBase + '/embed/r/atelier', 'the panel loads the embedded mode');
+  assert.equal(iframeSrc, deskBase + '/embed/', 'the panel loads the embedded mode and leaves the page to the Desk');
   assert.equal(await evaluate('__t3Custom.diagnostics().selectedRepository'), 'atelier');
   assert(await evaluate('document.querySelector("#native-content").inert'));
   const geometry = await evaluate('(()=>{const host=document.querySelector("[data-right-panel-surface-content]").getBoundingClientRect();const frame=document.querySelector("[data-t3-desk-mount]").getBoundingClientRect();return {hostWidth:host.width,frameWidth:frame.width,hostLeft:host.left,frameLeft:frame.left}})()');
@@ -139,15 +139,17 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   assert.equal(await inFrame('document.documentElement.style.getPropertyValue("--you")'), 'rgb(155, 188, 255)');
   assert.match(await inFrame('document.documentElement.style.getPropertyValue("--sans")'), /Georgia/);
   assert.equal(await inFrame('document.documentElement.dataset.theme ?? "dark"'), 'dark');
-  assert.equal(await inFrame('location.pathname'), '/embed/r/atelier');
+  // host:thread on desk:ready: the real Desk looks the thread up and opens its page, here the
+  // inbox, since the fixture's thread holds nothing, with the line naming the thread's part.
+  await until(() => deskRequests.includes('/api/ties?thread=thread-a'), 'host:thread on desk:ready');
+  await until(async () => (await inFrame('location.pathname')) === '/embed/inbox', 'Desk follows the thread');
+  assert.equal(await until(() => inFrame('document.querySelector(".thread-part")?.textContent'), 'Thread line'), 'This thread holds no open work.');
   // Title: the tab shows the Desk's page title from desk:navigated; Open externally is not embedded.
   const deskTitle = await until(async () => { const title = await inFrame('document.title'); return title && await evaluate('document.querySelector("[data-t3-desk-label]").textContent') === title && title; }, 'Tab label from desk:navigated');
   assert.notEqual(deskTitle, 'Desk');
-  assert.equal(await evaluate('document.querySelector("[data-t3-desk-external]").href'), deskBase + '/r/atelier');
   assert.equal(await evaluate(`${shadow}.querySelector("header")`), null, 'no doubled header in the panel');
-  await inFrame(`document.querySelector('a[href^="/embed/inbox"]').click()`);
   await until(async () => (await evaluate('document.querySelector("[data-t3-desk-external]").href')) === deskBase + '/inbox', 'Open externally follows desk:navigated');
-  console.log(`PASS: embedded Desk gets T3's theme on ready; the tab shows "${deskTitle}" from desk:navigated; Open externally uses the normal address`);
+  console.log(`PASS: embedded Desk gets T3's theme and thread-a on ready and opens its page; the tab shows "${deskTitle}" from desk:navigated; Open externally uses the normal address`);
   // A theme change on T3's root element is sent again.
   await evaluate('document.documentElement.classList.remove("dark"); document.documentElement.style.setProperty("--background", "#fafafa"); document.documentElement.style.setProperty("--foreground", "#111111")');
   await until(async () => (await inFrame('document.documentElement.style.getPropertyValue("--bg")')) === 'rgb(250, 250, 250)', 'host:theme after a theme change');
@@ -166,6 +168,8 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   console.log('PASS: Desk messages from the page itself or from another origin are ignored');
   // desk:open-thread navigates T3 to the thread's route, or says it is in no connected environment.
   const post = message => inFrame(`parent.postMessage(${JSON.stringify(message)}, location.ancestorOrigins[0])`);
+  // From here every host:thread the Desk frame receives is recorded.
+  await inFrame(`window.hostThreads = []; addEventListener('message', event => { if (event.data?.type === 'host:thread') hostThreads.push(event.data.thread); })`);
   await post({ type: 'desk:open-thread', thread: 'thread-unknown' });
   await until(() => evaluate(`${shadow}.querySelector(".notice:not([hidden])")?.textContent.includes("thread-unknown is not in any connected T3 environment")`), 'Notice for an unknown thread');
   assert.equal(await evaluate('location.hash'), hashBefore);
@@ -174,6 +178,21 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   await evaluate('location.hash = "/env/thread-a"');
   await until(() => evaluate('!document.querySelector("[data-t3-desk-mount]").hidden'), 'Desk back on thread-a');
   console.log('PASS: desk:open-thread opens the fixture route #/env/thread-b; an unknown thread is reported in the panel');
+  // host:thread on each switch to another thread, and never twice in a row for the same one.
+  await until(async () => JSON.stringify(await inFrame('hostThreads')) === '["thread-b","thread-a"]', 'host:thread on thread switches');
+  assert(deskRequests.includes('/api/ties?thread=thread-b'));
+  await evaluate('location.hash = "/settings/general"');
+  await until(() => evaluate('Boolean(document.querySelector("#t3-custom-settings"))'), 'Settings between threads');
+  await evaluate('location.hash = "/env/thread-a"');
+  await until(() => evaluate('!document.querySelector("[data-t3-desk-mount]").hidden && __t3Custom.diagnostics().context?.threadId === "thread-a"'), 'Back on thread-a from Settings');
+  await delay(1000);
+  assert.deepEqual(await inFrame('hostThreads'), ['thread-b', 'thread-a'], 'the same thread was sent again');
+  // When T3 re-renders its panel slot the mount moves and the iframe reloads: the fresh Desk is told the thread again.
+  const tiesBefore = deskRequests.filter(url => url === '/api/ties?thread=thread-a').length;
+  await evaluate('document.querySelector("[data-t3-desk-mount]").remove()');
+  await until(() => deskRequests.filter(url => url === '/api/ties?thread=thread-a').length === tiesBefore + 1, 'host:thread to a Desk reloaded by a re-rendered slot');
+  assert.equal(await evaluate('__t3Custom.error'), null);
+  console.log('PASS: host:thread is sent on ready, on each thread switch and to a reloaded Desk, never twice to the same Desk for the same thread');
 
   // Real backend data is checked through the same allow-listed bridge as hovercards.
   const record = await (await fetch(`${realDesk}/api/records/${referenceId}`)).json();
@@ -198,6 +217,10 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   await until(() => evaluate('Boolean(document.querySelector("#t3-custom-root").shadowRoot.querySelector("#atelier-hovercard button"))'), 'Cached hovercard');
   await evaluate('document.querySelector("#t3-custom-root").shadowRoot.querySelector("#atelier-hovercard button").click()');
   await until(() => evaluate(`document.querySelector('[data-t3-desk-mount]').shadowRoot.querySelector('iframe').src === '${deskBase}/embed/r/atelier/item/${referenceId}'`), 'Reference opens in Desk');
+  // The record stays: the reloaded Desk is not sent the same thread, so it does not move to the thread's page.
+  await until(() => evaluate(`__t3Custom.diagnostics().frame.ready && __t3Custom.diagnostics().frame.title !== ''`), 'Desk ready on the record');
+  await delay(1500);
+  assert.equal(await evaluate('__t3Custom.diagnostics().frame.path'), `/r/atelier/item/${referenceId}`);
   console.log('PASS: references by the Desk repository names, inline code, real hovercards, click-through, and streaming without text rewriting');
 
   await evaluate('globalThis.keptFrame=document.querySelector("[data-t3-desk-mount]").shadowRoot.querySelector("iframe");location.hash="/env/thread-b"');
@@ -222,6 +245,8 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   await until(() => evaluate('!document.querySelector("[data-t3-desk-mount]").shadowRoot.querySelector("iframe").hidden'), 'Cross-project reference override');
   console.log('PASS: explicit reference navigation works from an unmapped project');
 
+  const deskLoads = deskRequests.filter(url => url.startsWith('/embed')).length;
+  const frameBeforeSave = await evaluate('document.querySelector("[data-t3-desk-mount]").shadowRoot.querySelector("iframe").src');
   await evaluate(`globalThis.beforeSave=document.querySelector("#t3-custom-root");document.querySelector('[data-t3-desk-controls] [aria-label="Atelier customizations"]').click()`);
   await until(() => evaluate('Boolean(document.querySelector("#t3-custom-settings")?.shadowRoot.textContent.includes("reachable, "))'), 'Settings section with Desk status');
   const settingsText = await evaluate('document.querySelector("#t3-custom-settings").shadowRoot.textContent');
@@ -231,14 +256,23 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   const saved = await until(async () => JSON.parse(await fs.readFile(path.join(temp, 'config.json'), 'utf8')).settings, 'Settings written to config.json');
   assert.deepEqual(saved.mappings, { 'env:project-c': 'atelier' });
   assert.equal(saved.references, true);
-  await until(() => evaluate('document.querySelector("#t3-custom-root") !== globalThis.beforeSave'), 'Reapplied after config.json changed');
+  // A save from the settings page applies in place: no reinjection, no Desk reload.
+  await delay(1500);
+  assert(await evaluate('document.querySelector("#t3-custom-root") === globalThis.beforeSave'), 'a settings save reinjected the extension');
+  assert.equal(deskRequests.filter(url => url.startsWith('/embed')).length, deskLoads, 'a settings save reloaded the Desk iframe');
+  assert.equal(await evaluate('document.querySelector("[data-t3-desk-mount]").shadowRoot.querySelector("iframe").src'), frameBeforeSave);
+  // An edit of config.json from outside still reloads the extension.
+  const edited = JSON.parse(await fs.readFile(path.join(temp, 'config.json'), 'utf8'));
+  edited.settings.pinnedRepo = 'atelier';
+  await fs.writeFile(path.join(temp, 'config.json'), JSON.stringify(edited, null, 2));
+  await until(() => evaluate('document.querySelector("#t3-custom-root") !== globalThis.beforeSave'), 'Reapplied after an outside edit of config.json');
   const stored = await evaluate('JSON.stringify(Object.fromEntries(Object.keys(localStorage).map(key => [key, localStorage[key]])))');
   assert(!stored.includes('mappings') && stored.includes('openThreads'), `localStorage holds only view state: ${stored}`);
   await evaluate('location.hash="/env/thread-c"');
   await until(() => evaluate('!document.querySelector("[data-t3-desk-mount]")?.shadowRoot.querySelector("iframe").hidden'), 'Explicit project mapping');
   await evaluate('document.querySelector("#native-tab").click()');
   await until(() => evaluate('document.querySelector("[data-t3-desk-mount]").hidden && !document.querySelector("#native-content").inert'), 'Native tab restoration');
-  console.log('PASS: a manual project mapping is written to config.json, reapplied, and used; switching back to native surfaces');
+  console.log('PASS: a manual project mapping is written to config.json and applied in place without reloading the Desk; an outside edit reloads; switching back to native surfaces');
 
   const timeOrigin = await evaluate('performance.timeOrigin');
   await evaluate('location.hash="/settings/general"');

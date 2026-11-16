@@ -146,7 +146,6 @@ const positions = new Map();
 const areaLabels = new Map();
 const markedTabbars = new Set();
 let surfaceContent;
-let iframeRepository = null;
 // The Desk shown in the iframe, its route without /embed (from desk:navigated once it is ready),
 // and its page title.
 let frameDesk = null;
@@ -163,13 +162,12 @@ function restoreNative() {
 }
 const repositoryPath = repo => `/r/${encodeURIComponent(repo.repo)}`;
 const recordPath = record => `/r/${encodeURIComponent(record.repo)}/${record.kind === 'mission' ? 'mission' : 'item'}/${encodeURIComponent(record.id)}`;
-// The panel loads the embedded mode; Open externally keeps the normal address.
-function navigateDesk(repo, path = repositoryPath(repo)) {
-  if (frameDesk !== repo.desk || framePath !== path) loadFrame(repo.desk, path);
-  iframeRepository = repo.repo;
-}
-function loadFrame(desk, path) {
+// The panel loads the embedded mode; Open externally keeps the normal address. Opened plainly
+// it loads /embed/ and the Desk chooses the page for the thread T3 shows (host:thread). A page
+// asked for, a reference or a Refresh, is kept: the Desk is not told the current thread again.
+function loadFrame(desk, path, follow) {
   frameDesk = desk; framePath = path; deskReady = false; deskTitle = ''; sentTheme = '';
+  keepPage = !follow;
   iframe.src = `${desk}/embed${path}`;
   scheduleDOM();
 }
@@ -178,7 +176,7 @@ async function showDesk(reference) {
   if (!current || !deskAvailable()) { openSettings(); return; }
   if (reference) {
     referenceOverride = { projectKey: projectKey(current), repo: reference.repo };
-    navigateDesk(repositoryNamed(reference.repo), recordPath(reference));
+    loadFrame(repositoryNamed(reference.repo).desk, recordPath(reference), false);
   }
   desiredOpen = true; view.openThreads[threadKey(current)] = true; saveView();
   if (location.hash.includes('/settings')) location.hash = `/${current.environmentId}/${encodeURIComponent(current.threadId)}`;
@@ -203,7 +201,7 @@ listen(iframe, 'error', () => { panelError.hidden = false; panelError.textConten
 const deskOrigin = () => new URL(frameDesk).origin;
 let sentTheme = '';
 function sendTheme(always) {
-  if (!deskReady) return;
+  if (!deskReady || !iframe.contentWindow) return;
   const theme = readHostTheme(api.root);
   const text = JSON.stringify(theme);
   if (!always && text === sentTheme) return;
@@ -211,10 +209,18 @@ function sendTheme(always) {
   iframe.contentWindow.postMessage({ type: 'host:theme', ...theme }, deskOrigin());
 }
 disposers.push(observeHostTheme(() => sendTheme(false)));
-// Seam: the Desk's contract is gaining a message that tells it which thread T3 shows. Send it
-// from here once the contract defines it; this is called when the Desk becomes ready and when
-// T3's current thread changes. Until then nothing is sent.
-function tellDeskThread() {}
+// host:thread tells the Desk which thread T3 shows, by T3's thread ID, whole. It is sent when the
+// Desk becomes ready and when T3 shows another thread; never twice in a row for the same thread,
+// so the page the human moved to in the Desk stays.
+// Each desk:ready is a fresh Desk that knows no thread, also when T3 re-rendered the panel slot
+// and moving the iframe reloaded it. keepPage marks a load whose page was asked for.
+let threadSent = null;
+let keepPage = false;
+function tellDeskThread() {
+  if (!deskReady || !iframe.contentWindow || !current || current.threadId === threadSent) return;
+  threadSent = current.threadId;
+  iframe.contentWindow.postMessage({ type: 'host:thread', thread: current.threadId }, deskOrigin());
+}
 function openThread(threadId) {
   if (!host?.findThread) { notify(`Cannot open thread ${threadId}: T3 hook module:environment-atoms is missing (see Customizations).`); return; }
   const environmentId = host.findThread(threadId);
@@ -225,7 +231,10 @@ listen(window, 'message', event => {
   if (!frameDesk || event.source !== iframe.contentWindow || event.origin !== deskOrigin()) return;
   const message = event.data;
   if (!message || typeof message !== 'object') return;
-  if (message.type === 'desk:ready') { deskReady = true; sendTheme(true); tellDeskThread(); }
+  if (message.type === 'desk:ready') {
+    deskReady = true; threadSent = keepPage ? current?.threadId ?? null : null; keepPage = false;
+    sendTheme(true); tellDeskThread();
+  }
   else if (message.type === 'desk:navigated' && typeof message.path === 'string' && message.path.startsWith('/')) {
     framePath = message.path; deskTitle = String(message.title ?? ''); scheduleDOM();
   } else if (message.type === 'desk:open-thread' && typeof message.thread === 'string') openThread(message.thread);
@@ -243,7 +252,7 @@ const controls = element('div', { 'data-t3-desk-controls': '', hidden: '' }, ref
 const launch = element('button', { 'data-t3-desk-launch': '', 'aria-label': 'Open Atelier Desk', title: 'Atelier Desk', html: icons.desk });
 listen(tabLabel, 'click', () => desiredOpen ? hideDesk() : void showDesk());
 listen(closeDesk, 'click', hideDesk);
-listen(refreshDesk, 'click', () => { if (frameDesk) loadFrame(frameDesk, framePath); });
+listen(refreshDesk, 'click', () => { if (frameDesk) loadFrame(frameDesk, framePath, false); });
 listen(settingsDesk, 'click', openSettings);
 listen(launch, 'click', () => void showDesk());
 listen(document, 'click', event => {
@@ -279,7 +288,7 @@ function syncPanel() {
   mount.hidden = false;
   const repo = selectedRepository();
   empty.hidden = Boolean(repo); iframe.hidden = refreshDesk.hidden = externalDesk.hidden = !repo;
-  if (repo && iframeRepository !== repo.repo) navigateDesk(repo);
+  if (repo && frameDesk !== repo.desk) loadFrame(repo.desk, '/', true);
   const label = repo && deskTitle ? deskTitle : 'Desk';
   tabLabel.textContent = label; tab.title = repo ? `Atelier Desk: ${deskTitle || repo.repo}` : 'Atelier Desk';
   if (frameDesk) externalDesk.href = frameDesk + framePath;
