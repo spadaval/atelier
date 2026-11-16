@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-jzaw
 title: Show the project, not the system inbox, beside a thread that holds nothing
-status: in_review
+status: changes_requested
 mission: null
 labels: []
 priority: medium
