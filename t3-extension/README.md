@@ -28,9 +28,32 @@ Three layers:
 
 ## Install
 
-Requires T3 Code Nightly, Python 3 for the installer, and an Atelier Desk server
-reachable from this machine. At run time the loader uses T3's own executable in
-Node mode, so no separate Node installation is needed.
+Requires T3 Code Nightly, Python 3 for the installer and for updates, and an
+Atelier Desk server reachable from this machine. At run time the loader uses
+T3's own executable in Node mode, so no separate Node installation is needed.
+
+**On a new device, from a release.** No clone is needed. Download
+`t3-extension-<version>.zip` and its `.sha256` from the newest release tagged
+`t3-extension-v<version>` on
+[the repository's releases](https://github.com/spadaval/atelier/releases)
+(it is never marked latest, which stays the newest `atelier` release), unpack
+it and run its installer:
+
+```sh
+sha256sum -c t3-extension-0.1.1.zip.sha256   # macOS: shasum -a 256 -c
+python3 -m zipfile -e t3-extension-0.1.1.zip .
+python3 t3-extension-0.1.1/install.py        # Windows: py t3-extension-0.1.1\install.py
+# Edit config.json in the install folder (below): desk.urls.
+```
+
+The installer copies the bundle's files and its `VERSION` into the install
+folder, keeps an existing `config.json`, and records in it the Python that ran
+it, which `t3-custom update` uses for later installs. After that the extension
+updates itself from releases (see [Updates](#updates)); the unpacked folder can
+be deleted.
+
+**For development, from a checkout.** The installer copies the checkout's files
+instead, and the install reports its release as `development`:
 
 ```sh
 git clone https://github.com/spadaval/atelier.git
@@ -75,6 +98,52 @@ stand-in bundle whose executable runs Node. An install from a release bundle
 copies its `VERSION` file into the install folder, and `t3-custom check` and
 `status` report it as `release`; an install from a checkout reports
 `development`.
+
+## Updates
+
+```sh
+t3-custom update --check   # report the newest release; change nothing
+t3-custom update           # install it if it is newer, then reload
+```
+
+`update` reads the releases of this repository from GitHub's API
+(`releases` in `config.json` overrides the URL; tests point it at a local
+server). Of those it takes only releases that are neither drafts nor
+prereleases and whose tag is exactly `t3-extension-v<major>.<minor>.<patch>`,
+so `atelier`'s own `v*` releases are ignored, and of those the highest version.
+If that is newer than the installed one, it downloads the release's
+`t3-extension-<version>.zip` and `.sha256`, refuses the zip unless its SHA-256
+matches, unpacks it into a temporary folder, and runs the bundle's own
+`install.py --home <install folder>` with the recorded Python. That keeps
+`config.json` and `custom.css` as any reinstall does. It then asks a running
+injector to reload. Versions compare as three numbers; `development` and
+`0.0.0-dev.<commit>` (a bundle built on a pull request) count as `0.0.0`, older
+than every release, so a checkout install is always offered the newest release.
+The checksum proves the download is the file the release published, not who
+published it: trust rests on GitHub and this repository's release workflow.
+
+The injector checks when it starts and then once a day. It installs a newer
+release by itself only when `settings.autoUpdate` is `true`, which is off by
+default and is the "Install new extension releases by themselves" toggle in
+Customizations; otherwise it only reports it. This is the extension's own
+setting, apart from T3 Code's auto-update.
+
+Each lookup, from the injector or from `t3-custom update`, writes its outcome
+to `update.json` in the install folder: when it checked, the installed and the
+newest version, whether that is newer, and the error, if any. `t3-custom status`
+returns it as `update`, and the Customizations section shows it: the installed
+release, the newest one, when it checked, a failed lookup, download, checksum
+or install by name (for example `Looking up releases: GET <url>: HTTP 503
+Service Unavailable`), and an **Update to <version>** button when a newer
+release exists. A failure there changes nothing else: the installed version
+stays, and the injector and the extension keep running.
+
+Known limit: an update that changes `t3-custom.mjs` takes effect only when the
+injector restarts. `reload` reinjects `custom.js`, `custom.css` and the
+adapter, but the running injector keeps the loader it started with. Status then
+reports `restartNeeded: true` and the Customizations section says so; run
+`t3-custom stop` and open T3 Custom again. An update never restarts T3 Code or
+the injector by itself.
 
 ## Use
 
@@ -263,10 +332,13 @@ The Customizations section (Settings → General) shows:
   their identities;
 - the toggles: the Atelier views (the Desk panel, the sidebar views, the layer
   and the project strip), reference links and hovercards, and Follow the current
-  T3 project (off: a pinned repository is used);
+  T3 project (off: a pinned repository is used), and Install new extension
+  releases by themselves (off by default);
 - the current project's repository, Automatic (by identity, naming the match) or
   a manual override, and the list of overrides with a Remove button each,
   including any `desk.repositories` entries;
+- the installed release, the last release check and an Update button (see
+  [Updates](#updates));
 - injector status and errors, Reload scripts, Refresh status (also rereads the
   Desks), Open customization folder, Open Desk, each view with whether it is on
   or which hooks it lacks, and every T3 hook probe.
@@ -277,7 +349,7 @@ under `settings`:
 ```json
 "settings": {
   "enabled": true, "references": true, "followProject": true,
-  "pinnedRepo": null,
+  "autoUpdate": false, "pinnedRepo": null,
   "mappings": { "<environmentId>:<projectId>": "http://buildbot:3780/r/atelier" }
 }
 ```
@@ -379,6 +451,8 @@ Installed files, in the install folder above:
   test instance, Windows only).
 - `t3-custom.mjs`: launcher, file watcher, CDP attachment, and read bridge.
 - `injector.log`: timestamped operations and concrete errors.
+- `VERSION`: the installed release; absent for an install from a checkout.
+- `update.json`: the last release lookup or update and its error, if any.
 
 Saving client/adapter/CSS/config files reapplies them without refreshing T3.
 A change to `t3-custom.mjs` needs the injector restarted (`stop`, then
@@ -394,6 +468,7 @@ connection credentials.
 ```sh
 t3-custom status   # injector state, attached pages, and every hook probe
 t3-custom check    # validate the files without injecting
+t3-custom update   # install the newest release (--check: only report it)
 t3-custom reload
 t3-custom stop
 ```
@@ -552,7 +627,11 @@ No npm dependencies are needed. The tests need Node.js 22 or newer.
 `node run-tests.mjs` runs every test here that needs no real T3 Code: each
 `test-*.mjs` but `test-contract.mjs`, one at a time. It exits non-zero and
 names each test that failed. A new test is a new `test-*.mjs` file; the runner
-and CI find it.
+and CI find it. `test-extension.mjs` drives the extension in a fixture page in
+headless Chrome. `test-update.mjs` needs no browser or Desk, but needs
+`python3`: it builds release bundles from this folder, installs one into an
+empty home with a stand-in for T3 Code's app, and runs the installed
+`t3-custom update` and injector against a local releases list.
 
 **In CI.** The `extension` job in `.github/workflows/ci.yml` runs
 `node run-tests.mjs` on Linux in headless Chrome, after building

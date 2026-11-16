@@ -8,6 +8,11 @@ Options:
                the default location. On macOS and Linux PATH is an app bundle
                (Contents/Info.plist names its executable in Contents/MacOS);
                a test passes a stand-in bundle whose executable runs Node.
+
+Run from an unpacked release bundle, it installs that bundle's files and its
+VERSION; `t3-custom update` downloads a newer bundle and runs its install.py
+with --home. Run from a checkout, it installs the checkout's files as a
+development install.
 """
 import json
 import os
@@ -48,6 +53,8 @@ if not source_config.exists():
 config = json.loads(config_path.read_text()) if config_path.exists() else {}
 for key, value in json.loads(source_config.read_text()).items():
     config.setdefault(key, value)
+# `t3-custom update` runs a new release's install.py with the Python that ran this one.
+config['python'] = sys.executable
 if '--app' in sys.argv:
     config['appPath'] = str(Path(sys.argv[sys.argv.index('--app') + 1]).resolve())
 if not Path(config['appPath']).exists():

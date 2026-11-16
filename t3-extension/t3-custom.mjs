@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import { watch } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
+import os from 'node:os';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
@@ -63,6 +64,86 @@ const loadConfig = async () => JSON.parse(await fs.readFile(configPath, 'utf8'))
 // The release this home was installed from: install.py copies a bundle's VERSION
 // file here. An install from a checkout has none.
 const readRelease = async () => (await fs.readFile(path.join(home, 'VERSION'), 'utf8').catch(() => 'development')).trim();
+// Where to look for releases: config.releases, else this repository's releases on GitHub, which
+// also hold atelier's own; only t3-extension-v<major>.<minor>.<patch> tags are the extension's.
+const defaultReleases = 'https://api.github.com/repos/spadaval/atelier/releases?per_page=100';
+// The last release lookup or update, by this process or another: the injector and
+// `t3-custom update` both write it, and status reports it.
+const updatePath = path.join(home, 'update.json');
+const readUpdate = async () => JSON.parse(await fs.readFile(updatePath, 'utf8').catch(() => 'null'));
+// x.y.z compared as numbers; anything else, such as development or 0.0.0-dev.<commit>, is 0.0.0,
+// older than every release.
+const versionNumbers = version => version.match(/^(\d+)\.(\d+)\.(\d+)/)?.slice(1).map(Number) ?? [0, 0, 0];
+function newer(version, than) {
+  const [a, b] = [versionNumbers(version), versionNumbers(than)];
+  const differs = a.findIndex((part, index) => part !== b[index]);
+  return differs >= 0 && a[differs] > b[differs];
+}
+// The installed loader: a running injector keeps the one it started with until it is restarted.
+const loaderHash = () => fs.readFile(path.join(home, 't3-custom.mjs')).then(text => createHash('sha256').update(text).digest('hex'), () => null);
+async function get(url, operation) {
+  let response;
+  try { response = await fetch(url, { signal: AbortSignal.timeout(30000), headers: { 'user-agent': 't3-custom' } }); } catch (error) { throw new Error(`${operation}: GET ${url}: ${error.cause?.message ?? error.message}`); }
+  if (!response.ok) throw new Error(`${operation}: GET ${url}: HTTP ${response.status} ${response.statusText}`);
+  return response;
+}
+// The newest release that is not a draft or prerelease and whose tag is the extension's, or null.
+async function newestRelease(config) {
+  const url = config.releases ?? defaultReleases;
+  const response = await get(url, 'Looking up releases');
+  let releases;
+  try { releases = await response.json(); } catch (error) { throw new Error(`Looking up releases: GET ${url} did not return JSON: ${error.message}`); }
+  if (!Array.isArray(releases)) throw new Error(`Looking up releases: GET ${url} did not return a list of releases`);
+  let newest = null;
+  for (const release of releases) {
+    const version = !release.draft && !release.prerelease && release.tag_name?.match(/^t3-extension-v(\d+\.\d+\.\d+)$/)?.[1];
+    if (version && (!newest || newer(version, newest.version))) newest = { version, tag: release.tag_name, assets: release.assets ?? [] };
+  }
+  return newest;
+}
+// Downloads a release's bundle, refuses it unless its SHA-256 matches the release's .sha256 file,
+// and runs the bundle's own install.py on this home with the Python that installed it.
+async function install(config, release) {
+  const name = `t3-extension-${release.version}.zip`;
+  const download = async file => {
+    const asset = release.assets.find(asset => asset.name === file);
+    if (!asset) throw new Error(`Downloading ${file}: release ${release.tag} has no asset ${file}`);
+    return get(asset.browser_download_url, `Downloading ${file}`);
+  };
+  const zip = Buffer.from(await (await download(name)).arrayBuffer());
+  const expected = (await (await download(`${name}.sha256`)).text()).trim().split(/\s+/)[0];
+  const actual = createHash('sha256').update(zip).digest('hex');
+  if (actual !== expected) throw new Error(`Checking ${name}: its SHA-256 is ${actual}, but ${name}.sha256 says ${expected}; nothing was installed`);
+  const work = await fs.mkdtemp(path.join(os.tmpdir(), 't3-custom-update-'));
+  const python = config.python ?? (process.platform === 'win32' ? 'py' : 'python3');
+  const run = async (operation, args) => {
+    try { await execute(python, args, { env: appEnvironment({}) }); } catch (error) {
+      throw new Error(`${operation}: ${python} ${args.join(' ')} failed (${error.code ?? error.signal}): ${(error.stderr || error.message).trim()}`);
+    }
+  };
+  try {
+    await fs.writeFile(path.join(work, name), zip);
+    await run(`Unpacking ${name}`, ['-m', 'zipfile', '-e', path.join(work, name), work]);
+    await run(`Installing ${release.version}`, [path.join(work, `t3-extension-${release.version}`, 'install.py'), '--home', home]);
+  } finally { await fs.rm(work, { recursive: true, force: true }); }
+}
+// Looks up the newest release and, with apply, installs it when it is newer than this home's.
+// With record it writes the outcome to update.json; a failure is in its error and nothing else.
+async function update(config, { apply, record }) {
+  const result = { checkedAt: new Date().toISOString(), installed: await readRelease(), latest: null, newer: false, error: null };
+  try {
+    const release = await newestRelease(config);
+    result.latest = release && { version: release.version, tag: release.tag };
+    result.newer = Boolean(release && newer(release.version, result.installed));
+    if (apply && result.newer) {
+      const before = await loaderHash();
+      await install(config, release);
+      Object.assign(result, { installed: await readRelease(), newer: false, installedAt: new Date().toISOString(), restartNeeded: before !== await loaderHash() });
+    }
+  } catch (error) { result.error = error.message; }
+  if (record) await fs.writeFile(updatePath, JSON.stringify(result, null, 2) + '\n');
+  return result;
+}
 // desk.urls lists the Desks; the older form has a single desk.baseUrl.
 const deskUrls = config => (config.desk?.urls ?? [config.desk?.baseUrl ?? 'http://127.0.0.1:3780']).map(url => url.replace(/\/$/, ''));
 // What the client sees of config.json: the Desks, manual repository overrides and the settings
@@ -78,9 +159,10 @@ function checkSettings(settings) {
     references: value => typeof value === 'boolean',
     followProject: value => typeof value === 'boolean',
     pinnedRepo: value => value === null || typeof value === 'string',
+    autoUpdate: value => typeof value === 'boolean',
     mappings: value => isObject(value) && Object.values(value).every(repo => typeof repo === 'string'),
   };
-  const expected = { enabled: 'a boolean', references: 'a boolean', followProject: 'a boolean', pinnedRepo: 'a string or null', mappings: 'an object whose values are strings' };
+  const expected = { enabled: 'a boolean', references: 'a boolean', followProject: 'a boolean', autoUpdate: 'a boolean', pinnedRepo: 'a string or null', mappings: 'an object whose values are strings' };
   for (const [key, value] of Object.entries(settings)) {
     if (!Object.hasOwn(checks, key)) fail(`unknown setting ${key}`);
     if (!checks[key](value)) fail(`${key} must be ${expected[key]}, got ${JSON.stringify(value)}`);
@@ -237,6 +319,7 @@ async function daemon() {
   let stopping = false;
   let watcher;
   let updateTimer;
+  let releaseTimer;
   let discoveryError;
   let reloadQueue = Promise.resolve();
   // config.json as save-settings last wrote it: the page already applied that change itself.
@@ -261,6 +344,23 @@ async function daemon() {
     saveQueue = save.catch(() => {});
     return save;
   }
+
+  // Release checks and updates run one at a time. A failure is kept apart from lastError, which
+  // launch treats as fatal: the extension keeps running whatever the lookup says.
+  let updating = Promise.resolve();
+  function checkRelease(apply = config.settings?.autoUpdate === true) {
+    const run = updating.then(async () => {
+      const result = await update(config, { apply, record: true });
+      if (result.error) log(`Release check: ${result.error}`);
+      else log(result.installedAt ? `Installed release ${result.installed}` : 'Release checked', { installed: result.installed, latest: result.latest?.version ?? null });
+      if (result.installedAt) await reload(true);
+      return result;
+    });
+    updating = run.catch(() => {});
+    return run;
+  }
+  const startedLoader = await loaderHash();
+  const fullState = async () => ({ ...state, update: await readUpdate(), restartNeeded: (await loaderHash()) !== startedLoader });
 
   function problem(operation, error, extra = {}) {
     state.lastError = `${operation}: ${error.message ?? error}`;
@@ -292,6 +392,7 @@ async function daemon() {
       const inPlace = !force && raw === savedConfig && bundle?.base === next.base;
       bundle = next;
       state.version = next.version;
+      state.release = await readRelease();
       state.lastError = null;
       for (const target of targets.values()) {
         if (target.ready) await (inPlace ? register(target) : apply(target));
@@ -303,7 +404,8 @@ async function daemon() {
     let response;
     try {
       let data;
-      if (report.action === 'status') data = { ...state, home, targets: targets.size };
+      if (report.action === 'status') data = { ...(await fullState()), home, targets: targets.size };
+      else if (report.action === 'update') data = await checkRelease(true);
       else if (report.action === 'open-folder') {
         await platform.openFolder(home); data = { opened: true };
       } else if (report.action === 'desk-get') {
@@ -370,7 +472,7 @@ async function daemon() {
   async function stop() {
     if (stopping) return;
     stopping = true;
-    watcher?.close(); clearTimeout(updateTimer);
+    watcher?.close(); clearTimeout(updateTimer); clearInterval(releaseTimer);
     const cleanupResults = await Promise.allSettled([...targets.values()].map(async target => {
       try {
         if (target.scriptId) await target.cdp.call('Page.removeScriptToEvaluateOnNewDocument', { identifier: target.scriptId });
@@ -393,7 +495,7 @@ async function daemon() {
         const { action } = JSON.parse(input.split('\n')[0]);
         if (action === 'reload') await reload(true);
         else if (action !== 'status' && action !== 'stop') throw new Error(`Unknown control action: ${action}`);
-        socket.end(`${JSON.stringify({ ...state, targets: [...targets.values()].map(({ id, url }) => ({ id, url })), stopping: action === 'stop' })}\n`);
+        socket.end(`${JSON.stringify({ ...(await fullState()), targets: [...targets.values()].map(({ id, url }) => ({ id, url })), stopping: action === 'stop' })}\n`);
         if (action === 'stop') void stop();
       } catch (error) { socket.end(`${JSON.stringify({ error: error.message })}\n`); }
     });
@@ -409,6 +511,9 @@ async function daemon() {
     clearTimeout(updateTimer); updateTimer = setTimeout(() => void reload(), 150);
   });
   log('Injector ready', { port: config.debugPort, targets: config.targetPrefixes });
+  // A release check now and once a day; it installs the release only when settings.autoUpdate says so.
+  void checkRelease();
+  releaseTimer = setInterval(() => void checkRelease(), 24 * 60 * 60 * 1000);
   while (!stopping) {
     try {
       const response = await fetch(`http://127.0.0.1:${config.debugPort}/json/list`, { signal: AbortSignal.timeout(2000) });
@@ -470,8 +575,21 @@ try {
   else if (command === 'launch') await launch();
   else if (command === 'prepare') console.log(JSON.stringify(await startDaemon(), null, 2));
   else if (['status', 'stop', 'reload'].includes(command)) console.log(JSON.stringify(await control(command), null, 2));
-  else if (command === 'check') console.log(JSON.stringify({ release: await readRelease(), version: (await buildBundle(await loadConfig())).version, valid: true }));
-  else throw new Error(`Unknown command ${command}. Use launch, prepare, status, reload, stop, or check.`);
+  else if (command === 'update') {
+    // update installs the newest release if it is newer; update --check only reports it.
+    const apply = !process.argv.includes('--check');
+    const result = await update(await loadConfig(), { apply, record: apply });
+    if (result.installedAt) {
+      // A running injector reloads the new files; one that is not running loads them when it starts.
+      try { await control('reload'); result.reloaded = true; } catch (error) {
+        if (!['ENOENT', 'ECONNREFUSED'].includes(error.code)) throw error;
+        result.reloaded = false;
+      }
+    }
+    console.log(JSON.stringify(result, null, 2));
+    if (result.error) process.exitCode = 1;
+  } else if (command === 'check') console.log(JSON.stringify({ release: await readRelease(), version: (await buildBundle(await loadConfig())).version, valid: true }));
+  else throw new Error(`Unknown command ${command}. Use launch, prepare, status, reload, stop, update, or check.`);
 } catch (error) {
   console.error(`T3 Custom ${command} failed: ${error.stack ?? error}`);
   if (command === 'launch') {

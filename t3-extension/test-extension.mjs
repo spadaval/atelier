@@ -105,6 +105,9 @@ const server = http.createServer((request, response) => {
   const chunk = chunks[url.pathname.replace('/assets/', '')];
   if (chunk) { response.writeHead(200, { 'content-type': 'text/javascript' }); response.end(chunk); return; }
   // A same-site frame in the page's process: it has the injector's binding and calls it directly.
+  // The releases list, which the injector looks up when it starts: unavailable, so the
+  // Customizations section must name the failed lookup.
+  if (url.pathname === '/releases') { response.writeHead(503, { 'content-type': 'application/json' }); response.end('{}'); return; }
   if (url.pathname === '/spyframe') {
     response.writeHead(200, { 'content-type': 'text/html' });
     response.end(`<script>parent.postMessage({ spyBinding: typeof __t3CustomReport }, '*'); if (typeof __t3CustomReport === 'function') __t3CustomReport(JSON.stringify({ type: 'request', id: 'spy', action: 'desk-get', payload: { desk: new URL(location.href).searchParams.get('desk'), path: '/api/records/atelier-spyframe' } }));</script>`);
@@ -168,7 +171,7 @@ try {
   const secondDeskBase = `http://localhost:${secondDeskProxy.address().port}`;
   // No repository table: the project is matched by the identity the Desk reports.
   config.desk = { urls: [deskBase, secondDeskBase] }; delete config.settings;
-  config.debugPort = debugPort; config.targetPrefixes = [base];
+  config.debugPort = debugPort; config.targetPrefixes = [base]; config.releases = `${base}/releases`;
   await fs.writeFile(path.join(temp, 'config.json'), JSON.stringify(config));
   await fs.copyFile(path.join(root, 'custom.js'), path.join(temp, 'custom.js'));
   await fs.copyFile(path.join(root, 'custom.css'), path.join(temp, 'custom.css'));
@@ -630,6 +633,18 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   const settingsText = await evaluate('document.querySelector("#t3-custom-settings").shadowRoot.textContent');
   assert(settingsText.includes(`${deskBase}: reachable`) && settingsText.includes(`atelier (${fixtureRepositoryKey})`), settingsText);
   assert(settingsText.includes('module:environment-atoms') && settingsText.includes('css:theme'), settingsText);
+  // The release: the injector's lookup at start failed, and the section names it.
+  const settingsQuery = selector => `document.querySelector("#t3-custom-settings").shadowRoot.querySelector(${JSON.stringify(selector)})`;
+  const refreshUntil = (expression, label) => until(() => evaluate(`(${expression})||(${settingsQuery('#refresh-status')}.click(),false)`), label);
+  await refreshUntil(`${settingsQuery('#release-error')}.textContent === "Release check failed: Looking up releases: GET ${base}/releases: HTTP 503 Service Unavailable"`, 'The failed release lookup in Customizations');
+  assert.match(await evaluate(`${settingsQuery('#release-status')}.textContent`), /^Extension development · checked /);
+  assert.equal(await evaluate(`${settingsQuery('#update-release')}.hidden`), true, 'an update was offered after a failed lookup');
+  // A newer release, as a later check records it, is offered with a button.
+  await fs.writeFile(path.join(temp, 'update.json'), JSON.stringify({ checkedAt: new Date().toISOString(), installed: 'development', latest: { version: '0.5.0', tag: 't3-extension-v0.5.0' }, newer: true, error: null }));
+  await refreshUntil(`${settingsQuery('#release-status')}.textContent.includes("· release 0.5.0 is available ·")`, 'The newer release in Customizations');
+  assert.equal(await evaluate(`${settingsQuery('#release-error')}.hidden`), true);
+  assert.equal(await evaluate(`${settingsQuery('#update-release')}.hidden ? null : ${settingsQuery('#update-release')}.textContent`), 'Update to 0.5.0');
+  assert.equal(await evaluate(`${settingsQuery('[data-setting="autoUpdate"]')}.checked`), false, 'automatic updates are on by default');
   await evaluate(`(()=>{const select=document.querySelector("#t3-custom-settings").shadowRoot.querySelector("#project-mapping");select.value="${deskBase}/r/atelier";select.dispatchEvent(new Event("change"))})()`);
   // The views toggle was saved earlier; wait for this mapping.
   const saved = await until(async () => { const settings = JSON.parse(await fs.readFile(path.join(temp, 'config.json'), 'utf8')).settings; return settings?.mappings?.['env:project-c'] && settings; }, 'Settings written to config.json');
@@ -656,6 +671,7 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   await until(() => evaluate('!document.querySelector("[data-t3-desk-mount]")?.shadowRoot.querySelector("iframe").hidden'), 'Explicit project mapping');
   await evaluate('document.querySelector("#native-tab").click()');
   await until(() => evaluate('document.querySelector("[data-t3-desk-mount]").hidden && !document.querySelector("#native-content").inert'), 'Native tab restoration');
+  console.log('PASS: Customizations names a failed release lookup and offers a newer release; automatic updates are off by default');
   console.log('PASS: a manual project mapping is written to config.json and applied in place without reloading the Desk; an outside edit reloads; switching back to native surfaces');
 
   const timeOrigin = await evaluate('performance.timeOrigin');
