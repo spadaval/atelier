@@ -78,26 +78,19 @@ pub fn identity(url: &str) -> Option<String> {
     }
     let remote = remote.to_lowercase();
     match remote.split_once("://") {
-        Some(("ssh" | "http" | "https" | "git", rest)) => url_identity(rest),
+        Some(("ssh" | "http" | "https" | "git", _)) => url_identity(&remote),
         _ => scp_identity(&remote),
     }
 }
 
-/// `host/path` of a URL's part after its `scheme://`.
-fn url_identity(rest: &str) -> Option<String> {
-    let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
-    let (authority, rest) = rest.split_at(end);
-    let host = authority
-        .rsplit_once('@')
-        .map_or(authority, |(_, host)| host);
-    // An IPv6 host keeps its brackets and its colons; a port goes.
-    let host = match host.find(']') {
-        Some(close) if host.starts_with('[') => &host[..=close],
-        _ => host.split(':').next().unwrap_or_default(),
-    };
-    let path = rest.split(['?', '#']).next().unwrap_or_default();
-    let segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
-    (!host.is_empty() && segments.len() > 1).then(|| format!("{host}/{}", segments.join("/")))
+/// `host/path` of a URL, its host and path as the WHATWG URL standard
+/// gives them, as T3 Code's `new URL()` does: an IPv6 host compressed in
+/// brackets, an international host in Punycode, `.` and `..` resolved.
+fn url_identity(remote: &str) -> Option<String> {
+    let url = url::Url::parse(remote).ok()?;
+    let host = url.host_str().filter(|host| !host.is_empty())?;
+    let segments: Vec<&str> = url.path().split('/').filter(|s| !s.is_empty()).collect();
+    (segments.len() > 1).then(|| format!("{host}/{}", segments.join("/")))
 }
 
 /// `host/path` of `[user@]host:path`; `None` for a Windows drive, such as
@@ -329,6 +322,26 @@ mod tests {
                 "[2001:db8::1]/org/repo",
             ),
             ("https://[2001:DB8::2]/Org/Repo", "[2001:db8::2]/org/repo"),
+            (
+                "ssh://git@[2001:0db8:0000:0000:0000:0000:0000:1]:22/org/repo.git",
+                "[2001:db8::1]/org/repo",
+            ),
+            (
+                "https://börse.example.com/org/repo.git",
+                "xn--brse-5qa.example.com/org/repo",
+            ),
+            (
+                "https://gitlab.example.com/group/../other/repo.git",
+                "gitlab.example.com/other/repo",
+            ),
+            (
+                "ssh://git@host.example.com/a/./b/../c/repo",
+                "host.example.com/a/c/repo",
+            ),
+            (
+                "https://example.com/org/my repo?x=1#top",
+                "example.com/org/my%20repo",
+            ),
         ];
         for (url, named) in cases {
             assert_eq!(identity(url).as_deref(), Some(named), "{url}");
