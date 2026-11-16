@@ -35,7 +35,26 @@ async function control(action) {
 }
 const shell = {
   projects: [{ id: 'project-a', title: 'atelier', repositoryIdentity: { canonicalKey: fixtureRepositoryKey } }, { id: 'project-c', title: 'unlinked', repositoryIdentity: { canonicalKey: 'elsewhere/unlinked' } }],
-  threads: [{ id: 'thread-a', projectId: 'project-a' }, { id: 'thread-b', projectId: 'project-a' }, { id: 'thread-c', projectId: 'project-c' }],
+  threads: [
+    { id: 'thread-a', projectId: 'project-a', title: 'Thread A', status: 'idle', lineage: { parentThreadId: null } },
+    { id: 'thread-b', projectId: 'project-a', title: 'Thread B', status: 'running', lineage: { parentThreadId: null } },
+    { id: 'thread-c', projectId: 'project-c', title: 'Thread C', status: 'idle', lineage: { parentThreadId: null } },
+    // A subagent of thread-a (delegate_task), and a thread a linked environment's agent started from thread-b.
+    { id: 'thread-child', projectId: 'project-a', title: 'Child of A', status: 'idle', lineage: { parentThreadId: 'thread-a' } },
+    { id: 'thread-delegated', projectId: 'project-a', title: 'Delegated from B', status: 'idle', lineage: { parentThreadId: null }, delegatedFrom: { environmentId: 'env-remote', threadId: 'thread-b', title: 'Thread B' } },
+  ],
+};
+// T3's composer drafts: a new-thread screen for the mapped project and one for the unmapped one.
+const drafts = { 'draft-a': { environmentId: 'env', projectId: 'project-a', logicalProjectKey: fixtureRepositoryKey }, 'draft-c': { environmentId: 'env', projectId: 'project-c', logicalProjectKey: 'elsewhere/unlinked' } };
+// The Desk's sidebar and launch data, served by the first Desk; the mission's ID is a real one
+// (read at startup) so mission control renders. Thread identities are T3 thread IDs where T3 knows them.
+const sidebarFixture = missionId => ({ repos: [{ repo: 'atelier', missions: [{ id: missionId, title: 'Fixture mission', state: 'in_progress', done: 1, total: 3, waiting: 1,
+  threads: [{ identity: 'thread-b', role: 'lead' }, { identity: 'remote-thread-0123456789', role: 'reviewer' }],
+  items: [{ id: 'atelier-fi01', title: 'First item', status: 'started', threads: [{ identity: 'thread-a', role: 'implementer' }] }, { id: 'atelier-fi02', title: 'Second item', status: 'ready', threads: [] }] }] }] });
+const launchFixture = {
+  ready: [{ id: 'atelier-r1', title: 'Ready one, with a title long enough to be cut short in its card', priority: 'high' }, { id: 'atelier-r2', title: 'Ready two', priority: 'medium' }, { id: 'atelier-r3; rm -rf /', title: 'Not an item ID' }, { id: 'atelier-r4', title: 'Ready four' }],
+  waiting: 5, threads_waiting: [], waiting_items: [{ id: 'atelier-w1', title: 'Waiting one' }, { id: 'atelier-w2', title: 'Waiting two' }, { id: 'atelier-w3', title: 'Waiting three' }],
+  in_motion: [{ id: 'atelier-x1', title: 'Held by thread B', stage: 'started', age_seconds: 7200, holder: { identity: 'thread-b', title: 'Thread B' } }, { id: 'atelier-x2', title: 'Held elsewhere', stage: 'review', age_seconds: 90000, holder: { identity: 'remote-holder', title: 'Remote holder' } }],
 };
 // Modules shaped like T3's private hooks, so the real discovery code runs. Their names
 // differ from T3's chunk names, so discovery searches every declared module.
@@ -45,16 +64,23 @@ const byThreadKey = Object.fromEntries(['thread-a', 'thread-b', 'thread-c'].map(
 const state = { byThreadKey, openBrowser() {}, show({ environmentId, threadId }) { byThreadKey[environmentId + ':' + threadId].isOpen = true; for (const listener of listeners) listener(); } };
 export const s = { getState: () => state, subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener); } };`,
   'registry-fixture.js': `export const r = { '~effect/reactivity/AtomRegistry': '~effect/reactivity/AtomRegistry', get: atom => atom };`,
-  'shell-fixture.js': `let reads = 0; const snapshot = ${JSON.stringify(shell)};
+  'shell-fixture.js': `let reads = 0; const snapshot = globalThis.fixtureSnapshot = ${JSON.stringify(shell)};
 export const c = { familyAtom() {}, mountRows() {}, snapshotAtom: environmentId => environmentId === 'env-empty' ? { projects: [], threads: [] } : reads++ ? snapshot : { ...snapshot, threads: [] } };`,
   'environment-fixture.js': `export const e = { environmentIdsAtom: ['env', 'env-empty'], connectedEnvironmentIdsAtom: ['env', 'env-empty'] };`,
-  'index-fixture.js': `import './panel-fixture.js'; import './registry-fixture.js'; import './shell-fixture.js'; import './environment-fixture.js';
+  'drafts-fixture.js': `export const d = { getState: () => ({ draftThreadsByThreadKey: ${JSON.stringify(drafts)} }) };`,
+  'index-fixture.js': `import './panel-fixture.js'; import './registry-fixture.js'; import './shell-fixture.js'; import './environment-fixture.js'; import './drafts-fixture.js';
 new Worker('/assets/imageDecode.worker-fixture.js');`,
   // Like T3's image decoder worker: its top-level code must never run in the window.
   'imageDecode.worker-fixture.js': `if (typeof window !== 'undefined') globalThis.workerScriptRanInWindow = true;`,
 };
-const html = `<!doctype html><html class="dark"><head><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; connect-src 'self' blob: http: https: ws: wss:; style-src 'self' 'unsafe-inline'; frame-src 'self' blob: http: https:; worker-src 'self' blob:"><title>Atelier extension fixture</title><script type="module" src="/assets/index-fixture.js"></script>${Object.keys(chunks).filter(name => !name.includes('worker')).map(name => `<link rel="modulepreload" href="/assets/${name}">`).join('')}<style>html{--background:#202124;--foreground:#eeeeee;--card:#2a2b2e;--border:#555555;--muted-foreground:#a0a0a8;--secondary:#353639;--primary:#9bbcff}body{margin:0;background:var(--background);color:var(--foreground);font:14px Georgia, serif}#app{height:100vh;display:flex;flex-direction:column}header{padding:12px;border-bottom:1px solid #555}#workspace{display:flex;flex:1;min-height:0}[data-workspace-area=conversation]{flex:1;padding:20px;min-width:0;overflow:auto}[data-workspace-area=panel]{width:750px;display:flex;flex-direction:column;min-width:0}[data-right-panel-tabbar]{height:52px;display:flex;align-items:center}[data-right-panel-tabbar]>div{display:flex;align-items:center}[data-right-panel-surface-content]{position:relative;flex:1;min-height:0}#native-content{padding:20px}#settings{overflow:auto;padding:24px;max-width:850px}#composer{margin-top:30px;border:1px solid #555;padding:12px}</style></head><body><div id="app"><header><span data-panel-layout-controls>Workspace controls</span></header><div id="workspace"><main data-workspace-area="conversation"><h1>Conversation</h1><p id="reference-prose">Investigate ${referenceId}, then <code>${referenceId}</code>. Ignore other-xabc and not-${referenceId}-extra.</p><pre>${referenceId}</pre><div id="composer" contenteditable="true">${referenceId}</div><p id="stream"></p></main><div data-workspace-area="panel"><div data-right-panel-tabbar><div data-right-panel-tab-list><div data-active-tab="true"><button id="native-tab">Files</button></div><button aria-label="Add panel surface">+</button></div></div><div data-right-panel-surface-content><div id="native-content"><button id="native-control">Native file viewer</button></div></div></div></div><div id="settings" hidden><div data-settings-page-scroll><div><h1>General</h1><p>T3 settings fixture</p></div></div></div></div><script>
-addEventListener('hashchange',()=>{const settings=location.hash.includes('/settings');document.querySelector('#settings').hidden=!settings;document.querySelector('#workspace').style.display=settings?'none':'flex'});
+const listItems = shell.threads.map(thread => `<li data-thread-item="env:${thread.id}"><div data-sidebar-row="env:${thread.id}" data-route="/env/${thread.id}">${thread.title}</div></li>`).join('');
+const html = `<!doctype html><html class="dark"><head><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; connect-src 'self' blob: http: https: ws: wss:; style-src 'self' 'unsafe-inline'; frame-src 'self' blob: http: https:; worker-src 'self' blob:"><title>Atelier extension fixture</title><script type="module" src="/assets/index-fixture.js"></script>${Object.keys(chunks).filter(name => !name.includes('worker')).map(name => `<link rel="modulepreload" href="/assets/${name}">`).join('')}<style>html{--background:#202124;--foreground:#eeeeee;--card:#2a2b2e;--border:#555555;--muted-foreground:#a0a0a8;--secondary:#353639;--primary:#9bbcff}body{margin:0;background:var(--background);color:var(--foreground);font:14px Georgia, serif}#app{height:100vh;display:flex}[data-workspace-area=sidebar]{width:260px;flex-shrink:0;display:flex;flex-direction:column;border-right:1px solid #555}#thread-list{margin:0;padding:8px;list-style:none;overflow:auto}[data-sidebar-row]{padding:8px;cursor:pointer}main[data-slot=sidebar-inset]{position:relative;flex:1;min-width:0;display:flex;flex-direction:column}header{padding:12px;border-bottom:1px solid #555;display:flex;gap:12px}nav ol{display:flex;gap:8px;margin:0;padding:0;list-style:none}#workspace{display:flex;flex:1;min-height:0}[data-workspace-area=conversation]{flex:1;padding:20px;min-width:0;overflow:auto}[data-workspace-area=panel]{width:750px;display:flex;flex-direction:column;min-width:0}[data-right-panel-tabbar]{height:52px;display:flex;align-items:center}[data-right-panel-tabbar]>div{display:flex;align-items:center}[data-right-panel-surface-content]{position:relative;flex:1;min-height:0}#native-content{padding:20px}#settings{overflow:auto;padding:24px;max-width:850px}#composer{margin-top:30px;border:1px solid #555;padding:12px}#draft{flex:1;min-height:0}[data-chat-canvas]{position:relative;height:100%}[data-chat-composer-overlay]{position:absolute;inset:0;display:flex;align-items:center;pointer-events:none}[data-chat-composer-stack]{width:760px;max-width:calc(100% - 40px);margin:0 auto;pointer-events:auto}[data-testid=composer-editor]{min-height:60px;border:1px solid #555;padding:12px}</style></head><body><div id="app"><div data-workspace-area="sidebar"><div id="search-wrap"><div data-slot="sidebar-group"><input type="search" aria-label="Search threads"></div></div><ul id="thread-list">${listItems}</ul></div><main data-slot="sidebar-inset"><header><nav aria-label="Thread breadcrumb"><ol><li><button id="crumb-project">atelier</button></li><li>/</li><li>Thread</li></ol></nav><span data-panel-layout-controls>Workspace controls</span></header><div id="workspace"><div data-workspace-area="conversation"><h1>Conversation</h1><p id="reference-prose">Investigate ${referenceId}, then <code>${referenceId}</code>. Ignore other-xabc and not-${referenceId}-extra.</p><pre>${referenceId}</pre><div id="composer" contenteditable="true">${referenceId}</div><p id="stream"></p></div><div data-workspace-area="panel"><div data-right-panel-tabbar><div data-right-panel-tab-list><div data-active-tab="true"><button id="native-tab">Files</button></div><button aria-label="Add panel surface">+</button></div></div><div data-right-panel-surface-content><div id="native-content"><button id="native-control">Native file viewer</button></div></div></div></div><div id="draft" hidden><div data-chat-canvas><div data-workspace-area="composer" data-chat-composer-overlay><div data-chat-composer-stack><div data-testid="composer-editor" contenteditable="true" aria-label="Message"></div></div></div></div></div><div id="settings" hidden><div data-settings-page-scroll><div><h1>General</h1><p>T3 settings fixture</p></div></div></div></main></div><script>
+const show=()=>{const route=location.hash;const settings=route.includes('/settings');const draft=route.startsWith('#/draft/');document.querySelector('#settings').hidden=!settings;document.querySelector('#draft').hidden=!draft;document.querySelector('#workspace').style.display=settings||draft?'none':'flex'};
+addEventListener('hashchange',show);show();
+// T3 starts a new thread from the breadcrumb's project, opens a thread from its row, and sends the composer on Enter.
+document.querySelector('#crumb-project').addEventListener('click',()=>{globalThis.crumbStartedThread=true});
+document.querySelector('#thread-list').addEventListener('click',event=>{const row=event.target.closest('[data-route]');if(row)location.hash=row.dataset.route});
+document.querySelector('[data-testid=composer-editor]').addEventListener('keydown',event=>{if(event.key==='Enter')globalThis.fixtureSent=event.target.textContent});
 </script></body></html>`;
 const server = http.createServer((request, response) => {
   const url = new URL(request.url, 'http://fixture');
@@ -82,10 +108,12 @@ function deskProxyServer(requests, options) {
       if (options.slowEmbed) await delay(options.slowEmbed);
       response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify({ origins: [base] })); return;
     }
+    if (request.url === '/api/sidebar') { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(options.sidebar ?? { repos: [] })); return; }
+    if (request.url === '/api/launch?repo=atelier' && options.launch) { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(options.launch)); return; }
     if (options.missing?.includes(request.url)) { response.writeHead(404, { 'content-type': 'application/json' }); response.end(JSON.stringify({ error: 'not here' })); return; }
     if (request.url === '/spoof') {
       response.writeHead(200, { 'content-type': 'text/html' });
-      response.end(`<script>parent.postMessage({ type: 'desk:navigated', path: '/spoofed', title: 'Spoofed' }, '*'); parent.postMessage({ type: 'desk:open-thread', thread: 'thread-c' }, '*');</script>`);
+      response.end(`<script>parent.postMessage({ type: 'desk:navigated', path: '/spoofed', title: 'Spoofed' }, '*'); parent.postMessage({ type: 'desk:open-thread', thread: 'thread-c' }, '*'); parent.postMessage({ type: 'desk:key', key: 'Escape' }, '*');</script>`);
       return;
     }
     try {
@@ -97,7 +125,7 @@ function deskProxyServer(requests, options) {
 }
 const deskRequests = [];
 const secondDeskRequests = [];
-const firstDesk = { slowEmbed: 0, missing: [`/api/records/${missionId}`] };
+const firstDesk = { slowEmbed: 0, missing: [`/api/records/${missionId}`], launch: launchFixture };
 const deskProxy = deskProxyServer(deskRequests, firstDesk);
 const secondDeskProxy = deskProxyServer(secondDeskRequests, {});
 await new Promise(resolve => secondDeskProxy.listen(0, '127.0.0.1', resolve));
@@ -105,7 +133,13 @@ await new Promise(resolve => deskProxy.listen(0, '127.0.0.1', resolve));
 try {
   const configPath = path.join(root, 'config.json');
   const config = JSON.parse(await fs.readFile(await fs.access(configPath).then(() => configPath, () => path.join(root, 'config.example.json')), 'utf8'));
-  realDesk = (config.desk.urls?.[0] ?? config.desk.baseUrl).replace(/\/$/, '');
+  // DESK overrides the Desk the proxies forward to, such as a second Desk under test.
+  realDesk = (process.env.DESK ?? config.desk.urls?.[0] ?? config.desk.baseUrl).replace(/\/$/, '');
+  // A mission the real Desk serves, so its mission control renders in the layer.
+  const realMission = (await (await fetch(`${realDesk}/api/sidebar`)).json()).repos.flatMap(repo => repo.missions.map(mission => ({ repo: repo.repo, id: mission.id })))[0];
+  assert(realMission, `${realDesk}/api/sidebar lists no open mission; the layer check needs one`);
+  firstDesk.sidebar = sidebarFixture(realMission.id);
+  firstDesk.sidebar.repos[0].repo = realMission.repo;
   // Another site than the fixture, as the real Desk is, so its frame is a separate target.
   deskBase = `http://localhost:${deskProxy.address().port}`;
   const secondDeskBase = `http://localhost:${secondDeskProxy.address().port}`;
@@ -132,7 +166,7 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   const discovery = await evaluate(`({ workerLoaded: performance.getEntriesByType('resource').some(entry => entry.name.includes('.worker-')), ranInWindow: globalThis.workerScriptRanInWindow ?? false, modules: __t3Custom.diagnostics().modules, probes: Object.entries(__t3Custom.diagnostics().probes).filter(([name]) => name.startsWith('module:')).map(([name, probe]) => name + '=' + probe.ok) })`);
   assert(discovery.workerLoaded, 'the fixture worker should be among the page resources');
   assert.equal(discovery.ranInWindow, false, `discovery imported a worker script into the window: ${discovery.modules.join(', ')}`);
-  assert.deepEqual(discovery.probes, ['module:workspace-panel-store=true', 'module:atom-registry=true', 'module:thread-snapshot-atom=true', 'module:environment-atoms=true']);
+  assert.deepEqual(discovery.probes, ['module:workspace-panel-store=true', 'module:atom-registry=true', 'module:thread-snapshot-atom=true', 'module:environment-atoms=true', 'module:composer-draft-store=true']);
   console.log(`PASS: real discovery found every hook in ${discovery.modules.length} declared modules and never ran the worker script in the window`);
   await evaluate('document.querySelector("[data-t3-desk-launch]").click()');
   await until(() => evaluate('Boolean(document.querySelector("[data-right-panel-surface-content] > [data-t3-desk-mount]:not([hidden])"))'), 'Docked Desk');
@@ -160,16 +194,17 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   assert.equal(await inFrame('document.documentElement.style.getPropertyValue("--you")'), 'rgb(155, 188, 255)');
   assert.match(await inFrame('document.documentElement.style.getPropertyValue("--sans")'), /Georgia/);
   assert.equal(await inFrame('document.documentElement.dataset.theme ?? "dark"'), 'dark');
-  // host:thread on desk:ready: the real Desk looks the thread up and opens its page, here the
-  // inbox, since the fixture's thread holds nothing, with the line naming the thread's part.
+  // host:thread on desk:ready: the real Desk opens its "this thread" page for the thread, and reads
+  // the thread, the ties of the child T3 lists for it (children) and the record its conversation
+  // names (mentioned), so the whole message reached it.
   await until(() => deskRequests.includes('/api/ties?thread=thread-a'), 'host:thread on desk:ready');
-  await until(async () => (await inFrame('location.pathname')) === '/embed/inbox', 'Desk follows the thread');
-  assert.equal(await until(() => inFrame('document.querySelector(".thread-part")?.textContent'), 'Thread line'), 'This thread holds no open work.');
+  await until(async () => (await inFrame('location.pathname')) === '/embed/t', 'Desk follows the thread to /embed/t');
+  await until(() => deskRequests.includes('/api/ties?thread=thread-child') && deskRequests.includes(`/api/records/${referenceId}`), 'The Desk read the children and mentioned of host:thread');
   // Title: the tab shows the Desk's page title from desk:navigated; Open externally is not embedded.
   const deskTitle = await until(async () => { const title = await inFrame('document.title'); return title && await evaluate('document.querySelector("[data-t3-desk-label]").textContent') === title && title; }, 'Tab label from desk:navigated');
   assert.notEqual(deskTitle, 'Desk');
   assert.equal(await evaluate(`${shadow}.querySelector("header")`), null, 'no doubled header in the panel');
-  await until(async () => (await evaluate('document.querySelector("[data-t3-desk-external]").href')) === deskBase + '/inbox', 'Open externally follows desk:navigated');
+  await until(async () => (await evaluate('document.querySelector("[data-t3-desk-external]").href')) === deskBase + '/t', 'Open externally follows desk:navigated');
   console.log(`PASS: embedded Desk gets T3's theme and thread-a on ready and opens its page; the tab shows "${deskTitle}" from desk:navigated; Open externally uses the normal address`);
   // A theme change on T3's root element is sent again.
   await evaluate('document.documentElement.classList.remove("dark"); document.documentElement.style.setProperty("--background", "#fafafa"); document.documentElement.style.setProperty("--foreground", "#111111")');
@@ -193,7 +228,7 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   // desk:open-thread navigates T3 to the thread's route, or says it is in no connected environment.
   const post = message => inFrame(`parent.postMessage(${JSON.stringify(message)}, location.ancestorOrigins[0])`);
   // From here every host:thread the Desk frame receives is recorded.
-  await inFrame(`window.hostThreads = []; addEventListener('message', event => { if (event.data?.type === 'host:thread') hostThreads.push(event.data.thread); })`);
+  await inFrame(`window.hostThreads = []; window.hostMessages = []; addEventListener('message', event => { if (event.data?.type === 'host:thread') { hostThreads.push(event.data.thread); hostMessages.push(event.data); } })`);
   await post({ type: 'desk:open-thread', thread: 'thread-unknown' });
   await until(() => evaluate(`${shadow}.querySelector(".notice:not([hidden])")?.textContent.includes("thread-unknown is not in any connected T3 environment")`), 'Notice for an unknown thread');
   assert.equal(await evaluate('location.hash'), hashBefore);
@@ -211,6 +246,21 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   await until(() => evaluate('!document.querySelector("[data-t3-desk-mount]").hidden && __t3Custom.diagnostics().context?.threadId === "thread-a"'), 'Back on thread-a from Settings');
   await delay(1000);
   assert.deepEqual(await inFrame('hostThreads'), ['thread-b', 'thread-a'], 'the same thread was sent again');
+  // host:thread names the project's repository, the threads this one started in T3 (lineage.parentThreadId
+  // for thread-a's subagent, delegatedFrom for the thread a linked environment started from thread-b) and
+  // the IDs its conversation names, and is sent again when either list changes.
+  assert.deepEqual(await inFrame('hostMessages.find(message => message.thread === "thread-b")'), { type: 'host:thread', thread: 'thread-b', repository: 'atelier', children: ['thread-delegated'], mentioned: [referenceId] });
+  const lastMessage = () => inFrame('hostMessages.at(-1)');
+  assert.deepEqual(await lastMessage(), { type: 'host:thread', thread: 'thread-a', repository: 'atelier', children: ['thread-child'], mentioned: [referenceId] });
+  await evaluate(`(()=>{const p=document.createElement('p');p.id='mention-change';p.textContent='${missionId}';document.querySelector('[data-workspace-area=conversation]').append(p)})()`);
+  await until(async () => JSON.stringify((await lastMessage()).mentioned) === JSON.stringify([missionId, referenceId].sort()), 'host:thread again when an ID is mentioned');
+  await evaluate('document.querySelector("#mention-change").remove()');
+  await until(async () => JSON.stringify((await lastMessage()).mentioned) === JSON.stringify([referenceId]), 'host:thread again when a mention goes');
+  await evaluate(`fixtureSnapshot.threads.push({ id: 'thread-new-child', projectId: 'project-a', title: 'New child', status: 'running', lineage: { parentThreadId: 'thread-a' } })`);
+  await until(async () => JSON.stringify((await lastMessage()).children) === '["thread-child","thread-new-child"]', 'host:thread again when a child appears', 10000);
+  await evaluate('fixtureSnapshot.threads.pop()');
+  await until(async () => JSON.stringify((await lastMessage()).children) === '["thread-child"]', 'host:thread again when a child goes', 10000);
+  console.log('PASS: host:thread carries the repository, children by lineage and by delegatedFrom, and mentioned IDs, and is sent again when they change');
   // When T3 re-renders its panel slot the mount moves and the iframe reloads: the fresh Desk is told the thread again.
   const tiesBefore = deskRequests.filter(url => url === '/api/ties?thread=thread-a').length;
   await evaluate('document.querySelector("[data-t3-desk-mount]").remove()');
@@ -314,6 +364,160 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   await until(() => evaluate('!document.querySelector("[data-t3-desk-mount]").shadowRoot.querySelector("iframe").hidden'), 'Cross-project reference override');
   console.log('PASS: explicit reference navigation works from an unmapped project');
 
+  // The sidebar views, the layer over T3's main area, and the project strip.
+  const layerState = () => evaluate('__t3Custom.diagnostics().layer');
+  const layerSrc = () => evaluate('document.querySelector("[data-t3-layer] iframe").src');
+  const inboxCountOf = data => data.repos.reduce((sum, repo) => sum + (repo.needs_human ?? []).reduce((n, group) => n + group.items.length, 0) + (repo.proposed ?? []).length + (repo.threads ?? []).length, 0);
+  // Both Desks forward /api/inbox to the same real Desk, so the count is twice what it reports.
+  await until(async () => (await evaluate('document.querySelector("[data-t3-inbox-count]")?.textContent')) === String(2 * inboxCountOf(await (await fetch(`${realDesk}/api/inbox`)).json())), 'Inbox count from every Desk');
+  assert(await evaluate('document.querySelector("#search-wrap").nextElementSibling.matches("[data-t3-ext-sidebar]")'), 'the Inbox row goes right under T3\'s search group');
+  // A covered window throttles timers, so the views read the Desk again when the window is shown.
+  const reads = path => deskRequests.filter(url => url === path).length;
+  const [inboxReads, sidebarReads] = [reads('/api/inbox'), reads('/api/sidebar')];
+  await evaluate('document.dispatchEvent(new Event("visibilitychange"))');
+  await until(() => reads('/api/inbox') > inboxReads && reads('/api/sidebar') > sidebarReads, 'Inbox and missions read again when the window is shown');
+  const openInbox = async () => {
+    await evaluate('document.querySelector("[data-t3-inbox-row]").click()');
+    await until(async () => (await layerState())?.shown, 'Inbox layer open');
+  };
+  await openInbox();
+  assert.equal(await layerSrc(), `${deskBase}/embed/inbox`);
+  assert.equal(await evaluate('document.querySelector("[data-t3-inbox-row]").getAttribute("aria-pressed")'), 'true');
+  // The layer is exactly T3's main area, with nothing of ours but the frame and a close button.
+  assert.deepEqual(await evaluate('(()=>{const m=document.querySelector("main[data-slot=sidebar-inset]").getBoundingClientRect();const l=document.querySelector("[data-t3-layer]").getBoundingClientRect();return [l.left===m.left&&l.top===m.top&&l.width===m.width&&l.height===m.height,[...document.querySelector("[data-t3-layer]").children].map(c=>c.tagName).join()]})()'), [true, 'IFRAME,BUTTON']);
+  // The frame has focus once its Desk is ready, so the Desk's keys work at once.
+  await until(() => evaluate('__t3Custom.diagnostics().layer?.ready && document.activeElement === document.querySelector("[data-t3-layer] iframe")'), 'Layer frame focused');
+  const layerSession = async path => {
+    const target = await until(async () => (await (await fetch(`http://127.0.0.1:${debugPort}/json/list`)).json()).find(item => item.type === 'iframe' && item.url.startsWith(`${deskBase}/embed${path}`)), `Layer frame ${path}`);
+    return (await page.call('Target.attachToTarget', { targetId: target.id, flatten: true })).sessionId;
+  };
+  const postFromLayer = async (path, message) => page.call('Runtime.evaluate', { expression: `parent.postMessage(${JSON.stringify(message)}, location.ancestorOrigins[0])` }, await layerSession(path));
+  // desk:key Escape from the layer's own frame closes it, and focus leaves the frame.
+  await postFromLayer('/inbox', { type: 'desk:key', key: 'Escape' });
+  await until(async () => !(await layerState()) && await evaluate('document.querySelector("[data-t3-layer]").hidden'), 'desk:key Escape closes the layer');
+  assert.equal(await evaluate('document.activeElement === document.querySelector("[data-t3-layer] iframe")'), false, 'focus stayed in the closed layer');
+  for (const [label, close] of [['Escape in T3', 'document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))'], ['close button', 'document.querySelector("[data-t3-layer-close]").click()'], ['Inbox row again', 'document.querySelector("[data-t3-inbox-row]").click()'], ['a thread row in T3\'s sidebar', 'document.querySelector("[data-sidebar-row=\'env:thread-c\']").click()']]) {
+    await openInbox(); await evaluate(close);
+    await until(async () => !(await layerState()) && await evaluate('document.querySelector("[data-t3-layer]").hidden'), `Layer closed by ${label}`);
+  }
+  await openInbox();
+  await postFromLayer('/inbox', { type: 'desk:open-thread', thread: 'thread-a' });
+  await until(async () => (await evaluate('location.hash')) === '#/env/thread-a' && !(await layerState()), 'desk:open-thread from the layer navigates T3 and closes it');
+  // The layer's messages count only from its own frame's window with its Desk's origin: a frame of the
+  // same Desk elsewhere, and the layer's window sent to another origin, cannot close it or navigate T3.
+  await openInbox();
+  await evaluate(`(()=>{const f=document.createElement('iframe');f.id='spoof-layer';f.src='${deskBase}/spoof';document.body.append(f)})()`);
+  await until(() => deskRequests.filter(url => url === '/spoof').length === 2, 'Spoofing frame beside the layer');
+  await delay(1000);
+  assert((await layerState())?.shown, 'desk:key from the Desk origin in another window closed the layer');
+  assert.equal(await evaluate('location.hash'), '#/env/thread-a', 'desk:open-thread from the Desk origin in another window was accepted');
+  await evaluate('document.querySelector("#spoof-layer").remove()');
+  await page.call('Runtime.evaluate', { expression: `location.href = '${secondDeskBase}/spoof'` }, await layerSession('/inbox')).catch(() => {});
+  await until(() => secondDeskRequests.filter(url => url === '/spoof').length === 2, 'Layer frame sent to another origin');
+  await delay(1000);
+  assert((await layerState())?.shown, 'desk:key from the layer window with another origin closed the layer');
+  assert.equal(await evaluate('location.hash'), '#/env/thread-a', 'desk:open-thread from the layer window with another origin was accepted');
+  await evaluate('document.querySelector("[data-t3-layer-close]").click()');
+  console.log('PASS: the Inbox row counts every Desk\'s inbox and opens it in a layer over T3\'s main area that takes focus and closes on desk:key Escape, Escape, its button, the row, a thread row and desk:open-thread; messages from other windows or origins are ignored');
+
+  // Missions from /api/sidebar: collapsed rows; expanded, the threads by item, the mission's own
+  // threads and the T3 threads they started; a thread T3 knows opens, one it does not is dimmed.
+  const mission = firstDesk.sidebar.repos[0].missions[0];
+  const missionKey = `${deskBase}/${realMission.repo}/${mission.id}`;
+  const missionRow = `document.querySelector('[data-t3-mission] [data-mission="${mission.id}"]')`;
+  await until(() => evaluate(`Boolean(${missionRow})`), 'Mission row from /api/sidebar');
+  assert.equal(await evaluate('document.querySelectorAll("[data-t3-mission]").length'), 1, 'the second Desk lists no missions');
+  const rowText = await evaluate(`${missionRow}.textContent`);
+  assert(rowText.includes('Fixture mission') && rowText.includes(`${realMission.repo} · 1/3 done`), rowText);
+  assert(await evaluate(`Boolean(${missionRow}.querySelector('[data-t3-waiting]'))`), 'no mark for a mission waiting on the human');
+  assert.equal(await evaluate(`${missionRow}.querySelector('[data-t3-expand]').getAttribute('aria-expanded')`), 'false', 'a mission starts collapsed');
+  await evaluate(`${missionRow}.querySelector('[data-t3-expand]').click()`);
+  await until(() => evaluate('Boolean(document.querySelector("[data-t3-mission-body]"))'), 'Expanded mission');
+  assert.deepEqual(JSON.parse(await evaluate('localStorage.getItem("t3-custom:atelier:missions:v1")')).expanded, { [missionKey]: true });
+  const missionBody = await evaluate(`[...document.querySelector('[data-t3-mission-body]').children].map(node => node.matches('[data-t3-group]') ? 'group: ' + node.textContent : (node.dataset.unknown !== undefined ? 'unknown ' : 'thread ') + node.dataset.identity + ': ' + node.textContent)`);
+  assert.deepEqual(missionBody, ['group: atelier-fi01 · First item', 'thread thread-a: implementerThread Aidle', 'group: Mission', 'thread thread-b: leadThread Brunning', 'unknown remote-thread-0123456789: reviewerremote-t…456789', 'group: Other threads', 'thread thread-child: childChild of Aidle', 'thread thread-delegated: delegatedDelegated from Bidle']);
+  assert.equal(await evaluate('document.querySelector(\'[data-t3-mission-body] [data-identity="remote-thread-0123456789"]\').tagName'), 'DIV', 'a thread T3 does not know can be clicked');
+  await evaluate('document.querySelector(\'[data-t3-mission-body] [data-identity="thread-b"]\').click()');
+  await until(async () => (await evaluate('location.hash')) === '#/env/thread-b', 'A mission thread T3 knows opens on click');
+  console.log('PASS: Missions from /api/sidebar start collapsed, expand (remembered in localStorage) to threads by item, the mission\'s threads and Other threads by lineage and delegatedFrom; a known thread opens, an unknown one is dimmed');
+  // T3's own list items of those threads are hidden, with a note; the toggle shows them again.
+  const listShown = () => evaluate('[...document.querySelectorAll("[data-thread-item]")].filter(node => node.getBoundingClientRect().height > 0).map(node => node.dataset.threadItem)');
+  await until(async () => JSON.stringify(await listShown()) === '["env:thread-c"]', 'Mission threads hidden from T3\'s list');
+  assert.equal(await evaluate('document.querySelector("[data-t3-missions-hidden]").textContent'), ' · 4 hidden from T3\'s list');
+  await evaluate('document.querySelector("[data-t3-show-all]").click()');
+  await until(async () => (await listShown()).length === 5, 'Show all threads');
+  assert.equal(await evaluate('document.querySelector("[data-t3-missions-hidden]").textContent'), '');
+  assert.equal(await evaluate('JSON.parse(localStorage.getItem("t3-custom:atelier:missions:v1")).showAll'), true);
+  await evaluate('document.querySelector("[data-t3-show-all]").click()');
+  await until(async () => (await listShown()).length === 1, 'Mission threads hidden again');
+  console.log('PASS: T3\'s list items of mission threads are hidden with an "N hidden" note, and "Show all threads" shows them again');
+  // A mission row opens mission control in the layer, selected, with focus; the row again closes it.
+  await evaluate(`${missionRow}.click()`);
+  await until(async () => (await layerState())?.key === `mission:${missionKey}` && (await layerState()).shown, 'Mission control in the layer');
+  assert.equal(await layerSrc(), `${deskBase}/embed/mission/${realMission.repo}/${mission.id}`);
+  assert.equal(await evaluate(`${missionRow}.getAttribute('aria-pressed')`), 'true');
+  assert.equal(await evaluate('document.querySelector("[data-t3-inbox-row]").getAttribute("aria-pressed")'), 'false');
+  await until(() => evaluate('__t3Custom.diagnostics().layer?.ready && document.activeElement === document.querySelector("[data-t3-layer] iframe")'), 'Mission control has focus');
+  await evaluate(`${missionRow}.click()`);
+  await until(async () => !(await layerState()), 'The mission row again closes mission control');
+  // The project's name in T3's breadcrumb opens the project home instead of starting a thread.
+  await evaluate('document.querySelector("#crumb-project").click()');
+  await until(async () => (await layerState())?.shown, 'Project home layer');
+  assert.equal(await layerSrc(), `${deskBase}/embed/home/atelier`);
+  assert.equal(await evaluate('globalThis.crumbStartedThread ?? false'), false, 'T3 started a new thread as well');
+  await evaluate('document.querySelector("[data-t3-layer-close]").click()');
+  console.log('PASS: a mission row opens mission control in the layer, selected and focused; the breadcrumb\'s project opens the project home and T3 starts no thread');
+
+  // The project strip under the new-thread composer, from /api/launch.
+  await evaluate('location.hash = "/draft/draft-a"');
+  const strip = 'document.querySelector("[data-t3-strip]")';
+  await until(() => evaluate(`Boolean(${strip}) && !${strip}.hidden && Boolean(${strip}.querySelector('[data-t3-card="next"]'))`), 'Project strip');
+  assert.deepEqual(await evaluate(`[...${strip}.querySelectorAll('[data-t3-card]')].map(card => [card.dataset.t3Card, card.querySelector('[data-t3-card-head]').textContent, [...card.querySelectorAll('[data-t3-card-row]')].map(row => row.textContent)])`), [
+    ['waiting', 'Waiting on you5', ['Waiting one', 'Waiting two', '3 more']],
+    ['motion', 'In motion2', ['atelier-x1Held by thread Bstarted · 2hThread B', 'atelier-x2Held elsewherereview · 1dRemote holder']],
+    ['next', 'Next up4', ['atelier-r1Ready one, with a title long enough to be cut short in its card', 'atelier-r2Ready two', 'atelier-r3; rm -rf /Not an item ID']],
+  ]);
+  assert.equal(await evaluate(`${strip}.querySelector('[data-t3-strip-project]').textContent`), 'atelier');
+  // The strip's box is placed in whole pixels.
+  const stripBox = await evaluate(`(()=>{const s=${strip}.getBoundingClientRect();const c=document.querySelector('[data-chat-composer-stack]').getBoundingClientRect();return {strip:[s.left,s.top,s.width,s.height],composer:[c.left,c.bottom,c.width]}})()`);
+  const [left, top, width, height] = stripBox.strip; const [composerLeft, composerBottom, composerWidth] = stripBox.composer;
+  assert(Math.abs(width - composerWidth) <= 1 && Math.abs(left - composerLeft) <= 1 && top >= composerBottom - 1 && height === 176, `the strip is not as wide as the composer, under it, 176px high: ${JSON.stringify(stripBox)}`);
+  // A Next up row fills the composer and nothing is sent; an ID not of Atelier's form makes no prompt.
+  const nextRow = n => `[...${strip}.querySelectorAll('[data-t3-card="next"] [data-t3-card-row]')][${n}]`;
+  // A plain contenteditable keeps a trailing space as a no-break space; T3's ProseMirror does not.
+  const composerText = async () => (await evaluate('document.querySelector("[data-testid=composer-editor]").textContent')).replace(/ /g, ' ');
+  await evaluate(`${nextRow(0)}.click()`);
+  assert.equal(await composerText(), 'Start atelier-r1: run `atelier start atelier-r1` in a fresh checkout and follow what it prints.');
+  assert.equal(await evaluate(`${nextRow(2)}.disabled`), true, 'a prompt can be made from an ID that is not an item ID');
+  await evaluate(`${strip}.querySelector('[data-t3-strip-plan]').click()`);
+  assert.equal(await composerText(), 'Let\'s plan a mission for ');
+  assert.equal(await evaluate('globalThis.fixtureSent ?? null'), null, 'the composer was sent');
+  // In motion opens the item in the layer when T3 does not know its holder; Waiting opens the inbox;
+  // the project's name opens its home.
+  for (const [label, click, src] of [['an item held elsewhere', `[...${strip}.querySelectorAll('[data-t3-card="motion"] [data-t3-card-row]')][1].click()`, `${deskBase}/embed/r/atelier/item/atelier-x2`], ['Waiting on you', `${strip}.querySelector('[data-t3-card="waiting"] [data-t3-card-head]').click()`, `${deskBase}/embed/inbox`], ['the project name', `${strip}.querySelector('[data-t3-strip-project]').click()`, `${deskBase}/embed/home/atelier`]]) {
+    await evaluate(click);
+    await until(async () => (await layerState())?.shown && (await layerSrc()) === src, `Strip: ${label} opens the layer`);
+    await evaluate('document.querySelector("[data-t3-layer-close]").click()');
+  }
+  // Under 700px of composer width the In motion card goes.
+  await evaluate('document.querySelector("[data-chat-canvas]").style.width = "640px"');
+  await until(() => evaluate(`${strip}.hasAttribute('data-narrow') && ${strip}.querySelector('[data-t3-card="motion"]').getBoundingClientRect().width === 0 && ${strip}.getBoundingClientRect().width === 600`), 'Narrow strip');
+  await evaluate('document.querySelector("[data-chat-canvas]").style.width = ""');
+  await until(() => evaluate(`!${strip}.hasAttribute('data-narrow')`), 'Wide strip again');
+  // In motion opens its holder's thread when T3 knows it.
+  await evaluate(`[...${strip}.querySelectorAll('[data-t3-card="motion"] [data-t3-card-row]')][0].click()`);
+  await until(async () => (await evaluate('location.hash')) === '#/env/thread-b', 'Strip: a holder T3 knows opens its thread');
+  // Nothing for a project with no Desk repository.
+  await evaluate('location.hash = "/draft/draft-c"');
+  await until(() => evaluate(`${strip}.hidden`), 'No strip for an unmapped project');
+  await delay(1000);
+  assert(await evaluate(`${strip}.hidden`), 'a strip appeared for an unmapped project');
+  assert(!deskRequests.some(url => url.startsWith('/api/launch') && url !== '/api/launch?repo=atelier'), 'launch data was read for an unmapped project');
+  console.log('PASS: the project strip shows three cards from /api/launch as wide as the composer; Next up fills the composer without sending, and only from item IDs; In motion, Waiting and the project open the layer or the thread; under 700px In motion goes; nothing for an unmapped project');
+  await evaluate('location.hash = "/env/thread-c"');
+  await until(() => evaluate('__t3Custom.diagnostics().context?.threadId === "thread-c"'), 'Back on thread-c');
+
+
   const deskLoads = deskRequests.filter(url => url.startsWith('/embed')).length;
   const frameBeforeSave = await evaluate('document.querySelector("[data-t3-desk-mount]").shadowRoot.querySelector("iframe").src');
   await evaluate(`globalThis.beforeSave=document.querySelector("#t3-custom-root");document.querySelector('[data-t3-desk-controls] [aria-label="Atelier customizations"]').click()`);
@@ -355,6 +559,7 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   await until(() => evaluate('Boolean(document.querySelector("#t3-custom-root")) && document.querySelector("#t3-custom-root") !== globalThis.previousRoot'), 'Settings reinjection control');
   assert.equal(await evaluate('performance.timeOrigin'), timeOrigin);
   assert.equal(await evaluate('fixtureListeners.size'), 1);
+  await until(() => evaluate('document.querySelector("[data-t3-expand]")?.getAttribute("aria-expanded") === "true"'), 'Expanded mission remembered across reinjection');
   // By now the worker is in the page's resource timings, as after a TIFF/HEIF preview in T3.
   assert.equal(await evaluate('globalThis.workerScriptRanInWindow ?? false'), false, 'reinjection imported a worker script into the window');
   assert.equal(await evaluate('document.querySelector("#t3-custom-settings").shadowRoot.querySelector("#project-mapping").disabled'), false);
@@ -367,6 +572,15 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   const screenshot = await page.call('Page.captureScreenshot', { format: 'png' });
   await fs.writeFile(path.join(root, 'artifacts/extension-docked.png'), Buffer.from(screenshot.data, 'base64'));
   console.log('PASS: Settings reinjection preserves the document and cleans up old subscriptions');
+
+  // Without T3's sidebar search field the sidebar views go, by name; the panel and references stay.
+  await evaluate('document.querySelector("#search-wrap input").type = "text"');
+  await until(() => evaluate('__t3Custom.diagnostics().probes["dom:sidebarSearch"].ok === false && !document.querySelector("[data-t3-ext-sidebar]")'), 'Sidebar views off without T3\'s search field', 10000);
+  assert.deepEqual(await evaluate('__t3Custom.diagnostics().views.sidebar'), ['dom:sidebarSearch']);
+  assert(await evaluate('!document.querySelector("[data-t3-desk-mount]").hidden && __t3Custom.diagnostics().deskAvailable'), 'the Desk panel went with the sidebar hook');
+  await evaluate('(()=>{const link=document.querySelector("#t3-custom-root").shadowRoot.querySelector("[data-atelier-id]");link.blur();link.focus()})()');
+  await until(() => evaluate('Boolean(document.querySelector("#t3-custom-root").shadowRoot.querySelector("#atelier-hovercard h3"))'), 'References without the sidebar hook');
+  console.log('PASS: a missing sidebar hook turns off the sidebar views by name and leaves the Desk panel and references working');
 
   // If T3 renames its panel slot, reference clicks open Desk externally and the probe names the hook.
   await evaluate('window.open = url => { globalThis.openedExternally = url; }; const slot = document.querySelector("[data-right-panel-surface-content]"); slot.removeAttribute("data-right-panel-surface-content"); slot.setAttribute("data-renamed-surface-content", "")');
@@ -390,14 +604,17 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   await until(() => evaluate('[...document.querySelectorAll("[data-t3-desk-launch], [data-t3-desk-tab]")].every(button => button.hidden)'), 'Desk buttons hidden without a panel slot');
   await evaluate('location.hash="/settings/general"');
   await until(() => evaluate('document.querySelector("#t3-custom-settings")?.shadowRoot.textContent.includes("Desk panel: off, missing dom:panelContent")'), 'Settings names the missing panel hook');
+  const probeList = await evaluate('document.querySelector("#t3-custom-settings").shadowRoot.textContent');
+  for (const line of ['Inbox and Missions in the sidebar: off, missing dom:sidebarSearch', 'Desk layer over T3\'s main area: on', 'Project strip on the new-thread screen: on', 'Project home from the breadcrumb: on', 'dom:composerStack', 'dom:threadItem', 'state:thread-origin', 'module:composer-draft-store']) assert(probeList.includes(line), `the settings section does not say "${line}"`);
   console.log('PASS: a renamed panel slot turns the Desk panel off by name and reference clicks open Desk externally');
   await control('stop');
-  await until(() => evaluate('!document.querySelector("#t3-custom-root") && !document.querySelector("[data-t3-desk-mount]") && !document.querySelector("[data-t3-desk-launch]")'), 'Full extension removal');
+  await until(() => evaluate('!document.querySelector("#t3-custom-root") && !document.querySelector("[data-t3-desk-mount]") && !document.querySelector("[data-t3-desk-launch]") && !document.querySelector("[data-t3-ext-sidebar], [data-t3-layer], [data-t3-strip], [data-t3-hide-threads]")'), 'Full extension removal');
   assert.equal(await evaluate('document.querySelector("#native-content").inert'), false);
-  console.log('PASS: stop removes custom panel, settings controls, links, and native-content overrides');
+  console.log('PASS: stop removes custom panel, sidebar views, layer, strip, settings controls, links, and native-content overrides');
   console.log('Test logs:', temp);
 } catch (error) {
   console.error(error.stack); console.error('Test logs:', temp);
+  console.error('Last paths asked of the first Desk:', deskRequests.slice(-15).join(' '));
   try { console.error(await fs.readFile(path.join(temp, 'injector.log'), 'utf8')); } catch {}
   process.exitCode = 1;
 } finally {

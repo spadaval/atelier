@@ -1,7 +1,8 @@
 // Checks every T3 hook host-adapter.js relies on against a running T3 build.
-// Usage: node test-contract.mjs [--port 9333] [--thread <environmentId>/<threadId>]
-// It shows a thread, the workspace panel and Settings in that T3 window, then
-// restores the route. Exits non-zero naming each hook that is missing, or if
+// Usage: node test-contract.mjs [--port 9333] [--thread <environmentId>/<threadId>] [--draft <draftId>]
+// It shows a thread, the workspace panel, a new-thread screen (the first draft
+// with a project, or --draft) and Settings in that T3 window, then restores the
+// route. Exits non-zero naming each hook that is missing, or if
 // discovery imported anything but the renderer's own modules (never a worker).
 import fs from 'node:fs/promises';
 import { connectPage } from './devtools.mjs';
@@ -9,6 +10,7 @@ import { connectPage } from './devtools.mjs';
 const option = (name, fallback) => { const index = process.argv.indexOf(name); return index < 0 ? fallback : process.argv[index + 1]; };
 const port = Number(option('--port', 9333));
 const thread = option('--thread', null);
+const draft = option('--draft', null);
 const adapter = await fs.readFile(new URL('./host-adapter.js', import.meta.url), 'utf8');
 const page = await connectPage(port);
 const { probes, imported, declared } = await page.evaluate(`(async api => {
@@ -23,6 +25,11 @@ const { probes, imported, declared } = await page.evaluate(`(async api => {
     await wait(() => document.querySelector(hostSelectors.conversation));
     readHostTheme(document.body);
     if (context) {
+      // The sidebar views, the layer and the project home need these on a thread's screen.
+      const shown = ['sidebarSearch', 'mainInset', 'threadItem', 'sidebarRow', 'breadcrumbProject'];
+      await wait(() => shown.every(name => document.querySelector(hostSelectors[name])));
+      // Missions read who started each thread from the thread shells.
+      if (!host.threadList?.().length) hostProbes['state:thread-origin'] ??= { ok: false, detail: host.threadList ? 'no thread in any connected environment' : 'a thread module hook is missing' };
       const found = host.findThread?.(context.threadId);
       hostProbes['state:find-thread'] = found === context.environmentId ? { ok: true, detail: 'thread found in environment ' + found + ' among the connected environments' } : { ok: false, detail: host.findThread ? 'found ' + found + ' for a thread of ' + context.environmentId : 'module:environment-atoms is missing' };
     }
@@ -33,6 +40,13 @@ const { probes, imported, declared } = await page.evaluate(`(async api => {
       if (!document.querySelector(hostSelectors.panelTab)) document.querySelector(hostSelectors.panelContent + ' button')?.click();
       await wait(() => document.querySelector(hostSelectors.panelTab));
     }
+    // The project strip needs a new-thread screen of a project: T3's route, draft store and composer.
+    const draftId = ${JSON.stringify(draft)} ?? host.draftIds?.()[0];
+    if (draftId) {
+      location.hash = '/draft/' + encodeURIComponent(draftId);
+      await wait(() => ['composerOverlay', 'composerStack', 'composerEditor'].every(name => document.querySelector(hostSelectors[name])));
+      if (!host.draftContext?.()) hostProbes['route:draft'] ??= { ok: false, detail: '#/draft/' + draftId + ' named no project' };
+    } else hostProbes['route:draft'] = { ok: false, detail: host.draftIds ? 'T3 holds no new-thread draft with a project; open a new thread in a project, or pass --draft <id>' : 'module:composer-draft-store is missing' };
     location.hash = '/settings/general';
     await wait(() => document.querySelector(hostSelectors.settingsPage));
     const declared = [...document.querySelectorAll('script[type="module"][src], link[rel="modulepreload"][href]')].map(node => node.src || node.href);

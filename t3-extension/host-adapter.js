@@ -10,17 +10,19 @@ const hostSelectors = {
   layoutControls: '[data-panel-layout-controls]',
   conversation: '[data-workspace-area="conversation"]',
   settingsPage: '[data-settings-page-scroll]',
-  // Project home on the new-thread screen: the composer overlay T3 centres, and its composer stack.
+  // Project strip on the new-thread screen: the composer overlay T3 centres, its composer stack
+  // (the strip goes under it) and its editor (ProseMirror), which a Next up card fills.
   composerOverlay: '[data-workspace-area="composer"][data-chat-composer-overlay]',
   composerStack: '[data-chat-composer-stack]',
-  // Inbox: the sidebar's search field (the row goes below its group), T3's main area, its thread rows.
+  // Sidebar views: the search field (the Inbox row and Missions go below its group), T3's main
+  // area (the layer covers it) and its thread rows (a click on one closes the layer).
   sidebarSearch: '[data-workspace-area="sidebar"] [data-slot="sidebar-group"] input[type="search"]',
   mainInset: 'main[data-slot="sidebar-inset"]',
   sidebarRow: '[data-sidebar-row]',
-  // Missions: T3's own thread list items, hidden by CSS when a mission holds the thread.
+  // T3's own thread list items, hidden by CSS when a mission holds the thread.
   threadItem: '[data-thread-item]',
-  // Quick launch: T3's composer editor (ProseMirror). Project home: the breadcrumb's project button.
   composerEditor: '[data-testid="composer-editor"]',
+  // The thread breadcrumb's project button, which opens the project home instead.
   breadcrumbProject: 'nav[aria-label="Thread breadcrumb"] li:first-child button',
 };
 // ok: true (found), false (missing), null (DOM hook not on screen yet).
@@ -35,6 +37,18 @@ function observeHostDom() {
   for (const [name, selector] of Object.entries(hostSelectors)) {
     if (!hostProbes[`dom:${name}`].ok && document.querySelector(selector)) setHostProbe(`dom:${name}`, true, selector);
   }
+}
+
+// A DOM hook a view needs where T3 should render it: found, it is confirmed; still not found 3
+// seconds after the view first looked for it, it is reported missing and that view turns off.
+// hostDomExpected holds the hooks being waited for, so the caller can look again.
+const hostDomExpected = {};
+function expectHostDom(name, expected, where) {
+  if (!expected) { delete hostDomExpected[name]; return; }
+  const selector = hostSelectors[name];
+  if (document.querySelector(selector)) { delete hostDomExpected[name]; setHostProbe(`dom:${name}`, true, selector); return; }
+  hostDomExpected[name] ??= Date.now();
+  if (Date.now() - hostDomExpected[name] >= 3000) setHostProbe(`dom:${name}`, false, `${selector} not found 3 seconds after ${where}`);
 }
 
 // Every module discovery imported, for diagnostics and the contract test.
@@ -147,16 +161,22 @@ async function createHostAdapter(api) {
     const list = [];
     for (const environmentId of registry.get(environments.connectedEnvironmentIdsAtom) ?? []) {
       for (const thread of registry.get(threads.snapshotAtom(environmentId))?.threads ?? []) {
-        list.push({ environmentId, id: thread.id, title: thread.title, status: thread.status, parent: thread.lineage?.parentThreadId ?? null, delegatedFrom: thread.delegatedFrom?.threadId ?? null });
+        list.push({ environmentId, id: thread.id, title: thread.title, status: thread.status, parent: thread.lineage?.parentThreadId ?? null, delegatedFrom: thread.delegatedFrom?.threadId ?? null, hasLineage: 'lineage' in thread });
       }
     }
-    if (list.length && !hostProbes['state:thread-origin']?.ok) setHostProbe('state:thread-origin', true, `lineage.parentThreadId on ${list.filter(t => t.parent).length}, delegatedFrom.threadId on ${list.filter(t => t.delegatedFrom).length} of ${list.length} threads`);
+    // Only the lineage field is checked: delegatedFrom is absent on threads no linked environment started.
+    if (list.length) {
+      const shells = list.length - list.filter(thread => thread.hasLineage).length;
+      setHostProbe('state:thread-origin', shells === 0, shells === 0 ? 'lineage on every thread shell; delegatedFrom where a linked environment started the thread' : `${shells} of ${list.length} thread shells have no lineage field`);
+    }
     return list;
   }
   // Threads this thread started, by either link.
   const children = threadId => threadList().filter(thread => thread.parent === threadId || thread.delegatedFrom === threadId).map(thread => thread.id).sort();
   return {
     draftContext: registry && threads && drafts ? draftContext : null,
+    // The new-thread drafts that name a project, for the contract test to open one.
+    draftIds: drafts ? () => Object.entries(drafts.getState().draftThreadsByThreadKey).filter(([, draft]) => draft.projectId).map(([id]) => id) : null,
     children: registry && threads && environments ? children : null,
     threadList: registry && threads && environments ? threadList : null,
     // null means the surfaces that need this hook are off; hostProbes says why.

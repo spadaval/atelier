@@ -84,12 +84,13 @@ function checkSettings(settings) {
   }
   return settings;
 }
-// A Desk read: only GET of the repository list, the inbox, the sidebar, one repository's launch row, one record, or one item or mission. The path must
-// come out of URL parsing unchanged, so no dot segment, backslash, query or fragment gets through.
+// A Desk read: only GET of the repository list, the inbox, the sidebar, one repository's launch
+// data, one record, or one item or mission. The path must come out of URL parsing unchanged, so no
+// dot segment, backslash, query or fragment gets through; /api/launch takes exactly one query
+// parameter, a repository name of letters, digits, '.', '_' and '-'.
 const readablePath = /^\/api\/(repos|inbox|sidebar|records\/[a-z0-9-]+|repos\/[^/\\?#%]+\/(items|missions)\/[a-z0-9-]+)$/;
 function deskReadUrl(config, desk, requested) {
   if (!deskUrls(config).includes(desk)) throw new Error(`Desk read is not allowed: ${desk} is not in desk.urls of ${configPath}`);
-  // /api/launch takes one query parameter, a repository name.
   const launch = typeof requested === 'string' && requested.match(/^\/api\/launch\?repo=([A-Za-z0-9._-]+)$/);
   if (launch) {
     const url = new URL(desk + requested);

@@ -102,57 +102,101 @@ an item), T3 goes to `#/<environment>/<thread>` for the connected environment
 whose threads include it. A thread in no connected environment opens nothing, and
 the panel says so in a line at its top for 8 seconds.
 
-**Following the thread.** The extension sends `host:thread` with T3's thread
-ID, whole, as in the route: after each `desk:ready` and whenever T3's route
-changes to another thread. It names the project's Desk repository with it,
-so a thread that holds nothing shows its project and not the system inbox. The Desk opens the item or mission that thread holds
-now, or the inbox, with one line naming the thread's part ("This thread
-implements this item.", "This thread holds no open work."). The same thread is
-never sent twice in a row to the same Desk, so a page the human moves to in the
-Desk stays until T3 shows another thread. Every `desk:ready` is a fresh Desk that
+**Following the thread.** The extension sends `host:thread` as
+`{thread, repository, children, mentioned}`: `thread` is T3's thread ID, whole,
+as in the route; `repository` names the project's Desk repository (absent for an
+unmapped project), so a thread that holds nothing shows its project and not the
+system inbox; `children` lists the threads this one started that T3 knows, in
+any connected environment, by `lineage.parentThreadId` (a `delegate_task`
+subagent) or `delegatedFrom.threadId` (work a linked environment's agent started
+here); `mentioned` lists the item and mission IDs the reference scanner finds in
+the conversation. It is sent after each `desk:ready`, when T3's route changes to
+another thread, and when `children` or `mentioned` change (T3's thread list is
+read again every 3 seconds; the conversation on each rescan). The same message
+is never sent twice in a row to the same Desk, so a page the human moves to in
+the Desk stays until something changes. Every `desk:ready` is a fresh Desk that
 knows no thread, so it is told again, including when T3 re-renders its panel slot
 and moving the iframe reloads it. Two loads keep their page instead: a reference
 clicked in the conversation opens that record, and Refresh reloads the page
-shown; the Desk is not told the current thread on those, only the next one.
+shown; the Desk is not told the current thread on those, only the next change.
 
-## Spike: missions sidebar, layer, quick launch (branch `spike/t3-home`)
+## The sidebar and the layer
 
-A rough build to look at, against the spike Desk (`http://buildbot:3781`); untested
-beyond the screenshots in `artifacts/spike/` and `artifacts/spike/round2/`.
+Under T3's sidebar search the extension adds two things of its own, drawn with
+T3's sidebar colours and row metrics; T3's own rows are never moved:
 
-- **Layer.** One Desk frame over T3's main area (`main[data-slot=sidebar-inset]`),
-  sidebar left usable: the inbox, mission control or the project home. Esc, the
-  close button, the same row again, any T3 route change, `desk:open-thread` and
-  `desk:key {key: "Escape"}` from its frame close it. The frame gets focus as the
-  layer appears, so the Desk's keys work at once.
-- **Sidebar.** Under T3's search: the Inbox row (count from `GET /api/inbox`),
-  then a Missions section from `GET /api/sidebar`, both read every minute. A
-  mission row opens `/embed/mission/<repo>/<id>` in the layer; its chevron
-  expands it (kept in localStorage `t3-custom:atelier:missions:v1`) to its
-  threads by item, then mission threads, then "Other threads": T3 threads whose
-  `lineage.parentThreadId` or `delegatedFrom.threadId` is one of the mission's.
-  A thread T3 knows shows its live title and status and opens on click.
-- **Hiding.** T3's own list items (`li[data-thread-item="<env>:<thread>"]`) of
-  mission threads are hidden by a stylesheet; "Show all threads" turns it off.
-  T3's Working and Settled counts still include them; the Missions title says
-  "N hidden from T3's list" instead.
-- **Project strip.** On the new-thread screen of a project with a Desk
-  repository, a 176px strip under T3's composer controls, as wide as the
-  composer, from `GET /api/launch?repo=<repo>`: the project name (opens the
-  project home layer) and "Plan a mission" on its header line, then three cards,
-  Waiting on you (opens the inbox), In motion (opens the holder's thread when T3
-  knows it, else the item in the layer) and Next up (puts a start prompt in the
-  composer with `execCommand('insertText')`; never sends). Under 700px of
-  composer width the In motion card goes. Missing fields count as empty.
-- **Project home.** The project button in T3's thread breadcrumb opens
-  `/embed/home/<repo>` in the layer instead of starting a new thread.
-- `host:thread` is `{thread, repository, children, mentioned}`; `children` uses
-  both creator links above.
-- Hooks, each a probe: `module:composer-draft-store`, `route:draft`,
-  `state:thread-origin`, `dom:composerOverlay`, `dom:composerStack`,
-  `dom:composerEditor`, `dom:sidebarSearch`, `dom:mainInset`, `dom:sidebarRow`,
-  `dom:threadItem`, `dom:breadcrumbProject`. The bridge also allows
-  `GET /api/inbox`, `/api/sidebar` and `/api/launch?repo=<name>`.
+- **Inbox**, with the count of what waits on the human across every Desk in
+  `desk.urls`: needs-human items, proposed plans and waiting threads, from
+  `GET /api/inbox`. A failed read shows `!`, with the Desk and error in the
+  row's tooltip.
+- **Missions**, one row per open mission from each Desk's `GET /api/sidebar`
+  (in progress, agreed or proposed): its title, then the repository, items done
+  of total and its state, and a dot when something in it waits on the human.
+
+Both are read when the extension starts, every minute, and whenever the T3
+window is shown again (a covered window throttles timers).
+
+A mission starts collapsed. Its chevron expands it to its threads, grouped by
+item, then the mission's own threads, then **Other threads**: T3 threads whose
+creator is one of the mission's threads, by `lineage.parentThreadId` or
+`delegatedFrom.threadId`. Each shows its role; a thread T3 knows shows T3's live
+title and status (read every 3 seconds) and opens on click; one T3 does not know
+is dimmed, with its identity shortened and in full in its tooltip. Which missions
+are expanded is kept in localStorage (`t3-custom:atelier:missions:v1`).
+
+**Mission threads leave T3's list.** T3's own list items of every thread a
+mission holds, and of its Other threads, are hidden with a stylesheet keyed on
+T3's `data-thread-item` attribute; T3's nodes stay where React put them. The
+Missions title says how many ("· 4 hidden from T3's list"). **Show all
+threads**, at the head of the section, turns the hiding off (kept in the same
+localStorage entry). T3's own Working and Settled counts still include the
+hidden threads: T3 computes them from its data, and the extension cannot tell
+which shelf a hidden thread is on while a shelf is collapsed.
+
+**The layer.** The Inbox row and a mission row open the Desk over T3's main area
+(`/embed/inbox`, `/embed/mission/<repo>/<id>`), leaving the sidebar usable; the
+row shows as selected. The layer is one frame filling the main area, with a
+close button and nothing else of the extension's. The frame takes focus as the
+layer appears, so the Desk's keys work at once. It closes on Escape in T3,
+`desk:key {key: "Escape"}` from the Desk (Escape pressed inside its frame), the
+close button, its row again, a click on a thread row in T3's sidebar, any route
+change, and `desk:open-thread`, which also navigates T3. It speaks the same host
+contract as the panel (`host:theme` on `desk:ready` and on theme changes), and a
+message counts only from the layer frame's own window with its Desk's origin.
+
+## The project strip
+
+On T3's new-thread screen (`#/draft/<id>`), for a project with a Desk repository,
+a strip 176 pixels high and as wide as the composer sits under the composer's
+controls; T3 keeps the composer where it puts it. It reads
+`GET /api/launch?repo=<repo>` when the screen opens, again after a minute, and
+when the window is shown again. Fields the Desk does not send count as empty.
+
+- Its header line: the project's name, which opens the project home in the
+  layer, and **Plan a mission**, which puts "Let's plan a mission for " in the
+  composer.
+- **Waiting on you**, with the count: the first two waiting items, then "N
+  more". Any of it opens the inbox in the layer.
+- **In motion**, with the count: up to three items, each with its ID, title,
+  stage and how long, and the holder's thread title under it. A click opens the
+  holder's thread when T3 knows it, else the item in the layer.
+- **Next up**, with the count: up to three ready items. A click puts "Start
+  <id>: run `atelier start <id>` in a fresh checkout and follow what it prints."
+  in the composer, never sending it. The prompt is made only from an ID of
+  Atelier's form (lowercase letters and digits in dash-separated parts); a row
+  with any other ID is shown but disabled.
+
+The composer is T3's ProseMirror editor: the text goes in with
+`execCommand('insertText')` over a selection of its content, which fires the
+input events the editor handles, so T3's draft keeps it. When the composer is
+narrower than 700 pixels the In motion card is dropped and the other two share
+the width. A project with no Desk repository gets no strip.
+
+## The project home
+
+The project's name in T3's thread breadcrumb opens the Desk's project home,
+`/embed/home/<repo>`, in the layer instead of starting a new thread, for a
+project with a Desk repository. For any other project T3's own action runs.
 
 ## Project context
 
@@ -184,13 +228,15 @@ The Customizations section (Settings → General) shows:
 
 - each Desk URL, whether it is reachable, and which repositories it claims, with
   their identities;
-- the toggles: the Desk surface, reference links and hovercards, and Follow the
-  current T3 project (off: a pinned repository is used);
+- the toggles: the Atelier views (the Desk panel, the sidebar views, the layer
+  and the project strip), reference links and hovercards, and Follow the current
+  T3 project (off: a pinned repository is used);
 - the current project's repository, Automatic (by identity, naming the match) or
   a manual override, and the list of overrides with a Remove button each,
   including any `desk.repositories` entries;
 - injector status and errors, Reload scripts, Refresh status (also rereads the
-  Desks), Open customization folder, Open Desk, and every T3 hook probe.
+  Desks), Open customization folder, Open Desk, each view with whether it is on
+  or which hooks it lacks, and every T3 hook probe.
 
 The toggles, manual mappings and pinned repository are kept in `config.json`
 under `settings`:
@@ -225,7 +271,9 @@ reloaded (`injector.log`: "Settings saved; applied in place"). Any other edit of
 `config.json`, by hand or by another program, reapplies the extension as before.
 With several T3 windows, the others pick up a saved setting when they next
 reload. T3's localStorage keeps only view state, which threads
-had the Desk open (`t3-custom:atelier:view:v1`), and sessionStorage the last
+had the Desk open (`t3-custom:atelier:view:v1`) and which missions are expanded
+and whether T3's list shows all threads (`t3-custom:atelier:missions:v1`), and
+sessionStorage the last
 project context while Settings is shown. Settings kept in localStorage by an
 earlier version are not carried over.
 
@@ -261,11 +309,14 @@ shown explicitly.
 
 Desk reads go through the background injector because Desk does not currently
 advertise cross-origin access to the T3 renderer. The bridge permits only `GET`
-of `/api/repos`, `/api/records/{id}` and `/api/repos/{repo}/items|missions/{id}`,
-and only from a Desk in `desk.urls`. A repository segment may not hold `/`, `\`,
-`?`, `#` or `%`, and the URL the injector would fetch must have exactly the path
-asked for, with no query or fragment, so a dot segment, an encoded dot or a
-backslash cannot turn an allowed path into another. It does not proxy arbitrary
+of `/api/repos`, `/api/inbox`, `/api/sidebar`, `/api/records/{id}`,
+`/api/repos/{repo}/items|missions/{id}` and `/api/launch?repo=<name>`, and only
+from a Desk in `desk.urls`. A repository segment may not hold `/`, `\`, `?`, `#`
+or `%`, and the URL the injector would fetch must have exactly the path asked
+for, with no query or fragment, so a dot segment, an encoded dot or a backslash
+cannot turn an allowed path into another. `/api/launch` takes exactly one query
+parameter, `repo`, whose value is letters, digits, `.`, `_` and `-`, and the
+parsed URL must have exactly that path and query. It does not proxy arbitrary
 URLs, action endpoints, credentials, or shell commands. The other bridge actions
 are injector status, `save-settings`, and opening its fixed local folder.
 
@@ -303,7 +354,8 @@ Reload scripts forces reinjection even when files did not change. A T3 reload
 reruns the registered script after refreshing the document. Syntax errors keep
 the last working customization. Script runtime errors appear in diagnostics.
 `window.__t3Custom.diagnostics()` reports the hook probes, current project,
-selected repository, reference override, and panel selection without exposing
+selected repository, reference override, panel selection, the last `host:thread`
+sent, the layer's state and each view's missing hooks, without exposing
 connection credentials.
 
 ```sh
@@ -331,13 +383,14 @@ network-facing debugging listener is enabled.
 `host-adapter.js` names each private hook and probes it at startup:
 
 - `module:workspace-panel-store`, `module:atom-registry`,
-  `module:thread-snapshot-atom`, `module:environment-atoms`: found by the shape
-  of their exports, not by chunk or minified export names (the registry is
-  recognised by Effect's `~effect/reactivity/AtomRegistry` type id; the
-  environment atoms by `environmentIdsAtom` and `connectedEnvironmentIdsAtom`).
-  Discovery only imports modules the renderer itself loads as modules (its entry
-  script and `modulepreload` links), never workers or other scripts, and stops
-  as soon as all four are found. The last seen chunk names are tried first, so it
+  `module:thread-snapshot-atom`, `module:environment-atoms`,
+  `module:composer-draft-store`: found by the shape of their exports, not by
+  chunk or minified export names (the registry is recognised by Effect's
+  `~effect/reactivity/AtomRegistry` type id; the environment atoms by
+  `environmentIdsAtom` and `connectedEnvironmentIdsAtom`; the draft store by a
+  state with `draftThreadsByThreadKey`). Discovery only imports modules the
+  renderer itself loads as modules (its entry script and `modulepreload` links),
+  never workers or other scripts, and stops as soon as all five are found. The last seen chunk names are tried first, so it
   normally imports 5 modules; if they change it searches the rest (56 of 320 on
   the current build, of 320 then). `__t3Custom.diagnostics().modules` lists what it imported.
 - `css:theme`: T3's `--background`, `--foreground`, `--card`, `--border`,
@@ -348,10 +401,24 @@ network-facing debugging listener is enabled.
   opened. The thread's project and repository come from T3's own thread
   snapshot atom, so the adapter makes no request to the T3 server and needs none of its
   credentials.
-- `dom:*`: the DOM attributes the panel, references and settings attach to.
-  They are confirmed when first seen, since T3 renders them only on demand.
+- `route:draft`: the `#/draft/<id>` route of T3's new-thread screen, whose
+  project comes from the draft store's `draftThreadsByThreadKey`.
+- `state:thread-origin`: the `lineage` field on T3's thread shells
+  (`lineage.parentThreadId`), with `delegatedFrom.threadId` where a linked
+  environment started the thread, read for children and Other threads.
+- `dom:*`: the DOM attributes the panel, references, settings and views attach
+  to. They are confirmed when first seen, since T3 renders them only on demand.
   Opening Desk checks that T3's panel renders its content slot within 3 seconds;
-  if not, `dom:panel` or `dom:panelContent` is reported missing.
+  if not, `dom:panel` or `dom:panelContent` is reported missing. The views'
+  hooks are reported missing when T3 should show them and they are still absent
+  3 seconds later: `dom:sidebarSearch` (T3's sidebar search field, whose group
+  the Inbox row follows), `dom:mainInset` (`main[data-slot=sidebar-inset]`, the
+  main area the layer covers) on any thread or new-thread screen;
+  `dom:threadItem` (`li[data-thread-item]`) and `dom:sidebarRow`
+  (`[data-sidebar-row]`) when T3 lists threads; `dom:composerOverlay`,
+  `dom:composerStack` and `dom:composerEditor` on a project's new-thread screen;
+  `dom:breadcrumbProject` (the first button of `nav[aria-label="Thread
+  breadcrumb"]`) on a thread.
 
 A missing hook is reported by name in Customizations, in `t3-custom status`, and
 in `injector.log`, and turns off only the surface that needs it: the Desk panel
@@ -360,6 +427,29 @@ slot; opening a thread from the Desk also needs the environment atoms, and says
 in the panel when they are missing; the Desk's controls go after
 `dom:panelTabList`; references need the conversation DOM, and open Desk in the
 browser while the panel is off; the settings section needs the settings page.
+The other views each need only their own: the Inbox row and Missions
+`dom:sidebarSearch`; the layer `dom:mainInset` (without it, its pages open in the
+browser); mission threads' titles and Other threads the registry, thread snapshot
+and environment atoms and `state:thread-origin`; hiding mission threads
+`dom:threadItem`; the project strip the draft store, `route:draft`,
+`dom:composerOverlay` and `dom:composerStack`, and filling the composer
+`dom:composerEditor`; the project home `dom:breadcrumbProject`.
+
+## Known limits
+
+- T3's Working and Settled counts include threads hidden in Missions, as T3
+  computes them; the Missions title gives the number hidden instead.
+- Threads started with `t3_thread_launch` record no parent: T3 stores the caller
+  only as `senderThreadId` on the first message, which the thread list does not
+  carry. They appear in `children` and Other threads only when a linked
+  environment started them (`delegatedFrom`).
+- A mission thread appears with its T3 title, status and a click only when the
+  T3 window is connected to the environment that runs it; the Desk names each by
+  the identity its T3 server reports.
+- Escape reaches the extension from inside the layer only through the Desk's
+  `desk:key`; a Desk page that does not send it keeps Escape to itself.
+- The layer and the strip always use the first Desk in `desk.urls` for the
+  inbox.
 
 ## A test instance (Windows)
 
@@ -400,23 +490,30 @@ No npm dependencies are needed. The tests need Node.js 22 or newer.
 
 `node test-contract.mjs --port 9333 --thread <environmentId>/<threadId>` checks
 every hook against a running T3 (use a test instance): it opens the thread, the
-workspace panel and Settings, prints each probe, and exits non-zero naming each
+workspace panel, a new-thread screen (the first draft that names a project, or
+`--draft <id>`) and Settings, prints each probe, and exits non-zero naming each
 broken hook, or if discovery imported a script that is not a declared renderer
-module (such as a worker). It also reads the theme (`css:theme`) and finds the
-thread among the connected environments (`state:find-thread`). Run it after
-every T3 update.
+module (such as a worker). It also reads the theme (`css:theme`), finds the
+thread among the connected environments (`state:find-thread`) and reads who
+started each thread (`state:thread-origin`). Run it after every T3 update.
 
 `node test-extension.mjs` tests the extension logic in an isolated browser
-fixture with T3's panel DOM contract, T3's content security policy, and the real
-Desk app and data. The fixture serves modules shaped like T3's hooks, so the real
+fixture with T3's panel, sidebar, breadcrumb and new-thread DOM, T3's content
+security policy, and the real Desk app and data. The fixture serves modules shaped like T3's hooks, so the real
 discovery code runs, and a worker script that must never run in the window. The
 Desk is reached through two local proxies on another site that forward to the
 first Desk in `config.json`, except that they answer `GET /api/embed` with the
 fixture's origin, so the real Desk app performs the host contract with the
 fixture page; each proxy records every path asked for. The second proxy is a
 second Desk serving the same repositories, and the first answers 404 for the
-mission's record. The test's own `config.json` lists both and has no repository
-table and no settings. It uses Edge on Windows
+mission's record. The first serves the fixture's own `/api/sidebar` (one mission
+whose threads are fixture threads, a thread T3 does not know, and a real mission
+ID so mission control renders) and `/api/launch?repo=atelier`; the second lists
+no missions. The fixture's T3 state has a subagent of thread-a
+(`lineage.parentThreadId`) and a thread started from thread-b by a linked
+environment (`delegatedFrom`). The test's own `config.json` lists both and has
+no repository table and no settings; `DESK` overrides the Desk the proxies
+forward to (default: the first in `config.json`). It uses Edge on Windows
 and Chrome on macOS; set `BROWSER` to use another Chromium. It checks:
 
 - discovery, docking and resizing, and that the project is matched by the
@@ -430,12 +527,15 @@ and Chrome on macOS; set `BROWSER` to use another Chromium. It checks:
   second frame loaded from the Desk), and from the Desk iframe's own window with
   another origin (the frame sent to a page of the second Desk); each check
   fails if only that half of the window-and-origin test is removed;
-- `host:thread` on `desk:ready` (the real Desk reads `/api/ties` for the
-  fixture's thread and opens the inbox with "This thread holds no open work."),
-  on each switch to another thread, again to a Desk reloaded because its mount
-  was moved, never twice in a row for the same thread (Settings and back), and
-  for a thread switched to while a reference was still loading (the first Desk
-  holds back its `/api/embed` answer to make the window wide);
+- `host:thread` on `desk:ready` (the real Desk opens `/embed/t` and reads the
+  thread, its child's ties and the mentioned record), on each switch to another
+  thread, again to a Desk reloaded because its mount was moved, never twice in a
+  row with the same content (Settings and back), and for a thread switched to
+  while a reference was still loading (the first Desk holds back its
+  `/api/embed` answer to make the window wide);
+- the whole `host:thread` message: the repository, children by lineage and by
+  `delegatedFrom`, the mentioned IDs, and that it is sent again when a mention
+  or a child comes or goes;
 - `desk:open-thread` going to `#/env/thread-b`, and the notice for an unknown
   thread;
 - the bridge's allow-list (no action endpoints, no unconfigured Desk, no path
@@ -450,11 +550,35 @@ and Chrome on macOS; set `BROWSER` to use another Chromium. It checks:
   Desk iframe, 20 saves sent at once leaving the last one in `config.json`
   without a reinjection, an outside edit of `config.json` reapplying the
   extension, and localStorage holding only view state;
+- the Inbox row under T3's search group and its count from both Desks; the
+  layer: exactly T3's main area, the frame focused once its Desk is ready,
+  closing on `desk:key` Escape (and focus leaving the frame), Escape, the close
+  button, the row again, a thread row and `desk:open-thread` (which navigates);
+  that `desk:key` and `desk:open-thread` are ignored from the Desk's origin in
+  another window and from the layer's window with another origin; a reread of
+  the inbox and missions when the window is shown;
+- Missions: one row from the first Desk, collapsed, its count and waiting mark;
+  expanded (kept in localStorage, and after a reinjection) to the threads by
+  item, the mission's threads and Other threads, a known thread opening on click
+  and an unknown one dimmed and not a button; T3's list items of those threads
+  hidden with the "4 hidden" note and shown again by Show all threads; a mission
+  row opening mission control in the layer, selected and focused;
+- the breadcrumb's project opening the project home without T3's own action;
+- the project strip: its three cards and their rows from the fixture's launch
+  data, as wide as the composer and under it; a Next up row filling the
+  composer, nothing sent, a row whose ID is not an item ID disabled; Plan a
+  mission; In motion opening its holder's thread or the item, Waiting the inbox,
+  the project name its home; the narrow layout under 700 pixels; nothing for an
+  unmapped project and no launch read for it;
+- that without T3's search field the sidebar views turn off by name while the
+  panel and references keep working, and that the settings section names each
+  view and its hooks;
 - Settings reinjection, native-surface coexistence, the renamed panel slot
-  fallback, and clean removal.
+  fallback, and clean removal of every view.
 
 It reads Desk repository `atelier`, item `atelier-plr9` and mission
-`atelier-g961`; replace those fixtures to test another dataset. Screenshots go
+`atelier-g961`, and needs the Desk to list one open mission in
+`/api/sidebar`; replace those fixtures to test another dataset. Screenshots go
 under the ignored `artifacts/` directory. `devtools.mjs` is a development helper
 and is not installed. See [verification notes](docs/VERIFICATION.md).
 
