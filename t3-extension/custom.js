@@ -105,15 +105,18 @@ async function loadRepositories() {
   }));
   buildPattern(); scheduleDOM(); queueScan();
 }
-const repositoryNamed = name => repositories.find(repo => repo.repo === name) ?? null;
+// A repository is named by its Desk page, such as http://buildbot:3780/r/atelier, since two Desks
+// may serve repositories of the same name. A bare name, as older settings hold, takes the first.
+const repositoryKey = repo => `${repo.desk}${repositoryPath(repo)}`;
+const repositoryFor = value => repositories.find(repo => repositoryKey(repo) === value) ?? repositories.find(repo => repo.repo === value) ?? null;
 function mappedRepository() {
   const key = projectKey(current);
-  if (Object.hasOwn(settings.mappings, key)) return repositoryNamed(settings.mappings[key]);
+  if (Object.hasOwn(settings.mappings, key)) return repositoryFor(settings.mappings[key]);
   return repositories.find(repo => repo.keys.includes(current?.repositoryKey)) ?? null;
 }
 function selectedRepository() {
-  if (referenceOverride?.projectKey === projectKey(current)) return repositoryNamed(referenceOverride.repo);
-  return settings.followProject ? mappedRepository() : repositoryNamed(settings.pinnedRepo) ?? mappedRepository() ?? repositories[0] ?? null;
+  if (referenceOverride?.projectKey === projectKey(current)) return repositoryFor(referenceOverride.repository);
+  return settings.followProject ? mappedRepository() : repositoryFor(settings.pinnedRepo) ?? mappedRepository() ?? repositories[0] ?? null;
 }
 async function saveSettings() {
   try { await api.request('save-settings', settings); } catch (error) { displayError(error); }
@@ -167,7 +170,7 @@ const recordPath = record => `/r/${encodeURIComponent(record.repo)}/${record.kin
 // asked for, a reference or a Refresh, is kept: the Desk is not told the current thread again.
 function loadFrame(desk, path, follow) {
   frameDesk = desk; framePath = path; deskReady = false; deskTitle = ''; sentTheme = '';
-  keepPage = !follow;
+  keepThread = follow ? null : current?.threadId ?? null;
   iframe.src = `${desk}/embed${path}`;
   scheduleDOM();
 }
@@ -175,8 +178,9 @@ async function showDesk(reference) {
   if (!settings.enabled) { settings.enabled = true; void saveSettings(); }
   if (!current || !deskAvailable()) { openSettings(); return; }
   if (reference) {
-    referenceOverride = { projectKey: projectKey(current), repo: reference.repo };
-    loadFrame(repositoryNamed(reference.repo).desk, recordPath(reference), false);
+    // The record opens on the Desk that answered for it.
+    referenceOverride = { projectKey: projectKey(current), repository: repositoryKey(reference) };
+    loadFrame(reference.desk, recordPath(reference), false);
   }
   desiredOpen = true; view.openThreads[threadKey(current)] = true; saveView();
   if (location.hash.includes('/settings')) location.hash = `/${current.environmentId}/${encodeURIComponent(current.threadId)}`;
@@ -213,9 +217,10 @@ disposers.push(observeHostTheme(() => sendTheme(false)));
 // Desk becomes ready and when T3 shows another thread; never twice in a row for the same thread,
 // so the page the human moved to in the Desk stays.
 // Each desk:ready is a fresh Desk that knows no thread, also when T3 re-rendered the panel slot
-// and moving the iframe reloaded it. keepPage marks a load whose page was asked for.
+// and moving the iframe reloaded it. keepThread is the thread a load whose page was asked for
+// (a reference or Refresh) shows: that thread is not sent, but a switch before the Desk is ready is.
 let threadSent = null;
-let keepPage = false;
+let keepThread = null;
 function tellDeskThread() {
   if (!deskReady || !iframe.contentWindow || !current || current.threadId === threadSent) return;
   threadSent = current.threadId;
@@ -232,7 +237,7 @@ listen(window, 'message', event => {
   const message = event.data;
   if (!message || typeof message !== 'object') return;
   if (message.type === 'desk:ready') {
-    deskReady = true; threadSent = keepPage ? current?.threadId ?? null : null; keepPage = false;
+    deskReady = true; threadSent = keepThread; keepThread = null;
     sendTheme(true); tellDeskThread();
   }
   else if (message.type === 'desk:navigated' && typeof message.path === 'string' && message.path.startsWith('/')) {
@@ -369,12 +374,15 @@ function syncSettings() {
     return element('li', { class: status.error ? 'missing' : '', text: `${desk}: ${text}` });
   }));
   const automatic = current && repositories.find(repo => repo.keys.includes(current.repositoryKey));
-  options(mapping, [['@automatic', `Automatic: ${automatic ? automatic.repo : 'no Desk repository has this identity'}`], ['', 'Not linked'], ...repositories.map(repo => [repo.repo, repo.repo])]);
-  options(pinned, repositories.map(repo => [repo.repo, repo.repo]));
+  const label = repo => deskUrls.length > 1 ? `${repo.repo} (${repo.desk})` : repo.repo;
+  options(mapping, [['@automatic', `Automatic: ${automatic ? label(automatic) : 'no Desk repository has this identity'}`], ['', 'Not linked'], ...repositories.map(repo => [repositoryKey(repo), label(repo)])]);
+  options(pinned, repositories.map(repo => [repositoryKey(repo), label(repo)]));
   contextText.textContent = current ? `Current project: ${current.projectName}${current.repositoryKey ? ` (${current.repositoryKey})` : ' (no repository identity)'}` : 'Open a T3 thread to link its project.';
   mapping.disabled = !current;
-  mapping.value = current && Object.hasOwn(settings.mappings, projectKey(current)) ? settings.mappings[projectKey(current)] : '@automatic';
-  pinned.value = selectedRepository()?.repo ?? repositories[0]?.repo ?? '';
+  const mapped = current && Object.hasOwn(settings.mappings, projectKey(current)) ? settings.mappings[projectKey(current)] : '@automatic';
+  mapping.value = repositoryFor(mapped) ? repositoryKey(repositoryFor(mapped)) : mapped;
+  const shown = selectedRepository() ?? repositories[0];
+  pinned.value = shown ? repositoryKey(shown) : '';
   settingsRoot.querySelector('#pinned-row').hidden = settings.followProject;
   for (const [key, input] of Object.entries(toggles)) input.checked = settings[key];
   const rows = Object.entries(settings.mappings).map(([key, repo]) => {
@@ -434,7 +442,7 @@ function buildPattern() {
   pattern = slugs.length ? new RegExp(`(?<![\\w-])(?:${slugs.map(escape).join('|')})-[a-z0-9]+(?![\\w-])`, 'g') : null;
 }
 // A reference's address before it is resolved names the repository its slug belongs to.
-const referenceUrl = ref => (ref.desk ?? repositoryNamed(ref.repo)?.desk ?? deskUrls[0]) + recordPath(ref);
+const referenceUrl = ref => (ref.desk ?? repositoryFor(ref.repo)?.desk ?? deskUrls[0]) + recordPath(ref);
 function hideCard() {
   clearTimeout(hoverTimer); clearTimeout(dismissTimer); activeReference = null; pointerOverCard = false;
   if (card.matches(':popover-open')) card.hidePopover();
@@ -477,7 +485,7 @@ async function activateReference(ref, external = false) {
     await resolveReference(ref);
     if (api.signal.aborted) return;
     hideCard();
-    if (external || !deskAvailable() || !repositoryNamed(ref.repo)) window.open(referenceUrl(ref), '_blank', 'noopener');
+    if (external || !deskAvailable() || !repositoryFor(repositoryKey(ref))) window.open(referenceUrl(ref), '_blank', 'noopener');
     else await showDesk(ref);
   } catch { if (!api.signal.aborted) void showCard(ref); }
 }

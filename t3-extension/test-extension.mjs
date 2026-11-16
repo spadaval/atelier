@@ -60,28 +60,47 @@ const server = http.createServer((request, response) => {
   const url = new URL(request.url, 'http://fixture');
   const chunk = chunks[url.pathname.replace('/assets/', '')];
   if (chunk) { response.writeHead(200, { 'content-type': 'text/javascript' }); response.end(chunk); return; }
+  // A same-site frame in the page's process: it has the injector's binding and calls it directly.
+  if (url.pathname === '/spyframe') {
+    response.writeHead(200, { 'content-type': 'text/html' });
+    response.end(`<script>parent.postMessage({ spyBinding: typeof __t3CustomReport }, '*'); if (typeof __t3CustomReport === 'function') __t3CustomReport(JSON.stringify({ type: 'request', id: 'spy', action: 'desk-get', payload: { desk: new URL(location.href).searchParams.get('desk'), path: '/api/records/atelier-spyframe' } }));</script>`);
+    return;
+  }
   response.writeHead(200, { 'content-type': 'text/html' }); response.end(html);
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
-// The panel loads the real Desk app through this proxy, which answers GET /api/embed with the
-// fixture's origin, so the real app talks the host contract to the fixture page. Every path it
-// is asked for is recorded. /spoof is a page that posts Desk messages from another origin.
+// The panel loads the real Desk app through these proxies, which answer GET /api/embed with the
+// fixture's origin, so the real app talks the host contract to the fixture page. Each records every
+// path it is asked for. /spoof is a page that posts Desk messages to its parent. The first Desk
+// answers 404 for the mission's record, so it resolves on the second, which serves the same
+// repositories; slowEmbed holds the first Desk's /api/embed answer back.
+function deskProxyServer(requests, options) {
+  return http.createServer(async (request, response) => {
+    requests.push(request.url);
+    if (request.url === '/api/embed') {
+      if (options.slowEmbed) await delay(options.slowEmbed);
+      response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify({ origins: [base] })); return;
+    }
+    if (options.missing?.includes(request.url)) { response.writeHead(404, { 'content-type': 'application/json' }); response.end(JSON.stringify({ error: 'not here' })); return; }
+    if (request.url === '/spoof') {
+      response.writeHead(200, { 'content-type': 'text/html' });
+      response.end(`<script>parent.postMessage({ type: 'desk:navigated', path: '/spoofed', title: 'Spoofed' }, '*'); parent.postMessage({ type: 'desk:open-thread', thread: 'thread-c' }, '*');</script>`);
+      return;
+    }
+    try {
+      const upstream = await fetch(realDesk + request.url, { headers: { accept: request.headers.accept ?? '*/*' } });
+      response.writeHead(upstream.status, { 'content-type': upstream.headers.get('content-type') ?? 'application/octet-stream' });
+      response.end(Buffer.from(await upstream.arrayBuffer()));
+    } catch (error) { response.writeHead(502); response.end(String(error)); }
+  });
+}
 const deskRequests = [];
-const deskProxy = http.createServer(async (request, response) => {
-  deskRequests.push(request.url);
-  if (request.url === '/api/embed') { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify({ origins: [base] })); return; }
-  if (request.url === '/spoof') {
-    response.writeHead(200, { 'content-type': 'text/html' });
-    response.end(`<script>parent.postMessage({ type: 'desk:navigated', path: '/spoofed', title: 'Spoofed' }, '*'); parent.postMessage({ type: 'desk:open-thread', thread: 'thread-c' }, '*');</script>`);
-    return;
-  }
-  try {
-    const upstream = await fetch(realDesk + request.url, { headers: { accept: request.headers.accept ?? '*/*' } });
-    response.writeHead(upstream.status, { 'content-type': upstream.headers.get('content-type') ?? 'application/octet-stream' });
-    response.end(Buffer.from(await upstream.arrayBuffer()));
-  } catch (error) { response.writeHead(502); response.end(String(error)); }
-});
+const secondDeskRequests = [];
+const firstDesk = { slowEmbed: 0, missing: [`/api/records/${missionId}`] };
+const deskProxy = deskProxyServer(deskRequests, firstDesk);
+const secondDeskProxy = deskProxyServer(secondDeskRequests, {});
+await new Promise(resolve => secondDeskProxy.listen(0, '127.0.0.1', resolve));
 await new Promise(resolve => deskProxy.listen(0, '127.0.0.1', resolve));
 try {
   const configPath = path.join(root, 'config.json');
@@ -89,8 +108,9 @@ try {
   realDesk = (config.desk.urls?.[0] ?? config.desk.baseUrl).replace(/\/$/, '');
   // Another site than the fixture, as the real Desk is, so its frame is a separate target.
   deskBase = `http://localhost:${deskProxy.address().port}`;
+  const secondDeskBase = `http://localhost:${secondDeskProxy.address().port}`;
   // No repository table: the project is matched by the identity the Desk reports.
-  config.desk = { urls: [deskBase] }; delete config.settings;
+  config.desk = { urls: [deskBase, secondDeskBase] }; delete config.settings;
   config.debugPort = debugPort; config.targetPrefixes = [base];
   await fs.writeFile(path.join(temp, 'config.json'), JSON.stringify(config));
   await fs.copyFile(path.join(root, 'custom.js'), path.join(temp, 'custom.js'));
@@ -116,7 +136,8 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   console.log(`PASS: real discovery found every hook in ${discovery.modules.length} declared modules and never ran the worker script in the window`);
   await evaluate('document.querySelector("[data-t3-desk-launch]").click()');
   await until(() => evaluate('Boolean(document.querySelector("[data-right-panel-surface-content] > [data-t3-desk-mount]:not([hidden])"))'), 'Docked Desk');
-  const iframeSrc = await evaluate('document.querySelector("[data-t3-desk-mount]").shadowRoot.querySelector("iframe").src');
+  // The frame loads once every Desk has listed its repositories.
+  const iframeSrc = await until(() => evaluate('document.querySelector("[data-t3-desk-mount]").shadowRoot.querySelector("iframe").src'), 'Desk iframe address');
   assert.equal(iframeSrc, deskBase + '/embed/', 'the panel loads the embedded mode and leaves the page to the Desk');
   assert.equal(await evaluate('__t3Custom.diagnostics().selectedRepository'), 'atelier');
   assert(await evaluate('document.querySelector("#native-content").inert'));
@@ -155,17 +176,20 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   await until(async () => (await inFrame('document.documentElement.style.getPropertyValue("--bg")')) === 'rgb(250, 250, 250)', 'host:theme after a theme change');
   assert.equal(await inFrame('document.documentElement.dataset.theme'), 'light');
   console.log('PASS: a change of T3 theme on its root element is sent to the Desk');
-  // Messages that are not from the Desk iframe's window and origin are ignored.
+  // Messages count only from the Desk iframe's window AND the Desk's origin. First the Desk's own
+  // origin from another window: a second frame loaded from the Desk.
   const hashBefore = await evaluate('location.hash');
-  await evaluate(`window.postMessage({ type: 'desk:navigated', path: '/spoofed', title: 'Spoofed' }, '*'); window.postMessage({ type: 'desk:open-thread', thread: 'thread-c' }, '*')`);
-  await evaluate(`(()=>{const f=document.createElement('iframe');f.id='spoof';f.src='${deskBase.replace('localhost', '127.0.0.1')}/spoof';document.body.append(f)})()`);
-  await until(() => deskRequests.includes('/spoof'), 'Spoofing frame loaded');
-  await delay(1000);
-  assert.equal(await evaluate('location.hash'), hashBefore);
-  assert.notEqual(await evaluate('document.querySelector("[data-t3-desk-label]").textContent'), 'Spoofed');
-  assert.equal(await evaluate('__t3Custom.diagnostics().frame.path'), '/inbox');
+  const spoofed = async label => {
+    await delay(1000);
+    assert.equal(await evaluate('location.hash'), hashBefore, `${label}: desk:open-thread was accepted`);
+    assert.notEqual(await evaluate('document.querySelector("[data-t3-desk-label]").textContent'), 'Spoofed', `${label}: desk:navigated was accepted`);
+    assert.notEqual(await evaluate('__t3Custom.diagnostics().frame.path'), '/spoofed', `${label}: desk:navigated was accepted`);
+  };
+  await evaluate(`(()=>{const f=document.createElement('iframe');f.id='spoof';f.src='${deskBase}/spoof';document.body.append(f)})()`);
+  await until(() => deskRequests.includes('/spoof'), 'Spoofing frame from the Desk origin loaded');
+  await spoofed('the Desk origin from another window');
   await evaluate('document.querySelector("#spoof").remove()');
-  console.log('PASS: Desk messages from the page itself or from another origin are ignored');
+  console.log('PASS: Desk messages from the Desk origin in another window are ignored');
   // desk:open-thread navigates T3 to the thread's route, or says it is in no connected environment.
   const post = message => inFrame(`parent.postMessage(${JSON.stringify(message)}, location.ancestorOrigins[0])`);
   // From here every host:thread the Desk frame receives is recorded.
@@ -193,6 +217,16 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   await until(() => deskRequests.filter(url => url === '/api/ties?thread=thread-a').length === tiesBefore + 1, 'host:thread to a Desk reloaded by a re-rendered slot');
   assert.equal(await evaluate('__t3Custom.error'), null);
   console.log('PASS: host:thread is sent on ready, on each thread switch and to a reloaded Desk, never twice to the same Desk for the same thread');
+  // The Desk iframe's own window with another origin: the frame is sent to a page of the second
+  // Desk, which posts the same messages. Refresh brings the Desk back.
+  const reloadedFrame = await until(async () => (await (await fetch(`http://127.0.0.1:${debugPort}/json/list`)).json()).find(target => target.type === 'iframe' && target.url.startsWith(deskBase)), 'Reloaded Desk iframe');
+  const reloadedSession = (await page.call('Target.attachToTarget', { targetId: reloadedFrame.id, flatten: true })).sessionId;
+  await page.call('Runtime.evaluate', { expression: `location.href = '${secondDeskBase}/spoof'` }, reloadedSession).catch(() => {});
+  await until(() => secondDeskRequests.includes('/spoof'), 'Desk frame sent to another origin');
+  await spoofed('the Desk window with another origin');
+  await evaluate('document.querySelector("[data-t3-desk-controls] [aria-label=\'Refresh Desk\']").click()');
+  await until(() => evaluate('__t3Custom.diagnostics().frame.ready && __t3Custom.diagnostics().frame.title !== ""'), 'Desk back after Refresh');
+  console.log('PASS: Desk messages from the Desk iframe window with another origin are ignored');
 
   // Real backend data is checked through the same allow-listed bridge as hovercards.
   const record = await (await fetch(`${realDesk}/api/records/${referenceId}`)).json();
@@ -201,7 +235,27 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   assert.match(denied, /not allowed/);
   const otherDesk = await evaluate(`fixtureApi.request('desk-get',{desk:'http://127.0.0.1:1',path:'/api/repos'}).then(()=>false,error=>error.message)`);
   assert.match(otherDesk, /not in desk.urls/);
-  console.log('PASS: authenticated-free Desk reads work through the bridge; action endpoints and unconfigured Desks are rejected');
+  // Paths that URL parsing would turn into another one are refused before anything is fetched.
+  for (const sneaky of [String.raw`/api/repos/..\..\api\action?/items/x`, '/api/repos/%2e%2e/%2e%2e/api/action/items/x', '/api/repos/../../api/action/items/x', '/api/repos/a?b=/items/x']) {
+    const refused = await evaluate(`fixtureApi.request('desk-get',{desk:'${deskBase}',path:${JSON.stringify(sneaky)}}).then(()=>false,error=>error.message)`);
+    assert.match(String(refused), /not allowed/, `${sneaky} was read`);
+  }
+  assert(!deskRequests.some(url => url.startsWith('/api/action')), `a normalised path reached the Desk: ${deskRequests.filter(url => url.startsWith('/api/action')).join(', ')}`);
+  // Settings that would break the extension are refused, and config.json is left as it was.
+  const configBefore = await fs.readFile(path.join(temp, 'config.json'), 'utf8');
+  for (const bad of [{ mappings: null }, { mappings: [] }, { mappings: { a: 1 } }, { enabled: null }, { references: 'yes' }, { toString: null }, { constructor: null }, { pinnedRepo: 3 }]) {
+    const refused = await evaluate(`fixtureApi.request('save-settings', ${JSON.stringify(bad)}).then(()=>false,error=>error.message)`);
+    assert.match(String(refused), /save-settings:/, `${JSON.stringify(bad)} was saved`);
+  }
+  assert.equal(await fs.readFile(path.join(temp, 'config.json'), 'utf8'), configBefore);
+  // Only the top frame's main world may use the injector's binding.
+  await evaluate(`addEventListener('message', event => { if (event.data?.spyBinding) globalThis.spyBinding = event.data.spyBinding; })`);
+  await evaluate(`(()=>{const f=document.createElement('iframe');f.id='spyframe';f.src='/spyframe?desk=${encodeURIComponent(deskBase)}';document.body.append(f)})()`);
+  assert.equal(await until(() => evaluate('globalThis.spyBinding'), 'Same-site frame loaded'), 'function', 'the same-site frame should see the binding, or this check proves nothing');
+  await delay(1500);
+  assert(!deskRequests.includes('/api/records/atelier-spyframe'), 'a same-site frame used the injector bridge');
+  await evaluate('document.querySelector("#spyframe").remove()');
+  console.log('PASS: authenticated-free Desk reads work through the bridge; action endpoints, unconfigured Desks, normalised paths, bad settings and other frames are rejected');
 
   await until(() => evaluate('document.querySelector("#t3-custom-root").shadowRoot.querySelectorAll("[data-atelier-id]").length === 2'), 'Reference scanning');
   const prose = await evaluate('document.querySelector("#reference-prose").textContent');
@@ -221,6 +275,19 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   await until(() => evaluate(`__t3Custom.diagnostics().frame.ready && __t3Custom.diagnostics().frame.title !== ''`), 'Desk ready on the record');
   await delay(1500);
   assert.equal(await evaluate('__t3Custom.diagnostics().frame.path'), `/r/atelier/item/${referenceId}`);
+  // Open the reference again and switch to thread-b before the Desk is ready: thread-b is still sent.
+  const tiesB = deskRequests.filter(url => url === '/api/ties?thread=thread-b').length;
+  firstDesk.slowEmbed = 2500;
+  await evaluate('(()=>{const link=document.querySelector("#t3-custom-root").shadowRoot.querySelector("[data-atelier-id]");link.blur();link.focus()})()');
+  await until(() => evaluate('Boolean(document.querySelector("#t3-custom-root").shadowRoot.querySelector("#atelier-hovercard button"))'), 'Hovercard before a slow load');
+  await evaluate('document.querySelector("#t3-custom-root").shadowRoot.querySelector("#atelier-hovercard button").click()');
+  await until(() => evaluate('__t3Custom.diagnostics().frame.ready === false'), 'Reference load started');
+  await evaluate('location.hash = "/env/thread-b"');
+  await until(() => evaluate('__t3Custom.diagnostics().context?.threadId === "thread-b"'), 'Switched to thread-b during the load');
+  assert.equal(await evaluate('__t3Custom.diagnostics().frame.ready'), false, 'the Desk was ready before the switch; the check proves nothing');
+  firstDesk.slowEmbed = 0;
+  await until(() => deskRequests.filter(url => url === '/api/ties?thread=thread-b').length === tiesB + 1, 'host:thread for a thread switched to during a reference load');
+  console.log('PASS: a switch to another thread while a reference loads is sent when the Desk is ready');
   console.log('PASS: references by the Desk repository names, inline code, real hovercards, click-through, and streaming without text rewriting');
 
   await evaluate('globalThis.keptFrame=document.querySelector("[data-t3-desk-mount]").shadowRoot.querySelector("iframe");location.hash="/env/thread-b"');
@@ -231,10 +298,12 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   await evaluate(`(()=>{const p=document.createElement('p');p.id='mission-reference';p.textContent='${missionId}';document.querySelector('[data-workspace-area=conversation]').append(p)})()`);
   await until(() => evaluate(`Boolean(document.querySelector("#t3-custom-root").shadowRoot.querySelector("[data-atelier-id=${missionId}]"))`), 'Mission reference scanning');
   await evaluate(`(()=>{document.getSelection().removeAllRanges();const p=document.querySelector('#mission-reference');const range=document.createRange();range.selectNodeContents(p);const r=range.getBoundingClientRect();p.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,clientX:r.left+3,clientY:r.top+3}))})()`);
-  await until(() => evaluate(`globalThis.keptFrame.src.endsWith("/embed/r/atelier/mission/${missionId}")`), 'Direct mission reference click');
-  assert(deskRequests.includes(`/api/records/${missionId}`), 'the mission was resolved through /api/records');
-  assert(!deskRequests.some(url => url.includes(`/items/${missionId}`)), `a mission was looked up as an item first: ${deskRequests.filter(url => url.startsWith('/api/')).join(', ')}`);
-  console.log('PASS: direct mouse activation resolves a mission with one /api/records read, without requiring a hovercard');
+  await until(() => evaluate(`globalThis.keptFrame.src.includes("/embed/r/atelier/mission/${missionId}")`), 'Direct mission reference click');
+  // The first Desk has no such record; the second, which also serves atelier, answered, so it opens there.
+  assert.equal(await evaluate('globalThis.keptFrame.src'), `${secondDeskBase}/embed/r/atelier/mission/${missionId}`, 'the record opened on another Desk than the one that answered');
+  assert(deskRequests.includes(`/api/records/${missionId}`) && secondDeskRequests.includes(`/api/records/${missionId}`), 'the mission was resolved through /api/records');
+  assert(![...deskRequests, ...secondDeskRequests].some(url => url.includes(`/items/${missionId}`)), 'a mission was looked up as an item first');
+  console.log('PASS: direct mouse activation resolves a mission with one /api/records read per Desk and opens it on the Desk that answered');
   await evaluate('location.hash="/env/thread-c"');
   await delay(500); await evaluate('document.querySelector("[data-t3-desk-launch]").click()');
   await until(() => evaluate('document.querySelector("[data-t3-desk-mount]").shadowRoot.querySelector("iframe").hidden'), 'Unmapped project empty state');
@@ -252,15 +321,20 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   const settingsText = await evaluate('document.querySelector("#t3-custom-settings").shadowRoot.textContent');
   assert(settingsText.includes(`${deskBase}: reachable`) && settingsText.includes(`atelier (${fixtureRepositoryKey})`), settingsText);
   assert(settingsText.includes('module:environment-atoms') && settingsText.includes('css:theme'), settingsText);
-  await evaluate('(()=>{const select=document.querySelector("#t3-custom-settings").shadowRoot.querySelector("#project-mapping");select.value="atelier";select.dispatchEvent(new Event("change"))})()');
+  await evaluate(`(()=>{const select=document.querySelector("#t3-custom-settings").shadowRoot.querySelector("#project-mapping");select.value="${deskBase}/r/atelier";select.dispatchEvent(new Event("change"))})()`);
   const saved = await until(async () => JSON.parse(await fs.readFile(path.join(temp, 'config.json'), 'utf8')).settings, 'Settings written to config.json');
-  assert.deepEqual(saved.mappings, { 'env:project-c': 'atelier' });
+  assert.deepEqual(saved.mappings, { 'env:project-c': `${deskBase}/r/atelier` });
   assert.equal(saved.references, true);
   // A save from the settings page applies in place: no reinjection, no Desk reload.
   await delay(1500);
   assert(await evaluate('document.querySelector("#t3-custom-root") === globalThis.beforeSave'), 'a settings save reinjected the extension');
   assert.equal(deskRequests.filter(url => url.startsWith('/embed')).length, deskLoads, 'a settings save reloaded the Desk iframe');
   assert.equal(await evaluate('document.querySelector("[data-t3-desk-mount]").shadowRoot.querySelector("iframe").src'), frameBeforeSave);
+  // Many saves at once: the last one sent is what config.json holds, and it is still applied in place.
+  await evaluate(`Promise.all(Array.from({ length: 20 }, (_, n) => fixtureApi.request('save-settings', { ...${JSON.stringify(saved)}, pinnedRepo: 'concurrent-' + n })))`);
+  assert.equal(JSON.parse(await fs.readFile(path.join(temp, 'config.json'), 'utf8')).settings.pinnedRepo, 'concurrent-19', 'an older concurrent save won');
+  await delay(1500);
+  assert(await evaluate('document.querySelector("#t3-custom-root") === globalThis.beforeSave'), 'concurrent saves reinjected the extension');
   // An edit of config.json from outside still reloads the extension.
   const edited = JSON.parse(await fs.readFile(path.join(temp, 'config.json'), 'utf8'));
   edited.settings.pinnedRepo = 'atelier';
@@ -334,5 +408,5 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
     try { child.kill('SIGTERM'); await Promise.race([new Promise(resolve => child.once('close', resolve)), delay(4000)]); if (child.exitCode === null) child.kill('SIGKILL'); } catch {}
   }
   await new Promise(resolve => server.close(resolve));
-  deskProxy.closeAllConnections(); await new Promise(resolve => deskProxy.close(resolve));
+  for (const proxy of [deskProxy, secondDeskProxy]) { proxy.closeAllConnections(); await new Promise(resolve => proxy.close(resolve)); }
 }

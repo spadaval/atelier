@@ -68,14 +68,31 @@ const clientConfig = config => ({ urls: deskUrls(config), repositories: config.d
 // The settings the Customizations page may write, checked field by field.
 function checkSettings(settings) {
   const fail = message => { throw new Error(`save-settings: ${message}`); };
-  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) fail('settings must be an object');
-  const allowed = { enabled: 'boolean', references: 'boolean', followProject: 'boolean', pinnedRepo: 'string', mappings: 'object' };
+  const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+  if (!isObject(settings)) fail('settings must be an object');
+  const checks = {
+    enabled: value => typeof value === 'boolean',
+    references: value => typeof value === 'boolean',
+    followProject: value => typeof value === 'boolean',
+    pinnedRepo: value => value === null || typeof value === 'string',
+    mappings: value => isObject(value) && Object.values(value).every(repo => typeof repo === 'string'),
+  };
+  const expected = { enabled: 'a boolean', references: 'a boolean', followProject: 'a boolean', pinnedRepo: 'a string or null', mappings: 'an object whose values are strings' };
   for (const [key, value] of Object.entries(settings)) {
-    if (!(key in allowed)) fail(`unknown setting ${key}`);
-    if (value !== null && typeof value !== allowed[key]) fail(`${key} must be a ${allowed[key]}, got ${typeof value}`);
+    if (!Object.hasOwn(checks, key)) fail(`unknown setting ${key}`);
+    if (!checks[key](value)) fail(`${key} must be ${expected[key]}, got ${JSON.stringify(value)}`);
   }
-  for (const [key, repo] of Object.entries(settings.mappings ?? {})) if (typeof repo !== 'string') fail(`mapping ${key} must name a repository`);
   return settings;
+}
+// A Desk read: only GET of the repository list, one record, or one item or mission. The path must
+// come out of URL parsing unchanged, so no dot segment, backslash, query or fragment gets through.
+const readablePath = /^\/api\/(repos|records\/[a-z0-9-]+|repos\/[^/\\?#%]+\/(items|missions)\/[a-z0-9-]+)$/;
+function deskReadUrl(config, desk, requested) {
+  if (!deskUrls(config).includes(desk)) throw new Error(`Desk read is not allowed: ${desk} is not in desk.urls of ${configPath}`);
+  if (typeof requested !== 'string' || !readablePath.test(requested)) throw new Error(`Desk read is not allowed: ${requested}`);
+  const url = new URL(desk + requested);
+  if (url.pathname !== requested || url.search || url.hash || !readablePath.test(url.pathname)) throw new Error(`Desk read is not allowed: ${requested} (resolves to ${url.href})`);
+  return url.href;
 }
 const log = (message, extra = {}) => console.log(JSON.stringify({ time: new Date().toISOString(), message, ...extra }));
 async function debugPortOpen(config) {
@@ -213,6 +230,23 @@ async function daemon() {
   let reloadQueue = Promise.resolve();
   // config.json as save-settings last wrote it: the page already applied that change itself.
   let savedConfig = null;
+  // Saves run one at a time, in the order they arrive, and replace config.json whole (a temporary
+  // file renamed over it), so the last save wins and savedConfig is always what the file holds.
+  let saveQueue = Promise.resolve();
+  function saveSettings(settings) {
+    const save = saveQueue.then(async () => {
+      const next = await loadConfig();
+      next.settings = settings;
+      const text = JSON.stringify(next, null, 2) + '\n';
+      const temporary = `${configPath}.${process.pid}.tmp`;
+      await fs.writeFile(temporary, text);
+      await fs.rename(temporary, configPath);
+      savedConfig = text;
+      return { saved: configPath };
+    });
+    saveQueue = save.catch(() => {});
+    return save;
+  }
 
   function problem(operation, error, extra = {}) {
     state.lastError = `${operation}: ${error.message ?? error}`;
@@ -260,31 +294,36 @@ async function daemon() {
         await platform.openFolder(home); data = { opened: true };
       } else if (report.action === 'desk-get') {
         // Only reads, only from a configured Desk: the repository list, one record, or one item or mission.
-        const { desk, path: requested } = report.payload;
-        if (!deskUrls(config).includes(desk)) throw new Error(`Desk read is not allowed: ${desk} is not in desk.urls of ${configPath}`);
-        if (!/^\/api\/(repos|records\/[a-z0-9-]+|repos\/[^/]+\/(items|missions)\/[a-z0-9-]+)$/.test(requested)) throw new Error(`Desk read is not allowed: ${requested}`);
-        const url = desk + requested;
+        const url = deskReadUrl(config, report.payload.desk, report.payload.path);
         const result = await fetch(url, { signal: AbortSignal.timeout(15000), headers: { accept: 'application/json' }, redirect: 'error' });
         const body = await result.json();
         if (!result.ok) { const error = new Error(`GET ${url}: HTTP ${result.status}: ${body.error ?? result.statusText}`); error.status = result.status; throw error; }
         data = body;
       } else if (report.action === 'save-settings') {
-        // Written into config.json, which the watcher then reapplies.
-        const next = await loadConfig();
-        next.settings = checkSettings(report.payload);
-        savedConfig = JSON.stringify(next, null, 2) + '\n';
-        await fs.writeFile(configPath, savedConfig);
-        data = { saved: configPath };
+        data = await saveSettings(checkSettings(report.payload));
       } else throw new Error(`Unsupported injector request: ${report.action}`);
       response = { data };
     } catch (error) { response = { error: { message: error.message, status: error.status ?? null } }; }
     await target.cdp.call('Runtime.evaluate', { expression: `globalThis.__t3Custom?.answer(${JSON.stringify(report.id)}, ${JSON.stringify(response)})`, contextId: executionContextId }).catch(error => log('Request recipient disappeared', { action: report.action, error: error.message }));
   }
   async function attach(info) {
-    const target = { id: info.id, url: info.url, ready: false, scriptId: null };
+    // The binding exists in every context of the page, so a report counts only from the main world
+    // of the top frame (whose frame ID is the page target's ID), where the extension runs.
+    const target = { id: info.id, url: info.url, ready: false, scriptId: null, topContexts: new Set() };
     targets.set(info.id, target);
     target.cdp = new CDP(info.webSocketDebuggerUrl, message => {
+      if (message.method === 'Runtime.executionContextCreated') {
+        const context = message.params.context;
+        if (context.auxData?.frameId === info.id && context.auxData?.isDefault) target.topContexts.add(context.id);
+        return;
+      }
+      if (message.method === 'Runtime.executionContextDestroyed') { target.topContexts.delete(message.params.executionContextId); return; }
+      if (message.method === 'Runtime.executionContextsCleared') { target.topContexts.clear(); return; }
       if (message.method !== 'Runtime.bindingCalled' || message.params.name !== '__t3CustomReport') return;
+      if (!target.topContexts.has(message.params.executionContextId)) {
+        log('Ignored a report from outside the top frame', { target: info.id, executionContextId: message.params.executionContextId });
+        return;
+      }
       let report;
       try { report = JSON.parse(message.params.payload); } catch { return; }
       if (report.type === 'applied') {
