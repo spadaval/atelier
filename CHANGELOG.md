@@ -4,6 +4,81 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.7.0] - 2026-11-16
+
+The Desk can now be shown inside T3 Code: in its panel beside a thread, and
+over its main area as mission control and a project home. For agents,
+`atelier` changes little: a catch-up merge from the base no longer trips
+the pre-commit hook, and the tool says "action" where it said "act".
+
+0.7.0 reads a 0.6 repository's records, configuration and hooks as they
+are. No migration and no new `atelier setup` are needed.
+
+### Updating a host
+- Install the tracker as before: `cargo install --path crates/atelier-cli
+  --locked` from this tree, or the release's archive.
+- The Desk is updated by `desk/service/install.sh`, which keeps the existing
+  configuration. To let T3 Code frame the Desk, add `embed_origins =
+  ["t3code://app"]` to `~/.config/atelier-desk/config.toml` after the new
+  Desk is installed, then restart the service. Add it only after: an older
+  Desk refuses the key and will not start. A new configuration written by
+  `install.sh` already has the line.
+- Reload any open Desk tab once the new Desk is running. The route the app
+  posts actions to moved from `POST /api/act` to `POST /api/action`, so an
+  app loaded before the update cannot stop a proposed plan until it reloads.
+
+### For agents using `atelier`
+- The pre-commit hook accepts a catch-up merge from the base that imports a
+  lifecycle record the base already changed, such as another item's
+  `ready -> approved`. In 0.6.0 it refused that record as a status change
+  the commit made itself, so the merge could not be committed without
+  `ATELIER_SKIP`. The record must be byte-for-byte the base's copy, and the
+  merge's one incoming parent must be the base's tip, locally or on the
+  forge's remote, and `config.toml` must be unchanged. An edited import,
+  an older base tip or another parent is still refused. `docs/design.md`
+  gives the route: merge the base, keep its lifecycle records as it
+  committed them, commit, and make any edits to them afterwards.
+- The noun "act" is "action" in `atelier --help`, `atelier log --help`, and
+  the refusal `check` and the pre-commit hook print for a status change.
+  Nothing else a command prints changed.
+- The planner's role in the Agent Factory skill says when to build a rough
+  spike with Sumeet before planning (when nobody can say what is wanted
+  until it is seen), on a `spike/<slug>` branch that never merges, and what
+  the plan records of it.
+
+### The Desk
+- An embedded mode for a panel: a path under `/embed` draws the page with
+  its breadcrumb and an inbox link, and no sidebar, theme toggle or footer.
+  Pages fit a panel 420 to 720 pixels wide.
+- A host whose origin `embed_origins` lists can talk to the Desk over
+  `postMessage`: it can send its colours and font (`host:theme`) and the
+  thread it is showing (`host:thread`), and the Desk tells it when it is
+  ready, where it navigated, when the human opens a thread link, its height
+  on mission control, and an unhandled Escape. With the list empty, the
+  default, the Desk sends and reads nothing. `docs/architecture/desk.md`,
+  "The host contract", defines each message.
+- New views for a host: "This thread" (`/embed/t`), which shows what the
+  host's thread holds, the threads it started and the records it names;
+  mission control (`/embed/mission/<repo>/<id>`); the project home
+  (`/embed/home/<repo>`); and the inbox laid out for a wide frame.
+- New reads for a host: `/api/repos` gives each repository's `identity`
+  (its `origin` as `host/path`, as T3 Code names a project) and the
+  configured `caller`; `/api/records/{id}` says what an ID names;
+  `/api/ties?thread=` says what a thread holds and which ties are current;
+  `/api/thread`, `/api/sidebar`, `/api/launch`, `/api/history`,
+  `/api/roadmap`, `/api/checks` and `/api/embed` serve the views and T3
+  Code's sidebar and project strip. Each read that runs `git`, `gh` or T3
+  Code has a deadline and a cache, and draws what it could read when one
+  fails.
+- The disputed page reads again: its rows had squeezed their text into a
+  column two characters wide at every width.
+
+### Changed
+- The library crates `atelier-records` and `atelier-app` are merged into
+  `atelier-core`, and every `git` and `gh` call the tools make goes through
+  its `git` and `forge` modules. Behaviour is unchanged; this matters only
+  to code built against the crates.
+
 ## [0.6.0] - 2026-11-14
 
 Every change now reaches the base through a branch and a merge, so Atelier
