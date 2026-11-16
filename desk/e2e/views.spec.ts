@@ -102,6 +102,15 @@ for (const width of [1300, 880]) {
   });
 }
 
+test("the project home draws its missions when the items in no mission cannot be read", async ({ page }) => {
+  await page.route("**/api/roadmap**", (route) => route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "The roadmap could not be read." }) }));
+  await open(page, "/home/atelier", 1300);
+  await expect(page.getByRole("alert")).toHaveText("The roadmap could not be read.");
+  await expect(page.locator(".rm-lane")).toHaveCount(3);
+  await expect(page.getByRole("link", { name: /Build the Desk/ }).first()).toBeVisible();
+  await expect(page.locator(".rm-loose")).toHaveCount(0);
+});
+
 test("the inbox over a host's main area flows its sections into columns, and into one when narrow", async ({ page }) => {
   const lefts = () => page.locator(".inbox-repo").evaluateAll((all) => [...new Set(all.map((e) => Math.round(e.getBoundingClientRect().left)))]);
   await open(page, "/inbox", 1300);

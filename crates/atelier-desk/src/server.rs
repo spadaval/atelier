@@ -724,7 +724,7 @@ async fn motion(State(desk): State<Arc<Desk>>) -> Response {
                 ..MotionRepo::default()
             },
             |name, dir, motion| {
-                let times = views::branch_times(dir);
+                let times = desk.branch_times(name, dir);
                 for item in &mut motion.items {
                     let agents = item.holder.iter_mut().chain(item.reviewer.iter_mut());
                     agents.for_each(|agent| snapshot.join(std::slice::from_mut(agent)));

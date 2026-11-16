@@ -11,7 +11,7 @@ import type { RoadmapResponse } from "../api/RoadmapResponse";
 import { Crumbs } from "../components/Crumbs";
 import { sinceAgo, who } from "../components/Glance";
 import { ErrorBanner, Priority, ScopeBar, Skeleton, StatusGlyph } from "../components/ui";
-import { api, to, useData, useThreads } from "../lib/api";
+import { api, settled, to, useData, useThreads } from "../lib/api";
 import { begun } from "../lib/mission";
 import { statusName } from "../lib/words";
 
@@ -236,9 +236,12 @@ export function ProjectHomePage() {
     <div className="page rm-page">
       <Crumbs trail={[{ label: repo }]} />
       <ErrorBanner loaded={missions} />
-      {!missions.data || !roadmap.data ? (
+      <ErrorBanner loaded={roadmap} />
+      <ErrorBanner loaded={week} />
+      {/* A read that fails leaves its part out: the items in no mission, or the week. */}
+      {!settled(missions) || !settled(roadmap) ? (
         <Skeleton rows={8} />
-      ) : (
+      ) : !missions.data ? null : (
         <>
           <div className="rm-lanes">
             <Lane title="Now" hint="missions in progress, and started work in no mission" count={now.length + looseNow.length}>

@@ -12,6 +12,8 @@ use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use tempfile::TempDir;
 use tower::ServiceExt;
 
@@ -144,6 +146,7 @@ fn scratch(root: &Path) {
 struct Served {
     _dir: TempDir,
     root: PathBuf,
+    desk: Arc<Desk>,
     app: Router,
 }
 
@@ -158,9 +161,11 @@ fn serve(gh: Option<PathBuf>) -> Served {
     if let Some(gh) = gh {
         config.gh = gh;
     }
+    let desk = Desk::new(config);
     Served {
         root,
-        app: router_for(Desk::new(config)),
+        app: router_for(desk.clone()),
+        desk,
         _dir: dir,
     }
 }
@@ -276,6 +281,27 @@ async fn motion_and_an_item_carry_the_fields_the_views_read() {
     assert_eq!(
         strings(&repo["ready"], "id"),
         ["demo-c001", "demo-a002", "demo-c003", "demo-c002"]
+    );
+
+    // Read again with nothing changed, motion and the project strip run no
+    // command for the branches' times, or anything else they keep.
+    ok(&served.app, "/api/launch?repo=demo").await;
+    let built = served.desk.built.load(Ordering::Relaxed);
+    ok(&served.app, "/api/motion").await;
+    ok(&served.app, "/api/launch?repo=demo").await;
+    assert_eq!(served.desk.built.load(Ordering::Relaxed), built);
+    // A new commit on the branch is read.
+    git(&served.root, &["switch", "-q", STARTED]);
+    git_at(
+        &served.root,
+        &["commit", "-q", "--allow-empty", "-m", "More"],
+        Some("2030-01-01T00:00:00Z"),
+    );
+    git(&served.root, &["switch", "-q", "main"]);
+    let motion = ok(&served.app, "/api/motion").await;
+    assert_eq!(
+        motion["repos"][0]["items"][0]["changed_at"],
+        "2030-01-01T00:00:00Z"
     );
 
     // No forge, so no pull request is known.

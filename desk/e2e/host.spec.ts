@@ -48,8 +48,10 @@ test.afterAll(() => {
 });
 
 /** Opens the fixture host at `origin` framing the Desk's `path` `width` pixels wide, with `origins` listed, and returns the frame once the Desk has drawn. */
-async function host(page: Page, origin: string, path: string, origins: string[], width = 420): Promise<Frame> {
+async function host(page: Page, origin: string, path: string, origins: string[], width = 420, before?: () => Promise<void>): Promise<Frame> {
   const world = await serve(page);
+  // Routes added after the fixture server's answer before it.
+  await before?.();
   world.embedOrigins = origins;
   await page.setViewportSize({ width: Math.max(width, page.viewportSize()?.width ?? 0), height: 760 });
   await page.goto(`${origin}/?path=${encodeURIComponent(path)}&width=${width}`);
@@ -164,8 +166,8 @@ const at = (frame: Frame) => new URL(frame.url()).pathname;
 const navigated = async (page: Page) => (await received(page)).filter((m) => m.data.type === "desk:navigated").at(-1)?.data.path;
 
 /** The fixture host framing the Desk's repositories page, once the Desk has told it where it is. */
-async function connected(page: Page, path = "/", width = 420): Promise<Frame> {
-  const frame = await host(page, listed, path, [listed], width);
+async function connected(page: Page, path = "/", width = 420, before?: () => Promise<void>): Promise<Frame> {
+  const frame = await host(page, listed, path, [listed], width, before);
   await expect.poll(async () => (await received(page)).map((m) => m.data.type)).toContain("desk:navigated");
   return frame;
 }
@@ -218,6 +220,37 @@ test("This thread lists the threads it started and the records it names", async 
   const before = (await received(page)).length;
   await started.getByRole("button", { name: /Look into the flaky e2e test/ }).click();
   await expect.poll(async () => (await received(page)).slice(before).map((m) => m.data)).toContainEqual({ type: "desk:open-thread", thread: "thread:child-quiet" });
+});
+
+test("a thread it started is listed apart unless the work above shows it", async ({ page }) => {
+  const frame = await connected(page);
+  // A thread that holds nothing, whose child implements an item.
+  await send(page, { type: "host:thread", thread: "thread:unrelated", children: [tied.implementer] });
+  const started = frame.locator(".glance-block", { has: frame.getByRole("heading", { name: "Other threads it started" }) });
+  await expect(started.getByRole("button", { name: new RegExp(live.uwxy.title) })).toContainText("implements atelier-uwxy");
+  await expect(frame.locator(".glance-empty, .thread-part")).toHaveCount(0);
+
+  // The lead's mission shows that item, with its implementer's chip.
+  await send(page, { type: "host:thread", thread: tied.lead, children: [tied.implementer] });
+  await expect(frame.getByRole("heading", { name: "Work under this thread" })).toBeVisible();
+  await expect(frame.getByRole("heading", { name: "Other threads it started" })).toHaveCount(0);
+});
+
+test("This thread says when what waits on the human cannot be read, and draws the rest", async ({ page }) => {
+  const failed = { status: 500, contentType: "application/json", body: JSON.stringify({ error: "The inbox could not be read." }) };
+  const frame = await connected(page, "/", 420, async () => {
+    await page.route("**/api/inbox", (route) => route.fulfill(failed));
+  });
+  await send(page, { type: "host:thread", thread: tied.implementer });
+  await expect(frame.getByRole("alert")).toHaveText("The inbox could not be read.");
+  await expect(frame.getByRole("heading", { name: "Holds" })).toBeVisible();
+
+  // The project at a glance, for a thread with nothing, draws what it can read.
+  await send(page, { type: "host:thread", thread: tied.none, repository: "atelier" });
+  await expect(frame.locator(".thread-part")).toContainText("Here is atelier.");
+  await expect(frame.getByRole("alert")).toHaveText("The inbox could not be read.");
+  await expect(frame.getByRole("heading", { name: "Missions" })).toBeVisible();
+  await expect(frame.getByRole("heading", { name: "In motion" })).toBeVisible();
 });
 
 test("a thread that holds, started and names nothing shows its project, or says so", async ({ page }) => {

@@ -72,6 +72,9 @@ export async function reloadAll(): Promise<void> {
 
 const IDLE: Loaded<unknown> = { loading: false };
 
+/** Whether a read has its answer: its data, or the error that kept it. A page leaves out what failed and draws the rest. */
+export const settled = (read: Loaded<unknown>) => read.data !== undefined || read.error !== undefined;
+
 /** `GET path`, kept fresh: shown from cache at once, fetched again every `interval` ms while the page is visible. */
 export function useData<T>(path: string | null, interval = 30_000): Loaded<T> {
   const value = useSyncExternalStore(

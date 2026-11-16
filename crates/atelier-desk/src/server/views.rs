@@ -177,7 +177,7 @@ pub async fn launch(State(desk): State<Arc<Desk>>, Query(q): Query<RepoQuery>) -
         let recent: Vec<HistoryEvent> = (desk.history(&repo, &dir).unwrap_or_default().into_iter())
             .filter(|e| history::within(&e.at, LAUNCH_DAYS, now))
             .collect();
-        let times = branch_times(&dir);
+        let times = desk.branch_times(&repo, &dir);
         let mut in_motion: Vec<InMotion> = (motion.items.iter())
             .map(|item| {
                 let submits = (recent.iter())
@@ -232,10 +232,20 @@ pub async fn launch(State(desk): State<Arc<Desk>>, Query(q): Query<RepoQuery>) -
     .await
 }
 
+impl Desk {
+    /// When each branch of the repository `name` at `dir`, local and
+    /// fetched, last had a commit, kept while its commits are unchanged, so
+    /// a poll of an unchanged repository runs no command for it.
+    pub(super) fn branch_times(&self, name: &str, dir: &Path) -> HashMap<String, String> {
+        let read = |r: &mut Repo| Ok(Some(branch_times(&r.root)));
+        (self.read(name, dir, "branch-times", read).ok().flatten()).unwrap_or_default()
+    }
+}
+
 /// When each branch, local and fetched, last had a commit, by the name
 /// `git` gives it short (`<branch>` or `<remote>/<branch>`), as RFC 3339.
 /// Empty where `git` cannot list them.
-pub fn branch_times(dir: &Path) -> HashMap<String, String> {
+fn branch_times(dir: &Path) -> HashMap<String, String> {
     let mut command = Command::new("git");
     command.arg("-C").arg(dir).args([
         "for-each-ref",

@@ -2,46 +2,43 @@
 //! `gh pr view`), each given a deadline, so a hung command fails one read
 //! and holds no request open.
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use std::io::Read;
 use std::process::{Command, Output, Stdio};
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 /// Runs `command` with nothing on its standard input, and its output once
-/// it exits, or an error once `limit` has passed, when it is killed. A
-/// command that exits unsuccessfully is an error that names its standard
-/// error.
+/// it exits and its output is read, or an error once `limit` has passed,
+/// when it is killed. The limit covers reading its output too, so a process
+/// it leaves behind holding a pipe open fails the read rather than holding
+/// it. A command that exits unsuccessfully is an error that names its
+/// standard error.
 pub fn run(command: &mut Command, limit: Duration) -> Result<Vec<u8>> {
     let what = format!("{:?}", command.get_program());
+    let deadline = Instant::now() + limit;
+    let late = || format!("{what} did not finish within {} seconds", limit.as_secs());
     let mut child = (command.stdin(Stdio::null()))
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .with_context(|| format!("cannot run {what}"))?;
     // Each pipe is drained on a thread of its own, so a command that writes
-    // more than a pipe holds is not stopped waiting on a full pipe.
-    let drain = |pipe: Option<Box<dyn Read + Send>>| {
+    // more than a pipe holds is not stopped waiting on a full pipe. A thread
+    // still reading at the deadline is left to end with the pipe.
+    fn drain(pipe: Option<impl Read + Send + 'static>) -> mpsc::Receiver<Vec<u8>> {
+        let (send, receive) = mpsc::channel();
         std::thread::spawn(move || {
             let mut bytes = Vec::new();
             if let Some(mut pipe) = pipe {
                 let _ = pipe.read_to_end(&mut bytes);
             }
-            bytes
-        })
-    };
-    let stdout = drain(
-        child
-            .stdout
-            .take()
-            .map(|p| Box::new(p) as Box<dyn Read + Send>),
-    );
-    let stderr = drain(
-        child
-            .stderr
-            .take()
-            .map(|p| Box::new(p) as Box<dyn Read + Send>),
-    );
-    let deadline = Instant::now() + limit;
+            let _ = send.send(bytes);
+        });
+        receive
+    }
+    let stdout = drain(child.stdout.take());
+    let stderr = drain(child.stderr.take());
     let status = loop {
         if let Some(status) = child.try_wait()? {
             break status;
@@ -49,16 +46,18 @@ pub fn run(command: &mut Command, limit: Duration) -> Result<Vec<u8>> {
         if Instant::now() >= deadline {
             let _ = child.kill();
             let _ = child.wait();
-            // A pipe a grandchild still holds open would keep its thread
-            // reading, so neither is waited for.
-            bail!("{what} did not finish within {} seconds", limit.as_secs());
+            bail!(late());
         }
         std::thread::sleep(Duration::from_millis(10));
     };
+    let read = |pipe: &mpsc::Receiver<Vec<u8>>| {
+        let left = deadline.saturating_duration_since(Instant::now());
+        pipe.recv_timeout(left).map_err(|_| anyhow!(late()))
+    };
     let output = Output {
         status,
-        stdout: stdout.join().unwrap_or_default(),
-        stderr: stderr.join().unwrap_or_default(),
+        stdout: read(&stdout)?,
+        stderr: read(&stderr)?,
     };
     if !output.status.success() {
         let error = String::from_utf8_lossy(&output.stderr);
@@ -96,6 +95,17 @@ mod tests {
         let started = Instant::now();
         let hung = run(Command::new("sleep").arg("30"), Duration::from_millis(200));
         assert!(format!("{:#}", hung.unwrap_err()).contains("did not finish"));
+        assert!(started.elapsed() < Duration::from_secs(5));
+    }
+
+    #[test]
+    fn a_pipe_held_open_after_the_command_exits_is_not_waited_for() {
+        let started = Instant::now();
+        let held = run(
+            Command::new("sh").args(["-c", "sleep 30 & exit 0"]),
+            Duration::from_millis(300),
+        );
+        assert!(format!("{:#}", held.unwrap_err()).contains("did not finish"));
         assert!(started.elapsed() < Duration::from_secs(5));
     }
 

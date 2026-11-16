@@ -12,8 +12,8 @@ import type { MotionResponse } from "../api/MotionResponse";
 import type { ItemRow } from "../api/ItemRow";
 import type { MotionItem } from "../api/MotionItem";
 import { LiveThreadRow } from "./Agents";
-import { Priority, ScopeBar, Skeleton, StatusGlyph } from "./ui";
-import { api, to, useData, useThreads } from "../lib/api";
+import { ErrorBanner, Priority, ScopeBar, Skeleton, StatusGlyph } from "./ui";
+import { api, settled, to, useData, useThreads } from "../lib/api";
 import { ago, countsLine, finished, statusName, total } from "../lib/words";
 
 /** A thread as a short name: its live title, else the end of its identity. */
@@ -115,14 +115,22 @@ export function ProjectGlance({ repo }: { repo: string }) {
   const moving = motion.data?.repos.find((r) => r.repo === repo);
   const waiting = inbox.data?.repos.find((r) => r.repo === repo);
   const moved = moving?.items ?? [];
-  const quiet = [...new Set(moved.flatMap((i) => [i.holder, i.reviewer]).filter((a): a is Agent => !!a && !a.thread).map((a) => a.identity))];
+  const quiet = [
+    ...new Set(
+      moved
+        .flatMap((i) => [i.holder, i.reviewer])
+        .filter((a): a is Agent => !!a && !a.thread)
+        .map((a) => a.identity),
+    ),
+  ];
   const infos = useThreads(quiet);
   const names = new Map([...infos].map(([id, info]) => [id, info.title]));
   if (missions.status === 404) return <p className="glance-empty">The Desk does not serve a repository named {repo}.</p>;
-  if (!missions.data || !motion.data || !inbox.data) return <Skeleton rows={4} />;
+  // A read that fails leaves its blocks out, and the rest still draw.
+  if (!settled(missions) || !settled(motion) || !settled(inbox)) return <Skeleton rows={4} />;
 
   // Agreed missions, those with work under way first.
-  const active = missions.data.missions.filter((m) => m.state === "open").sort((a, b) => Number(b.in_progress) - Number(a.in_progress));
+  const active = (missions.data?.missions ?? []).filter((m) => m.state === "open").sort((a, b) => Number(b.in_progress) - Number(a.in_progress));
   const items = moved;
   const needs = (waiting?.needs_human ?? []).flatMap((g) => g.items);
   const ready = (moving?.ready ?? []).filter((r) => !r.needs_human);
@@ -132,6 +140,13 @@ export function ProjectGlance({ repo }: { repo: string }) {
 
   return (
     <div className="glance">
+      {[missions, motion, inbox].some((read) => read.error) ? (
+        <div className="glance-errors">
+          <ErrorBanner loaded={missions} />
+          <ErrorBanner loaded={motion} />
+          <ErrorBanner loaded={inbox} />
+        </div>
+      ) : null}
       {waits > 0 ? (
         <Block title="Waiting on you" tally={waits}>
           {plans.map((m) => (
@@ -155,37 +170,43 @@ export function ProjectGlance({ repo }: { repo: string }) {
         </Block>
       ) : null}
 
-      <Block title="Missions" tally={active.length} more={<Link to={to.repo(repo)}>All missions</Link>}>
-        {active.length === 0 ? <p className="card-empty">No mission is agreed and open.</p> : null}
-        {active.map((m) => (
-          <Link key={m.id} to={to.mission(repo, m.id)} className="glance-mission" title={m.in_progress ? "Work under way" : "Agreed, nothing started"}>
-            <span className={`glyph ${m.in_progress ? "run" : "plain"}`}>
-              <Target size={15} aria-hidden />
-            </span>
-            <span className="title">{m.title}</span>
-            <span className="bar" title={countsLine(m.counts)}>
-              <ScopeBar counts={m.counts} />
-            </span>
-            <span className="num">
-              {finished(m.counts)}/{total(m.counts)}
-            </span>
-          </Link>
-        ))}
-      </Block>
+      {missions.data ? (
+        <Block title="Missions" tally={active.length} more={<Link to={to.repo(repo)}>All missions</Link>}>
+          {active.length === 0 ? <p className="card-empty">No mission is agreed and open.</p> : null}
+          {active.map((m) => (
+            <Link key={m.id} to={to.mission(repo, m.id)} className="glance-mission" title={m.in_progress ? "Work under way" : "Agreed, nothing started"}>
+              <span className={`glyph ${m.in_progress ? "run" : "plain"}`}>
+                <Target size={15} aria-hidden />
+              </span>
+              <span className="title">{m.title}</span>
+              <span className="bar" title={countsLine(m.counts)}>
+                <ScopeBar counts={m.counts} />
+              </span>
+              <span className="num">
+                {finished(m.counts)}/{total(m.counts)}
+              </span>
+            </Link>
+          ))}
+        </Block>
+      ) : null}
 
-      <Block title="In motion" tally={items.length} more={<Link to="/motion">In motion</Link>}>
-        {items.length === 0 ? <p className="card-empty">Nothing is started.</p> : null}
-        {items.map((item) => (
-          <MotionRow key={item.id} repo={repo} item={item} names={names} />
-        ))}
-      </Block>
+      {motion.data ? (
+        <>
+          <Block title="In motion" tally={items.length} more={<Link to="/motion">In motion</Link>}>
+            {items.length === 0 ? <p className="card-empty">Nothing is started.</p> : null}
+            {items.map((item) => (
+              <MotionRow key={item.id} repo={repo} item={item} names={names} />
+            ))}
+          </Block>
 
-      <Block title="Next up" tally={ready.length}>
-        {ready.length === 0 ? <p className="card-empty">Nothing is ready to start.</p> : null}
-        {ready.map((row) => (
-          <ReadyRow key={row.id} repo={repo} row={row} />
-        ))}
-      </Block>
+          <Block title="Next up" tally={ready.length}>
+            {ready.length === 0 ? <p className="card-empty">Nothing is ready to start.</p> : null}
+            {ready.map((row) => (
+              <ReadyRow key={row.id} repo={repo} row={row} />
+            ))}
+          </Block>
+        </>
+      ) : null}
       <p className="glance-foot">{moving?.fetched.at ? `${repo}, fetched ${ago((Date.now() - Date.parse(moving.fetched.at)) / 1000)}` : repo}</p>
     </div>
   );

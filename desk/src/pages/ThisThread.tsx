@@ -12,7 +12,7 @@ import type { TiesResponse } from "../api/TiesResponse";
 import { LiveThreadRow } from "../components/Agents";
 import { Crumbs } from "../components/Crumbs";
 import { ErrorBanner, ScopeBar, Skeleton, StatusGlyph } from "../components/ui";
-import { api, to, useAll, useData, useThreads } from "../lib/api";
+import { api, settled, to, useAll, useData, useThreads } from "../lib/api";
 import { openThread, useHostContext, type HostContext } from "../lib/host";
 import { countsLine, finished, roleWords, statusName, statusTitle, total } from "../lib/words";
 import { Block, ProjectGlance, Row, since, who } from "../components/Glance";
@@ -285,7 +285,6 @@ function ThreadView({ context }: { context: HostContext }) {
   const [showDone, setShowDone] = useState(false);
 
   // A read that fails leaves its part out, and the page still draws.
-  const settled = (read: { data?: unknown; error?: string }) => read.data !== undefined || read.error !== undefined;
   if (!settled(ties) || !settled(inbox) || childTies.loading || named.loading) return <Skeleton rows={6} />;
   const repos = inbox.data?.repos ?? [];
 
@@ -310,8 +309,21 @@ function ThreadView({ context }: { context: HostContext }) {
   const waits = waitingItems.length + waitingThreads.length + waitingPlans.length;
 
   const holds = itemTies.length + missionTies.length;
-  // A child that no record names: the work above does not show it.
-  const others = context.children.map((id, at) => ({ id, at })).filter(({ at }) => (childTies.data[at]?.ties ?? []).length === 0);
+  // The records Holds and Work under this thread draw. A child is listed
+  // apart unless all it works on now is among them, where its chip or its
+  // record already shows it.
+  const drawn = new Set<string>(current.map((t) => t.id));
+  for (const m of [...missions.data, ...work.data]) {
+    if (!m) continue;
+    drawn.add(m.mission.id);
+    for (const i of m.items) drawn.add(i.id);
+  }
+  const others = context.children
+    .map((id, at) => ({ id, at, ties: childTies.data[at]?.ties ?? [] }))
+    .filter(({ ties }) => {
+      const now = ties.filter((t) => t.current);
+      return now.length === 0 || now.some((t) => !drawn.has(t.id));
+    });
   // Without its ties the page cannot say the thread holds nothing.
   const empty = ties.data !== undefined && holds === 0 && workTies.length === 0 && others.length === 0 && mentioned.length === 0 && waits === 0;
   const earlier = tieLine(all.filter((t) => !t.current));
@@ -319,6 +331,8 @@ function ThreadView({ context }: { context: HostContext }) {
   return (
     <>
       <ErrorBanner loaded={ties} />
+      {/* The project at a glance names its own failed reads. */}
+      {empty && context.repository ? null : <ErrorBanner loaded={inbox} />}
       <div className="thread-head">
         <b>{self.data?.title ?? "This thread"}</b>
         {earlier && holds === 0 ? <span>Earlier it {earlier}.</span> : null}
@@ -386,8 +400,8 @@ function ThreadView({ context }: { context: HostContext }) {
 
           {others.length > 0 ? (
             <Block title="Other threads it started" tally={others.length}>
-              {others.map(({ id, at }) => (
-                <ChildRow key={id} id={id} info={childInfo.data[at] ?? null} ties={[]} now={now} />
+              {others.map(({ id, at, ties }) => (
+                <ChildRow key={id} id={id} info={childInfo.data[at] ?? null} ties={ties} now={now} />
               ))}
             </Block>
           ) : null}
