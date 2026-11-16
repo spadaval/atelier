@@ -20,10 +20,24 @@
 # responses) runs when a change touches desk/, and only then: it builds no
 # Rust, and a change to atelier-desk's types reaches it as a change to
 # desk/src/api/.
+#
+# extension (the T3 Code extension's tests in t3-extension/, against an
+# atelier-desk and its app built from the same commit) runs when a change
+# touches t3-extension/, desk/, crates/atelier-desk/, the workspace's
+# Cargo.toml, Cargo.lock or rust-toolchain.toml, the CI workflow or this
+# script. Not for crates/atelier-core alone: the fields the extension reads
+# are defined in atelier-desk, and the rust job tests the core.
 set -euo pipefail
 
 base=${1:-}
 head=${2:-HEAD}
+
+needs_extension() {
+  case $1 in
+    t3-extension/* | desk/* | crates/atelier-desk/* | Cargo.toml | Cargo.lock | rust-toolchain.toml | .github/workflows/ci.yml | scripts/ci-jobs.sh) return 0 ;;
+    *) return 1 ;;
+  esac
+}
 
 needs_rust() {
   case $1 in
@@ -39,6 +53,7 @@ if [[ -z $base || $base =~ ^0+$ ]] || ! git rev-parse -q --verify "$base^{commit
   echo "ci-jobs: no base commit to compare against, so every job runs." >&2
   echo "rust=true"
   echo "desk=true"
+  echo "extension=true"
   exit 0
 fi
 
@@ -46,6 +61,7 @@ fi
 # out of crates/ still counts as a change to crates/.
 rust=false
 desk=false
+extension=false
 while IFS= read -r path; do
   if [ "$rust" = false ] && needs_rust "$path"; then
     echo "ci-jobs: rust runs for $path." >&2
@@ -55,8 +71,14 @@ while IFS= read -r path; do
     echo "ci-jobs: desk runs for $path." >&2
     desk=true
   fi
+  if [ "$extension" = false ] && needs_extension "$path"; then
+    echo "ci-jobs: extension runs for $path." >&2
+    extension=true
+  fi
 done < <(git diff --no-renames --name-only "$base" "$head")
 [ "$rust" = true ] || echo "ci-jobs: rust skipped; the change touches nothing it tests." >&2
 [ "$desk" = true ] || echo "ci-jobs: desk skipped; the change touches nothing in desk/." >&2
+[ "$extension" = true ] || echo "ci-jobs: extension skipped; the change touches nothing it tests." >&2
 echo "rust=$rust"
 echo "desk=$desk"
+echo "extension=$extension"

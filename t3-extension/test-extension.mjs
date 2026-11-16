@@ -7,22 +7,24 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { connectPage } from './devtools.mjs';
+import { fixture, startFixtureDesk } from './fixture-desk.mjs';
 
 // The extension's folder, wherever the test is run from.
 const root = path.dirname(fileURLToPath(import.meta.url));
 const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'atelier-extension-test-'));
 const debugPort = 19222;
-let deskBase, realDesk;
-// The Desk's identity for the atelier repository, as GET /api/repos reports it.
-const fixtureRepositoryKey = 'github.com/spadaval/atelier';
-const referenceId = 'atelier-plr9';
+let deskBase, realDesk, fixtureDesk;
+// The fixture repository's identity, as GET /api/repos reports it (fixture-desk.mjs).
+const fixtureRepositoryKey = fixture.identity;
+const referenceId = fixture.items.reference.id;
 // Named only in thread-b's, thread-child's and other:thread-a's conversations.
 const threadBReference = 'atelier-tb01';
 const childReference = 'atelier-ch01';
 const otherReference = 'atelier-oa01';
-const missionId = 'atelier-g961';
+// A mission the conversation names; the first Desk answers 404 for it, so it resolves on the second.
+const missionId = fixture.closedMission.id;
 // A Chromium browser for the isolated fixture page; set BROWSER to override.
-const browserPath = process.env.BROWSER ?? (process.platform === 'win32' ? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe' : '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
+const browserPath = process.env.BROWSER ?? ({ win32: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', darwin: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' }[process.platform] ?? '/usr/bin/google-chrome');
 let browser, injector, page;
 async function until(check, label, timeout = 20000) {
   const end = Date.now() + timeout; let lastError;
@@ -54,11 +56,9 @@ const shell = {
 };
 // T3's composer drafts: a new-thread screen for the mapped project and one for the unmapped one.
 const drafts = { 'draft-a': { environmentId: 'env', projectId: 'project-a', logicalProjectKey: fixtureRepositoryKey }, 'draft-c': { environmentId: 'env', projectId: 'project-c', logicalProjectKey: 'elsewhere/unlinked' } };
-// The Desk's sidebar and launch data, served by the first Desk; the mission's ID is a real one
-// (read at startup) so mission control renders. Thread identities are T3 thread IDs where T3 knows them.
-const sidebarFixture = missionId => ({ repos: [{ repo: 'atelier', missions: [{ id: missionId, title: 'Fixture mission', state: 'in_progress', done: 1, total: 3, waiting: 1,
-  threads: [{ identity: 'thread-b', role: 'lead' }, { identity: 'remote-thread-0123456789', role: 'reviewer' }],
-  items: [{ id: 'atelier-fi01', title: 'First item', status: 'started', threads: [{ identity: 'thread-a', role: 'implementer' }] }, { id: 'atelier-fi02', title: 'Second item', status: 'ready', threads: [] }] }] }] });
+// The Desk's launch data, served by the first Desk in place of the real Desk's: its rows include IDs
+// no record can have. The sidebar comes from the real Desk, whose fixture repository holds one open
+// mission led by thread-b, with a plan reviewer T3 does not know and an item held by thread-a.
 const launchFixture = {
   ready: [{ id: 'atelier-r1', title: 'Ready one, with a title long enough to be cut short in its card', priority: 'high' }, { id: 'atelier-r2', title: 'Ready two', priority: 'medium' }, { id: 'atelier-r3; rm -rf /', title: 'Not an item ID' }, { id: 'atelier-r4', title: 'Ready four' }],
   waiting: 5, threads_waiting: [], waiting_items: [{ id: 'atelier-w1', title: 'Waiting one' }, { id: 'atelier-w2', title: 'Waiting two' }, { id: 'atelier-w3', title: 'Waiting three' }],
@@ -132,7 +132,7 @@ function deskProxyServer(requests, options) {
       inbox.repos.push({ repo: 'unreadable', commit: null, error: 'git: not a repository', needs_human: [], proposed: [], threads: [] });
       response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(inbox)); return;
     }
-    if (request.url === '/api/sidebar') { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(options.sidebar ?? { repos: [] })); return; }
+    if (request.url === '/api/sidebar' && options.sidebar) { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(options.sidebar ?? { repos: [] })); return; }
     if (request.url === '/api/launch?repo=atelier' && options.launch) { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(options.launch)); return; }
     if (options.missing?.includes(request.url)) { response.writeHead(404, { 'content-type': 'application/json' }); response.end(JSON.stringify({ error: 'not here' })); return; }
     if (request.url === '/spoof') {
@@ -151,19 +151,18 @@ const deskRequests = [];
 const secondDeskRequests = [];
 const firstDesk = { slowEmbed: 0, missing: [`/api/records/${missionId}`], launch: launchFixture };
 const deskProxy = deskProxyServer(deskRequests, firstDesk);
-const secondDeskProxy = deskProxyServer(secondDeskRequests, {});
+const secondDeskProxy = deskProxyServer(secondDeskRequests, { sidebar: { repos: [] } });
 await new Promise(resolve => secondDeskProxy.listen(0, '127.0.0.1', resolve));
 await new Promise(resolve => deskProxy.listen(0, '127.0.0.1', resolve));
 try {
   const configPath = path.join(root, 'config.json');
   const config = JSON.parse(await fs.readFile(await fs.access(configPath).then(() => configPath, () => path.join(root, 'config.example.json')), 'utf8'));
-  // DESK overrides the Desk the proxies forward to, such as a second Desk under test.
-  realDesk = (process.env.DESK ?? config.desk.urls?.[0] ?? config.desk.baseUrl).replace(/\/$/, '');
-  // A mission the real Desk serves, so its mission control renders in the layer.
-  const realMission = (await (await fetch(`${realDesk}/api/sidebar`)).json()).repos.flatMap(repo => repo.missions.map(mission => ({ repo: repo.repo, id: mission.id })))[0];
-  assert(realMission, `${realDesk}/api/sidebar lists no open mission; the layer check needs one`);
-  firstDesk.sidebar = sidebarFixture(realMission.id);
-  firstDesk.sidebar.repos[0].repo = realMission.repo;
+  // The Desk the proxies forward to: DESK, a Desk serving the fixture repository, such as one
+  // `node fixture-desk.mjs` started; else this checkout's atelier-desk, started here on it.
+  if (!process.env.DESK) fixtureDesk = await startFixtureDesk();
+  realDesk = (process.env.DESK ?? fixtureDesk.url).replace(/\/$/, '');
+  const served = (await (await fetch(`${realDesk}/api/repos`)).json()).repos.find(repo => repo.name === fixture.repo);
+  assert.equal(served?.identity, fixture.identity, `${realDesk} does not serve the fixture repository ${fixture.repo} (${fixture.identity}); start one with node fixture-desk.mjs`);
   // Another site than the fixture, as the real Desk is, so its frame is a separate target.
   deskBase = `http://localhost:${deskProxy.address().port}`;
   const secondDeskBase = `http://localhost:${secondDeskProxy.address().port}`;
@@ -508,13 +507,13 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
 
   // Missions from /api/sidebar: collapsed rows; expanded, the threads by item, the mission's own
   // threads and the T3 threads they started; a thread T3 knows opens, one it does not is dimmed.
-  const mission = firstDesk.sidebar.repos[0].missions[0];
-  const missionKey = `${deskBase}/${realMission.repo}/${mission.id}`;
+  const mission = fixture.mission;
+  const missionKey = `${deskBase}/${fixture.repo}/${mission.id}`;
   const missionRow = `document.querySelector('[data-t3-mission] [data-mission="${mission.id}"]')`;
   await until(() => evaluate(`Boolean(${missionRow})`), 'Mission row from /api/sidebar');
   assert.equal(await evaluate('document.querySelectorAll("[data-t3-mission]").length'), 1, 'the second Desk lists no missions');
   const rowText = await evaluate(`${missionRow}.textContent`);
-  assert(rowText.includes('Fixture mission') && rowText.includes(`${realMission.repo} · 1/3 done`), rowText);
+  assert(rowText.includes('Fixture mission') && rowText.includes(`${fixture.repo} · 1/3 done`), rowText);
   assert(await evaluate(`Boolean(${missionRow}.querySelector('[data-t3-waiting]'))`), 'no mark for a mission waiting on the human');
   assert.equal(await evaluate(`${missionRow}.querySelector('[data-t3-expand]').getAttribute('aria-expanded')`), 'false', 'a mission starts collapsed');
   await evaluate(`${missionRow}.querySelector('[data-t3-expand]').click()`);
@@ -550,7 +549,7 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   // A mission row opens mission control in the layer, selected, with focus; the row again closes it.
   await evaluate(`${missionRow}.click()`);
   await until(async () => (await layerState())?.key === `mission:${missionKey}` && (await layerState()).shown, 'Mission control in the layer');
-  assert.equal(await layerSrc(), `${deskBase}/embed/mission/${realMission.repo}/${mission.id}`);
+  assert.equal(await layerSrc(), `${deskBase}/embed/mission/${fixture.repo}/${mission.id}`);
   assert.equal(await evaluate(`${missionRow}.getAttribute('aria-pressed')`), 'true');
   assert.equal(await evaluate('document.querySelector("[data-t3-inbox-row]").getAttribute("aria-pressed")'), 'false');
   await until(() => evaluate('__t3Custom.diagnostics().layer?.ready && document.activeElement === document.querySelector("[data-t3-layer] iframe")'), 'Mission control has focus');
@@ -725,6 +724,8 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   console.error(error.stack); console.error('Test logs:', temp);
   console.error('Last paths asked of the first Desk:', deskRequests.slice(-15).join(' '));
   try { console.error(await fs.readFile(path.join(temp, 'injector.log'), 'utf8')); } catch {}
+  try { console.error('Browser log, last 40 lines:\n' + (await fs.readFile(path.join(temp, 'browser.log'), 'utf8')).split('\n').slice(-40).join('\n')); } catch {}
+  if (fixtureDesk) console.error('Fixture Desk log:\n' + fixtureDesk.log());
   process.exitCode = 1;
 } finally {
   try { await control('stop'); } catch {}
@@ -735,4 +736,5 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   }
   await new Promise(resolve => server.close(resolve));
   for (const proxy of [deskProxy, secondDeskProxy]) { proxy.closeAllConnections(); await new Promise(resolve => proxy.close(resolve)); }
+  await fixtureDesk?.stop();
 }
