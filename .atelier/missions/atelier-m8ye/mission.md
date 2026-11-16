@@ -41,8 +41,9 @@ the extension fails the pull request that makes it.
 The extension is released apart from `atelier`. A tag `t3-extension-v<version>`
 on a commit of `master` publishes a GitHub release holding one bundle: the
 extension's files and its installer, and a checksum. That release builds no
-Rust and runs no test of its own: it publishes only a commit whose CI run
-passed, and that run held the extension's job. It does not start the
+Rust and runs no test of its own: it publishes only when CI passed, with
+the extension's job in it, on the last commit that changed anything that job
+tests. It does not start the
 `atelier` release, and is never the repository's "latest" release, which
 stays the newest `atelier` one. A device installs the
 extension from a bundle and learns of a newer one from the releases, by the
@@ -78,8 +79,10 @@ workflow, and T3 Code's own runtime runs the extension on a device.
   `master`, builds a bundle whose installer installs the extension into an
   empty home directory and whose files equal `t3-extension/` at that commit.
   `dist plan` for a tag `t3-extension-v0.1.1` does not plan an `atelier`
-  release, and the workflow refuses a tag whose commit is not on `master` or
-  whose CI run did not pass with the extension's job in it.
+  release. The workflow refuses a tag whose commit is not on `master`, and
+  one where CI did not pass, with the extension's job in it, on the last
+  commit at or before the tag that changed what that job tests; it accepts a
+  tag on a later merge that changed only records.
 - installs-from-bundle: from the bundle alone, with no clone, the installer
   sets up a home directory in which `t3-custom check` passes, on a Linux
   runner where no T3 Code is installed, by naming a stand-in for the app
