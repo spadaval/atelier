@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-wlyn
 title: Install and update the extension from its release bundle
-status: in_review
+status: changes_requested
 mission: atelier-m8ye
 labels: []
 priority: medium
