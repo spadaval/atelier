@@ -51,6 +51,52 @@ pub fn remote_of(dir: &Path, forge: Option<&str>) -> Option<String> {
         .then(|| "origin".to_string())
 }
 
+/// The repository at `dir` as T3 Code names a project's repository: its
+/// `origin` remote as [`identity`] gives it; `None` without an `origin`.
+pub fn origin_identity(dir: &Path) -> Option<String> {
+    identity(&git::run(dir, &["remote", "get-url", "origin"]).ok()?)
+}
+
+/// A remote's URL as `host/path`, lower case, with no scheme, user, port
+/// or `.git`: `https://github.com/spadaval/atelier.git`,
+/// `git@github.com:spadaval/atelier.git` and
+/// `ssh://git@github.com:22/spadaval/atelier` are all
+/// `github.com/spadaval/atelier`, the key T3 Code's
+/// `repositoryKeyFromRemote` gives. `None` for a URL with no host, such as
+/// a local path or a `file://` URL.
+pub fn identity(url: &str) -> Option<String> {
+    let url = url.trim();
+    let (host, path) = match url.split_once("://") {
+        Some((scheme, _)) if scheme.eq_ignore_ascii_case("file") => return None,
+        Some((_, rest)) => {
+            let (authority, path) = rest.split_once('/')?;
+            let host = authority.rsplit_once('@').map_or(authority, |(_, h)| h);
+            (host.split(':').next()?, path)
+        }
+        // `[user@]host:path`, as `scp` writes it. A path before the colon
+        // makes it a local path instead.
+        None => {
+            let (authority, path) = url.split_once(':')?;
+            if authority.contains('/') {
+                return None;
+            }
+            (
+                authority.rsplit_once('@').map_or(authority, |(_, h)| h),
+                path,
+            )
+        }
+    };
+    let path = path.trim_matches('/');
+    let path = path
+        .strip_suffix(".git")
+        .unwrap_or(path)
+        .trim_end_matches('/');
+    if host.is_empty() || path.is_empty() {
+        return None;
+    }
+    Some(format!("{host}/{path}").to_lowercase())
+}
+
 impl Fetches {
     pub fn new(every: u64, gh: PathBuf) -> Fetches {
         Fetches {
@@ -221,4 +267,39 @@ fn newest(listed: Vec<Listed>) -> HashMap<String, PrMark> {
         }
     }
     prs
+}
+
+#[cfg(test)]
+mod tests {
+    use super::identity;
+
+    #[test]
+    fn a_remote_is_named_as_t3_code_names_a_repository() {
+        let named = "github.com/spadaval/atelier";
+        for url in [
+            "https://github.com/spadaval/atelier.git",
+            "https://github.com/spadaval/atelier",
+            "https://user:token@GitHub.com:443/Spadaval/Atelier.git/",
+            "http://github.com/spadaval/atelier/",
+            "git@github.com:spadaval/atelier.git",
+            "github.com:spadaval/atelier",
+            "ssh://git@github.com/spadaval/atelier.git",
+            "ssh://git@github.com:22/spadaval/atelier",
+            "git+ssh://git@github.com/spadaval/atelier.git",
+        ] {
+            assert_eq!(identity(url).as_deref(), Some(named), "{url}");
+        }
+        assert_eq!(
+            identity("git@gitlab.example.com:group/sub/project.git").as_deref(),
+            Some("gitlab.example.com/group/sub/project")
+        );
+        for local in [
+            "/srv/git/atelier.git",
+            "../atelier",
+            "file:///srv/git/atelier.git",
+            "",
+        ] {
+            assert_eq!(identity(local), None, "{local}");
+        }
+    }
 }

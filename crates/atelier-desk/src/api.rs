@@ -19,6 +19,11 @@ pub struct ReposResponse {
 pub struct RepoSummary {
     pub name: String,
     pub path: String,
+    /// Its `origin` remote as `host/path`, lower case, with no scheme,
+    /// user, port or `.git`, as T3 Code names a project's repository
+    /// (`github.com/spadaval/atelier`); `null` without an `origin`, or for
+    /// one with no host, such as a local path.
+    pub identity: Option<String>,
     pub base: Option<String>,
     pub base_tip: Option<String>,
     /// Agreed missions with a started item.
@@ -476,6 +481,49 @@ pub enum HoldKind {
     Mission,
 }
 
+/// `GET /api/records/{id}`: what an ID names, in the first repository
+/// served that holds it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+pub struct RecordName {
+    pub repo: String,
+    pub kind: HoldKind,
+    pub id: String,
+    pub title: String,
+    pub status: RecordStatus,
+}
+
+/// A record's status as it stores it: an item's, or a mission's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(untagged)]
+pub enum RecordStatus {
+    Item(Status),
+    Mission(MissionStatus),
+}
+
+/// `GET /api/ties?thread=<identity>`: every record that names a thread
+/// identity, in every repository served.
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct TiesResponse {
+    /// The identity asked about, whole.
+    pub thread: String,
+    pub ties: Vec<Tie>,
+}
+
+/// One record that names the identity, and in which role.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+pub struct Tie {
+    pub repo: String,
+    pub kind: HoldKind,
+    pub id: String,
+    pub title: String,
+    pub status: RecordStatus,
+    pub role: Role,
+    /// Whether the identity works on the record now: the last implementer
+    /// of a started item; the holder of a review of an item's or a plan's
+    /// open round; the lead or a planner of a mission not done or dropped.
+    pub current: bool,
+}
+
 /// `POST /api/action`, sent with the header `x-atelier-desk: 1`.
 #[derive(Debug, Clone, Deserialize, TS)]
 #[serde(tag = "action", rename_all = "snake_case")]
@@ -792,6 +840,8 @@ pub fn export_types(dir: &std::path::Path) -> Result<(), ts_rs::ExportError> {
     ItemPage::export_all(&config)?;
     InboxResponse::export_all(&config)?;
     ThreadsResponse::export_all(&config)?;
+    RecordName::export_all(&config)?;
+    TiesResponse::export_all(&config)?;
     ProposedResponse::export_all(&config)?;
     MotionResponse::export_all(&config)?;
     DisputedResponse::export_all(&config)?;

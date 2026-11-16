@@ -5,6 +5,7 @@ use crate::api::{
     ActionRequest, ApiError, DisputedRepo, DisputedResponse, FetchMark, Hold, InboxRepo,
     InboxResponse, MissionRow, MissionState, MotionRepo, MotionResponse, PrMark, ProposedRepo,
     ProposedResponse, RepoSummary, ReposResponse, SessionRequest, StopAction, ThreadsResponse,
+    TiesResponse,
 };
 use crate::config::Config;
 use crate::fetch::{self, Fetches};
@@ -248,6 +249,20 @@ impl Desk {
         held.ok().flatten().unwrap_or_default()
     }
 
+    /// The index of every repository served, in the order the
+    /// configuration gives them. A repository that does not read is left
+    /// out; `/api/repos` gives its error.
+    fn indexes(&self) -> Vec<read::Index> {
+        let mut indexes = Vec::new();
+        for (name, dir, duplicate) in self.config.repositories() {
+            if duplicate.is_none() {
+                let index = self.read(&name, &dir, "index", |r| read::index(r, &name));
+                indexes.extend(index.ok().flatten());
+            }
+        }
+        indexes
+    }
+
     /// The response for `route` of the repository served as `name`.
     fn repo_route<T: Clone + Send + Sync + 'static>(
         &self,
@@ -345,6 +360,8 @@ pub fn router_for(desk: Arc<Desk>) -> Router {
         .route("/api/repos/{repo}/doc", get(doc))
         .route("/api/repos/{repo}/items/{id}", get(item))
         .route("/api/inbox", get(inbox))
+        .route("/api/records/{id}", get(record))
+        .route("/api/ties", get(ties))
         .route("/api/threads", get(threads))
         .route("/api/proposed", get(proposed))
         .route("/api/motion", get(motion))
@@ -473,7 +490,10 @@ async fn repos(State(desk): State<Arc<Desk>>) -> Response {
                 error: Some(error),
                 ..RepoSummary::default()
             },
-            |name, dir, summary| summary.fetched = desk.fetched(name, dir),
+            |name, dir, summary| {
+                summary.fetched = desk.fetched(name, dir);
+                summary.identity = fetch::origin_identity(dir);
+            },
         );
         Ok(ReposResponse {
             repos,
@@ -749,6 +769,43 @@ async fn threads(State(desk): State<Arc<Desk>>) -> Response {
             threads: snapshot.live(&desk.holds()),
             t3: snapshot.state,
         })
+    })
+    .await
+}
+
+/// What the ID `id` names: the first record with it, item or mission, in
+/// the repositories served, in the order the configuration gives them.
+async fn record(State(desk): State<Arc<Desk>>, UrlPath(id): UrlPath<String>) -> Response {
+    blocking(move || {
+        checked(&id)?;
+        let found = (desk.indexes().into_iter())
+            .find_map(|index| index.records.into_iter().find(|r| r.id == id));
+        found.ok_or_else(|| Failure::NotFound(format!("No repository served holds {id}.")))
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+struct ThreadQuery {
+    thread: String,
+}
+
+/// Every record that names the identity `thread`, whether or not T3 Code
+/// lists it as live.
+async fn ties(
+    State(desk): State<Arc<Desk>>,
+    Query(ThreadQuery { thread }): Query<ThreadQuery>,
+) -> Response {
+    blocking(move || {
+        if thread.is_empty() {
+            return Err(Failure::BadRequest("`thread` names no identity.".into()));
+        }
+        let ties = (desk.indexes().into_iter())
+            .flat_map(|index| index.ties)
+            .filter(|(identity, _)| *identity == thread)
+            .map(|(_, tie)| tie)
+            .collect();
+        Ok(TiesResponse { thread, ties })
     })
     .await
 }
