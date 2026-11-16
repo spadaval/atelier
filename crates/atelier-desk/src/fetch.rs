@@ -51,6 +51,73 @@ pub fn remote_of(dir: &Path, forge: Option<&str>) -> Option<String> {
         .then(|| "origin".to_string())
 }
 
+/// The repository at `dir` as T3 Code names a project's repository: its
+/// `origin` remote as [`identity`] gives it; `None` without an `origin`.
+pub fn origin_identity(dir: &Path) -> Option<String> {
+    identity(&git::run(dir, &["remote", "get-url", "origin"]).ok()?)
+}
+
+/// A remote's URL as `host/path`, lower case, with no scheme, user, port
+/// or `.git`: `https://github.com/spadaval/atelier.git`,
+/// `git@github.com:spadaval/atelier.git` and
+/// `ssh://git@github.com:22/spadaval/atelier` are all
+/// `github.com/spadaval/atelier`. It follows T3 Code's
+/// `parseGitRemoteRepository` (`packages/shared/src/git.ts`), which its
+/// `repositoryKeyFromRemote` keys a project's repository by: only `ssh`,
+/// `http`, `https` and `git` URLs, or `[user@]host:path` as `scp` writes
+/// it, and a path of at least two segments. `None` for any other remote,
+/// such as a local path or a `file://` URL.
+pub fn identity(url: &str) -> Option<String> {
+    let mut remote = url.trim().trim_end_matches('/');
+    let cut = remote.len().saturating_sub(4);
+    if remote
+        .get(cut..)
+        .is_some_and(|end| end.eq_ignore_ascii_case(".git"))
+    {
+        remote = &remote[..cut];
+    }
+    let remote = remote.to_lowercase();
+    match remote.split_once("://") {
+        Some(("ssh" | "http" | "https" | "git", _)) => url_identity(&remote),
+        _ => scp_identity(&remote),
+    }
+}
+
+/// `host/path` of a URL, its host and path as the WHATWG URL standard
+/// gives them, as T3 Code's `new URL()` does: an IPv6 host compressed in
+/// brackets, an international host in Punycode, `.` and `..` resolved.
+fn url_identity(remote: &str) -> Option<String> {
+    let url = url::Url::parse(remote).ok()?;
+    let host = url.host_str().filter(|host| !host.is_empty())?;
+    let segments: Vec<&str> = url.path().split('/').filter(|s| !s.is_empty()).collect();
+    (segments.len() > 1).then(|| format!("{host}/{}", segments.join("/")))
+}
+
+/// `host/path` of `[user@]host:path`; `None` for a Windows drive, such as
+/// `c:/repo`.
+fn scp_identity(remote: &str) -> Option<String> {
+    let bytes = remote.as_bytes();
+    if bytes.len() > 1 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
+        return None;
+    }
+    let (user_host, path) = remote.split_once(':')?;
+    let host = match user_host.split_once('@') {
+        Some((user, host)) => {
+            let named = |c: char| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-');
+            (!user.is_empty() && user.chars().all(named)).then_some(host)?
+        }
+        None => user_host,
+    };
+    let odd = |c: char| matches!(c, '@' | '/' | '\\') || c.is_whitespace();
+    if host.is_empty() || host.contains(odd) {
+        return None;
+    }
+    let path = path.strip_prefix('/').unwrap_or(path);
+    let segments: Vec<&str> = path.split('/').collect();
+    let fine = |s: &&str| !s.is_empty() && !s.contains(char::is_whitespace);
+    (segments.len() > 1 && segments.iter().all(fine)).then(|| format!("{host}/{path}"))
+}
+
 impl Fetches {
     pub fn new(every: u64, gh: PathBuf) -> Fetches {
         Fetches {
@@ -221,4 +288,75 @@ fn newest(listed: Vec<Listed>) -> HashMap<String, PrMark> {
         }
     }
     prs
+}
+
+#[cfg(test)]
+mod tests {
+    use super::identity;
+
+    #[test]
+    fn a_remote_is_named_as_t3_code_names_a_repository() {
+        let named = "github.com/spadaval/atelier";
+        for url in [
+            "https://github.com/spadaval/atelier.git",
+            "https://github.com/spadaval/atelier",
+            "https://user:token@GitHub.com:443/Spadaval/Atelier.git/",
+            "https://GitHub.com/Spadaval/Atelier.GIT",
+            "http://github.com/spadaval/atelier/",
+            "git@github.com:spadaval/atelier.git",
+            "github.com:spadaval/atelier",
+            "git@github.com:/spadaval/atelier.git",
+            "ssh://git@github.com/spadaval/atelier.git",
+            "ssh://git@github.com:22/spadaval/atelier",
+            "git://github.com/spadaval/atelier.git",
+        ] {
+            assert_eq!(identity(url).as_deref(), Some(named), "{url}");
+        }
+        let cases = [
+            (
+                "git@gitlab.example.com:group/sub/project.git",
+                "gitlab.example.com/group/sub/project",
+            ),
+            (
+                "ssh://git@[2001:db8::1]:22/org/repo.git",
+                "[2001:db8::1]/org/repo",
+            ),
+            ("https://[2001:DB8::2]/Org/Repo", "[2001:db8::2]/org/repo"),
+            (
+                "ssh://git@[2001:0db8:0000:0000:0000:0000:0000:1]:22/org/repo.git",
+                "[2001:db8::1]/org/repo",
+            ),
+            (
+                "https://börse.example.com/org/repo.git",
+                "xn--brse-5qa.example.com/org/repo",
+            ),
+            (
+                "https://gitlab.example.com/group/../other/repo.git",
+                "gitlab.example.com/other/repo",
+            ),
+            (
+                "ssh://git@host.example.com/a/./b/../c/repo",
+                "host.example.com/a/c/repo",
+            ),
+            (
+                "https://example.com/org/my repo?x=1#top",
+                "example.com/org/my%20repo",
+            ),
+        ];
+        for (url, named) in cases {
+            assert_eq!(identity(url).as_deref(), Some(named), "{url}");
+        }
+        for none in [
+            "/srv/git/atelier.git",
+            "../atelier",
+            "file:///srv/git/atelier.git",
+            "git+ssh://git@github.com/spadaval/atelier.git",
+            "c:/repos/atelier",
+            "https://github.com/atelier",
+            "git@github.com:atelier.git",
+            "",
+        ] {
+            assert_eq!(identity(none), None, "{none}");
+        }
+    }
 }

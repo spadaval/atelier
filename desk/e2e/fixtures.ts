@@ -306,10 +306,11 @@ export const missions: MissionsResponse = { commit, missions: Object.values(miss
 
 export const repos: ReposResponse = {
   repos: [
-    { name: "atelier", path: "/projects/atelier", base: "master", base_tip: commit, in_progress: 2, proposed: 2, waiting: 1, error: null, fetched },
+    { name: "atelier", path: "/projects/atelier", identity: "github.com/spadaval/atelier", base: "master", base_tip: commit, in_progress: 2, proposed: 2, waiting: 1, error: null, fetched },
     {
       name: "broken",
       path: "/projects/broken",
+      identity: null,
       base: null,
       base_tip: null,
       in_progress: 0,

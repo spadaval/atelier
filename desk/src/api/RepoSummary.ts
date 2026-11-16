@@ -5,7 +5,14 @@ import type { FetchMark } from "./FetchMark";
  * One repository and its counts, or why it cannot be read: then `error`
  * is set and the rest is empty.
  */
-export type RepoSummary = { name: string, path: string, base: string | null, base_tip: string | null,
+export type RepoSummary = { name: string, path: string,
+/**
+ * Its `origin` remote as `host/path`, lower case, with no scheme,
+ * user, port or `.git`, as T3 Code names a project's repository
+ * (`github.com/spadaval/atelier`); `null` without an `origin`, or for
+ * one with no host, such as a local path.
+ */
+identity: string | null, base: string | null, base_tip: string | null,
 /**
  * Agreed missions with a started item.
  */

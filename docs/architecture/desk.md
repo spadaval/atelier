@@ -353,6 +353,8 @@ identity never appears in a path: it can hold `/`, `:` and `%`, as
 | `GET /api/repos/{repo}/items/{id}` | Item | One item in full |
 | `GET /api/inbox` | Inbox | What waits on the human, in every repository |
 | `GET /api/threads` | Live threads | T3 Code's live threads, each with what it holds in the records |
+| `GET /api/records/{id}` | A host that frames the Desk | What an ID names, in whichever repository served holds it |
+| `GET /api/ties?thread=<identity>` | A host that frames the Desk | Every record that names a thread identity, live or not, and whether each tie is current |
 | `GET /api/proposed` | Proposed | Proposed plans and record changes on branches, in every repository |
 | `GET /api/motion` | In motion | Started items and missions in progress, with their threads |
 | `GET /api/disputed` | Disputed | What `atelier list --disputed` gives, with each side's model |
@@ -385,6 +387,7 @@ cached, and so are pull requests and T3 Code's threads.
 | Field | Given by | State |
 | --- | --- | --- |
 | `name`, `path` | The Desk's configuration | Desk |
+| `identity` | The `origin` remote (`git remote get-url origin`) as `host/path`, lower case, with no scheme, user, port or `.git`: `https://github.com/spadaval/atelier.git`, `git@github.com:spadaval/atelier.git` and `ssh://git@github.com:22/spadaval/atelier` are all `github.com/spadaval/atelier`, the key T3 Code's `repositoryKeyFromRemote` gives a project's repository (`fetch::identity`). `null` without an `origin`, or for one with no host, such as a local path or a `file://` URL. Given for a repository that does not read too | Desk |
 | `base` | `Repo::base`, from `config.toml` at `HEAD` | M1: `Repo::open_committed` |
 | `base_tip` | `Repo::base_tip` | psjw |
 | `in_progress` | Count of missions where `atelier_core::in_progress(mission, &entries)` | master |
@@ -555,6 +558,47 @@ ID, percent-encoded>`.
 
 Effort, context use and token counts are not shown: the MCP server gives
 none (atelier-aab1), and the strategy puts them out of scope.
+
+### `GET /api/records/{id}`
+
+What an ID names, for a host that has an ID and no repository, such as T3
+Code's extension reading one from a thread's title. The Desk looks the ID
+up in every repository served, in the order its configuration gives them,
+and answers with the first record that has it. A repository that does not
+read is passed over; `/api/repos` gives its error. An ID that does not
+validate is `400`; one that validates and names nothing is `404`.
+
+| Field | Given by |
+| --- | --- |
+| `repo` | The name the Desk's configuration gives the repository |
+| `kind` | `item` or `mission` |
+| `id`, `title` | The record |
+| `status` | As the record stores it: an item's (`Status`, such as `in_review`) or a mission's (`MissionStatus`: `open`, `done`, `dropped` or the old `draft`) |
+
+Records are read as `/api/threads` reads them: each item by the record the
+cross-branch rule picks (`Located::record`), so a started item's status is
+its branch's, and each mission by its record that counts, with a stop on
+the forge's base marked dropped (`Repo::published_stops`). The index both
+this route and `/api/ties` read is built once per repository and kept
+until its commits change, as every response is.
+
+### `GET /api/ties?thread=<identity>`
+
+What a thread identity is tied to, whether or not T3 Code lists the thread
+as live, so a host can show what any thread worked on. The identity is the
+query parameter `thread`, percent-encoded, never a path segment, since it
+can hold `/`, `:` and `%`. It is compared whole, as in [Tying a thread to
+an item](#tying-a-thread-to-an-item). A `thread` that is missing or empty
+is `400`; an identity no record names gets `ties: []`, not `404`.
+
+| Field | Given by |
+| --- | --- |
+| `thread` | The identity asked about |
+| `ties[] {repo, kind, id, title, status, role}` | One per record and role that names the identity, in every repository served: the record as on `/api/records/{id}`, and `role` as on `/api/threads` (`planner`, `implementer`, `reviewer`, `lead` or `decider`). Items come before missions within a repository |
+| `ties[].current` | Whether the identity works on the record now. On an item: its last implementer (`Implementers::holder`) while it is `building`, `in_review`, `changes_requested` or `approved` (`actions::STARTED`); the holder of a review of its latest round while it is `in_review` and no review of that round has a verdict, as `Entry::reviewer` finds it. On a mission that is not `done` or `dropped`: its lead and its planners, and the holder of each review of its plan's latest round while a review of that round has no verdict, the rule `actions::plan_round` keeps a round open by. Otherwise false: a replaced implementer, a reviewer of a closed round, a decider, and every tie to a done or dropped record |
+
+`/api/threads` and its `holds` are unchanged: they list every tie, current
+or not, with no title or status.
 
 ### `GET /api/proposed`
 
