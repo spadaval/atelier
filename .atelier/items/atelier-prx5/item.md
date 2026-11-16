@@ -55,9 +55,12 @@ repository a T3 project is, what an ID names and what a thread is tied to.
   `a_remote_is_named_as_t3_code_names_a_repository` covers HTTPS (with a
   user, token and port), `git@host:path`, bare `host:path`, `ssh://` with
   and without a port, and `git+ssh://`. A local path or `file://` URL gives
-  `null`, as no `origin` does. Since round 1 it ports T3 Code's
-  `parseGitRemoteRepository` rule for rule, and every case in the test
-  was checked against that function run from the local T3 Code checkout.
+  `null`, as no `origin` does. It ports T3 Code's
+  `parseGitRemoteRepository` rule for rule, reading a URL with the `url`
+  crate (WHATWG, as T3's `new URL()`), so an IPv6 host is compressed, an
+  international host is Punycode and `.`/`..` are resolved. Every case in
+  the test was checked against that function run from the local T3 Code
+  checkout.
   A host whose source control definition respells its keys (Azure
   DevOps over SSH) is not respelled here.
 - `GET /api/records/{id}` answers `{repo, kind, id, title, status}`, from
@@ -93,3 +96,4 @@ passed) and `tsc --noEmit` in `desk/`.
 ### Responses
 
 - 1-ctz4.1: fixed in cb7ff9fd2
+- 2-mihq.2: fixed in 5c7122fd4
