@@ -61,40 +61,68 @@ pub fn origin_identity(dir: &Path) -> Option<String> {
 /// or `.git`: `https://github.com/spadaval/atelier.git`,
 /// `git@github.com:spadaval/atelier.git` and
 /// `ssh://git@github.com:22/spadaval/atelier` are all
-/// `github.com/spadaval/atelier`, the key T3 Code's
-/// `repositoryKeyFromRemote` gives. `None` for a URL with no host, such as
-/// a local path or a `file://` URL.
+/// `github.com/spadaval/atelier`. It follows T3 Code's
+/// `parseGitRemoteRepository` (`packages/shared/src/git.ts`), which its
+/// `repositoryKeyFromRemote` keys a project's repository by: only `ssh`,
+/// `http`, `https` and `git` URLs, or `[user@]host:path` as `scp` writes
+/// it, and a path of at least two segments. `None` for any other remote,
+/// such as a local path or a `file://` URL.
 pub fn identity(url: &str) -> Option<String> {
-    let url = url.trim();
-    let (host, path) = match url.split_once("://") {
-        Some((scheme, _)) if scheme.eq_ignore_ascii_case("file") => return None,
-        Some((_, rest)) => {
-            let (authority, path) = rest.split_once('/')?;
-            let host = authority.rsplit_once('@').map_or(authority, |(_, h)| h);
-            (host.split(':').next()?, path)
-        }
-        // `[user@]host:path`, as `scp` writes it. A path before the colon
-        // makes it a local path instead.
-        None => {
-            let (authority, path) = url.split_once(':')?;
-            if authority.contains('/') {
-                return None;
-            }
-            (
-                authority.rsplit_once('@').map_or(authority, |(_, h)| h),
-                path,
-            )
-        }
+    let mut remote = url.trim().trim_end_matches('/');
+    let cut = remote.len().saturating_sub(4);
+    if remote
+        .get(cut..)
+        .is_some_and(|end| end.eq_ignore_ascii_case(".git"))
+    {
+        remote = &remote[..cut];
+    }
+    let remote = remote.to_lowercase();
+    match remote.split_once("://") {
+        Some(("ssh" | "http" | "https" | "git", rest)) => url_identity(rest),
+        _ => scp_identity(&remote),
+    }
+}
+
+/// `host/path` of a URL's part after its `scheme://`.
+fn url_identity(rest: &str) -> Option<String> {
+    let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    let (authority, rest) = rest.split_at(end);
+    let host = authority
+        .rsplit_once('@')
+        .map_or(authority, |(_, host)| host);
+    // An IPv6 host keeps its brackets and its colons; a port goes.
+    let host = match host.find(']') {
+        Some(close) if host.starts_with('[') => &host[..=close],
+        _ => host.split(':').next().unwrap_or_default(),
     };
-    let path = path.trim_matches('/');
-    let path = path
-        .strip_suffix(".git")
-        .unwrap_or(path)
-        .trim_end_matches('/');
-    if host.is_empty() || path.is_empty() {
+    let path = rest.split(['?', '#']).next().unwrap_or_default();
+    let segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+    (!host.is_empty() && segments.len() > 1).then(|| format!("{host}/{}", segments.join("/")))
+}
+
+/// `host/path` of `[user@]host:path`; `None` for a Windows drive, such as
+/// `c:/repo`.
+fn scp_identity(remote: &str) -> Option<String> {
+    let bytes = remote.as_bytes();
+    if bytes.len() > 1 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
         return None;
     }
-    Some(format!("{host}/{path}").to_lowercase())
+    let (user_host, path) = remote.split_once(':')?;
+    let host = match user_host.split_once('@') {
+        Some((user, host)) => {
+            let named = |c: char| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-');
+            (!user.is_empty() && user.chars().all(named)).then_some(host)?
+        }
+        None => user_host,
+    };
+    let odd = |c: char| matches!(c, '@' | '/' | '\\') || c.is_whitespace();
+    if host.is_empty() || host.contains(odd) {
+        return None;
+    }
+    let path = path.strip_prefix('/').unwrap_or(path);
+    let segments: Vec<&str> = path.split('/').collect();
+    let fine = |s: &&str| !s.is_empty() && !s.contains(char::is_whitespace);
+    (segments.len() > 1 && segments.iter().all(fine)).then(|| format!("{host}/{path}"))
 }
 
 impl Fetches {
@@ -280,26 +308,42 @@ mod tests {
             "https://github.com/spadaval/atelier.git",
             "https://github.com/spadaval/atelier",
             "https://user:token@GitHub.com:443/Spadaval/Atelier.git/",
+            "https://GitHub.com/Spadaval/Atelier.GIT",
             "http://github.com/spadaval/atelier/",
             "git@github.com:spadaval/atelier.git",
             "github.com:spadaval/atelier",
+            "git@github.com:/spadaval/atelier.git",
             "ssh://git@github.com/spadaval/atelier.git",
             "ssh://git@github.com:22/spadaval/atelier",
-            "git+ssh://git@github.com/spadaval/atelier.git",
+            "git://github.com/spadaval/atelier.git",
         ] {
             assert_eq!(identity(url).as_deref(), Some(named), "{url}");
         }
-        assert_eq!(
-            identity("git@gitlab.example.com:group/sub/project.git").as_deref(),
-            Some("gitlab.example.com/group/sub/project")
-        );
-        for local in [
+        let cases = [
+            (
+                "git@gitlab.example.com:group/sub/project.git",
+                "gitlab.example.com/group/sub/project",
+            ),
+            (
+                "ssh://git@[2001:db8::1]:22/org/repo.git",
+                "[2001:db8::1]/org/repo",
+            ),
+            ("https://[2001:DB8::2]/Org/Repo", "[2001:db8::2]/org/repo"),
+        ];
+        for (url, named) in cases {
+            assert_eq!(identity(url).as_deref(), Some(named), "{url}");
+        }
+        for none in [
             "/srv/git/atelier.git",
             "../atelier",
             "file:///srv/git/atelier.git",
+            "git+ssh://git@github.com/spadaval/atelier.git",
+            "c:/repos/atelier",
+            "https://github.com/atelier",
+            "git@github.com:atelier.git",
             "",
         ] {
-            assert_eq!(identity(local), None, "{local}");
+            assert_eq!(identity(none), None, "{none}");
         }
     }
 }
