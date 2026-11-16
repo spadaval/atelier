@@ -21,6 +21,11 @@ const { probes, imported, declared } = await page.evaluate(`(async api => {
     const context = host.context && await host.context().catch(error => { hostProbes['route:thread'] ??= { ok: false, detail: error.message }; return null; });
     if (!context) hostProbes['route:thread'] ??= { ok: false, detail: location.hash + ' is not a thread with a project; pass --thread <environmentId>/<threadId>' };
     await wait(() => document.querySelector(hostSelectors.conversation));
+    readHostTheme(document.body);
+    if (context) {
+      const found = host.findThread?.(context.threadId);
+      hostProbes['state:find-thread'] = found === context.environmentId ? { ok: true, detail: 'thread found in environment ' + found + ' among the connected environments' } : { ok: false, detail: host.findThread ? 'found ' + found + ' for a thread of ' + context.environmentId : 'module:environment-atoms is missing' };
+    }
     if (context && host.panel) {
       await host.panel.show(context);
       observeHostDom();

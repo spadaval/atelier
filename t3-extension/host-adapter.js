@@ -34,6 +34,7 @@ async function createHostAdapter(api) {
     'workspace-panel-store': value => typeof value.subscribe === 'function' && ['byThreadKey', 'show', 'openBrowser'].every(key => key in value.getState()),
     'atom-registry': value => '~effect/reactivity/AtomRegistry' in value && typeof value.get === 'function',
     'thread-snapshot-atom': value => ['snapshotAtom', 'familyAtom', 'mountRows'].every(key => typeof value[key] === 'function'),
+    'environment-atoms': value => ['environmentIdsAtom', 'connectedEnvironmentIdsAtom'].every(key => key in value),
   };
   // Last seen chunk names only decide the search order, so a renamed chunk costs time, not a hook.
   const likelyChunks = /\/(terminalFocus|session|utils)-[^/]*\.js$/;
@@ -71,6 +72,7 @@ async function createHostAdapter(api) {
   const panelStore = found['workspace-panel-store'];
   const registry = found['atom-registry'];
   const threads = found['thread-snapshot-atom'];
+  const environments = found['environment-atoms'];
 
   // Reads T3's own list of the environment's projects and threads, with the rows T3 loads
   // separately for an older or child thread merged in. It needs no request, so it works
@@ -103,9 +105,18 @@ async function createHostAdapter(api) {
     setHostProbe('route:thread', false, `#/${environmentId}/${threadId} named no thread with a project in that environment within 15 seconds`);
     return null;
   }
+  // The connected environment whose loaded threads include threadId, or null.
+  function findThread(threadId) {
+    for (const environmentId of registry.get(environments.connectedEnvironmentIdsAtom) ?? []) {
+      if (registry.get(threads.snapshotAtom(environmentId))?.threads.some(thread => thread.id === threadId)) return environmentId;
+    }
+    return null;
+  }
   return {
     // null means the surfaces that need this hook are off; hostProbes says why.
     context: registry && threads ? context : null,
+    findThread: registry && threads && environments ? findThread : null,
+    showThread: (environmentId, threadId) => { location.hash = `/${environmentId}/${encodeURIComponent(threadId)}`; },
     panel: panelStore ? {
       state: context => panelStore.getState().byThreadKey[`${context.environmentId}:${context.threadId}`],
       // Opens T3's panel and resolves to its content slot, or to null with the missing hook recorded.
@@ -122,4 +133,29 @@ async function createHostAdapter(api) {
       subscribe: listener => panelStore.subscribe(listener),
     } : null,
   };
+}
+
+// T3's theme, from its own CSS custom properties, in the form of the Desk's host:theme message.
+// Each colour is resolved to a computed value, so the Desk gets no var() or color-mix() of T3's.
+const hostThemeColors = { background: '--background', foreground: '--foreground', surface: '--card', border: '--border', muted: '--muted-foreground', accent: '--primary' };
+function readHostTheme(root) {
+  const probe = document.createElement('span');
+  root.append(probe);
+  const colors = {};
+  const missing = [];
+  for (const [name, variable] of Object.entries(hostThemeColors)) {
+    if (!getComputedStyle(document.documentElement).getPropertyValue(variable).trim()) { missing.push(variable); continue; }
+    probe.style.color = `var(${variable})`;
+    colors[name] = getComputedStyle(probe).color;
+  }
+  probe.remove();
+  setHostProbe('css:theme', missing.length === 0, missing.length ? `T3 defines no ${missing.join(', ')} on its root element` : Object.values(hostThemeColors).join(', '));
+  const scheme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+  return { colors, font: getComputedStyle(document.body).fontFamily, scheme };
+}
+// T3 switches theme on its root element's class and style attributes.
+function observeHostTheme(callback) {
+  const observer = new MutationObserver(callback);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style', 'data-theme'] });
+  return () => observer.disconnect();
 }
