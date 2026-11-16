@@ -3,6 +3,7 @@ import type { Agent } from "./Agent";
 import type { DoneWhen } from "./DoneWhen";
 import type { FetchMark } from "./FetchMark";
 import type { ItemRow } from "./ItemRow";
+import type { PrMark } from "./PrMark";
 import type { Question } from "./Question";
 import type { ReadFrom } from "./ReadFrom";
 import type { ReadyMark } from "./ReadyMark";
@@ -26,4 +27,6 @@ unsettled: Array<string>,
  * Its implementers, the reviewers of its reviews and the deciders of
  * its answers.
  */
-threads: Array<Agent>, t3: T3State, fetched: FetchMark, };
+threads: Array<Agent>, t3: T3State, fetched: FetchMark,
+/** Spike: its branch's pull request. */
+pull_request?: PrMark | null, };

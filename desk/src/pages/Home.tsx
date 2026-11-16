@@ -1,0 +1,186 @@
+import { GitPullRequestArrow, Target } from "lucide-react";
+import type { ReactNode } from "react";
+import { Link, useParams } from "react-router";
+import type { Agent } from "../api/Agent";
+import type { InboxResponse } from "../api/InboxResponse";
+import type { MissionsResponse } from "../api/MissionsResponse";
+import type { MotionResponse } from "../api/MotionResponse";
+import type { ItemRow } from "../api/ItemRow";
+import type { MotionItem } from "../api/MotionItem";
+import { LiveThreadRow } from "../components/Agents";
+import { Crumbs } from "../components/Crumbs";
+import { Priority, ScopeBar, Skeleton, StatusGlyph } from "../components/ui";
+import { api, to, useData } from "../lib/api";
+import { ago, countsLine, finished, statusName, total } from "../lib/words";
+
+/** A thread as a short name: its live title, else the end of its identity. */
+export function who(agent: Agent | null | undefined, identity?: string | null): string {
+  if (agent?.thread) return agent.thread.title;
+  const id = agent?.identity ?? identity;
+  if (!id) return "nobody";
+  const tail = id.split(/%3A|:/).at(-1) ?? id;
+  return `thread …${tail.slice(-6)}`;
+}
+
+/** `12m`, `3h`, `2d`: how long ago, short. */
+export function since(iso: string | null | undefined, now = Date.now()): string | null {
+  if (!iso) return null;
+  const at = Date.parse(iso);
+  if (Number.isNaN(at)) return null;
+  const s = Math.max(0, (now - at) / 1000);
+  if (s < 60) return "now";
+  if (s < 3600) return `${Math.round(s / 60)}m`;
+  if (s < 172_800) return `${Math.round(s / 3600)}h`;
+  return `${Math.round(s / 86_400)}d`;
+}
+
+export function Block({ title, tally, more, children }: { title: string; tally?: ReactNode; more?: ReactNode; children: ReactNode }) {
+  return (
+    <section className="glance-block">
+      <div className="glance-head">
+        <h3>{title}</h3>
+        {tally !== undefined ? <span className="tally">{tally}</span> : null}
+        {more ? <span className="more">{more}</span> : null}
+      </div>
+      <div className="list">{children}</div>
+    </section>
+  );
+}
+
+/** One item as a compact row: glyph, ID, title, and a short right-hand note. */
+export function Row({ repo, id, title, status, note, hot, extra }: { repo: string; id: string; title: string; status: string; note?: ReactNode; hot?: boolean; extra?: ReactNode }) {
+  return (
+    <Link to={to.item(repo, id)} className={`glance-row${hot ? " hot" : ""}`}>
+      <StatusGlyph status={status} />
+      <span className="id">{id}</span>
+      <span className="title">{title}</span>
+      <span className="note">
+        {extra}
+        {note}
+      </span>
+    </Link>
+  );
+}
+
+function MotionRow({ repo, item }: { repo: string; item: MotionItem }) {
+  const age = since(item.changed_at);
+  const holder = item.status === "in_review" && item.reviewer ? `review: ${who(item.reviewer)}` : who(item.holder);
+  return (
+    <Row
+      repo={repo}
+      id={item.id}
+      title={item.title}
+      status={item.status}
+      note={
+        <>
+          <span className="stage">{statusName(item.status)}</span>
+          <span className="who" title={item.holder?.identity ?? undefined}>
+            {holder}
+          </span>
+          {age ? <span className="age" title={`Last commit on ${item.branch ?? "its branch"} ${item.changed_at}`}>{age}</span> : null}
+        </>
+      }
+    />
+  );
+}
+
+function ReadyRow({ repo, row }: { repo: string; row: ItemRow }) {
+  return <Row repo={repo} id={row.id} title={row.title} status={row.status} extra={<Priority priority={row.priority} />} />;
+}
+
+/**
+ * The project at a glance, for a host that shows it under its new-thread
+ * composer: missions in progress, items in motion, what waits on the human
+ * and what can start next. No heading of its own, and no claim on the
+ * window's height.
+ */
+export function ProjectGlance({ repo }: { repo: string }) {
+  const missions = useData<MissionsResponse>(api.missions(repo));
+  const motion = useData<MotionResponse>(api.motion());
+  const inbox = useData<InboxResponse>(api.inbox());
+  const moving = motion.data?.repos.find((r) => r.repo === repo);
+  const waiting = inbox.data?.repos.find((r) => r.repo === repo);
+  if (missions.status === 404) return <p className="glance-empty">The Desk does not serve a repository named {repo}.</p>;
+  if (!missions.data || !motion.data || !inbox.data) return <Skeleton rows={4} />;
+
+  const active = missions.data.missions.filter((m) => m.state === "open" && m.in_progress);
+  const items = moving?.items ?? [];
+  const ready = moving?.ready ?? [];
+  const needs = (waiting?.needs_human ?? []).flatMap((g) => g.items);
+  const plans = waiting?.proposed ?? [];
+  const threads = waiting?.threads ?? [];
+  const waits = needs.length + plans.length + threads.length;
+
+  return (
+    <div className="glance">
+      {waits > 0 ? (
+        <Block title="Waiting on you" tally={waits}>
+          {plans.map((m) => (
+            <Link key={m.id} to={to.mission(repo, m.id)} className="glance-row hot">
+              <span className="glyph you">
+                <GitPullRequestArrow size={15} aria-hidden />
+              </span>
+              <span className="id">{m.id}</span>
+              <span className="title">{m.title}</span>
+              <span className="note">
+                <span className="tag you">Plan proposed</span>
+              </span>
+            </Link>
+          ))}
+          {threads.map((t) => (
+            <LiveThreadRow key={t.id} thread={t} holds={t.holds} />
+          ))}
+          {needs.map((row) => (
+            <Row key={row.id} repo={repo} id={row.id} title={row.title} status={row.status} note={<span className="tag you">Needs you</span>} />
+          ))}
+        </Block>
+      ) : null}
+
+      <Block title="Missions in progress" tally={active.length} more={<Link to={to.repo(repo)}>All missions</Link>}>
+        {active.length === 0 ? <p className="card-empty">No mission has work under way.</p> : null}
+        {active.map((m) => (
+          <Link key={m.id} to={to.mission(repo, m.id)} className="glance-mission">
+            <span className="glyph run">
+              <Target size={15} aria-hidden />
+            </span>
+            <span className="title">{m.title}</span>
+            <span className="bar" title={countsLine(m.counts)}>
+              <ScopeBar counts={m.counts} />
+            </span>
+            <span className="num">
+              {finished(m.counts)}/{total(m.counts)}
+            </span>
+          </Link>
+        ))}
+      </Block>
+
+      <Block title="In motion" tally={items.length} more={<Link to="/motion">In motion</Link>}>
+        {items.length === 0 ? <p className="card-empty">Nothing is started.</p> : null}
+        {items.map((item) => (
+          <MotionRow key={item.id} repo={repo} item={item} />
+        ))}
+      </Block>
+
+      <Block title="Next up" tally={ready.length}>
+        {ready.length === 0 ? <p className="card-empty">Nothing is ready to start.</p> : null}
+        {ready.map((row) => (
+          <ReadyRow key={row.id} repo={repo} row={row} />
+        ))}
+      </Block>
+      <p className="glance-foot">
+        {repo}, as of {moving?.fetched.at ? ago((Date.now() - Date.parse(moving.fetched.at)) / 1000) : "now"}
+      </p>
+    </div>
+  );
+}
+
+/** `/home/:repo`: the project home under T3 Code's new-thread composer. */
+export function HomePage() {
+  const { repo = "" } = useParams();
+  return (
+    <div className="page glance-page">
+      <Crumbs trail={[{ label: repo }]} />
+      <ProjectGlance repo={repo} />
+    </div>
+  );
+}

@@ -15,4 +15,8 @@ holder: Agent | null,
 /**
  * Who holds its review, while it is in review.
  */
-reviewer: Agent | null, };
+reviewer: Agent | null,
+/**
+ * Spike: when its branch last had a commit.
+ */
+changed_at?: string | null, };

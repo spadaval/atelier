@@ -2443,3 +2443,300 @@ a.q:hover {
   font: 500 12px var(--mono);
   color: var(--you-text);
 }
+
+/* ------------------------------------------------- spike: glance pages */
+/* The project home under T3's composer: no top bar, no claim on the height. */
+.shell.embedded.bare {
+  min-height: 0;
+}
+.page.glance-page {
+  max-width: none;
+  padding: 14px 16px 24px;
+}
+.shell.embedded.bare .page.glance-page {
+  padding: 8px 12px 12px;
+}
+.glance {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr));
+  gap: 16px 20px;
+  align-items: start;
+}
+.glance.one {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 820px;
+}
+.glance-block {
+  min-width: 0;
+}
+.glance-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 2px 6px;
+}
+.glance-head h3 {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.glance-head .more {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.glance-head .more a:hover {
+  color: var(--ink);
+}
+.glance-row {
+  display: grid;
+  grid-template-columns: 18px auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 5px 10px;
+  width: 100%;
+  text-align: left;
+}
+.glance-row:hover,
+.glance-mission:hover,
+.child-row:hover {
+  background: var(--hover);
+}
+.glance-row.hot {
+  box-shadow: inset 2px 0 0 var(--you);
+}
+.glance-row .id {
+  font: 11.5px var(--mono);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.glance-row .title,
+.glance-mission .title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.glance-row .note,
+.child-row .note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.glance-row .who {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ink-2);
+}
+.glance-row .age,
+.child-row .age {
+  font: 11.5px var(--mono);
+  min-width: 26px;
+  text-align: right;
+}
+.glance-row .kind {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.glance-mission {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 110px 44px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+}
+.glance-mission .num {
+  font: 12px var(--mono);
+  color: var(--ink-3);
+  text-align: right;
+}
+.glance .card-empty {
+  margin: 0;
+  padding: 10px 12px;
+}
+.glance-foot,
+.glance-empty {
+  margin: 4px 2px 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.glance-empty {
+  padding: 8px 0;
+  font-size: 13px;
+}
+.thread-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 0 2px 14px;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+.thread-head b {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+.page.glance-page .thread-part {
+  padding: 0 2px 10px;
+}
+.hold-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 10px 12px;
+}
+.hold-card + .hold-card {
+  margin-top: 10px;
+}
+.hold-card header {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+.hold-title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hold-title:hover {
+  color: var(--you-text);
+}
+.hold-title .id {
+  font: 500 12px var(--mono);
+  color: var(--ink-3);
+  margin-right: 4px;
+}
+.hold-role {
+  margin: 2px 0 8px 26px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.hold-card > .seg {
+  margin: 0 0 8px 26px;
+  width: calc(100% - 26px);
+}
+.hold-sub {
+  margin: 0 0 4px 26px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.ticks {
+  list-style: none;
+  margin: 0 0 8px 26px;
+  padding: 0;
+  display: grid;
+  gap: 3px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.ticks li {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 6px;
+}
+.ticks li svg {
+  margin-top: 3px;
+  color: var(--ink-3);
+}
+.ticks li.on {
+  color: var(--ink-3);
+}
+.ticks li.on svg {
+  color: var(--ok);
+}
+.hold-items {
+  margin: 0 0 8px 26px;
+}
+.hold-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  margin-left: 26px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.hold-foot a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.hold-foot a:hover {
+  color: var(--ink);
+}
+.hold-foot .more {
+  margin-left: auto;
+}
+.child-row {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  width: 100%;
+  padding: 8px 12px;
+  text-align: left;
+}
+.child-row .t {
+  display: block;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.child-row .s {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 10px;
+  row-gap: 2px;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.child-row .grow {
+  min-width: 0;
+}
+.child-row.stale {
+  box-shadow: inset 2px 0 0 var(--bad);
+}
+.fold-done summary {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 12px;
+  font-size: 12px;
+  color: var(--ink-3);
+  cursor: pointer;
+  list-style: none;
+}
+.fold-done summary::-webkit-details-marker {
+  display: none;
+}
+.fold-done[open] summary svg {
+  transform: rotate(90deg);
+}
+.fold-done > .glance-row {
+  border-top: 1px solid var(--line);
+}
+@media (max-width: 600px) {
+  .glance-row {
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+  }
+  .glance-row .id {
+    display: none;
+  }
+  .glance-row .who {
+    max-width: 110px;
+  }
+}

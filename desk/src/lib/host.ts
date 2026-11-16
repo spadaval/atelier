@@ -20,7 +20,15 @@ export type DeskMessage =
   | { type: "desk:open-thread"; thread: string };
 
 /** Where the contract stands: the listed origins, and the parent's once it is known to be one of them. */
-const state: { origins: string[]; parent: string | null; thread: string | null } = { origins: [], parent: null, thread: null };
+/** Spike: everything a `host:thread` message says about the host's thread. */
+export type HostContext = { thread: string; repository: string | null; children: string[]; mentioned: string[] };
+
+const state: { origins: string[]; parent: string | null; thread: string | null; context: HostContext | null } = {
+  origins: [],
+  parent: null,
+  thread: null,
+  context: null,
+};
 const listeners = new Set<() => void>();
 let theme: HostTheme = { colours: {} };
 let lastReport = "";
@@ -58,6 +66,17 @@ export function useHostThread(): string | null {
     () => null,
   );
 }
+
+/** Spike: the host's thread with its project, children and mentioned records, or null before the host names one. */
+export function useHostContext(): HostContext | null {
+  return useSyncExternalStore(
+    subscribe,
+    () => state.context,
+    () => null,
+  );
+}
+
+const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((v): v is string => typeof v === "string" && v !== "") : []);
 
 function send(message: DeskMessage) {
   if (state.parent === null) return;
@@ -99,7 +118,11 @@ function receive(event: MessageEvent) {
   } else if (message.type === "host:thread") {
     // An identity is only ever looked up (`GET /api/ties`), never followed.
     const thread = message.thread;
-    if (typeof thread !== "string" || thread === "" || thread === state.thread) return;
+    if (typeof thread !== "string" || thread === "") return;
+    const repository = typeof message.repository === "string" && message.repository !== "" ? message.repository : null;
+    const context: HostContext = { thread, repository, children: strings(message.children), mentioned: [...new Set(strings(message.mentioned))] };
+    if (JSON.stringify(context) === JSON.stringify(state.context)) return;
+    state.context = context;
     state.thread = thread;
     changed();
   }

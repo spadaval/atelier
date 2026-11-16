@@ -26,6 +26,7 @@ pub struct Threads {
     /// not, by ID: its provider, model and link.
     known: RwLock<HashMap<String, Known>>,
     polls: AtomicUsize,
+    read_cache: RwLock<HashMap<String, (Instant, Option<crate::api::ThreadInfo>)>>,
 }
 
 #[derive(Clone)]
@@ -61,6 +62,7 @@ impl Threads {
             polled: RwLock::default(),
             known: RwLock::default(),
             polls: AtomicUsize::new(0),
+            read_cache: RwLock::default(),
         }
     }
 
@@ -122,6 +124,55 @@ impl Threads {
                 side.model = Some(found.model.clone());
             }
         }
+    }
+
+    /// Spike: a thread by identity, from the live list, else read from T3
+    /// Code once and kept for a minute.
+    pub fn info(&self, id: &str) -> Option<crate::api::ThreadInfo> {
+        let snapshot = self.snapshot();
+        if let Some(t) = snapshot.threads.iter().find(|t| t.thread_id == id) {
+            return Some(crate::api::ThreadInfo {
+                id: t.thread_id.clone(),
+                title: t.title.clone(),
+                status: t.status.clone(),
+                updated_at: t.updated_at.clone(),
+                parent: t.parent_thread_id.clone(),
+                model: Some(t.model.clone()),
+                live: true,
+            });
+        }
+        {
+            let cache = self.read_cache.read().unwrap();
+            if let Some((at, info)) = cache.get(id) {
+                if at.elapsed() < Duration::from_secs(60) {
+                    return info.clone();
+                }
+            }
+        }
+        let client = self.client.as_ref()?;
+        let read = {
+            let mut client = client.lock().unwrap();
+            client.call(
+                "t3_thread_read",
+                serde_json::json!({"threadId": id, "limit": 1, "maxCharsPerItem": 1}),
+            )
+        };
+        let info = read.ok().and_then(|v| {
+            let t = v.get("thread")?;
+            let s = |k: &str| t.get(k).and_then(|x| x.as_str()).map(str::to_string);
+            Some(crate::api::ThreadInfo {
+                id: id.to_string(),
+                title: s("title")?,
+                status: s("status").unwrap_or_default(),
+                updated_at: s("updatedAt").unwrap_or_default(),
+                parent: s("parentThreadId"),
+                model: s("model"),
+                live: false,
+            })
+        });
+        let mut cache = self.read_cache.write().unwrap();
+        cache.insert(id.to_string(), (Instant::now(), info.clone()));
+        info
     }
 
     pub fn snapshot(&self) -> Snapshot {

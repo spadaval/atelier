@@ -328,6 +328,8 @@ pub struct ItemPage {
     pub threads: Vec<Agent>,
     pub t3: T3State,
     pub fetched: FetchMark,
+    /// Spike: the pull request of its branch.
+    pub pull_request: Option<PrMark>,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -440,6 +442,19 @@ pub struct T3State {
     pub age_seconds: Option<u32>,
     /// Why the last poll failed, or that T3 Code is not configured.
     pub error: Option<String>,
+}
+
+/// Spike: `GET /api/thread?id=<identity>`, any thread T3 Code knows, live
+/// or ended.
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct ThreadInfo {
+    pub id: String,
+    pub title: String,
+    pub status: String,
+    pub updated_at: String,
+    pub parent: Option<String>,
+    pub model: Option<String>,
+    pub live: bool,
 }
 
 /// `GET /api/threads`.
@@ -667,6 +682,8 @@ pub struct MotionRepo {
     pub items: Vec<MotionItem>,
     /// Each agreed mission with a started item.
     pub missions: Vec<MotionMission>,
+    /// Spike: the ready items that can start now, highest priority first.
+    pub ready: Vec<ItemRow>,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -682,6 +699,8 @@ pub struct MotionItem {
     pub holder: Option<Agent>,
     /// Who holds its review, while it is in review.
     pub reviewer: Option<Agent>,
+    /// Spike: when its branch last had a commit.
+    pub changed_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
