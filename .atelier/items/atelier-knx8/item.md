@@ -68,8 +68,8 @@ lead, a planner or a plan reviewer, and the inbox otherwise.
   location changes, so a page the human moved to stays. It replaces the
   history entry instead of pushing one, because a framed page's history is
   the host window's, and the host's back button should not step through
-  threads. A failed read of the ties leaves the page where it is. A late
-  answer for an identity the host has since replaced is dropped.
+  threads. A failed read of the ties leaves the page where it is, with no
+  line. A late answer for an identity the host has since replaced is dropped.
 - **The line** sits above the page, under the top bar (`.thread-part`):
   "This thread implements this item.", "reviews this item.", "leads this
   mission.", "plans this mission.", "reviews this mission's plan.", and on
@@ -79,7 +79,7 @@ lead, a planner or a plan reviewer, and the inbox otherwise.
 ### Validation
 
 - `pnpm test`: 57 passed. `pnpm typecheck`, `pnpm build`.
-- `pnpm e2e`: 104 passed on desktop and phone. `desk/e2e/host.spec.ts`
+- `pnpm e2e`: 106 passed on desktop and phone. `desk/e2e/host.spec.ts`
   frames the Desk in the fixture host page and sends `host:thread` for an
   implementer, a lead, a thread with no tie, a thread that implemented a
   done item and reviews another (it lands on the review's item), and a
@@ -88,5 +88,5 @@ lead, a planner or a plan reviewer, and the inbox otherwise.
   resends the same thread (the page stays), then sends another thread (the
   page changes), then the first again (it changes back). A host on an
   unlisted origin cannot move the Desk. `/api/ties` answers from
-  `ties` in `desk/e2e/fixtures.ts`.
-
+  `ties` in `desk/e2e/fixtures.ts`. A thread whose ties answer 503 after
+  a followed one leaves the page and removes the last line.

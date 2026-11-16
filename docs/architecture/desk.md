@@ -405,7 +405,8 @@ or, on the inbox, "This thread holds no open work"; the line goes once the
 human leaves the page. A `host:thread` that names the thread the last one
 named changes nothing, so the page the human has moved to stays; one that
 names another thread opens that thread's page. If the read fails the page
-stays where it is.
+stays where it is, with no line, since the last thread's line no longer
+applies.
 
 What a host sends is only displayed. No message makes the Desk write or
 act, fetch from another origin, or go outside its own routes: a theme sets

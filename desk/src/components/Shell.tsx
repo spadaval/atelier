@@ -125,6 +125,9 @@ function useFollowThread(): Place | null {
   const [followed, setFollowed] = useState<Place | null>(null);
   useEffect(() => {
     if (thread === null) return;
+    // The line names the last thread's part; it goes until this thread's
+    // ties are read, and stays gone if they cannot be.
+    setFollowed(null);
     let stale = false;
     void (async () => {
       try {

@@ -660,6 +660,8 @@ export const tied = {
   /** Implemented and reviewed only work that is done. */
   pastOnly: "thread:1ie1-only",
   none: live.free.id,
+  /** A thread whose ties cannot be read: `/api/ties` answers 503. */
+  unreadable: "thread:ties-unreadable",
 };
 
 const tie = (kind: Tie["kind"], id: string, title: string, status: Tie["status"], role: Tie["role"], current: boolean): Tie => ({ repo: "atelier", kind, id, title, status, role, current });
@@ -754,6 +756,7 @@ export class World {
     if (path === "/api/ties") {
       const identity = url.searchParams.get("thread");
       if (!identity) return { status: 400, body: { error: "A thread identity is needed." } };
+      if (identity === tied.unreadable) return { status: 503, body: { error: "The records could not be read." } };
       return { status: 200, body: { thread: identity, ties: ties[identity] ?? [] } };
     }
     if (path === "/api/inbox") return { status: 200, body: this.inbox };

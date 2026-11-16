@@ -201,6 +201,18 @@ test("the same thread again leaves the page alone, and another thread changes it
   await expect.poll(() => at(frame)).toBe("/embed/r/atelier/item/atelier-uwxy");
 });
 
+test("a thread whose ties cannot be read leaves the page, without the last thread's line", async ({ page }) => {
+  const frame = await host(page, listed, "/", [listed]);
+  await expect.poll(async () => (await received(page)).map((m) => m.data.type)).toContain("desk:navigated");
+  await send(page, { type: "host:thread", thread: tied.implementer });
+  await expect(frame.locator(".thread-part")).toHaveText("This thread implements this item.");
+  await send(page, { type: "host:thread", thread: tied.unreadable });
+  await expect(frame.locator(".thread-part")).toHaveCount(0);
+  await page.waitForTimeout(300);
+  expect(at(frame)).toBe("/embed/r/atelier/item/atelier-uwxy");
+  await expect(frame.locator(".thread-part")).toHaveCount(0);
+});
+
 test("a host whose origin is not listed cannot move the Desk", async ({ page }) => {
   const frame = await host(page, stranger, "/", [listed]);
   await send(page, { type: "host:thread", thread: tied.implementer });
