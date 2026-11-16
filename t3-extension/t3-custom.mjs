@@ -84,9 +84,9 @@ function checkSettings(settings) {
   }
   return settings;
 }
-// A Desk read: only GET of the repository list, one record, or one item or mission. The path must
+// A Desk read: only GET of the repository list, the inbox, one record, or one item or mission. The path must
 // come out of URL parsing unchanged, so no dot segment, backslash, query or fragment gets through.
-const readablePath = /^\/api\/(repos|records\/[a-z0-9-]+|repos\/[^/\\?#%]+\/(items|missions)\/[a-z0-9-]+)$/;
+const readablePath = /^\/api\/(repos|inbox|records\/[a-z0-9-]+|repos\/[^/\\?#%]+\/(items|missions)\/[a-z0-9-]+)$/;
 function deskReadUrl(config, desk, requested) {
   if (!deskUrls(config).includes(desk)) throw new Error(`Desk read is not allowed: ${desk} is not in desk.urls of ${configPath}`);
   if (typeof requested !== 'string' || !readablePath.test(requested)) throw new Error(`Desk read is not allowed: ${requested}`);

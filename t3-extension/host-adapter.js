@@ -10,6 +10,13 @@ const hostSelectors = {
   layoutControls: '[data-panel-layout-controls]',
   conversation: '[data-workspace-area="conversation"]',
   settingsPage: '[data-settings-page-scroll]',
+  // Project home on the new-thread screen: the composer overlay T3 centres, and its composer stack.
+  composerOverlay: '[data-workspace-area="composer"][data-chat-composer-overlay]',
+  composerStack: '[data-chat-composer-stack]',
+  // Inbox: the sidebar's search field (the row goes below its group), T3's main area, its thread rows.
+  sidebarSearch: '[data-workspace-area="sidebar"] [data-slot="sidebar-group"] input[type="search"]',
+  mainInset: 'main[data-slot="sidebar-inset"]',
+  sidebarRow: '[data-sidebar-row]',
 };
 // ok: true (found), false (missing), null (DOM hook not on screen yet).
 const hostProbes = Object.fromEntries(Object.keys(hostSelectors).map(name => [`dom:${name}`, { ok: null, detail: `${hostSelectors[name]} not seen yet` }]));
@@ -36,6 +43,8 @@ async function createHostAdapter(api) {
     'atom-registry': value => '~effect/reactivity/AtomRegistry' in value && typeof value.get === 'function',
     'thread-snapshot-atom': value => ['snapshotAtom', 'familyAtom', 'mountRows'].every(key => typeof value[key] === 'function'),
     'environment-atoms': value => ['environmentIdsAtom', 'connectedEnvironmentIdsAtom'].every(key => key in value),
+    // T3's composer draft store: a new-thread screen (#/draft/<id>) names its project there.
+    'composer-draft-store': value => typeof value.getState === 'function' && 'draftThreadsByThreadKey' in value.getState(),
   };
   // Last seen chunk names only decide the search order, so a renamed chunk costs time, not a hook.
   const likelyChunks = /\/(terminalFocus|session|utils|toast)-[^/]*\.js$/;
@@ -74,6 +83,7 @@ async function createHostAdapter(api) {
   const registry = found['atom-registry'];
   const threads = found['thread-snapshot-atom'];
   const environments = found['environment-atoms'];
+  const drafts = found['composer-draft-store'];
 
   // Reads T3's own list of the environment's projects and threads, with the rows T3 loads
   // separately for an older or child thread merged in. It needs no request, so it works
@@ -81,7 +91,7 @@ async function createHostAdapter(api) {
   async function context() {
     const hash = location.hash;
     const route = new URL(hash.slice(1) || '/', 'https://t3.invalid');
-    if (route.pathname.startsWith('/settings')) return null;
+    if (route.pathname.startsWith('/settings') || route.pathname.startsWith('/draft/')) return null;
     const [, environmentId, encodedThreadId] = route.pathname.split('/');
     if (!environmentId || !encodedThreadId) return null;
     const threadId = decodeURIComponent(encodedThreadId);
@@ -113,7 +123,31 @@ async function createHostAdapter(api) {
     }
     return null;
   }
+  // The project of the new-thread screen T3 shows (#/draft/<id>), from its draft store, or null.
+  function draftContext() {
+    const match = location.hash.match(/^#\/draft\/([^/?#]+)/);
+    if (!match) return null;
+    const draftId = decodeURIComponent(match[1]);
+    const draft = drafts.getState().draftThreadsByThreadKey[draftId];
+    if (!draft) { setHostProbe('route:draft', false, `#/draft/${draftId} has no entry in T3's draftThreadsByThreadKey`); return null; }
+    setHostProbe('route:draft', true, '#/draft/<draft> → draftThreadsByThreadKey');
+    if (!draft.projectId) return null;
+    const project = registry.get(threads.snapshotAtom(draft.environmentId))?.projects.find(project => project.id === draft.projectId);
+    return { draftId, environmentId: draft.environmentId, projectId: draft.projectId, projectName: project?.title ?? null, repositoryKey: project?.repositoryIdentity?.canonicalKey ?? draft.logicalProjectKey ?? null };
+  }
+  // Threads this thread started: T3's lineage.parentThreadId, in every connected environment.
+  function children(threadId) {
+    const ids = [];
+    for (const environmentId of registry.get(environments.connectedEnvironmentIdsAtom) ?? []) {
+      for (const thread of registry.get(threads.snapshotAtom(environmentId))?.threads ?? []) {
+        if (thread.lineage?.parentThreadId === threadId) ids.push(thread.id);
+      }
+    }
+    return ids.sort();
+  }
   return {
+    draftContext: registry && threads && drafts ? draftContext : null,
+    children: registry && threads && environments ? children : null,
     // null means the surfaces that need this hook are off; hostProbes says why.
     context: registry && threads ? context : null,
     findThread: registry && threads && environments ? findThread : null,

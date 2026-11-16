@@ -114,6 +114,27 @@ and moving the iframe reloads it. Two loads keep their page instead: a reference
 clicked in the conversation opens that record, and Refresh reloads the page
 shown; the Desk is not told the current thread on those, only the next one.
 
+## Spike: thread panel, project home, inbox (branch `spike/t3-home`)
+
+A rough build to look at, against the spike Desk (`http://buildbot:3781`); untested
+beyond the screenshots in `artifacts/spike/`.
+
+- `host:thread` is `{thread, repository, children, mentioned}`: `repository` is the
+  project's Desk repository name (absent if none), `children` the threads whose
+  T3 `lineage.parentThreadId` is this thread in any connected environment (read
+  every 3 seconds), `mentioned` the IDs the reference scanner found. It is sent
+  again whenever any of these change.
+- On T3's new-thread screen (`#/draft/<id>`, project from T3's composer draft
+  store) for a project with a Desk repository, `/embed/home/<repo>` fills the
+  space under the composer, which is moved from the centre to near the top.
+- An **Inbox** row under the sidebar's search shows the count from each Desk's
+  `GET /api/inbox` (needs-human items + proposed plans + waiting threads),
+  read every minute. Clicking it opens `/embed/inbox` over T3's main area; Esc,
+  the close button, the row again, a sidebar thread or any route change close it.
+- New hooks, each a probe: `module:composer-draft-store`, `route:draft`,
+  `dom:composerOverlay`, `dom:composerStack`, `dom:sidebarSearch`,
+  `dom:mainInset`, `dom:sidebarRow`. The bridge also allows `GET /api/inbox`.
+
 ## Project context
 
 The adapter reads the current environment/thread route, then resolves project
