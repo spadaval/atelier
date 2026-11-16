@@ -1,3 +1,4 @@
+// Probe for atelier-7tg6 timing; not to be merged.
 // Runs every test in this folder that needs no real T3 Code: each `test-*.mjs` but those listed in
 // `needsT3`, one at a time, since they share the browser's debugging port. CI runs this; a new test
 // is a new `test-*.mjs` file. Exits non-zero naming each test that failed.
