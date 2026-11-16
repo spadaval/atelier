@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-7tg6
 title: Run the extension's fixture test in CI against the Desk built from the same commit
-status: in_review
+status: approved
 mission: atelier-m8ye
 labels: []
 priority: medium
