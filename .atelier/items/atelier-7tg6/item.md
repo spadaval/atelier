@@ -26,7 +26,7 @@ Windows, against whichever Desk is live on buildbot.
 
 ## Done when
 
-- [ ] A CI job runs `t3-extension/test-extension.mjs` on Linux against an `atelier-desk` built from the same commit, with the Desk's app built from `desk/` at that commit.
+- [ ] A CI job runs the extension's tests on Linux against an `atelier-desk` built from the same commit, with the Desk's app built from `desk/` at that commit. It runs them through one command kept in `t3-extension/`, which runs every test there that needs no real T3 Code, `test-extension.mjs` among them, so a later item adds a test by adding a file and never edits the workflow. The command fails when any test fails and names it.
 - [ ] That Desk serves a repository the test owns: records written by the test's setup, or committed as fixtures under `t3-extension/`, with fixed IDs, titles and statuses. No expectation in the test depends on this repository's live records, such as the status of `atelier-plr9`, or on a host named buildbot.
 - [ ] The job runs when a change touches `t3-extension/`, `desk/`, `crates/atelier-desk`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `.github/workflows/ci.yml` or `scripts/ci-jobs.sh`, and not otherwise; `scripts/ci-jobs.sh` holds the rule and `scripts/ci-jobs.test.sh` covers each. A change to `crates/atelier-core` alone does not run it, on purpose: the fields the extension reads are defined in `atelier-desk`, and the `rust` job covers the core. `t3-extension/README.md` says so. A run whose jobs are all skipped still concludes success.
 - [ ] On a pull request that changes only `t3-extension/`, the job finishes in under six minutes, so `atelier merge`'s nine-minute wait holds; the Report gives the timing of three runs and says what is cached.

@@ -75,8 +75,8 @@ workflow, and T3 Code's own runtime runs the extension on a device.
   neither the `rust` job nor the `desk` job, and one that changes only
   `crates/atelier-core` does not run the extension's job.
   `scripts/ci-jobs.test.sh` covers both.
-- own-release: the release workflow's no-publish run, started by hand on
-  `master`, builds a bundle whose installer installs the extension into an
+- own-release: the release workflow's no-publish run, on the pull request
+  that adds it, builds a bundle whose installer installs the extension into an
   empty home directory and whose files equal `t3-extension/` at that commit.
   `dist plan` for a tag `t3-extension-v0.1.1` does not plan an `atelier`
   release. The workflow refuses a tag whose commit is not on `master`, and
@@ -100,7 +100,8 @@ the extension's repository.
 
 Out, and done by the planner's thread after the items merge:
 
-- Tagging the first extension release.
+- Starting the release workflow's no-publish run on `master` by hand, then
+  tagging the first extension release.
 - Reinstalling the extension on Sumeet's Windows machine from the bundle, and
   running the fixture and contract tests there. No implementer on this host
   can run Windows or a real T3 Code.

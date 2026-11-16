@@ -31,7 +31,7 @@ checkout it sits in, and updating means `git pull` and running it again.
 - [ ] `t3-custom update` looks up this repository's releases, takes the newest whose tag is `t3-extension-v<version>` and is newer than the installed one, ignores every other release, downloads its bundle, verifies the checksum, installs it, and reloads. A bundle whose checksum does not match is refused and the installed version stays as it was. With `--check` it reports and changes nothing.
 - [ ] The injector checks for a newer release when it starts and once a day, and the Customizations section shows the installed version and whether a newer one exists. It applies an update by itself only when a setting in `config.json`, off by default, says so; otherwise the user runs the command or presses a button there.
 - [ ] A failed lookup or download is reported by name in `t3-custom status` and the Customizations section, and nothing else stops working.
-- [ ] Tests cover: choosing the release from a fixture list holding `atelier` releases, older and newer extension releases and a draft; the checksum refusal; an install from a bundle into an empty home; and the setting. The CI job from atelier-7tg6 runs them.
+- [ ] Tests cover: choosing the release from a fixture list holding `atelier` releases, older and newer extension releases and a draft; the checksum refusal; an install from a bundle into an empty home; and the setting. They are files the one test command of atelier-7tg6 picks up, so the CI job runs them with no change to the workflow, and the Report links a run that shows them.
 - [ ] `t3-extension/README.md` describes installing on a new device from a release, and updating.
 
 ## Scope
