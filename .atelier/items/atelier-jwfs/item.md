@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-jwfs
 title: Stop the project home's interface test from failing when the clock crosses a minute
-status: changes_requested
+status: in_review
 mission: null
 labels:
 - bug
