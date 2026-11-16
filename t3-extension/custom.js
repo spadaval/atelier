@@ -229,8 +229,9 @@ let keepThread = null;
 let mentioned = [];
 function threadMessage() {
   const message = { type: 'host:thread', thread: current.threadId };
-  const repo = mappedRepository();
-  if (repo) message.repository = repo.repo;
+  // The repository lets the Desk show this project, not the system inbox, for a thread that holds nothing.
+  const repository = selectedRepository()?.repo;
+  if (repository) message.repository = repository;
   message.children = host?.children?.(current.threadId) ?? [];
   message.mentioned = mentioned;
   return message;

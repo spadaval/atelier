@@ -104,7 +104,8 @@ the panel says so in a line at its top for 8 seconds.
 
 **Following the thread.** The extension sends `host:thread` with T3's thread
 ID, whole, as in the route: after each `desk:ready` and whenever T3's route
-changes to another thread. The Desk opens the item or mission that thread holds
+changes to another thread. It names the project's Desk repository with it,
+so a thread that holds nothing shows its project and not the system inbox. The Desk opens the item or mission that thread holds
 now, or the inbox, with one line naming the thread's part ("This thread
 implements this item.", "This thread holds no open work."). The same thread is
 never sent twice in a row to the same Desk, so a page the human moves to in the
