@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-vg1l
 title: Lay the Desk out for a panel when it is embedded
-status: in_review
+status: approved
 mission: atelier-61gh
 labels: []
 priority: medium
