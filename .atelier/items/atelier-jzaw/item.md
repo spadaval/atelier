@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-jzaw
 title: Show the project, not the system inbox, beside a thread that holds nothing
-status: changes_requested
+status: in_review
 mission: null
 labels: []
 priority: medium
@@ -73,10 +73,12 @@ when the thread holds nothing and the host names the project.
 Checks: in `desk/`, `pnpm test` (60 passed), `pnpm build`, and `pnpm e2e`
 (118 passed, desktop and phone).
 
-### Round 2
-
-Fixed review 1-8m4g's finding: a `GET /api/repos` request that rejects,
+In round 2, a `GET /api/repos` request that rejects,
 such as a reset connection, now gives the inbox like a non-OK status does,
 instead of falling into the ties read's catch and leaving the last thread's
 page. `desk/e2e/host.spec.ts` adds a test that aborts the request after a
 thread switch and expects the inbox with its line.
+
+### Responses
+
+- 1-8m4g.1: fixed in a1fb38672
