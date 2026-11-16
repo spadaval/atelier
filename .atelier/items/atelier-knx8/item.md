@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-knx8
 title: Open the page for what a thread holds
-status: in_review
+status: approved
 mission: atelier-61gh
 labels: []
 priority: medium
