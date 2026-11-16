@@ -3,12 +3,13 @@ schema: atelier.item
 schema_version: 3
 id: atelier-vg1l
 title: Lay the Desk out for a panel when it is embedded
-status: ready
+status: building
 mission: atelier-61gh
 labels: []
 priority: medium
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3Abedbfab3-88f2-4387-b923-ba6bd0a0f9b1%3Adelegate-task%3A198d7fda-8b3f-4b54-bc0c-d7e7cec75961
 ready:
   by: 'sumeet, in conversation on 2026-11-15: get that mission going'
   at: 2026-11-16T02:21:33.165230332Z
