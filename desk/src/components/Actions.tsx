@@ -213,7 +213,7 @@ export function PlanningSession({ repo, mission }: { repo: string; mission: stri
           <div className="grow">
             <b>A planning session started in T3 Code.</b>{" "}
             {response.link ? (
-              <ThreadTitle thread={{ title: "Open the thread", link: response.link }} />
+              <ThreadTitle thread={{ id: response.thread_id, title: "Open the thread", link: response.link }} />
             ) : (
               <span>T3 Code gave no address for it; find the thread named for this mission in T3 Code.</span>
             )}

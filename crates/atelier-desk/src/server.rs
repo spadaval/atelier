@@ -2,9 +2,10 @@
 //! and app checks, the cache, and the built app's files.
 
 use crate::api::{
-    ActionRequest, ApiError, DisputedRepo, DisputedResponse, FetchMark, Hold, InboxRepo,
-    InboxResponse, MissionRow, MissionState, MotionRepo, MotionResponse, PrMark, ProposedRepo,
-    ProposedResponse, RepoSummary, ReposResponse, SessionRequest, StopAction, ThreadsResponse,
+    ActionRequest, ApiError, DisputedRepo, DisputedResponse, EmbedResponse, FetchMark, Hold,
+    InboxRepo, InboxResponse, MissionRow, MissionState, MotionRepo, MotionResponse, PrMark,
+    ProposedRepo, ProposedResponse, RepoSummary, ReposResponse, SessionRequest, StopAction,
+    ThreadsResponse,
 };
 use crate::config::Config;
 use crate::fetch::{self, Fetches};
@@ -344,6 +345,7 @@ pub fn router_for(desk: Arc<Desk>) -> Router {
         .route("/api/repos/{repo}/missions/{id}", get(mission))
         .route("/api/repos/{repo}/doc", get(doc))
         .route("/api/repos/{repo}/items/{id}", get(item))
+        .route("/api/embed", get(embed))
         .route("/api/inbox", get(inbox))
         .route("/api/threads", get(threads))
         .route("/api/proposed", get(proposed))
@@ -481,6 +483,14 @@ async fn repos(State(desk): State<Arc<Desk>>) -> Response {
         })
     })
     .await
+}
+
+/// `GET /api/embed`: the origins that may frame the Desk.
+async fn embed(State(desk): State<Arc<Desk>>) -> Response {
+    Json(EmbedResponse {
+        origins: desk.config.embed_origins.clone(),
+    })
+    .into_response()
 }
 
 #[derive(Deserialize)]

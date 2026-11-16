@@ -6,6 +6,7 @@ import type { Hold } from "../api/Hold";
 import type { LiveThread } from "../api/LiveThread";
 import type { T3State } from "../api/T3State";
 import { to } from "../lib/api";
+import { openThread, useConnected } from "../lib/host";
 import { roleWords, t3Note, threadStatus } from "../lib/words";
 import { Card } from "./ui";
 
@@ -22,8 +23,19 @@ export function Identity({ id }: { id: string }) {
   );
 }
 
-/** A thread's title, linking to it in T3 Code when T3 Code gave a web address. */
-export function ThreadTitle({ thread }: { thread: { title: string; link: string | null } }) {
+/**
+ * A thread's title, linking to it. Framed by a listed host, it asks the host
+ * to open the thread by its identity and opens nothing itself; otherwise it
+ * links to T3 Code's web address, when T3 Code gave one.
+ */
+export function ThreadTitle({ thread }: { thread: { id: string; title: string; link: string | null } }) {
+  const hosted = useConnected();
+  if (hosted)
+    return (
+      <button type="button" className="t-link" title={`${thread.title}, in T3 Code`} onClick={() => openThread(thread.id)}>
+        <span className="truncate">{thread.title}</span>
+      </button>
+    );
   if (!thread.link || !/^https?:\/\//i.test(thread.link)) return <span className="truncate">{thread.title}</span>;
   return (
     <a href={thread.link} target="_blank" rel="noreferrer" className="t-link" title={`${thread.title}, in T3 Code`}>
@@ -58,7 +70,7 @@ export function AgentRow({ repo, agent, known }: { repo: string; agent: Agent; k
     <div className="agent" data-testid="agent">
       <Pulse status={thread?.status ?? null} />
       <span className="grow">
-        <span className="t">{thread ? <ThreadTitle thread={thread} /> : <Identity id={agent.identity} />}</span>
+        <span className="t">{thread ? <ThreadTitle thread={{ ...thread, id: agent.identity }} /> : <Identity id={agent.identity} />}</span>
         <span className="s">
           <span>{roleWords[agent.role]}</span>
           {agent.item ? (

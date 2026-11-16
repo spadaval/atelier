@@ -129,6 +129,11 @@ hosts = ["localhost", "127.0.0.1"]
 # The built app's directory, served for every path outside /api, with its
 # index.html for a path that names no file. Without it only /api is served.
 app = "/path/to/atelier/desk/dist"
+# The origins of the pages that may frame the Desk in its embedded mode and
+# talk to it (The host contract). Each is scheme://host[:port], with no
+# path; `*` and `null` are refused. Default: none, and the framed Desk then
+# sends and reads nothing.
+embed_origins = ["t3code://app"]
 
 # How to reach T3 Code. Without this table the Desk makes no call to T3
 # Code and every response reports its threads as unavailable. Both keys
@@ -331,6 +336,62 @@ the browser's viewport; `desk/e2e/embedded.spec.ts` checks the inbox,
 repositories, mission, item, proposed, in motion and disputed pages at 420
 and 720 pixels.
 
+### The host contract
+
+The embedded Desk and the page that frames it, its host, talk over
+`postMessage` (item atelier-fnm5; `desk/src/lib/host.ts`). Each message is
+an object with a `type`; a message whose `type` the Desk does not know, or
+that is not an object, is ignored, so a host may send messages a newer Desk
+understands.
+
+**Who talks.** The app reads the configuration's `embed_origins` from
+`GET /api/embed` once, when it opens under `/embed` inside a frame. It talks
+only to its parent window, and only when the parent's origin is listed: it
+learns that origin from `location.ancestorOrigins`, else from
+`document.referrer`, else from the first message the parent sends from a
+listed origin. It posts with that origin as the target, never `*`, and it
+reads a message only when `event.source` is its parent window and
+`event.origin` is that origin. With an empty list, or a parent whose origin
+is not listed, the Desk sends nothing, reads nothing, and works as it does
+unframed.
+
+**From the Desk to the host:**
+
+| `type` | Fields | When |
+| --- | --- | --- |
+| `desk:ready` | `version`: `1` | Once, when it has a listed parent |
+| `desk:navigated` | `path`: the Desk's route without `/embed`, with its query, such as `/r/atelier/item/atelier-fnm5`; `title`: the page's title, as the browser tab would show it | After `desk:ready`, and whenever the path or the title changes, so a page whose title arrives with its data is told twice |
+| `desk:open-thread` | `thread`: the thread's identity as the records hold it (`Agent.identity`, `LiveThread.id`, a dispute's `Side.identity`, a started session's `thread_id`) | When the human follows a thread link |
+
+With a listed parent a thread link is a button that sends `desk:open-thread`
+and opens no tab, popup or page; the host decides how to show the thread.
+Without one it links to T3 Code's web address in a new tab, as before.
+
+**From the host to the Desk:**
+
+| `type` | Fields | What the Desk does |
+| --- | --- | --- |
+| `host:theme` | `colors`: any of `background`, `foreground`, `surface`, `border`, `muted` (secondary text) and `accent`, each a CSS colour; `font`: a CSS font family list; `scheme`: `light` or `dark` | Sets its tokens from them, without a reload |
+
+The theme maps onto the tokens at the top of `desk/src/styles.css`:
+`background` to `--bg`, `foreground` to `--ink`, `surface` to `--panel`,
+`--raised` and `--paper`, `border` to `--line`, `muted` to `--ink-3`,
+`accent` to `--you` and `--you-text`, and `font` to `--sans`. The tokens the
+host does not send are derived by mixing `--bg` and `--ink` (`--canvas`,
+`--hover`, `--line-strong`, `--ink-2`, and the surface, line and muted
+tokens when those are not sent). `scheme` picks the Desk's light or dark set
+for the colours a host cannot send, those of state (blue, green, red,
+violet); without it the scheme follows the background's luminance. A later
+message merges over the earlier ones: what it sends replaces, what it omits
+stays, and a new `background` without a `scheme` has its scheme read from
+the colour. A value that does not parse as a colour or a family list, or
+that refers outside itself (`var()`, `env()`, `url()`, `inherit`), is
+dropped and its token keeps its value.
+
+What a host sends is only displayed. No message makes the Desk write, act,
+fetch from another origin or navigate; the Desk navigates only when the
+human follows a link inside it.
+
 ## Routes
 
 All responses are JSON, typed for the app with `ts-rs`. Times are RFC 3339
@@ -346,6 +407,7 @@ identity never appears in a path: it can hold `/`, `:` and `%`, as
 | Route | Page | Gives |
 | --- | --- | --- |
 | `GET /api/repos` | Repositories | Each repository with its counts |
+| `GET /api/embed` | Embedded mode | `origins`: the configuration's `embed_origins`, the origins the Desk talks to (The host contract) |
 | `GET /api/repos/{repo}/missions` | Mission rail | The repository's missions and loose work |
 | `GET /api/repos/{repo}/missions/{id}` | Mission | One mission, wherever it is read from: sections, documents, items, plan reviews, threads, its pull request and its stop |
 | `GET /api/repos/{repo}/missions/{id}/history` | Mission, Activity tab | The actions on the mission and its items (M5; 404 until it exists) |

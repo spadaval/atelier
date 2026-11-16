@@ -602,3 +602,19 @@ async fn what_is_proposed_in_motion_and_disputed_is_read_from_the_branches() {
         "no forge: the Desk cannot publish a stop"
     );
 }
+
+#[tokio::test]
+async fn the_app_learns_which_origins_may_frame_it() {
+    let served = serve();
+    assert_eq!(
+        ok(&served.app, "/api/embed").await,
+        serde_json::json!({ "origins": [] })
+    );
+    let mut listed = config(vec![], None);
+    listed.embed_origins = vec!["t3code://app".into()];
+    let app = router_for(Desk::new(listed));
+    assert_eq!(
+        ok(&app, "/api/embed").await,
+        serde_json::json!({ "origins": ["t3code://app"] })
+    );
+}

@@ -86,6 +86,8 @@ url = "http://$dns:3780"
 listen = ["127.0.0.1:3780", "$ip:3780"]
 hosts = ["localhost", "127.0.0.1", "$ip", "$host", "$dns"]
 app = "~/.local/share/atelier-desk/app"
+# T3 Code's desktop app frames the embedded Desk in its panel.
+embed_origins = ["t3code://app"]
 
 # Mail when a plan is proposed or merges, from the human's own account to
 # itself. Off until he turns it on; the inbox lists the news either way.

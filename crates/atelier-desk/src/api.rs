@@ -13,6 +13,14 @@ pub struct ReposResponse {
     pub built_from: String,
 }
 
+/// `GET /api/embed`: what the app needs to talk to a page that frames it.
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct EmbedResponse {
+    /// The origins that may frame the Desk, from the configuration's
+    /// `embed_origins`: the app posts to and reads from these only.
+    pub origins: Vec<String>,
+}
+
 /// One repository and its counts, or why it cannot be read: then `error`
 /// is set and the rest is empty.
 #[derive(Debug, Clone, Default, Serialize, TS)]
@@ -786,6 +794,7 @@ named!(ReadFrom, atelier_core::ReadFrom, Base, Branch);
 pub fn export_types(dir: &std::path::Path) -> Result<(), ts_rs::ExportError> {
     let config = ts_rs::Config::new().with_out_dir(dir);
     ReposResponse::export_all(&config)?;
+    EmbedResponse::export_all(&config)?;
     MissionsResponse::export_all(&config)?;
     MissionPage::export_all(&config)?;
     DocResponse::export_all(&config)?;

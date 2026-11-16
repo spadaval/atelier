@@ -664,6 +664,8 @@ export class World {
   missionPages = structuredClone(missionPages);
   items = structuredClone(items);
   sent: Sent[] = [];
+  /** The origins that may frame the Desk, as the configuration's `embed_origins` lists them. */
+  embedOrigins: string[] = [];
   /** The query of each document read. */
   docsRead: string[] = [];
 
@@ -723,6 +725,7 @@ export class World {
     const path = url.pathname;
     const missing = (what: string) => ({ status: 404, body: { error: `No ${what}` } });
     if (path === "/api/repos") return { status: 200, body: this.repos };
+    if (path === "/api/embed") return { status: 200, body: { origins: this.embedOrigins } };
     if (path === "/api/inbox") return { status: 200, body: this.inbox };
     if (path === "/api/threads") return { status: 200, body: this.threads };
     if (path === "/api/proposed") return { status: 200, body: proposed };
