@@ -269,6 +269,7 @@ pub fn summary(repo: &mut Repo, name: &str) -> Result<Option<RepoSummary>> {
     Ok(Some(RepoSummary {
         name: name.to_string(),
         path: repo.root.display().to_string(),
+        identity: None,
         base: Some(repo.base.clone()),
         base_tip: Some(repo.base_tip.clone()),
         in_progress: (missions.clone())
@@ -492,6 +493,131 @@ pub fn holds(repo: &mut Repo, name: &str) -> Result<Option<Vec<(String, Hold)>>>
         holds.extend(named.map(|named| hold(HoldKind::Mission, &dir.mission.id, named)));
     }
     Ok(Some(holds))
+}
+
+/// Every record of one repository, by the record that counts, and each
+/// identity's ties to them, for `/api/records/{id}` and `/api/ties`.
+#[derive(Debug, Clone, Default)]
+pub struct Index {
+    pub records: Vec<RecordName>,
+    /// By identity.
+    pub ties: Vec<(String, Tie)>,
+}
+
+/// The index of the repository served as `name`: each item, by the record
+/// the cross-branch rule picks, and each mission, as [`holds`] reads them.
+pub fn index(repo: &mut Repo, name: &str) -> Result<Option<Index>> {
+    let records = Records::read(repo)?;
+    let mut index = Index::default();
+    let mut add = |kind, id: &str, title: &str, status, ties: Vec<(String, Role, bool)>| {
+        let record = RecordName {
+            repo: name.to_string(),
+            kind,
+            id: id.to_string(),
+            title: title.to_string(),
+            status,
+        };
+        for (identity, role, current) in ties {
+            let tie = Tie {
+                repo: record.repo.clone(),
+                kind,
+                id: record.id.clone(),
+                title: record.title.clone(),
+                status,
+                role,
+                current,
+            };
+            index.ties.push((identity, tie));
+        }
+        index.records.push(record);
+    };
+    for record in records.items.iter().filter_map(Located::record) {
+        let item = &record.item;
+        let status = RecordStatus::Item(item.status.into());
+        add(
+            HoldKind::Item,
+            &item.id,
+            &item.title,
+            status,
+            item_ties(record)?,
+        );
+    }
+    for dir in &records.missions {
+        let mission = &dir.mission;
+        let status = RecordStatus::Mission(mission.status.into());
+        let ties = mission_ties(dir);
+        add(HoldKind::Mission, &mission.id, &mission.title, status, ties);
+    }
+    Ok(Some(index))
+}
+
+/// The holders of the reviews of `reviews`' latest round, while that round
+/// is open: while no review of it has a verdict when `any_ends` is set, as
+/// an item's round ends, else while one has none, as a plan's does.
+fn open_round(reviews: &[ReviewFile], any_ends: bool) -> Vec<&Thread> {
+    let Some(latest) = reviews.iter().map(|r| r.name.round).max() else {
+        return Vec::new();
+    };
+    let round: Vec<&ReviewFile> = reviews.iter().filter(|r| r.name.round == latest).collect();
+    let judged = |r: &&ReviewFile| r.review.verdict.is_some();
+    let open = match any_ends {
+        true => !round.iter().any(judged),
+        false => !round.iter().all(judged),
+    };
+    match open {
+        true => round
+            .iter()
+            .filter_map(|r| r.review.reviewers.holder())
+            .collect(),
+        false => Vec::new(),
+    }
+}
+
+/// Each identity `record` names, with its role, as [`named_in_item`]
+/// gives them, and whether the tie is current: for its last implementer
+/// while it is started, and for the holder of its open round's review
+/// while it is in review.
+fn item_ties(record: &ItemDir) -> Result<Vec<(String, Role, bool)>> {
+    let status = record.item.status;
+    let holder = record.item.implementers.holder();
+    let reviewing = match status {
+        atelier_core::model::Status::InReview => open_round(&record.reviews, true),
+        _ => Vec::new(),
+    };
+    let current = |identity: &str, role| match role {
+        Role::Implementer => STARTED.contains(&status) && holder.is_some_and(|h| h.0 == identity),
+        Role::Reviewer => reviewing.iter().any(|r| r.0 == identity),
+        _ => false,
+    };
+    let named = named_in_item(record)?.into_iter();
+    Ok(named
+        .map(|(identity, role)| {
+            let current = current(&identity, role);
+            (identity, role, current)
+        })
+        .collect())
+}
+
+/// Each identity `dir` names, with its role, as [`named_in_mission`] gives
+/// them, and whether the tie is current: for its lead and planners, and the
+/// holders of its plan's open round's reviews, while it is not done or
+/// dropped.
+fn mission_ties(dir: &MissionDir) -> Vec<(String, Role, bool)> {
+    let finished = matches!(dir.mission.status, Stored::Done | Stored::Dropped);
+    let reviewing = open_round(&dir.reviews, false);
+    let current = |identity: &str, role| match role {
+        _ if finished => false,
+        Role::Lead | Role::Planner => true,
+        Role::Reviewer => reviewing.iter().any(|r| r.0 == identity),
+        _ => false,
+    };
+    let named = named_in_mission(dir).into_iter();
+    named
+        .map(|(identity, role)| {
+            let current = current(&identity, role);
+            (identity, role, current)
+        })
+        .collect()
 }
 
 /// Each document of mission `id` at `commit`, titled by its first `# `

@@ -29,6 +29,8 @@ tower-http = { version = "0.6", features = ["fs"] }
 ts-rs = "12"
 # The T3 Code client: blocking HTTP over loopback, with no TLS.
 ureq = { version = "3", default-features = false }
+# WHATWG URL parsing, as T3 Code reads a remote with `new URL()`.
+url = "2"
 
 [dev-dependencies]
 tempfile.workspace = true
