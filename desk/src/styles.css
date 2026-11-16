@@ -2030,6 +2030,7 @@ button.pane-label:hover {
   align-items: center;
   gap: 5px;
   min-width: 0;
+  max-width: 100%;
   font-weight: 500;
 }
 .t-link:hover {
@@ -2395,6 +2396,38 @@ a.q:hover {
 .motion:last-child {
   border-bottom: 0;
 }
-.side {
+.dispute-side {
   overflow-wrap: anywhere;
+}
+
+/* ---------------------------------------------------------------- embedded */
+/* Inside a host's panel the host draws the frame: one column, and a top bar
+   with the inbox and the breadcrumb only. Pages take the narrow layouts from
+   the width media queries above, since the panel is the viewport. */
+.shell.embedded {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.shell.embedded .top {
+  padding: 0 12px;
+  gap: 6px;
+}
+
+.inbox-btn {
+  flex: none;
+  display: flex;
+  gap: 4px;
+  width: auto;
+  min-width: 30px;
+  padding: 0 7px;
+}
+
+.inbox-btn[aria-current="page"] {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.inbox-btn .count {
+  font: 500 12px var(--mono);
+  color: var(--you-text);
 }

@@ -312,6 +312,25 @@ the tables below suggest:
 - Every page that reads a repository ends with when its remote was last
   fetched (`fetched`).
 
+### The embedded mode
+
+A host that shows the Desk in a panel, such as T3 Code, opens it under
+`/embed`: `/embed/inbox`, `/embed/r/{repo}/item/{id}`, and so on for every
+route above (item atelier-vg1l). The app's router takes `/embed` as its
+base, so every link inside the Desk keeps the prefix and a reload stays in
+the mode; the server already answers any path outside `/api` with the app.
+Without the prefix nothing changes.
+
+In the mode the Desk draws content only. It removes the sidebar with its
+brand, page links and repository list, the theme toggle, the footer with the
+commit the server was built from, and the menu button that opens the sidebar
+on a phone. The top bar keeps the breadcrumb, the way up from any page, and
+gains a link to the inbox with its count of what waits on the human. Pages
+take their narrow layouts from the width media queries, since the panel is
+the browser's viewport; `desk/e2e/embedded.spec.ts` checks the inbox,
+repositories, mission, item, proposed, in motion and disputed pages at 420
+and 720 pixels.
+
 ## Routes
 
 All responses are JSON, typed for the app with `ts-rs`. Times are RFC 3339

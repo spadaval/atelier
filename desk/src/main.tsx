@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router";
 import { App } from "./App";
+import { EMBED_BASE, embedded } from "./lib/embed";
 import "./styles.css";
 
 let saved: string | null = null;
@@ -16,7 +17,7 @@ if (saved === "light" || (!saved && matchMedia("(prefers-color-scheme: light)").
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename={embedded ? EMBED_BASE : undefined}>
       <App />
     </BrowserRouter>
   </StrictMode>,
