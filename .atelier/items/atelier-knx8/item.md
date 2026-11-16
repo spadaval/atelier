@@ -90,3 +90,8 @@ lead, a planner or a plan reviewer, and the inbox otherwise.
   unlisted origin cannot move the Desk. `/api/ties` answers from
   `ties` in `desk/e2e/fixtures.ts`. A thread whose ties answer 503 after
   a followed one leaves the page and removes the last line.
+
+### Responses
+
+- 1-qfzg.1: fixed in 2fe204791
+- 1-qfzg.2: fixed in 2fe204791
