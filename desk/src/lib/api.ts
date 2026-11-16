@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type { ApiError } from "../api/ApiError";
 
 export type Loaded<T> = { data?: T; error?: string; status?: number; loading: boolean };
@@ -113,13 +113,58 @@ export const api = {
   missions: (repo: string) => `/api/repos/${seg(repo)}/missions`,
   mission: (repo: string, id: string) => `/api/repos/${seg(repo)}/missions/${seg(id)}`,
   item: (repo: string, id: string) => `/api/repos/${seg(repo)}/items/${seg(id)}`,
+  sidebar: () => "/api/sidebar",
+  launch: (repo: string) => `/api/launch?repo=${seg(repo)}`,
+  history: (repo: string, opts: { days?: number; ids?: string[] } = {}) =>
+    `/api/history?repo=${seg(repo)}${opts.days ? `&days=${opts.days}` : ""}${opts.ids ? `&ids=${seg(opts.ids.join(","))}` : ""}`,
+  checks: (repo: string, pr: number) => `/api/checks?repo=${seg(repo)}&pr=${pr}`,
+  roadmap: (repo: string) => `/api/roadmap?repo=${seg(repo)}`,
+  thread: (id: string) => `/api/thread?id=${seg(id)}`,
+  record: (id: string) => `/api/records/${seg(id)}`,
   ties: (thread: string) => `/api/ties?thread=${seg(thread)}`,
   doc: (repo: string, path: string, at?: string | null) => `/api/repos/${seg(repo)}/doc?path=${seg(path)}${at ? `&at=${seg(at)}` : ""}`,
 };
 
+/**
+ * Spike: several paths read together, again every `interval` ms. Each
+ * answer is the body, or null where the read failed.
+ */
+export function useAll<T>(paths: string[], interval = 30_000): { data: (T | null)[]; loading: boolean } {
+  const key = paths.join("\n");
+  const [value, setValue] = useState<{ key: string; data: (T | null)[] }>({ key: "", data: [] });
+  useEffect(() => {
+    let stale = false;
+    const list = key === "" ? [] : key.split("\n");
+    const read = async () => {
+      const data = await Promise.all(
+        list.map(async (path) => {
+          try {
+            const response = await fetch(path, { headers: { accept: "application/json" } });
+            return response.ok ? ((await response.json()) as T) : null;
+          } catch {
+            return null;
+          }
+        }),
+      );
+      if (!stale) setValue((old) => (old.key === key && JSON.stringify(old.data) === JSON.stringify(data) ? old : { key, data }));
+    };
+    void read();
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") void read();
+    }, interval);
+    return () => {
+      stale = true;
+      clearInterval(timer);
+    };
+  }, [key, interval]);
+  return value.key === key ? { data: value.data, loading: false } : { data: paths.map(() => null), loading: paths.length > 0 };
+}
+
 /** The app's own routes. */
 export const to = {
   repo: (repo: string) => `/r/${seg(repo)}`,
+  home: (repo: string) => `/home/${seg(repo)}`,
+  control: (repo: string, id: string) => `/mission/${seg(repo)}/${seg(id)}`,
   agents: (repo?: string) => (repo === undefined ? "/agents" : `/r/${seg(repo)}/agents`),
   proposed: () => "/proposed",
   motion: () => "/motion",

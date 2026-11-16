@@ -3,11 +3,9 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router";
 import type { InboxResponse } from "../api/InboxResponse";
 import type { ReposResponse } from "../api/ReposResponse";
-import type { TiesResponse } from "../api/TiesResponse";
 import { api, to } from "../lib/api";
 import { embedded } from "../lib/embed";
-import { place, serves, tied, type Place } from "../lib/follow";
-import { report, useHostThread } from "../lib/host";
+import { report, reportHeight, useConnected, useHostContext } from "../lib/host";
 import { useData } from "../lib/api";
 
 function Brand() {
@@ -110,57 +108,20 @@ function InboxLink() {
 }
 
 /**
- * Opens the page for the thread the host shows, each time the host names
- * another thread, and returns that page with the line that names the
- * thread's part on it. The host naming the same thread again leaves alone
- * the page the human has since moved to.
+ * Spike: every `host:thread` message opens the "This thread" page, which
+ * reads the thread, its children and what it mentions from the host's
+ * context. Replacing, not pushing, so the host's back button does not walk
+ * through the threads it showed.
  */
-function useFollowThread(): Place | null {
-  const host = useHostThread();
+function useFollowThread() {
+  const context = useHostContext();
   const navigate = useNavigate();
-  // The navigate function changes with the location; following a thread must
-  // not run again when the human moves on, so the effect reads it here.
   const go = useRef(navigate);
   go.current = navigate;
-  const [followed, setFollowed] = useState<Place | null>(null);
   useEffect(() => {
-    if (host === null) return;
-    // The line names the last thread's part; it goes until this thread's
-    // ties are read, and stays gone if they cannot be.
-    setFollowed(null);
-    let stale = false;
-    void (async () => {
-      try {
-        const read = async <T,>(path: string): Promise<T | null> => {
-          const response = await fetch(path, { headers: { accept: "application/json" } });
-          return response.ok ? ((await response.json()) as T) : null;
-        };
-        const body = await read<TiesResponse>(api.ties(host.thread));
-        if (body === null || stale) return;
-        // A thread with no current tie gets its project's page, when the host
-        // names a repository the Desk serves; otherwise the inbox.
-        let repository: string | null = null;
-        if (tied(body.ties) === null && host.repository !== null) {
-          // A list that cannot be read, by status or by a failed request,
-          // gives the inbox: the thread's ties were read, so its page moves.
-          const repos = await read<ReposResponse>(api.repos()).catch(() => null);
-          if (repos !== null && serves(repos, host.repository)) repository = host.repository;
-        }
-        if (stale) return;
-        const next = place(body.ties, repository);
-        setFollowed(next);
-        // Replacing, not pushing: the host chose this page, and the host's own
-        // back button should not walk through the threads it showed.
-        go.current(next.path, { replace: true });
-      } catch {
-        // Without the thread's ties the page stays where it is.
-      }
-    })();
-    return () => {
-      stale = true;
-    };
-  }, [host]);
-  return followed;
+    if (context === null) return;
+    go.current("/t", { replace: true });
+  }, [context]);
 }
 
 /**
@@ -173,15 +134,29 @@ function EmbeddedShell({ children }: { children: ReactNode }) {
   // Tells a listed host where the Desk is; the title is reported again as
   // the page sets it (lib/host.ts).
   useEffect(report, [location.pathname, location.search]);
-  const followed = useFollowThread();
+  useFollowThread();
+  // The project home sits under T3's composer and brings no chrome of its own.
+  // Mission control draws its own top bar, as Factory's does.
+  const bare = location.pathname.startsWith("/mission/");
+  const main = useRef<HTMLDivElement>(null);
+  const hosted = useConnected();
+  useEffect(() => {
+    if (!bare || !hosted || !main.current) return;
+    const watch = new ResizeObserver(([entry]) => reportHeight(entry.contentRect.height));
+    watch.observe(main.current);
+    return () => watch.disconnect();
+  }, [bare, hosted]);
   return (
-    <div className="shell embedded">
-      <div className="main">
-        <header className="top">
-          <InboxLink />
-          <nav id="crumbs" className="crumbs" aria-label="Where you are" />
-        </header>
-        {followed && followed.path === location.pathname ? <p className="thread-part">{followed.line}</p> : null}
+    <div className={`shell embedded${bare ? " bare" : ""}`}>
+      <div className="main" ref={main}>
+        {bare ? (
+          <nav id="crumbs" hidden />
+        ) : (
+          <header className="top">
+            <InboxLink />
+            <nav id="crumbs" className="crumbs" aria-label="Where you are" />
+          </header>
+        )}
         {children}
       </div>
     </div>

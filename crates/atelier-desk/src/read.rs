@@ -832,6 +832,7 @@ pub fn item(repo: &mut Repo, id: &str) -> Result<Option<ItemPage>> {
         threads: agents(named_in_item(record)?, None),
         t3: T3State::default(),
         fetched: FetchMark::default(),
+        pull_request: None,
     }))
 }
 
@@ -1051,6 +1052,7 @@ pub fn motion(repo: &mut Repo, name: &str) -> Result<Option<MotionRepo>> {
             branch: branch.map(|b| b.name.clone()),
             holder: (entry.holder.as_ref()).map(|t| agent(t.to_string(), Role::Implementer, id)),
             reviewer: (entry.reviewer.as_ref()).map(|t| agent(t.to_string(), Role::Reviewer, id)),
+            changed_at: None,
         });
     }
     items.sort_by(|a, b| (&a.mission, &a.id).cmp(&(&b.mission, &b.id)));
@@ -1065,7 +1067,16 @@ pub fn motion(repo: &mut Repo, name: &str) -> Result<Option<MotionRepo>> {
         }
     }
     missions.sort_by(|a, b| a.mission.id.cmp(&b.mission.id));
+    let mut startable: Vec<&Entry> = (records.entries.iter())
+        .filter(|e| e.status == atelier_core::model::Status::Ready && e.startable())
+        .collect();
+    startable.sort_by(|a, b| a.priority.cmp(&b.priority).then(a.id.cmp(&b.id)));
+    let mut ready = Vec::new();
+    for entry in startable.into_iter().take(5) {
+        ready.push(item_row(entry, &records.items)?);
+    }
     Ok(Some(MotionRepo {
+        ready,
         repo: name.to_string(),
         commit: Some(repo.base_tip.clone()),
         error: None,
@@ -1159,4 +1170,17 @@ fn judged_words(judged: Judged) -> String {
 
 fn time(time: &Time) -> String {
     time.to_rfc3339()
+}
+
+/// Spike: the items in no mission that are not done or dropped.
+pub fn loose(repo: &mut Repo) -> Result<Option<Vec<ItemRow>>> {
+    use atelier_core::model::Status as S;
+    let records = Records::read(repo)?;
+    let mut rows = Vec::new();
+    for entry in records.entries.iter() {
+        if entry.mission.is_none() && !matches!(entry.status, S::Done | S::Dropped) {
+            rows.push(item_row(entry, &records.items)?);
+        }
+    }
+    Ok(Some(rows))
 }

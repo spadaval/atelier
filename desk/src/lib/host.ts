@@ -17,16 +17,20 @@ import { apply, merge, type HostTheme } from "./theme";
 export type DeskMessage =
   | { type: "desk:ready"; version: 1 }
   | { type: "desk:navigated"; path: string; title: string }
-  | { type: "desk:open-thread"; thread: string };
+  | { type: "desk:open-thread"; thread: string }
+  | { type: "desk:resized"; height: number }
+  | { type: "desk:key"; key: "Escape" };
 
-/**
- * The thread the host last said it shows (`host:thread`), with the name of
- * the Desk repository the host's project maps to, or null when it named none.
- */
-export type HostThread = { thread: string; repository: string | null };
+/** Where the contract stands: the listed origins, and the parent's once it is known to be one of them. */
+/** Spike: everything a `host:thread` message says about the host's thread. */
+export type HostContext = { thread: string; repository: string | null; children: string[]; mentioned: string[] };
 
-/** Where the contract stands: the listed origins, the parent's once it is known to be one of them, and the host's thread. */
-const state: { origins: string[]; parent: string | null; thread: HostThread | null } = { origins: [], parent: null, thread: null };
+const state: { origins: string[]; parent: string | null; thread: string | null; context: HostContext | null } = {
+  origins: [],
+  parent: null,
+  thread: null,
+  context: null,
+};
 const listeners = new Set<() => void>();
 let theme: HostTheme = { colours: {} };
 let lastReport = "";
@@ -53,17 +57,28 @@ export function useConnected(): boolean {
 }
 
 /**
- * The thread the host last said it shows (`host:thread`), or null before it
- * says one. It changes only when the host names another thread, so a message
- * for the same thread changes nothing, even one with another `repository`.
+ * The identity of the thread the host last said it shows (`host:thread`), or
+ * null before it says one. It changes only when the host names another
+ * thread, so a message for the same thread changes nothing.
  */
-export function useHostThread(): HostThread | null {
+export function useHostThread(): string | null {
   return useSyncExternalStore(
     subscribe,
     () => state.thread,
     () => null,
   );
 }
+
+/** Spike: the host's thread with its project, children and mentioned records, or null before the host names one. */
+export function useHostContext(): HostContext | null {
+  return useSyncExternalStore(
+    subscribe,
+    () => state.context,
+    () => null,
+  );
+}
+
+const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((v): v is string => typeof v === "string" && v !== "") : []);
 
 function send(message: DeskMessage) {
   if (state.parent === null) return;
@@ -105,10 +120,12 @@ function receive(event: MessageEvent) {
   } else if (message.type === "host:thread") {
     // An identity is only ever looked up (`GET /api/ties`), never followed.
     const thread = message.thread;
-    if (typeof thread !== "string" || thread === "" || thread === state.thread?.thread) return;
-    // A repository name is only compared with those the Desk serves.
+    if (typeof thread !== "string" || thread === "") return;
     const repository = typeof message.repository === "string" && message.repository !== "" ? message.repository : null;
-    state.thread = { thread, repository };
+    const context: HostContext = { thread, repository, children: strings(message.children), mentioned: [...new Set(strings(message.mentioned))] };
+    if (JSON.stringify(context) === JSON.stringify(state.context)) return;
+    state.context = context;
+    state.thread = thread;
     changed();
   }
 }
@@ -126,6 +143,11 @@ export function report() {
   if (key === lastReport) return;
   lastReport = key;
   send({ type: "desk:navigated", path, title });
+}
+
+/** Spike: tells the host how tall the page's content is, so it can size the frame to it. */
+export function reportHeight(height: number) {
+  send({ type: "desk:resized", height: Math.ceil(height) });
 }
 
 /** Asks the host to open the thread whose identity is `thread`. */
@@ -151,6 +173,12 @@ export async function startHost() {
   state.origins = origins.filter((o) => typeof o === "string" && o !== "*" && o !== "null");
   if (state.origins.length === 0) return;
   window.addEventListener("message", receive);
+  // Escape that nothing in the Desk handled goes to the host, so it can
+  // close its panel or overlay. A Desk control that uses Escape calls
+  // preventDefault, and then the host is not told.
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !event.defaultPrevented) send({ type: "desk:key", key: "Escape" });
+  });
   new MutationObserver(report).observe(document.head, { subtree: true, childList: true, characterData: true });
   const parent = parentOrigin();
   if (parent !== null && state.origins.includes(parent)) connect(parent);

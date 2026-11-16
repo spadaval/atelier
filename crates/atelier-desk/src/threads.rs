@@ -26,6 +26,38 @@ pub struct Threads {
     /// not, by ID: its provider, model and link.
     known: RwLock<HashMap<String, Known>>,
     polls: AtomicUsize,
+    read_cache: RwLock<HashMap<String, (Instant, Option<crate::api::ThreadInfo>)>>,
+    full_cache: RwLock<HashMap<String, (Instant, Option<crate::api::ThreadInfo>)>>,
+}
+
+/// A thread item as one line: a tool call as its tool and first argument,
+/// a message as its first line. The item's text may be cut short, so a
+/// tool call's JSON is read with string matching, not parsed.
+fn one_line(item: &serde_json::Value) -> Option<String> {
+    let text = item.get("text")?.as_str()?;
+    let kind = item.get("type").and_then(|t| t.as_str()).unwrap_or("");
+    let field = |name: &str| -> Option<String> {
+        let key = format!("\"{name}\": \"");
+        let start = text.find(&key)? + key.len();
+        let rest = &text[start..];
+        let end = rest.find('"').unwrap_or(rest.len());
+        Some(rest[..end].replace("\\n", " "))
+    };
+    let line = if kind.contains("tool") {
+        let tool = field("toolName").unwrap_or_else(|| kind.to_string());
+        let tool = tool.rsplit("__").next().unwrap_or(&tool).to_string();
+        let arg = ["description", "command", "file_path", "pattern", "query", "prompt", "url"]
+            .iter()
+            .find_map(|k| field(k));
+        match arg {
+            Some(arg) => format!("{tool}: {arg}"),
+            None => tool,
+        }
+    } else {
+        text.lines().find(|l| !l.trim().is_empty())?.trim().to_string()
+    };
+    let line: String = line.chars().take(160).collect();
+    Some(line)
 }
 
 #[derive(Clone)]
@@ -61,6 +93,8 @@ impl Threads {
             polled: RwLock::default(),
             known: RwLock::default(),
             polls: AtomicUsize::new(0),
+            read_cache: RwLock::default(),
+            full_cache: RwLock::default(),
         }
     }
 
@@ -122,6 +156,112 @@ impl Threads {
                 side.model = Some(found.model.clone());
             }
         }
+    }
+
+    /// Spike: a thread by identity, from the live list, else read from T3
+    /// Code once and kept for a minute.
+    pub fn info(&self, id: &str) -> Option<crate::api::ThreadInfo> {
+        let snapshot = self.snapshot();
+        if let Some(t) = snapshot.threads.iter().find(|t| t.thread_id == id) {
+            return Some(crate::api::ThreadInfo {
+                id: t.thread_id.clone(),
+                title: t.title.clone(),
+                status: t.status.clone(),
+                updated_at: t.updated_at.clone(),
+                parent: t.parent_thread_id.clone(),
+                model: Some(t.model.clone()),
+                live: true,
+                started_at: None,
+                last_line: None,
+            });
+        }
+        {
+            let cache = self.read_cache.read().unwrap();
+            if let Some((at, info)) = cache.get(id) {
+                if at.elapsed() < Duration::from_secs(60) {
+                    return info.clone();
+                }
+            }
+        }
+        let client = self.client.as_ref()?;
+        let read = {
+            let mut client = client.lock().unwrap();
+            client.call(
+                "t3_thread_read",
+                serde_json::json!({"threadId": id, "limit": 1, "maxCharsPerItem": 1}),
+            )
+        };
+        let info = read.ok().and_then(|v| {
+            let t = v.get("thread")?;
+            let s = |k: &str| t.get(k).and_then(|x| x.as_str()).map(str::to_string);
+            Some(crate::api::ThreadInfo {
+                id: id.to_string(),
+                title: s("title")?,
+                status: s("status").unwrap_or_default(),
+                updated_at: s("updatedAt").unwrap_or_default(),
+                parent: s("parentThreadId"),
+                model: s("model"),
+                live: false,
+                started_at: None,
+                last_line: None,
+            })
+        });
+        let mut cache = self.read_cache.write().unwrap();
+        cache.insert(id.to_string(), (Instant::now(), info.clone()));
+        info
+    }
+
+    /// Spike: a thread read from T3 Code with its latest run's start and
+    /// its latest item as one line, kept 20 seconds.
+    pub fn info_full(&self, id: &str) -> Option<crate::api::ThreadInfo> {
+        {
+            let cache = self.full_cache.read().unwrap();
+            if let Some((at, info)) = cache.get(id) {
+                if at.elapsed() < Duration::from_secs(20) {
+                    return info.clone();
+                }
+            }
+        }
+        let live = self.snapshot().threads.iter().any(|t| t.thread_id == id);
+        let client = self.client.as_ref()?;
+        let read = {
+            let mut client = client.lock().unwrap();
+            client.call(
+                "t3_thread_read",
+                serde_json::json!({"threadId": id, "limit": 4, "maxCharsPerItem": 400, "view": "activity"}),
+            )
+        };
+        let info = read.ok().and_then(|v| {
+            let t = v.get("thread")?;
+            let s = |k: &str| t.get(k).and_then(|x| x.as_str()).map(str::to_string);
+            let runs = v.get("recentRuns").and_then(|r| r.as_array()).cloned().unwrap_or_default();
+            let started_at = (runs.iter())
+                .find_map(|r| r.get("startedAt").and_then(|x| x.as_str()).map(str::to_string))
+                .or_else(|| s("createdAt"));
+            // The newest output: an assistant message or a tool call, not a
+            // checkpoint or a message sent to the thread.
+            let items = v.get("items").and_then(|i| i.as_array()).cloned().unwrap_or_default();
+            let item = (items.iter().rev())
+                .find(|i| {
+                    let kind = i.get("type").and_then(|t| t.as_str()).unwrap_or("");
+                    kind == "assistant_message" || kind.contains("tool") || kind.contains("command")
+                })
+                .cloned();
+            Some(crate::api::ThreadInfo {
+                id: id.to_string(),
+                title: s("title")?,
+                status: s("status").unwrap_or_default(),
+                updated_at: s("updatedAt").unwrap_or_default(),
+                parent: s("parentThreadId"),
+                model: s("model"),
+                live,
+                started_at,
+                last_line: item.as_ref().and_then(one_line),
+            })
+        });
+        let mut cache = self.full_cache.write().unwrap();
+        cache.insert(id.to_string(), (Instant::now(), info.clone()));
+        info
     }
 
     pub fn snapshot(&self) -> Snapshot {

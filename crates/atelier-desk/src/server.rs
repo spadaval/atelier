@@ -7,6 +7,8 @@ use crate::api::{
     ProposedRepo, ProposedResponse, RepoSummary, ReposResponse, SessionRequest, StopAction,
     ThreadsResponse, TiesResponse,
 };
+mod spike;
+
 use crate::config::Config;
 use crate::fetch::{self, Fetches};
 use crate::news::News;
@@ -364,6 +366,12 @@ pub fn router_for(desk: Arc<Desk>) -> Router {
         .route("/api/records/{id}", get(record))
         .route("/api/ties", get(ties))
         .route("/api/threads", get(threads))
+        .route("/api/thread", get(thread))
+        .route("/api/sidebar", get(spike::sidebar))
+        .route("/api/launch", get(spike::launch))
+        .route("/api/history", get(spike::history))
+        .route("/api/checks", get(spike::checks))
+        .route("/api/roadmap", get(spike::roadmap))
         .route("/api/proposed", get(proposed))
         .route("/api/motion", get(motion))
         .route("/api/disputed", get(disputed))
@@ -582,7 +590,10 @@ async fn item(
         let snapshot = desk.threads.snapshot();
         snapshot.join(&mut page.threads);
         page.t3 = snapshot.state;
-        page.fetched = desk.fetched(&repo, &desk.served(&repo)?);
+        let dir = desk.served(&repo)?;
+        page.fetched = desk.fetched(&repo, &dir);
+        page.pull_request = (page.row.branch.as_ref())
+            .and_then(|b| desk.pull_request(&repo, &dir, &b.name.clone()));
         Ok(page)
     })
     .await
@@ -715,6 +726,7 @@ async fn motion(State(desk): State<Arc<Desk>>) -> Response {
                 for item in &mut motion.items {
                     let agents = item.holder.iter_mut().chain(item.reviewer.iter_mut());
                     agents.for_each(|agent| snapshot.join(std::slice::from_mut(agent)));
+                    item.changed_at = item.branch.as_deref().and_then(|b| last_commit(dir, b));
                 }
                 for mission in &mut motion.missions {
                     (mission.lead.iter_mut()).for_each(|a| snapshot.join(std::slice::from_mut(a)));
@@ -790,6 +802,35 @@ async fn record(State(desk): State<Arc<Desk>>, UrlPath(id): UrlPath<String>) -> 
         let found = (desk.indexes().into_iter())
             .find_map(|index| index.records.into_iter().find(|r| r.id == id));
         found.ok_or_else(|| Failure::NotFound(format!("No repository served holds {id}.")))
+    })
+    .await
+}
+
+/// Spike: when `branch` last had a commit, in `dir`.
+fn last_commit(dir: &Path, branch: &str) -> Option<String> {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(["log", "-1", "--format=%cI", branch, "--"])
+        .output()
+        .ok()?;
+    let text = String::from_utf8(out.stdout).ok()?.trim().to_string();
+    (out.status.success() && !text.is_empty()).then_some(text)
+}
+
+#[derive(Deserialize)]
+struct IdQuery {
+    id: String,
+    #[serde(default)]
+    full: Option<String>,
+}
+
+/// Spike: any thread T3 Code knows by its identity, live or ended.
+async fn thread(State(desk): State<Arc<Desk>>, Query(IdQuery { id, full }): Query<IdQuery>) -> Response {
+    blocking(move || {
+        let found = if full.is_some() { desk.threads.info_full(&id) } else { desk.threads.info(&id) };
+        found
+            .ok_or_else(|| Failure::NotFound(format!("T3 Code knows no thread {id}.")))
     })
     .await
 }
