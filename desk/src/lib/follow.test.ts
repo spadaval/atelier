@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Tie } from "../api/Tie";
-import { INBOX, place } from "./follow";
+import type { RepoSummary } from "../api/RepoSummary";
+import { INBOX, place, serves } from "./follow";
 
 const tie = (kind: Tie["kind"], id: string, role: Tie["role"], current: boolean, repo = "atelier"): Tie => ({
   repo,
@@ -38,5 +39,23 @@ describe("place", () => {
   it("opens the inbox for a thread with no ties, or only a decider's", () => {
     expect(place([])).toEqual({ path: "/inbox", line: "This thread holds no open work." });
     expect(place([tie("item", "atelier-a1", "decider", true)])).toEqual(INBOX);
+  });
+
+  it("opens the project's page for a thread with no current tie when the host names a repository", () => {
+    expect(place([], "lor")).toEqual({ path: "/r/lor", line: "This thread holds no open work in this project." });
+    expect(place([tie("item", "atelier-d1", "implementer", false)], "atelier").path).toBe("/r/atelier");
+  });
+  it("keeps a current tie's page whatever repository the host names", () => {
+    expect(place([tie("item", "atelier-a1", "implementer", true)], "lor").path).toBe("/r/atelier/item/atelier-a1");
+  });
+});
+
+describe("serves", () => {
+  const repo = (name: string, error: string | null = null) => ({ name, error }) as RepoSummary;
+  const repos = { repos: [repo("atelier"), repo("broken", "does not read")], built_from: "x" };
+  it("counts a repository the Desk lists and can read", () => {
+    expect(serves(repos, "atelier")).toBe(true);
+    expect(serves(repos, "broken")).toBe(false);
+    expect(serves(repos, "elsewhere")).toBe(false);
   });
 });

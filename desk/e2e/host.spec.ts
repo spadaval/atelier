@@ -156,8 +156,16 @@ test("with no origin listed, the framed Desk draws and sends and reads nothing",
 
 // Following the host's thread (`host:thread`): the Desk opens the page for
 // what the thread holds now, and names the thread's part on it.
-const follows = [
+// The host may name the Desk repository its project maps to (`repository`):
+// that repository's page, rather than the inbox, is then the place of a
+// thread that holds nothing there.
+const follows: { who: string; thread: string; repository?: string; path: string; line: string }[] = [
   { who: "an implementer", thread: tied.implementer, path: "/r/atelier/item/atelier-uwxy", line: "This thread implements this item." },
+  { who: "an implementer in a project the host names", thread: tied.implementer, repository: "lor", path: "/r/atelier/item/atelier-uwxy", line: "This thread implements this item." },
+  { who: "a thread with no tie in a project the Desk serves", thread: tied.none, repository: "atelier", path: "/r/atelier", line: "This thread holds no open work in this project." },
+  { who: "a thread with only past ties in a project the Desk serves", thread: tied.pastOnly, repository: "atelier", path: "/r/atelier", line: "This thread holds no open work in this project." },
+  { who: "a thread with no tie in a project the Desk does not serve", thread: tied.none, repository: "elsewhere", path: "/inbox", line: "This thread holds no open work." },
+  { who: "a thread with no tie in a project the Desk cannot read", thread: tied.none, repository: "broken", path: "/inbox", line: "This thread holds no open work." },
   { who: "a lead", thread: tied.lead, path: "/r/atelier/mission/atelier-z4cr", line: "This thread leads this mission." },
   { who: "a thread with no tie", thread: tied.none, path: "/inbox", line: "This thread holds no open work." },
   { who: "a thread that implemented a done item and reviews another", thread: tied.pastAndReview, path: "/r/atelier/item/atelier-u1ko", line: "This thread reviews this item." },
@@ -170,7 +178,7 @@ for (const f of follows) {
   test(`the host's thread opens its page: ${f.who}`, async ({ page }) => {
     const frame = await host(page, listed, "/", [listed]);
     await expect.poll(async () => (await received(page)).map((m) => m.data.type)).toContain("desk:navigated");
-    await send(page, { type: "host:thread", thread: f.thread });
+    await send(page, { type: "host:thread", thread: f.thread, ...(f.repository ? { repository: f.repository } : {}) });
     await expect.poll(() => at(frame)).toBe(`/embed${f.path}`);
     await expect(frame.locator(".thread-part")).toHaveText(f.line);
     await expect.poll(async () => (await received(page)).filter((m) => m.data.type === "desk:navigated").at(-1)?.data.path).toBe(f.path);
@@ -188,6 +196,10 @@ test("the same thread again leaves the page alone, and another thread changes it
   await expect.poll(() => at(frame)).toBe("/embed/inbox");
   await expect(frame.locator(".thread-part")).toHaveCount(0);
   await send(page, { type: "host:thread", thread: tied.implementer });
+  await page.waitForTimeout(300);
+  expect(at(frame)).toBe("/embed/inbox");
+  // A change of repository for the same thread is the same thread.
+  await send(page, { type: "host:thread", thread: tied.implementer, repository: "atelier" });
   await page.waitForTimeout(300);
   expect(at(frame)).toBe("/embed/inbox");
 
@@ -211,6 +223,17 @@ test("a thread whose ties cannot be read leaves the page, without the last threa
   await page.waitForTimeout(300);
   expect(at(frame)).toBe("/embed/r/atelier/item/atelier-uwxy");
   await expect(frame.locator(".thread-part")).toHaveCount(0);
+});
+
+test("a repository list whose request fails gives the inbox, not the last thread's page", async ({ page }) => {
+  const frame = await host(page, listed, "/", [listed]);
+  await expect.poll(async () => (await received(page)).map((m) => m.data.type)).toContain("desk:navigated");
+  await send(page, { type: "host:thread", thread: tied.implementer });
+  await expect.poll(() => at(frame)).toBe("/embed/r/atelier/item/atelier-uwxy");
+  await page.route("**/api/repos", (route) => route.abort("connectionreset"));
+  await send(page, { type: "host:thread", thread: tied.none, repository: "atelier" });
+  await expect.poll(() => at(frame)).toBe("/embed/inbox");
+  await expect(frame.locator(".thread-part")).toHaveText("This thread holds no open work.");
 });
 
 test("a host whose origin is not listed cannot move the Desk", async ({ page }) => {

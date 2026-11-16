@@ -19,8 +19,14 @@ export type DeskMessage =
   | { type: "desk:navigated"; path: string; title: string }
   | { type: "desk:open-thread"; thread: string };
 
-/** Where the contract stands: the listed origins, and the parent's once it is known to be one of them. */
-const state: { origins: string[]; parent: string | null; thread: string | null } = { origins: [], parent: null, thread: null };
+/**
+ * The thread the host last said it shows (`host:thread`), with the name of
+ * the Desk repository the host's project maps to, or null when it named none.
+ */
+export type HostThread = { thread: string; repository: string | null };
+
+/** Where the contract stands: the listed origins, the parent's once it is known to be one of them, and the host's thread. */
+const state: { origins: string[]; parent: string | null; thread: HostThread | null } = { origins: [], parent: null, thread: null };
 const listeners = new Set<() => void>();
 let theme: HostTheme = { colours: {} };
 let lastReport = "";
@@ -47,11 +53,11 @@ export function useConnected(): boolean {
 }
 
 /**
- * The identity of the thread the host last said it shows (`host:thread`), or
- * null before it says one. It changes only when the host names another
- * thread, so a message for the same thread changes nothing.
+ * The thread the host last said it shows (`host:thread`), or null before it
+ * says one. It changes only when the host names another thread, so a message
+ * for the same thread changes nothing, even one with another `repository`.
  */
-export function useHostThread(): string | null {
+export function useHostThread(): HostThread | null {
   return useSyncExternalStore(
     subscribe,
     () => state.thread,
@@ -99,8 +105,10 @@ function receive(event: MessageEvent) {
   } else if (message.type === "host:thread") {
     // An identity is only ever looked up (`GET /api/ties`), never followed.
     const thread = message.thread;
-    if (typeof thread !== "string" || thread === "" || thread === state.thread) return;
-    state.thread = thread;
+    if (typeof thread !== "string" || thread === "" || thread === state.thread?.thread) return;
+    // A repository name is only compared with those the Desk serves.
+    const repository = typeof message.repository === "string" && message.repository !== "" ? message.repository : null;
+    state.thread = { thread, repository };
     changed();
   }
 }

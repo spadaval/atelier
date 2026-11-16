@@ -2,9 +2,11 @@
  * Following the host's thread: which page the embedded Desk opens for the
  * thread its host is showing (`host:thread`, docs/architecture/desk.md, "The
  * host contract"). Only a thread's current ties count, as `GET /api/ties`
- * marks them; a thread with none, including one tied only to finished work,
- * gets the inbox.
+ * marks them. A thread with none, including one tied only to finished work,
+ * gets its project's page when the host names a repository the Desk serves,
+ * and the inbox otherwise.
  */
+import type { ReposResponse } from "../api/ReposResponse";
 import type { Tie } from "../api/Tie";
 import { to } from "./api";
 
@@ -23,11 +25,28 @@ const ORDER: { kind: Tie["kind"]; role: Tie["role"]; line: string }[] = [
 /** The inbox, for a thread that holds no current work. */
 export const INBOX: Place = { path: "/inbox", line: "This thread holds no open work." };
 
-/** The page the embedded Desk opens for a thread with `ties`. */
-export function place(ties: Tie[]): Place {
+/** A repository's page, for a thread that holds no current work in that repository. */
+export const project = (repo: string): Place => ({ path: to.repo(repo), line: "This thread holds no open work in this project." });
+
+/** The thread's first current tie in `ORDER`, as its page, or null with none. */
+export function tied(ties: Tie[]): Place | null {
   for (const want of ORDER) {
     const tie = ties.find((t) => t.current && t.kind === want.kind && t.role === want.role);
     if (tie) return { path: tie.kind === "item" ? to.item(tie.repo, tie.id) : to.mission(tie.repo, tie.id), line: want.line };
   }
-  return INBOX;
+  return null;
+}
+
+/** Whether `repo` names a repository the Desk serves: one `GET /api/repos` lists and can read. */
+export function serves(repos: ReposResponse, repo: string): boolean {
+  return repos.repos.some((r) => r.name === repo && r.error === null);
+}
+
+/**
+ * The page the embedded Desk opens for a thread with `ties`, whose host's
+ * project maps to `repository`, given as the name of a repository the Desk
+ * serves, or null when the host named none or one the Desk does not serve.
+ */
+export function place(ties: Tie[], repository: string | null = null): Place {
+  return tied(ties) ?? (repository === null ? INBOX : project(repository));
 }
