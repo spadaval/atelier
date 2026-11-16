@@ -17,7 +17,9 @@ Three layers:
   `platform` object.
 - `host-adapter.js`: the only code coupled to T3 internals.
 - `custom.js`: the Atelier extension, written against the adapter and Desk's HTTP
-  API. The Desk panel is an iframe.
+  API. The Desk panel is an iframe showing the Desk's embedded mode, and the two
+  talk over the Desk's host contract (in the `atelier` repository,
+  `docs/architecture/desk.md`, "The embedded mode" and "The host contract").
 
 ## Install
 
@@ -29,7 +31,7 @@ Node mode, so no separate Node installation is needed.
 git clone git@github.com:spadaval/t3-code-atelier.git
 cd t3-code-atelier
 cp config.example.json config.json
-# Edit config.json: desk.baseUrl and repository identities/slugs.
+# Edit config.json: desk.urls.
 python3 install.py        # Windows: py install.py
 ```
 
@@ -41,11 +43,17 @@ python3 install.py        # Windows: py install.py
 | Control command | `t3-custom` in the install folder | `t3-custom.cmd` in the install folder |
 | Control channel | Unix socket `injector.sock` | named pipe `\\.\pipe\t3-custom-<hash of folder>` |
 
-`config.json` is local and ignored by Git. Set `desk.baseUrl` to a URL reachable
-from both the injector and the embedded browser. Each repository entry needs
-Desk's repository name, its Atelier `slug`, and T3's canonical repository key.
-An explicit project mapping in Settings can also select a configured repository.
-If `appPath` does not exist, the installer fills in the T3 it finds.
+`config.json` is local and ignored by Git. `desk.urls` lists the Desks (one
+today), each reachable from both the injector and the embedded browser; the older
+single `desk.baseUrl` is still read. Each Desk must list `t3code://app` in its
+`embed_origins`, or its embedded mode will not talk to T3. No repository table is
+needed: each Desk's `GET /api/repos` gives every repository's `identity`, which
+is matched against T3's `repositoryIdentity.canonicalKey`. `desk.repositories`
+is now only an override: an entry `{ "repo", "slug", "repositoryKeys" }` adds
+keys a repository should also match, or a reference prefix other than its name.
+`settings` holds what the Customizations section edits (see
+[Settings](#settings)). If `appPath` does not exist, the installer fills in the
+T3 it finds.
 
 Running the installer again upgrades an installation: it replaces the managed
 files (`t3-custom.mjs`, `host-adapter.js`, `custom.js`, `README.md`), keeping a
@@ -64,19 +72,39 @@ once and open the launcher. On Windows the check is that a second T3 process
 hands off to the running one and exits. The original icon and update relaunches
 are not intercepted.
 
-**Desk** is available beside T3's panel controls and in its right-panel tab strip.
-It uses the existing workspace-panel content area and follows the host's resize,
-maximize, and close behavior. Selecting a native tab restores native content.
-This is an injected surface adapter, not a registered public T3 plugin type.
-Existing native surfaces remain in T3's state; their DOM is left mounted and is
-hidden/inert only while Desk occupies the slot.
+**Desk** is an icon button beside T3's panel controls and a tab in its
+right-panel tab strip. It uses the existing workspace-panel content area and
+follows the host's resize, maximize, and close behavior. Selecting a native tab
+restores native content. This is an injected surface adapter, not a registered
+public T3 plugin type. Existing native surfaces remain in T3's state; their DOM
+is left mounted and is hidden/inert only while Desk occupies the slot.
 
-The panel header has only Desk controls: Refresh, Open externally, and Close.
-A small bottom-right gear opens **Settings → General → Customizations**. That
-section contains injector status/errors, the state of each T3 hook, Reload
-scripts, Open customization folder, feature toggles, project mapping, and the
-follow-project/pinned setting. The controls are created before the T3 hooks are
-looked up, so a broken hook still leaves a path to diagnostics and reloading.
+The panel holds only the Desk, loaded under `/embed` (for example
+`http://buildbot:3780/embed/r/atelier`), so the Desk draws no sidebar, theme
+toggle or footer of its own. The Desk tab looks like T3's own tabs: a close icon,
+then the title of the Desk page shown, from the Desk's `desk:navigated` message.
+Three icon buttons follow T3's tab list while the Desk is shown: Refresh (reloads
+the Desk page shown), Open externally (the same page at its normal, non-embedded
+address) and Customizations (opens **Settings → General → Customizations**).
+
+On `desk:ready` the extension sends `host:theme` with T3's colours, font and
+scheme, and sends it again whenever T3's theme changes; the Desk restyles without
+reloading. The colours are T3's `--background`, `--foreground`, `--card`
+(surface), `--border`, `--muted-foreground` (muted) and `--primary` (accent),
+each resolved to a computed colour; the font is the page's; the scheme is dark
+when T3's root has its `dark` class. Messages are posted with the Desk's origin
+as the target, and a message counts only when it comes from the Desk iframe's
+window with the Desk's origin.
+
+When the Desk asks to open a thread (`desk:open-thread`, such as a thread link on
+an item), T3 goes to `#/<environment>/<thread>` for the connected environment
+whose threads include it. A thread in no connected environment opens nothing, and
+the panel says so in a line at its top for 8 seconds.
+
+The Desk will also be told which thread T3 shows; that message is still being
+added to the Desk's contract, so nothing is sent yet. `tellDeskThread` in
+`custom.js` is where it goes: it is already called when the Desk becomes ready
+and when T3's thread changes.
 
 ## Project context
 
@@ -84,11 +112,14 @@ The adapter reads the current environment/thread route, then resolves project
 metadata using T3's existing authenticated connection. It keeps those credentials
 inside T3's renderer. Neither Desk nor its iframe receives T3 credentials.
 
-`config.json` maps canonical repository identities to Desk repository names and
-Atelier slugs. The example maps T3's `github.com/spadaval/atelier` to Desk's
-`atelier` repository. Names and local directory paths are not used as identity.
-Manual mappings are keyed by T3 environment ID and project ID. Worktrees or
-clones with the same repository identity resolve to the same Desk repository.
+A project's Desk repository is, in order: a manual mapping for that project in
+`settings.mappings`; else the repository whose Desk `identity` (or a
+`desk.repositories` override key) equals the project's canonical repository key.
+So a T3 project whose repository a Desk serves needs no configuration: T3's
+`github.com/spadaval/atelier` opens the Desk's `atelier`. Names and local
+directory paths are not used as identity. Manual mappings are keyed by T3
+environment ID and project ID. Worktrees or clones with the same repository
+identity resolve to the same Desk repository.
 
 Threads in the same repository preserve iframe navigation. Switching to an
 unmapped project shows an explicit empty state instead of the previous
@@ -96,16 +127,49 @@ repository's content. Link that project in Customizations, or turn off Follow
 current project and choose a pinned repository. Clicking a valid cross-project
 reference explicitly opens that reference, without silently changing the mapping.
 
-Project mappings, feature preferences, and per-thread Desk selection live in
-T3's localStorage. Settings retain the last project context across reinjection
-using sessionStorage. The adapter makes T3 metadata reads and local UI-store
-changes. Desk retains its own existing user-authorized actions.
+The adapter makes T3 metadata reads and local UI-store changes. Desk retains its
+own existing user-authorized actions.
+
+## Settings
+
+The Customizations section (Settings → General) shows:
+
+- each Desk URL, whether it is reachable, and which repositories it claims, with
+  their identities;
+- the toggles: the Desk surface, reference links and hovercards, and Follow the
+  current T3 project (off: a pinned repository is used);
+- the current project's repository, Automatic (by identity, naming the match) or
+  a manual override, and the list of overrides with a Remove button each,
+  including any `desk.repositories` entries;
+- injector status and errors, Reload scripts, Refresh status (also rereads the
+  Desks), Open customization folder, Open Desk, and every T3 hook probe.
+
+The toggles, manual mappings and pinned repository are kept in `config.json`
+under `settings`:
+
+```json
+"settings": {
+  "enabled": true, "references": true, "followProject": true,
+  "pinnedRepo": null, "mappings": { "<environmentId>:<projectId>": "atelier" }
+}
+```
+
+A change in the section is sent to the injector as a `save-settings` request,
+which checks each field and rewrites `config.json`; the injector's file watcher
+then reapplies the extension, as for any edit of that file. Editing the file by
+hand works the same way. T3's localStorage keeps only view state, which threads
+had the Desk open (`t3-custom:atelier:view:v1`), and sessionStorage the last
+project context while Settings is shown. Settings kept in localStorage by an
+earlier version are not carried over.
 
 ## Smart references
 
-The configured slug recognizes item/mission tokens such as `atelier-plr9`.
-Suffixes follow Atelier's lowercase-letter/digit format; four characters are not
-assumed. Unknown prefixes are not interpreted as Atelier references.
+Each Desk repository's name, or the `slug` of its `desk.repositories` override,
+recognizes item/mission tokens such as `atelier-plr9`. The Desk does not report
+an Atelier slug, so its repository name stands in for it; they are the same for
+every repository the Desk serves today. Suffixes follow Atelier's
+lowercase-letter/digit format; four characters are not assumed. Unknown prefixes
+are not interpreted as Atelier references.
 
 Rendered conversation text, including inline code, is highlighted. Fenced code,
 links, controls, and editors are excluded. DOM Ranges and CSS Highlights leave
@@ -117,18 +181,22 @@ as messages stream. Existing focus/hover targets are retained across scans.
 References need only T3's conversation DOM, so they keep working when the hooks
 behind the Desk panel are missing; clicks then open Desk externally.
 
-Hover or keyboard focus opens a card with title, state, priority, holder,
-blockers, completion checks, and an optional goal excerpt. Click opens the record
-in Desk. Direct activation resolves the record kind even before a hovercard has
-loaded. Lookup tries the item route, then the mission route only on a 404.
-Requests are deduplicated and cached for 30 seconds; Refresh/Retry bypasses the
-cache. API failure and not-found states are shown explicitly.
+An ID is resolved with one read, `GET /api/records/{id}`, which names its
+repository, kind (item or mission), title and status; with several Desks, each is
+asked in `desk.urls` order until one has it. Hover or keyboard focus opens a card
+with that title and status at once, then priority, holder, blockers, completion
+checks and a goal excerpt from the record's own item or mission route. Click
+opens the record in Desk, in its repository even from another project. Direct
+activation needs only the one read. Requests are deduplicated and cached for 30
+seconds; Refresh/Retry bypasses the cache. API failure and not-found states are
+shown explicitly.
 
 Desk reads go through the background injector because Desk does not currently
-advertise cross-origin access to the T3 renderer. The bridge permits only
-`GET /api/repos` and configured repositories' item/mission reads. It does not
-proxy arbitrary URLs, action endpoints, credentials, or shell commands. The
-other bridge actions are injector status and opening its fixed local folder.
+advertise cross-origin access to the T3 renderer. The bridge permits only `GET`
+of `/api/repos`, `/api/records/{id}` and `/api/repos/{repo}/items|missions/{id}`,
+and only from a Desk in `desk.urls`. It does not proxy arbitrary URLs, action
+endpoints, credentials, or shell commands. The other bridge actions are injector
+status, `save-settings`, and opening its fixed local folder.
 
 ## Edit and control
 
@@ -137,12 +205,15 @@ Installed files, in the install folder above:
 - `custom.js`: extension UI, settings, project behavior, and references.
 - `custom.css`: optional CSS for T3 itself.
 - `host-adapter.js`: the boundary coupled to T3's private DOM and modules.
-- `config.json`: app path, port, URL matching, Desk backend, repository/slug map,
-  and optional `appEnv` (environment for a test instance, Windows only).
+- `config.json`: app path, port, URL matching, Desk URLs, optional repository
+  overrides, the extension's settings, and optional `appEnv` (environment for a
+  test instance, Windows only).
 - `t3-custom.mjs`: launcher, file watcher, CDP attachment, and read bridge.
 - `injector.log`: timestamped operations and concrete errors.
 
 Saving client/adapter/CSS/config files reapplies them without refreshing T3.
+A change to `t3-custom.mjs` needs the injector restarted (`stop`, then
+`launch`).
 Reload scripts forces reinjection even when files did not change. A T3 reload
 reruns the registered script after refreshing the document. Syntax errors keep
 the last working customization. Script runtime errors appear in diagnostics.
@@ -163,10 +234,11 @@ T3 normally to remove the debugging listener too. To uninstall, stop, then
 remove the launcher and the install folder.
 
 Only main page targets matching `t3code://app/` are injected. Preview pages and
-Desk's iframe are not injected separately. T3's own content security policy is
-left in force: it already allows `frame-src http: https:` for the Desk iframe,
-and CDP-injected scripts are not subject to `script-src`. Desk reads go through
-the injector because Desk sends no CORS headers. No main-process inspector or
+Desk's iframe are not injected separately; the iframe and T3 talk only through
+the Desk's `postMessage` contract. T3's own content security policy is left in
+force: it already allows `frame-src http: https:` for the Desk iframe, and
+CDP-injected scripts are not subject to `script-src`. Desk reads go through the
+injector because Desk sends no CORS headers. No main-process inspector or
 network-facing debugging listener is enabled.
 
 ## T3 hooks
@@ -174,14 +246,19 @@ network-facing debugging listener is enabled.
 `host-adapter.js` names each private hook and probes it at startup:
 
 - `module:workspace-panel-store`, `module:atom-registry`,
-  `module:thread-snapshot-atom`: found by the shape of their exports, not by
-  chunk or minified export names (the registry is recognised by Effect's
-  `~effect/reactivity/AtomRegistry` type id). Discovery only imports modules the
-  renderer itself loads as modules (its entry script and `modulepreload` links),
-  never workers or other scripts, and stops as soon as all three are found. The
-  last seen chunk names are tried first, so it normally imports 4 modules; if
-  they change it searches the rest (80 of 320 on the current build).
-  `__t3Custom.diagnostics().modules` lists what it imported.
+  `module:thread-snapshot-atom`, `module:environment-atoms`: found by the shape
+  of their exports, not by chunk or minified export names (the registry is
+  recognised by Effect's `~effect/reactivity/AtomRegistry` type id; the
+  environment atoms by `environmentIdsAtom` and `connectedEnvironmentIdsAtom`).
+  Discovery only imports modules the renderer itself loads as modules (its entry
+  script and `modulepreload` links), never workers or other scripts, and stops
+  as soon as all four are found. The last seen chunk names are tried first, so it
+  normally imports 5 modules; if they change it searches the rest (56 of 320 on
+  the current build, of 320 then). `__t3Custom.diagnostics().modules` lists what it imported.
+- `css:theme`: T3's `--background`, `--foreground`, `--card`, `--border`,
+  `--muted-foreground` and `--primary` on its root element, read each time the
+  theme is sent. A missing one is named and simply not sent; the Desk keeps its
+  own value for it.
 - `route:thread`: the `#/<environment>/<thread>` route, checked when a thread is
   opened. The thread's project and repository come from T3's own thread
   snapshot atom, so the adapter makes no request to the T3 server and needs none of its
@@ -194,9 +271,10 @@ network-facing debugging listener is enabled.
 A missing hook is reported by name in Customizations, in `t3-custom status`, and
 in `injector.log`, and turns off only the surface that needs it: the Desk panel
 needs the panel store, the registry, the thread snapshot atom and the panel
-slot;
-references need the conversation DOM, and open Desk in the browser while the
-panel is off; the settings section needs the settings page.
+slot; opening a thread from the Desk also needs the environment atoms, and says
+in the panel when they are missing; the Desk's controls go after
+`dom:panelTabList`; references need the conversation DOM, and open Desk in the
+browser while the panel is off; the settings section needs the settings page.
 
 ## A test instance (Windows)
 
@@ -239,48 +317,62 @@ No npm dependencies are needed. The tests need Node.js 22 or newer.
 every hook against a running T3 (use a test instance): it opens the thread, the
 workspace panel and Settings, prints each probe, and exits non-zero naming each
 broken hook, or if discovery imported a script that is not a declared renderer
-module (such as a worker). Run it after every T3 update.
+module (such as a worker). It also reads the theme (`css:theme`) and finds the
+thread among the connected environments (`state:find-thread`). Run it after
+every T3 update.
 
 `node test-extension.mjs` tests the extension logic in an isolated browser
-fixture with T3's panel DOM contract, T3's content security policy, and real
-Desk reads. The fixture serves modules shaped like T3's hooks, so the real
-discovery code runs, and a worker script that must never run in the window. It
-also renames the panel slot and checks that references then open Desk
-externally. It uses Edge on Windows and Chrome on macOS; set `BROWSER` to use
-another Chromium. It checks docking/resizing, project matching and manual
-mappings, safe reference rendering, keyboard hovercards, click-through, Settings
-reinjection, native-surface coexistence, and clean removal. It reads Desk
-repository `atelier`, item `atelier-plr9` and mission `atelier-g961` from the
-configured Desk; replace those fixtures to test another dataset. Screenshots go
+fixture with T3's panel DOM contract, T3's content security policy, and the real
+Desk app and data. The fixture serves modules shaped like T3's hooks, so the real
+discovery code runs, and a worker script that must never run in the window. The
+Desk is reached through a local proxy on another site that forwards to the first
+Desk in `config.json`, except that it answers `GET /api/embed` with the
+fixture's origin, so the real Desk app performs the host contract with the
+fixture page; the proxy also records every path asked for. The test's own
+`config.json` has no repository table and no settings. It uses Edge on Windows
+and Chrome on macOS; set `BROWSER` to use another Chromium. It checks:
+
+- discovery, docking and resizing, and that the project is matched by the
+  identity the Desk reports;
+- the `/embed` prefix on the iframe and the normal address on Open externally,
+  following `desk:navigated`; no header row in the panel and no floating gear;
+- `host:theme` on `desk:ready` (colours, font, scheme) and again after a change
+  of the fixture's root class and custom properties;
+- the tab label from `desk:navigated`;
+- that messages posted by the page itself and by a frame of another origin
+  change nothing;
+- `desk:open-thread` going to `#/env/thread-b`, and the notice for an unknown
+  thread;
+- the bridge's allow-list (no action endpoints, no unconfigured Desk);
+- references, keyboard hovercards, click-through and streaming, and that a
+  mission is resolved with one `/api/records` read and never asked for as an
+  item;
+- a manual mapping saved from Settings landing in `config.json` under
+  `settings`, the extension being reapplied, and localStorage holding only view
+  state;
+- Settings reinjection, native-surface coexistence, the renamed panel slot
+  fallback, and clean removal.
+
+It reads Desk repository `atelier`, item `atelier-plr9` and mission
+`atelier-g961`; replace those fixtures to test another dataset. Screenshots go
 under the ignored `artifacts/` directory. `devtools.mjs` is a development helper
 and is not installed. See [verification notes](docs/VERIFICATION.md).
 
-## Proposed Desk backend increment
+## What the Desk still lacks
 
-This extension is the T3-specific client; the following belong in Desk:
+The Desk now gives repository identities, one-read record resolution, an
+embedded mode and a host contract, and this extension uses all four. Still open
+on the Desk's side:
 
-1. **Repository metadata for integrations.** Expose the authoritative Atelier
-   `slug` and a stable repository identity in `/api/repos`. The server already
-   reads `.atelier/config.toml`; integrations should not infer prefixes from
-   existing IDs or equate server paths with client paths.
-2. **Compact reference resolution.** Resolve an ID to item or mission in one
-   read, returning repository identity, kind, canonical URL, title, status,
-   priority, holder, blockers, completion counts, source revision, and read-from
-   information. Distinguish unknown, missing, and ambiguous references. Support
-   cache validation (for example ETag) before adding bulk lookup or live events.
-3. **An embedded Desk mode.** Provide a compact, repository-scoped layout that
-   fits a side panel, with theme selection and less redundant global navigation.
-   Global Inbox/Proposed/Motion/Disputed views need an explicit repository filter;
-   simply deep-linking the repository page does not scope every other view.
-4. **A narrow host navigation protocol.** Add a documented, origin-checked
-   `postMessage` handshake for selecting a repository/item, reporting navigation,
-   and requesting host links. Validate both source window and exact origin. This
-   would preserve iframe history without changing src to convey host context.
-5. **An explicit integration read contract.** Document stable errors, versioning,
-   and the intended cross-origin/auth model for previews. Keep read previews
-   separate from action authorization; do not broadly enable mutation access
-   merely to make hovercards work.
+1. **The Atelier slug in `/api/repos`.** The extension uses the repository name
+   as the reference prefix; a repository whose slug differs needs a
+   `desk.repositories` override.
+2. **Telling the Desk which thread T3 shows.** Being added to the contract;
+   `tellDeskThread` in `custom.js` is the seam for it.
+3. **Hovercard fields in `/api/records/{id}`.** Priority, holder, blockers and
+   completion counts still need a second read of the item or mission route.
+4. **CORS for reads.** Reads go through the injector because the Desk sends no
+   CORS headers.
 
-No Desk changes above are required by this client increment. Desk must already
-be reachable at the configured URL; the extension does not configure its server
-or create network tunnels.
+Desk must already be reachable at the configured URL; the extension does not
+configure its server or create network tunnels.
