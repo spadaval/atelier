@@ -135,3 +135,8 @@ Tests: `node t3-extension/run-tests.mjs`: "All 3 tests passed:
 test-extension.mjs, test-fixture-desk.mjs, test-update.mjs". Each new check
 fails with its fix undone (`t3-extension/docs/VERIFICATION.md`).
 
+### Responses
+
+- 1-iclq.1: fixed in d839006d3 (Shift-click on a thread row stopped while a mission is placed; other order-based shortcuts listed under Known limits)
+- 1-iclq.2: fixed in d839006d3 (copies of the extension's rows removed on each sync, when the view is off and at teardown)
+- 1-iclq.3: fixed in 9de9e431e (the fixture Desk's address read from a whole line)
