@@ -87,6 +87,8 @@ item in `items/<id>/item.md` with its reviews beside it, and the rules in
 - Installed CLI: `atelier`, installed from this tree with `cargo install
   --path crates/atelier-cli --locked`.
 - The Desk's app: `desk/` (`pnpm test`, `pnpm e2e`; see `desk/README.md`).
+- The T3 Code extension: `node t3-extension/run-tests.mjs`, against a Desk
+  built from this checkout (see `t3-extension/README.md`).
 - The T3 Code extension: `t3-extension/` (`node t3-extension/test-extension.mjs`
   with a Desk running and Chrome; set `DESK` and `BROWSER`, see its README).
 - Formatting: `cargo fmt -- --check`
@@ -99,6 +101,9 @@ item in `items/<id>/item.md` with its reviews beside it, and the rules in
   the merge. CI skips the Rust jobs when a change touches only tracker
   records, Markdown outside `crates/`, the Desk's app outside
   `desk/src/api/`, and the T3 Code extension (`scripts/ci-jobs.sh` holds the
-  rule). No CI job tests the extension yet.
+  rule). CI's jobs are `rust` (the build, tests and `atelier check`), `desk`
+  (the Desk's app) and `extension` (the T3 Code extension's tests against
+  `atelier-desk` and its app built from the same commit); each runs only for
+  the paths that script names for it.
 - The cutover kit, `scripts/cutover/`, stays until the work host has
   adopted the new tool (`scripts/cutover/README.md`).

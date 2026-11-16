@@ -516,6 +516,44 @@ Settings → Environments → Add environment.
 
 No npm dependencies are needed. The tests need Node.js 22 or newer.
 
+`node run-tests.mjs` runs every test here that needs no real T3 Code: each
+`test-*.mjs` but `test-contract.mjs`, one at a time. It exits non-zero and
+names each test that failed. A new test is a new `test-*.mjs` file; the runner
+and CI find it.
+
+**In CI.** The `extension` job in `.github/workflows/ci.yml` runs
+`node run-tests.mjs` on Linux in headless Chrome, after building
+`atelier-desk` (`cargo build -p atelier-desk`) and the Desk's app
+(`pnpm build` in `desk/`) from the same commit, so a change to the Desk that
+breaks the extension fails its own pull request. It runs when a change
+touches `t3-extension/`, `desk/`, `crates/atelier-desk/`, the workspace's
+`Cargo.toml`, `Cargo.lock` or `rust-toolchain.toml`, `.github/workflows/ci.yml`
+or `scripts/ci-jobs.sh` (`scripts/ci-jobs.sh` holds the rule). A change to
+`crates/atelier-core` alone does not run it, on purpose: the fields the
+extension reads are defined in `atelier-desk`, and the `rust` job tests the
+core.
+
+**On your machine**, either way:
+
+```sh
+# Let the test start a Desk from this checkout:
+cargo build -p atelier-desk
+pnpm --dir desk install && pnpm --dir desk build
+node t3-extension/run-tests.mjs
+
+# Or start the fixture Desk yourself, anywhere that has the build, and point
+# the test at it, such as from Windows at a Desk on another host:
+node t3-extension/fixture-desk.mjs     # prints the Desk's URL
+DESK=http://127.0.0.1:<port> node t3-extension/run-tests.mjs
+```
+
+`fixture-desk.mjs` writes the fixture repository into a temporary directory
+and serves it with `atelier-desk` (`ATELIER_DESK` overrides the binary,
+`DESK_APP` the app) on a free loopback port, fetching nothing. A Desk named by
+`DESK` must serve that repository: the test checks that it does and stops if
+not. On Windows set `BROWSER` if Edge is elsewhere; on Linux it defaults to
+`/usr/bin/google-chrome`.
+
 `node test-contract.mjs --port 9333 --thread <environmentId>/<threadId>` checks
 every hook against a running T3 (use a test instance): it opens the thread, the
 workspace panel, a new-thread screen (the first draft that names a project, or
@@ -536,19 +574,20 @@ fixture with T3's panel, sidebar, breadcrumb and new-thread DOM, T3's content
 security policy, and the real Desk app and data. The fixture serves modules shaped like T3's hooks, so the real
 discovery code runs, and a worker script that must never run in the window. The
 Desk is reached through two local proxies on another site that forward to the
-first Desk in `config.json`, except that they answer `GET /api/embed` with the
+fixture Desk (or `DESK`), except that they answer `GET /api/embed` with the
 fixture's origin, so the real Desk app performs the host contract with the
 fixture page; each proxy records every path asked for. The second proxy is a
 second Desk serving the same repositories, and the first answers 404 for the
-mission's record. The first serves the fixture's own `/api/sidebar` (one mission
-whose threads are fixture threads, a thread T3 does not know, and a real mission
-ID so mission control renders) and `/api/launch?repo=atelier`; the second lists
-no missions. The fixture's T3 state has a subagent of thread-a
+closed mission's record. The first forwards `/api/sidebar` to the real Desk,
+whose fixture repository holds one open mission led by thread-b, with a plan
+reviewer T3 does not know and an item held by thread-a, and answers
+`/api/launch?repo=atelier` itself, since its rows include IDs no record can
+have; the second lists no missions. The fixture's T3 state has a subagent of thread-a
 (`lineage.parentThreadId`) and a thread started from thread-b by a linked
 environment (`delegatedFrom`). The test's own `config.json` lists both and has
-no repository table and no settings; `DESK` overrides the Desk the proxies
-forward to (default: the first in `config.json`). It uses Edge on Windows
-and Chrome on macOS; set `BROWSER` to use another Chromium. It checks:
+no repository table and no settings. It uses Edge on Windows, Chrome on macOS
+and `/usr/bin/google-chrome` elsewhere; set `BROWSER` to use another Chromium.
+It checks:
 
 - discovery, docking and resizing, and that the project is matched by the
   identity the Desk reports;
@@ -610,9 +649,15 @@ and Chrome on macOS; set `BROWSER` to use another Chromium. It checks:
 - Settings reinjection, native-surface coexistence, the renamed panel slot
   fallback, and clean removal of every view.
 
-It reads Desk repository `atelier`, item `atelier-plr9` and mission
-`atelier-g961`, and needs the Desk to list one open mission in
-`/api/sidebar`; replace those fixtures to test another dataset. Screenshots go
+Its records are those `fixture-desk.mjs` writes, with fixed IDs, titles and
+statuses: repository `atelier` with identity `example.invalid/fixture/atelier`,
+open mission `atelier-fm01` with items `atelier-fi01` (building, on its branch),
+`atelier-fi02` (needs-human) and `atelier-fi03` (done), closed mission
+`atelier-fm02`, and item `atelier-rf01` in no mission, which the conversations
+name. Every other read reaches the real Desk, except what the proxies answer
+themselves: `/api/embed`, `/api/launch`, the unreadable repository added to
+one `/api/inbox` answer, and the 404 for `atelier-fm02` on the first Desk. A
+change to those in the Desk does not fail this test. Screenshots go
 under the ignored `artifacts/` directory. `devtools.mjs` is a development helper
 and is not installed. See [verification notes](docs/VERIFICATION.md).
 
