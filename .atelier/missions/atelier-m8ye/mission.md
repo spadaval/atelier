@@ -41,8 +41,10 @@ the extension fails the pull request that makes it.
 The extension is released apart from `atelier`. A tag `t3-extension-v<version>`
 on a commit of `master` publishes a GitHub release holding one bundle: the
 extension's files and its installer, and a checksum. That release builds no
-Rust, does not start the `atelier` release, and is never the repository's
-"latest" release, which stays the newest `atelier` one. A device installs the
+Rust and runs no test of its own: it publishes only a commit whose CI run
+passed, and that run held the extension's job. It does not start the
+`atelier` release, and is never the repository's "latest" release, which
+stays the newest `atelier` one. A device installs the
 extension from a bundle and learns of a newer one from the releases, by the
 tag's prefix.
 
@@ -53,10 +55,17 @@ workflow, and T3 Code's own runtime runs the extension on a device.
 
 ## Success criteria
 
-- same-tree: the files under `t3-extension/` at the import's merge equal the
-  tree of `spadaval/t3-code-atelier` at `a242410`, apart from line endings
-  and trailing whitespace made consistent, and `git log --follow` on
-  `t3-extension/custom.js` reaches the extension's first commit.
+- same-tree: at the last imported commit on the item's branch, before any
+  edit made here, the files under `t3-extension/` equal the tree of
+  `spadaval/t3-code-atelier` at `a242410` byte for byte. The item's later
+  commits hold every change made here, so a reviewer reads those alone.
+  `git log --follow` on `t3-extension/custom.js` reaches the extension's
+  first commit.
+- nothing-private: no commit that the import adds to this public repository
+  holds a file under `artifacts/`, where the private repository's history
+  keeps screenshots of Sumeet's other projects and thread titles, and the
+  import's Report lists what a scan of the imported history for secrets,
+  addresses and personal details found.
 - contract-in-ci: on a pull request that renames one field the extension
   reads from `GET /api/sidebar`, the CI job for the extension fails, and on
   the base it passes. The job's run, from its start to its end, is under six
@@ -69,9 +78,12 @@ workflow, and T3 Code's own runtime runs the extension on a device.
   `master`, builds a bundle whose installer installs the extension into an
   empty home directory and whose files equal `t3-extension/` at that commit.
   `dist plan` for a tag `t3-extension-v0.1.1` does not plan an `atelier`
-  release, and the workflow refuses a tag whose commit is not on `master`.
+  release, and the workflow refuses a tag whose commit is not on `master` or
+  whose CI run did not pass with the extension's job in it.
 - installs-from-bundle: from the bundle alone, with no clone, the installer
-  sets up a home directory in which `t3-custom check` passes, and the update
+  sets up a home directory in which `t3-custom check` passes, on a Linux
+  runner where no T3 Code is installed, by naming a stand-in for the app
+  as its tests do, and the update
   command, given a fixture list of releases, picks the newest
   `t3-extension-v*` one, ignores `atelier`'s releases, verifies the bundle's
   checksum and refuses one that does not match. Tests cover each.
@@ -93,11 +105,14 @@ Out, and done by the planner's thread after the items merge:
 
 Out altogether:
 
-- Any change to what the extension shows or does, and any change to the
-  Desk. atelier-zc0o, the fast-keys bug in mission control, is not part of
-  this mission.
+- Any change to what the extension shows or does, other than its installed
+  version and its update control in the Customizations section, and any
+  change to the Desk. atelier-zc0o, the fast-keys bug in mission control, is
+  not part of this mission.
 - Running the contract test, which needs a real T3 Code, on a schedule.
-- macOS, and making T3 Code keep the extension across its own updates.
+- Checking anything on macOS. The installer and loader keep the macOS paths
+  they have, and no item here proves them.
+- Making T3 Code keep the extension across its own updates.
 
 ## Authority
 
@@ -109,7 +124,9 @@ and how the `atelier` release is made to ignore the extension's tags.
 An implementer asks the thread that started it before: changing the tag
 scheme `t3-extension-v<version>`; changing how `atelier` itself is tagged,
 built or released; letting a workflow publish from anything but a tag on
-`master`; adding a dependency the extension must install on a device; or
-making the device apply an update without the user having turned that on.
+`master`; adding a dependency the extension must install on a device;
+making the device apply an update without the user having turned that on; or
+pushing imported history in which the scan found anything but the authors'
+Git identities.
 
 ## Result
