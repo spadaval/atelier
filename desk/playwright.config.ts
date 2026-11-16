@@ -10,7 +10,9 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   reporter: process.env.CI ? "list" : "line",
-  use: { baseURL: `http://127.0.0.1:${port}` },
+  // The pages run in UTC, so the week strip splits its days at the same
+  // hours on every host.
+  use: { baseURL: `http://127.0.0.1:${port}`, timezoneId: "UTC" },
   projects: [
     { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } } },
     { name: "phone", use: { ...devices["Desktop Chrome"], viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } },

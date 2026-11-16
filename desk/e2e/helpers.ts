@@ -1,8 +1,13 @@
 import { expect, type Frame, type Page } from "@playwright/test";
-import { World } from "./fixtures";
+import { now, World } from "./fixtures";
 
-/** Answers every /api request of `page` from a fresh fixture server, and returns it. */
+/**
+ * Answers every /api request of `page` from a fresh fixture server, and
+ * returns it. The page's clock starts at the fixtures' `now` and runs on from
+ * there, so the ages it shows are the fixtures' and not the real clock's.
+ */
 export async function serve(page: Page): Promise<World> {
+  await page.clock.install({ time: now });
   const world = new World();
   await page.route("**/api/**", (route) => {
     const request = route.request();
