@@ -1,5 +1,32 @@
 # Verification
 
+## Review fixes for the sidebar views, Windows, November 16, 2026
+
+Fixes for an independent review of `776be61..4bb7348`; same T3 build, test
+instance (port 9333) and Desk (`http://buildbot:3781`) as below. The daily
+instance was not touched.
+
+`DESK=http://buildbot:3781 node test-extension.mjs` passes. Each new check was
+then run with only its fix undone, and failed:
+
+| Finding | Fix undone | Failure |
+| --- | --- | --- |
+| 1. Hiding outlived Missions | Hiding regardless of the views toggle and the sidebar hook | "T3's list whole with the views off" timed out |
+| 2. Suffix selectors | `[data-thread-item$=":<thread>"]` again | "Mission threads hidden from T3's list, and only they" timed out (`env:other:thread-a` was hidden) |
+| 3. Stale `mentioned` | One global list, sent before the new thread's scan, kept with references off | thread-b's messages were not exactly one carrying its own references |
+| 4. Unreadable repository | `repos[].error` ignored | "Inbox count marked for an unreadable repository" timed out |
+
+The route-switch check now waits for thread-b's message before switching back:
+a thread is announced once its own conversation has been scanned.
+
+`node test-contract.mjs --port 9333 --thread <atelier test thread>` passes with
+the new `state:composer-prompt` probe: text put in the composer of a new-thread
+screen reached T3's draft store, and the prompt was put back. Its first version
+filled the composer before T3 had rendered the draft's own editor and wrote into
+the test thread's draft instead; the check now waits for the draft's editor, and
+the stray text was removed.
+
+
 ## Sidebar views, layer and project strip, Windows, November 16, 2026
 
 T3 Code Nightly `0.1.10-nightly.20261115.4749`, test instance (port 9333, own
