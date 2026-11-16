@@ -1,11 +1,13 @@
 import { Activity, Bot, FolderGit2, GitPullRequestArrow, Inbox, LayoutGrid, Menu, Moon, Scale, Sun } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
-import { Link, NavLink, useLocation } from "react-router";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Link, NavLink, useLocation, useNavigate } from "react-router";
 import type { InboxResponse } from "../api/InboxResponse";
 import type { ReposResponse } from "../api/ReposResponse";
+import type { TiesResponse } from "../api/TiesResponse";
 import { api, to } from "../lib/api";
 import { embedded } from "../lib/embed";
-import { report } from "../lib/host";
+import { place, type Place } from "../lib/follow";
+import { report, useHostThread } from "../lib/host";
 import { useData } from "../lib/api";
 
 function Brand() {
@@ -108,6 +110,45 @@ function InboxLink() {
 }
 
 /**
+ * Opens the page for the thread the host shows, each time the host names
+ * another thread, and returns that page with the line that names the
+ * thread's part on it. The host naming the same thread again leaves alone
+ * the page the human has since moved to.
+ */
+function useFollowThread(): Place | null {
+  const thread = useHostThread();
+  const navigate = useNavigate();
+  // The navigate function changes with the location; following a thread must
+  // not run again when the human moves on, so the effect reads it here.
+  const go = useRef(navigate);
+  go.current = navigate;
+  const [followed, setFollowed] = useState<Place | null>(null);
+  useEffect(() => {
+    if (thread === null) return;
+    let stale = false;
+    void (async () => {
+      try {
+        const response = await fetch(api.ties(thread), { headers: { accept: "application/json" } });
+        if (!response.ok || stale) return;
+        const body = (await response.json()) as TiesResponse;
+        if (stale) return;
+        const next = place(body.ties);
+        setFollowed(next);
+        // Replacing, not pushing: the host chose this page, and the host's own
+        // back button should not walk through the threads it showed.
+        go.current(next.path, { replace: true });
+      } catch {
+        // Without the thread's ties the page stays where it is.
+      }
+    })();
+    return () => {
+      stale = true;
+    };
+  }, [thread]);
+  return followed;
+}
+
+/**
  * The embedded Desk draws content only: its host supplies the frame, so
  * there is no sidebar, brand, theme toggle or footer. The breadcrumb is the
  * way up, and the inbox is one link away from every page.
@@ -117,6 +158,7 @@ function EmbeddedShell({ children }: { children: ReactNode }) {
   // Tells a listed host where the Desk is; the title is reported again as
   // the page sets it (lib/host.ts).
   useEffect(report, [location.pathname, location.search]);
+  const followed = useFollowThread();
   return (
     <div className="shell embedded">
       <div className="main">
@@ -124,6 +166,7 @@ function EmbeddedShell({ children }: { children: ReactNode }) {
           <InboxLink />
           <nav id="crumbs" className="crumbs" aria-label="Where you are" />
         </header>
+        {followed && followed.path === location.pathname ? <p className="thread-part">{followed.line}</p> : null}
         {children}
       </div>
     </div>

@@ -24,6 +24,7 @@ import type { SessionResponse } from "../src/api/SessionResponse";
 import type { StatusCount } from "../src/api/StatusCount";
 import type { T3State } from "../src/api/T3State";
 import type { ThreadsResponse } from "../src/api/ThreadsResponse";
+import type { Tie } from "../src/api/Tie";
 
 const commit = "2116defdde63afdadad2dddead0945cb50c21c42";
 const at = "2026-11-11T03:50:46+00:00";
@@ -650,6 +651,29 @@ export const answers = {
   sessionRefused: { result: "refused", text: "No T3 Code project has /projects/atelier as its workspace root, so no session can start there." },
 } satisfies Record<string, ActionResponse | SessionResponse>;
 
+/** Threads a host may show, by what they are tied to, for `/api/ties`. */
+export const tied = {
+  implementer: thread,
+  lead: "thread:z4cr-lead",
+  /** Implemented atelier-1ie1, now done, and reviews atelier-u1ko's open round. */
+  pastAndReview: "thread:1ie1-then-u1ko",
+  /** Implemented and reviewed only work that is done. */
+  pastOnly: "thread:1ie1-only",
+  none: live.free.id,
+};
+
+const tie = (kind: Tie["kind"], id: string, title: string, status: Tie["status"], role: Tie["role"], current: boolean): Tie => ({ repo: "atelier", kind, id, title, status, role, current });
+const u1ko = "Delete the old workspace";
+const ie1 = "Write the Desk's API as a document first";
+
+/** `/api/ties` for each identity in `tied`; any other identity is tied to nothing. */
+export const ties: Record<string, Tie[]> = {
+  [tied.implementer]: [tie("item", "atelier-uwxy", "Serve the Desk's reading routes from commits: the atelier-desk crate", "building", "implementer", true)],
+  [tied.lead]: [tie("mission", "atelier-z4cr", z4cr.mission.title, "open", "lead", true)],
+  [tied.pastAndReview]: [tie("item", "atelier-1ie1", ie1, "done", "implementer", false), tie("item", "atelier-u1ko", u1ko, "in_review", "reviewer", true)],
+  [tied.pastOnly]: [tie("item", "atelier-1ie1", ie1, "done", "implementer", false), tie("item", "atelier-1ie1", ie1, "done", "reviewer", false)],
+};
+
 /** A request the app sent to an action or session route. */
 export type Sent = { path: string; header: string | undefined; body: unknown };
 
@@ -727,6 +751,11 @@ export class World {
     const missing = (what: string) => ({ status: 404, body: { error: `No ${what}` } });
     if (path === "/api/repos") return { status: 200, body: this.repos };
     if (path === "/api/embed") return { status: 200, body: { origins: this.embedOrigins } };
+    if (path === "/api/ties") {
+      const identity = url.searchParams.get("thread");
+      if (!identity) return { status: 400, body: { error: "A thread identity is needed." } };
+      return { status: 200, body: { thread: identity, ties: ties[identity] ?? [] } };
+    }
     if (path === "/api/inbox") return { status: 200, body: this.inbox };
     if (path === "/api/threads") return { status: 200, body: this.threads };
     if (path === "/api/proposed") return { status: 200, body: proposed };
