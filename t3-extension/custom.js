@@ -860,9 +860,12 @@ const layoutStyle = element('style', { 'data-t3-mission-layout': '' });
 document.head.append(layoutStyle);
 const listRows = new Map(); const rowSignatures = new WeakMap();
 let ordered = new Set(); let layoutList = null; let layoutActive = false;
+// T3 fades a removed row by appending a copy of it, the extension's rows included, so every row
+// carrying the extension's mark goes, copies too.
+const removeListRows = keep => { for (const node of document.querySelectorAll('[data-t3-list-row]')) if (!keep?.has(node)) node.remove(); };
 function clearLayout() {
   for (const node of ordered) node.style.order = '';
-  for (const row of listRows.values()) row.remove();
+  removeListRows();
   listRows.clear(); ordered = new Set(); layoutList = null; layoutActive = false; layoutStyle.textContent = '';
 }
 // One of the extension's rows in T3's list, kept across syncs and rebuilt when its data changes.
@@ -909,7 +912,7 @@ function syncMissionLayout() {
   boringNote.hidden = !on || Boolean(list) || Boolean(document.querySelector(hostSelectors.sidebarSearch)?.value) || !document.querySelector(hostSelectors.threadItem);
   const problem = list && hostListProblem(list);
   if (list) setHostProbe('layout:threadList', !problem, problem ? `T3's thread list: ${problem}` : 'project folders and their thread rows in one flex column');
-  if (!list || problem) { if (layoutList || ordered.size) clearLayout(); return; }
+  if (!list || problem) { if (layoutList || ordered.size || document.querySelector('[data-t3-list-row]')) clearLayout(); return; }
   // T3 fades a row it removes by appending an inert, absolutely placed copy (Sidebar.motion.ts);
   // being out of flow, those copies, like the extension's own rows, are left out of the walk.
   const children = [...list.children].filter(node => !node.hasAttribute('data-t3-list-row') && !(node.inert && node.style.position === 'absolute'));
@@ -947,7 +950,8 @@ function syncMissionLayout() {
     if (rest.length) add(`${folderKey}|more`, moreRow(`${folderKey}|more`, repo, rest));
     sequence.push(...loose);
   }
-  for (const [key, node] of listRows) if (!used.has(key)) { node.remove(); listRows.delete(key); }
+  for (const key of listRows.keys()) if (!used.has(key)) listRows.delete(key);
+  removeListRows(new Set(listRows.values()));
   for (const node of listRows.values()) if (node.parentElement !== list) list.append(node);
   const next = new Set(sequence);
   for (const node of ordered) if (!next.has(node)) node.style.order = '';
@@ -959,12 +963,18 @@ function syncMissionLayout() {
   for (const node of listRows.values()) node.setAttribute('aria-pressed', String(Boolean(layer) && node.dataset.t3LayerKey === layer.key));
   expectHostDom('settleButton', folderThreads > 0, 'T3 listed threads in a project folder');
 }
-// T3 settles every row between where a press on a row's Settle button starts and where it is
-// released, in T3's own order, which differs from what is drawn once a mission is placed. While
-// one is, the press is stopped before T3 sees it, so no drag starts; a plain click still settles
-// that one thread.
+// Two of T3's gestures act on a run of rows taken from T3's own order, which differs from what is
+// drawn once a mission is placed: dragging from a row's Settle button settles every row between,
+// and Shift-click selects every row between the anchor and the row clicked, which bulk Settle,
+// Snooze, Delete and a drag to the composer then act on. While a mission is placed, both are
+// stopped before T3 sees them: a press on Settle, so no drag starts (a plain click still settles
+// that thread), and a Shift-click on a thread row (a click and Ctrl- or Cmd-click still work).
 listen(document, 'pointerdown', event => {
   if (layoutActive && event.target instanceof Element && event.target.closest(hostSelectors.settleButton)) event.stopPropagation();
+}, { capture: true });
+listen(document, 'click', event => {
+  if (!layoutActive || !event.shiftKey || event.ctrlKey || event.metaKey || !(event.target instanceof Element)) return;
+  if (event.target.closest(hostSelectors.threadItem) && !event.target.closest('button, a')) { event.preventDefault(); event.stopPropagation(); }
 }, { capture: true });
 
 function syncSidebar() {

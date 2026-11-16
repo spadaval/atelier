@@ -88,7 +88,8 @@ new Worker('/assets/imageDecode.worker-fixture.js');`,
 // its thread rows after it, then the Settled shelf. Like React, it closes a folder by removing its
 // rows, appending an inert, absolutely placed copy of each to the list, as T3 fades a removed row
 // (Sidebar.motion.ts; here they stay, as in a hidden window, whose animations never finish);
-// fadingCopy(node) makes one. And
+// fadingCopy(node) makes one. A Shift-click on a row that reaches T3 records a range selection
+// (fixtureList.ranges), as T3's own, from its order; a Ctrl-click a toggle (fixtureList.toggles). And
 // replaceList() draws a new list (as a search or a route change does). With
 // fixtureList.boring false it is a flat list with no folders. A row's Settle button records a
 // press that reaches T3's own handler (where T3 would start its drag-sweep) and a click.
@@ -96,7 +97,7 @@ const listFolders = [
   { key: `folder:${fixtureRepositoryKey}`, title: 'atelier', threads: ['thread-child', 'thread-loose', 'thread-a', 'thread-delegated', 'thread-b'] },
   { key: 'folder:elsewhere/unlinked', title: 'unlinked', threads: ['thread-c', 'other:thread-a'] },
 ];
-const listScript = `const fixtureList=globalThis.fixtureList={boring:true,closed:new Set(),folders:${JSON.stringify(listFolders)},titles:${JSON.stringify(Object.fromEntries(shell.threads.map(thread => [thread.id, thread.title])))},sweeps:[],settled:[]};
+const listScript = `const fixtureList=globalThis.fixtureList={boring:true,closed:new Set(),folders:${JSON.stringify(listFolders)},titles:${JSON.stringify(Object.fromEntries(shell.threads.map(thread => [thread.id, thread.title])))},sweeps:[],settled:[],ranges:[],toggles:[]};
 const li=(attributes,html)=>{const node=document.createElement('li');for(const [name,value] of Object.entries(attributes))node.setAttribute(name,value);node.innerHTML=html;return node};
 const threadNode=id=>{const node=li({'data-thread-item':'env:'+id},'<div data-sidebar-row="env:'+id+'" data-route="/env/'+id+'"><span></span><button aria-label="Settle thread">✓</button></div>');node.querySelector('span').textContent=fixtureList.titles[id]??id;return node};
 globalThis.fadingCopy=row=>{const copy=row.cloneNode(true);copy.removeAttribute('data-thread-item');copy.setAttribute('aria-hidden','true');copy.inert=true;Object.assign(copy.style,{position:'absolute',top:'0px',left:'0px',width:'200px',opacity:'0.5'});return copy};
@@ -118,7 +119,7 @@ addEventListener('hashchange',show);show();
 // T3 starts a new thread from the breadcrumb's project, opens a thread from its row, and sends the composer on Enter.
 document.querySelector('#crumb-project').addEventListener('click',()=>{globalThis.crumbStartedThread=true});
 ${listScript}
-document.addEventListener('click',event=>{const row=event.target.closest('#thread-list [data-route]');if(row)location.hash=row.dataset.route});
+document.addEventListener('click',event=>{const row=event.target.closest('#thread-list [data-route]');if(!row)return;const key=row.closest('[data-thread-item]').dataset.threadItem;if(event.ctrlKey)fixtureList.toggles.push(key);else if(event.shiftKey)fixtureList.ranges.push(key);else location.hash=row.dataset.route});
 const editor=document.querySelector('[data-testid=composer-editor]');
 editor.addEventListener('keydown',event=>{if(event.key==='Enter')globalThis.fixtureSent=event.target.textContent});
 // Like T3, the editor's text reaches the draft store a microtask later, under the draft the editor
@@ -567,6 +568,14 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   const settle = id => `document.querySelector('[data-thread-item="env:${id}"] [aria-label="Settle thread"]')`;
   await evaluate(`${settle('thread-a')}.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, isPrimary: true, button: 0 })); ${settle('thread-a')}.click()`);
   assert.deepEqual(await evaluate('[fixtureList.sweeps, fixtureList.settled]'), [[], ['env:thread-a']], 'a press on Settle reached T3, or the click did not');
+  // A Shift-click, which T3 turns into a range of its own order, never reaches T3 either; a
+  // Ctrl-click does.
+  const rowClick = (id, init) => `document.querySelector('[data-sidebar-row="env:${id}"] span').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ...${JSON.stringify(init)} }))`;
+  await evaluate(`${rowClick('thread-child', { ctrlKey: true })}; ${rowClick('thread-a', { shiftKey: true })}; ${rowClick('thread-a', { shiftKey: true, ctrlKey: true })}`);
+  assert.deepEqual(await evaluate('[fixtureList.ranges, fixtureList.toggles]'), [[], ['env:thread-child', 'env:thread-a']], 'a Shift-click reached T3 while a mission was placed, or a Ctrl-click did not');
+  // T3's fading copies of the extension's own rows are removed as they appear.
+  await evaluate('document.querySelector("#thread-list").append(fadingCopy(document.querySelector("[data-t3-mission-row]")))');
+  await until(() => evaluate('document.querySelectorAll("[data-t3-list-row]").length === 2'), 'A copy of a mission header removed');
   // T3 adds a row in place, closes and opens a folder, and replaces its list: each is laid out again.
   await evaluate('document.querySelector("#thread-list").insertBefore(threadNode("thread-new"), document.querySelectorAll("#thread-list [data-testid=sidebar-project-folder]")[1])');
   await untilDrawn([...laidOut.slice(0, 9), 'env:thread-new', ...tail], 'A row T3 added, in its place');
@@ -584,6 +593,8 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   // With the boring sidebar off (no folders) nothing is reordered and a note says how to turn it on.
   await evaluate('fixtureList.boring = false; replaceList()');
   await until(async () => await noOrders() && await evaluate('!document.querySelector("[data-t3-boring-note]").hidden'), 'Boring sidebar off');
+  await evaluate(`${rowClick('thread-a', { shiftKey: true })}`);
+  assert.deepEqual(await evaluate('fixtureList.ranges'), ['env:thread-a'], 'a Shift-click was stopped with no missions placed');
   assert.match(await evaluate('document.querySelector("[data-t3-boring-note]").textContent'), /Settings → Labs → Boring sidebar/);
   await evaluate(`${settle('thread-a')}.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, isPrimary: true, button: 0 }))`);
   assert.deepEqual(await evaluate('fixtureList.sweeps'), ['env:thread-a'], 'a press on Settle was stopped with no missions placed');
@@ -596,6 +607,9 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   await until(() => evaluate(`Boolean(${settingToggle('enabled')})`), 'Settings section for the views toggle');
   await evaluate(`${settingToggle('enabled')}.click()`);
   await until(async () => await noOrders() && await evaluate('!document.querySelector("[data-t3-ext-sidebar]")'), 'T3\'s list whole with the views off');
+  // A copy T3 fades in after the rows went, from its last positions, goes too.
+  await evaluate('globalThis.keptHeader = document.createElement("li"); keptHeader.setAttribute("data-t3-list-row", ""); keptHeader.setAttribute("data-t3-mission-row", "x"); keptHeader.textContent = "Fixture mission"; document.querySelector("#thread-list").append(fadingCopy(keptHeader))');
+  await until(() => noOrders(), 'A copy of a mission header removed with the views off');
   await evaluate(`${settingToggle('enabled')}.click()`);
   await untilDrawn(laidOut, 'Missions back with the views on');
   await evaluate('location.hash = "/env/thread-b"');
@@ -772,6 +786,7 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   await until(() => evaluate('__t3Custom.diagnostics().probes["layout:threadList"].ok === false'), 'The list structure probe');
   assert.match(await evaluate('__t3Custom.diagnostics().probes["layout:threadList"].detail'), /not a flex column/);
   assert.deepEqual(await evaluate('__t3Custom.diagnostics().views.missions'), ['layout:threadList']);
+  await evaluate('document.querySelector("#thread-list").append(fadingCopy(keptHeader))');
   await until(() => evaluate('[...document.querySelector("#thread-list").children].every(node => !node.style.order) && !document.querySelector("[data-t3-list-row]") && !document.querySelector("[data-t3-mission-layout]").textContent'), 'T3\'s list whole with the missions view off');
   console.log('PASS: a thread list missions cannot use turns the missions view off by name, with no order, row or rule of the extension left in it');
 
