@@ -264,10 +264,17 @@ The Desks are read when the extension starts, every minute, and whenever the T3
 window is shown again (a covered window throttles timers); T3's threads are read
 again every 3 seconds.
 
-**Settle while missions are placed.** Pressing a row's Settle button and
-dragging settles every thread between, in T3's own order, which is no longer
-the order drawn. While a mission is placed, a press on Settle is stopped before
-T3 sees it, so no drag starts; a plain click still settles that one thread.
+**Gestures that take a run of rows.** Two of T3's gestures act on every row
+between two others, in T3's own order, which is no longer the order drawn:
+dragging from a row's Settle button settles them, and Shift-click selects them,
+for bulk Settle, Snooze, Delete or a drag to the composer. While a mission is
+placed, both are stopped before T3 sees them. A plain click on Settle still
+settles that one thread, and a click and Ctrl- or Cmd-click on a row still open
+and select it.
+
+T3 fades a row it removes by appending a copy of it, and does so for the
+extension's rows too. The extension removes copies of its own rows as they
+appear, when the view turns off and when it stops.
 
 **The layer.** The Inbox row, a mission's title and N more missions open the
 Desk over T3's main area (`/embed/inbox`, `/embed/mission/<repo>/<id>`,
@@ -583,8 +590,17 @@ in the browser); the project strip the draft store, `route:draft`,
 - Missions need the boring sidebar. A project with open missions but no T3
   folder (no thread in the list) is not shown, and N more missions is shown
   only in a folder with a thread of a project mapped to a Desk repository.
-- Arrow keys move through T3's list in T3's order, not the order drawn, so in a
-  folder with missions they jump between mission threads and loose threads.
+- T3's next and previous thread shortcuts, and the thread it opens after the
+  open thread is settled, follow T3's order, not the order drawn, so in a
+  folder with missions they can jump between mission threads and loose
+  threads. The Ctrl+1–9 jump shortcuts count in T3's order too, but T3 draws
+  each hint on its row, so the row labelled is the row opened.
+- While a mission is placed, Shift-click selects nothing; select several
+  threads with Ctrl- or Cmd-click. A thread selected before its mission is
+  folded stays selected while hidden, and bulk actions include it.
+- A copy T3 makes of one of the extension's rows after the extension has
+  stopped is T3's to remove; it goes when T3's fade ends, which a covered
+  window delays until it is shown.
 - T3 animates its list from positions it measures before the extension
   reorders it, so a row whose place changes can slide in from the wrong spot
   for T3's 150 ms motion. Not seen on the test instance, whose covered window
@@ -799,8 +815,10 @@ It checks:
   indented, with their role (none on the threads they started), "1 more
   mission" with its dot, then the folder's loose thread; the other folder
   untouched; folding (kept in localStorage, and after a reinjection) to the
-  thread count and dot; a press on Settle not reaching T3 while a mission is
-  placed, and reaching it when none is, and a click on Settle reaching it; a
+  thread count and dot; a press on Settle and a Shift-click on a row not
+  reaching T3 while a mission is placed, and reaching it when none is, and a
+  click on Settle and a Ctrl-click reaching it; copies of a mission header
+  removed while the view is on and after it turns off; a
   row T3 adds in place, a folder closed (no mission rows) and opened again,
   T3's fading copies of removed rows, and a new list, each laid out again; the
   boring sidebar off and the views off, each leaving no order, row or rule of

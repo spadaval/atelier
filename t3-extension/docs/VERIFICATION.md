@@ -1,5 +1,31 @@
 # Verification
 
+## Review fixes for missions in T3's list (atelier-ytor), Windows, November 16, 2026
+
+Fixes for round 1 of the review of atelier-ytor; same T3 build, test instance
+(port 9333) and Desk as below. The daily instance was not touched.
+
+`node run-tests.mjs` passes on Linux. Each new check was run with only its fix
+undone, and failed:
+
+| Finding | Fix undone | Failure |
+| --- | --- | --- |
+| 1. Shift-click ranges in T3's order | Shift-click not stopped | "a Shift-click reached T3 while a mission was placed, or a Ctrl-click did not" |
+| 2. Copies of mission rows kept | Copies left while the view is on | "A copy of a mission header removed" timed out |
+| 2. (view off) | Copies left when the view is off | "A copy of a mission header removed with the views off" timed out |
+| 3. Fixture Desk address | (`test-fixture-desk.mjs`, new) | every split of the "serving on" line is checked |
+
+In the test instance, with the synthetic mission again (a temporary copy of
+`custom.js`, since replaced by the real one), real CDP clicks on two rows drawn
+next to each other with a third between them in T3's order: Ctrl-click the
+first selected it, Shift-click the second selected nothing more and did not
+navigate, Ctrl-click the second selected it too, and Escape cleared both.
+Closing and reopening the folder left no copy of the mission header (last round
+it left one); T3's copies of its own rows are T3's.
+
+Not verified: T3's Shift-click range against the reordered list without the fix
+on the real app (the review reproduced it with T3's own selection store).
+
 ## Missions in T3's thread list (atelier-ytor), Windows, November 16, 2026
 
 T3 Code Nightly 0.1.10-nightly.20261115, test instance (port 9333), boring
