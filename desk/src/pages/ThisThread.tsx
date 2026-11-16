@@ -208,7 +208,9 @@ function ThreadView({ context }: { context: HostContext }) {
 
   if (!ties.data || !inbox.data || childTies.loading || named.loading) return <Skeleton rows={6} />;
 
-  const mentioned = named.data.filter((r): r is RecordName => r !== null);
+  // A record this thread holds is shown under Holds, not again here.
+  const held = new Set(current.map((t) => t.id));
+  const mentioned = named.data.filter((r): r is RecordName => r !== null && !held.has(r.id));
   const openMentioned = mentioned.filter((r) => !CLOSED.has(r.status));
   const doneMentioned = mentioned.filter((r) => CLOSED.has(r.status));
 

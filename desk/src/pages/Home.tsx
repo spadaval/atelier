@@ -10,7 +10,8 @@ import type { MotionItem } from "../api/MotionItem";
 import { LiveThreadRow } from "../components/Agents";
 import { Crumbs } from "../components/Crumbs";
 import { Priority, ScopeBar, Skeleton, StatusGlyph } from "../components/ui";
-import { api, to, useData } from "../lib/api";
+import type { ThreadInfo } from "../api/ThreadInfo";
+import { api, to, useAll, useData } from "../lib/api";
 import { ago, countsLine, finished, statusName, total } from "../lib/words";
 
 /** A thread as a short name: its live title, else the end of its identity. */
@@ -62,26 +63,38 @@ export function Row({ repo, id, title, status, note, hot, extra }: { repo: strin
   );
 }
 
-function MotionRow({ repo, item }: { repo: string; item: MotionItem }) {
+function MotionRow({ repo, item, names }: { repo: string; item: MotionItem; names: Map<string, string> }) {
   const age = since(item.changed_at);
-  const holder = item.status === "in_review" && item.reviewer ? `review: ${who(item.reviewer)}` : who(item.holder);
+  const name = (agent: Agent | null) => (agent?.thread ? agent.thread.title : agent ? (names.get(agent.identity) ?? who(agent)) : "nobody");
+  const reviewing = item.status === "in_review" && item.reviewer;
   return (
-    <Row
-      repo={repo}
-      id={item.id}
-      title={item.title}
-      status={item.status}
-      note={
-        <>
-          <span className="stage">{statusName(item.status)}</span>
-          <span className="who" title={item.holder?.identity ?? undefined}>
-            {holder}
-          </span>
-          {age ? <span className="age" title={`Last commit on ${item.branch ?? "its branch"} ${item.changed_at}`}>{age}</span> : null}
-        </>
-      }
-    />
+    <Link to={to.item(repo, item.id)} className="glance-row two">
+      <StatusGlyph status={item.status} />
+      <span className="id">{item.id}</span>
+      <span className="title">{item.title}</span>
+      {age ? (
+        <span className="age" title={`Last commit on ${item.branch ?? "its branch"} ${item.changed_at}`}>
+          {age}
+        </span>
+      ) : (
+        <span />
+      )}
+      <span className="sub">
+        <span className="stage">{statusName(item.status)}</span>
+        <span className="who" title={(reviewing ? item.reviewer : item.holder)?.identity ?? undefined}>
+          {reviewing ? `Reviewed by ${name(item.reviewer)}` : `Held by ${name(item.holder)}`}
+        </span>
+      </span>
+    </Link>
   );
+}
+
+/** Titles for the threads T3 Code no longer lists as live, read one by one. */
+function useThreadNames(ids: string[]): Map<string, string> {
+  const read = useAll<ThreadInfo>(ids.map(api.thread), 120_000);
+  const names = new Map<string, string>();
+  read.data.forEach((info, at) => info && names.set(ids[at], info.title));
+  return names;
 }
 
 function ReadyRow({ repo, row }: { repo: string; row: ItemRow }) {
@@ -100,13 +113,17 @@ export function ProjectGlance({ repo }: { repo: string }) {
   const inbox = useData<InboxResponse>(api.inbox());
   const moving = motion.data?.repos.find((r) => r.repo === repo);
   const waiting = inbox.data?.repos.find((r) => r.repo === repo);
+  const moved = moving?.items ?? [];
+  const quiet = [...new Set(moved.flatMap((i) => [i.holder, i.reviewer]).filter((a): a is Agent => !!a && !a.thread).map((a) => a.identity))];
+  const names = useThreadNames(quiet);
   if (missions.status === 404) return <p className="glance-empty">The Desk does not serve a repository named {repo}.</p>;
   if (!missions.data || !motion.data || !inbox.data) return <Skeleton rows={4} />;
 
-  const active = missions.data.missions.filter((m) => m.state === "open" && m.in_progress);
-  const items = moving?.items ?? [];
-  const ready = moving?.ready ?? [];
+  // Agreed missions, those with work under way first.
+  const active = missions.data.missions.filter((m) => m.state === "open").sort((a, b) => Number(b.in_progress) - Number(a.in_progress));
+  const items = moved;
   const needs = (waiting?.needs_human ?? []).flatMap((g) => g.items);
+  const ready = (moving?.ready ?? []).filter((r) => !r.needs_human);
   const plans = waiting?.proposed ?? [];
   const threads = waiting?.threads ?? [];
   const waits = needs.length + plans.length + threads.length;
@@ -136,11 +153,11 @@ export function ProjectGlance({ repo }: { repo: string }) {
         </Block>
       ) : null}
 
-      <Block title="Missions in progress" tally={active.length} more={<Link to={to.repo(repo)}>All missions</Link>}>
-        {active.length === 0 ? <p className="card-empty">No mission has work under way.</p> : null}
+      <Block title="Missions" tally={active.length} more={<Link to={to.repo(repo)}>All missions</Link>}>
+        {active.length === 0 ? <p className="card-empty">No mission is agreed and open.</p> : null}
         {active.map((m) => (
-          <Link key={m.id} to={to.mission(repo, m.id)} className="glance-mission">
-            <span className="glyph run">
+          <Link key={m.id} to={to.mission(repo, m.id)} className="glance-mission" title={m.in_progress ? "Work under way" : "Agreed, nothing started"}>
+            <span className={`glyph ${m.in_progress ? "run" : "plain"}`}>
               <Target size={15} aria-hidden />
             </span>
             <span className="title">{m.title}</span>
@@ -157,7 +174,7 @@ export function ProjectGlance({ repo }: { repo: string }) {
       <Block title="In motion" tally={items.length} more={<Link to="/motion">In motion</Link>}>
         {items.length === 0 ? <p className="card-empty">Nothing is started.</p> : null}
         {items.map((item) => (
-          <MotionRow key={item.id} repo={repo} item={item} />
+          <MotionRow key={item.id} repo={repo} item={item} names={names} />
         ))}
       </Block>
 
@@ -167,9 +184,7 @@ export function ProjectGlance({ repo }: { repo: string }) {
           <ReadyRow key={row.id} repo={repo} row={row} />
         ))}
       </Block>
-      <p className="glance-foot">
-        {repo}, as of {moving?.fetched.at ? ago((Date.now() - Date.parse(moving.fetched.at)) / 1000) : "now"}
-      </p>
+      <p className="glance-foot">{moving?.fetched.at ? `${repo}, fetched ${ago((Date.now() - Date.parse(moving.fetched.at)) / 1000)}` : repo}</p>
     </div>
   );
 }

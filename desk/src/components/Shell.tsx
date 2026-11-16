@@ -5,7 +5,7 @@ import type { InboxResponse } from "../api/InboxResponse";
 import type { ReposResponse } from "../api/ReposResponse";
 import { api, to } from "../lib/api";
 import { embedded } from "../lib/embed";
-import { report, useHostContext } from "../lib/host";
+import { report, reportHeight, useConnected, useHostContext } from "../lib/host";
 import { useData } from "../lib/api";
 
 function Brand() {
@@ -137,9 +137,17 @@ function EmbeddedShell({ children }: { children: ReactNode }) {
   useFollowThread();
   // The project home sits under T3's composer and brings no chrome of its own.
   const bare = location.pathname.startsWith("/home/");
+  const main = useRef<HTMLDivElement>(null);
+  const hosted = useConnected();
+  useEffect(() => {
+    if (!bare || !hosted || !main.current) return;
+    const watch = new ResizeObserver(([entry]) => reportHeight(entry.contentRect.height));
+    watch.observe(main.current);
+    return () => watch.disconnect();
+  }, [bare, hosted]);
   return (
     <div className={`shell embedded${bare ? " bare" : ""}`}>
-      <div className="main">
+      <div className="main" ref={main}>
         {bare ? (
           <nav id="crumbs" hidden />
         ) : (

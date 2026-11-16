@@ -17,7 +17,8 @@ import { apply, merge, type HostTheme } from "./theme";
 export type DeskMessage =
   | { type: "desk:ready"; version: 1 }
   | { type: "desk:navigated"; path: string; title: string }
-  | { type: "desk:open-thread"; thread: string };
+  | { type: "desk:open-thread"; thread: string }
+  | { type: "desk:resized"; height: number };
 
 /** Where the contract stands: the listed origins, and the parent's once it is known to be one of them. */
 /** Spike: everything a `host:thread` message says about the host's thread. */
@@ -141,6 +142,11 @@ export function report() {
   if (key === lastReport) return;
   lastReport = key;
   send({ type: "desk:navigated", path, title });
+}
+
+/** Spike: tells the host how tall the page's content is, so it can size the frame to it. */
+export function reportHeight(height: number) {
+  send({ type: "desk:resized", height: Math.ceil(height) });
 }
 
 /** Asks the host to open the thread whose identity is `thread`. */

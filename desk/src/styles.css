@@ -2740,3 +2740,64 @@ a.q:hover {
     max-width: 110px;
   }
 }
+/* A row of work in motion: title, then stage and who holds it. */
+.glance-row.two {
+  grid-template-columns: 18px auto minmax(0, 1fr) auto;
+  row-gap: 0;
+  padding: 6px 10px;
+}
+.glance-row.two .sub {
+  grid-column: 3 / 5;
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.glance-row.two .sub .who {
+  max-width: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.glance-row.two .age {
+  font: 11.5px var(--mono);
+  color: var(--ink-3);
+}
+@media (max-width: 600px) {
+  .glance-row.two {
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+  }
+  .glance-row.two .sub {
+    grid-column: 2 / 4;
+  }
+}
+
+/* Spike: the inbox shown large over T3's main area. Past one comfortable
+   column it flows its sections into columns instead of stretching rows. */
+.shell.embedded .page.inbox-page {
+  max-width: 1360px;
+  margin: 0 auto;
+}
+.shell.embedded .inbox-flow {
+  columns: 560px 3;
+  column-gap: 32px;
+}
+/* A repository stays whole in one column, so its heading stays with it. */
+.shell.embedded .inbox-flow .inbox-repo {
+  display: inline-block;
+  width: 100%;
+  break-inside: avoid;
+}
+.shell.embedded .inbox-flow .inbox-repo {
+  margin-bottom: 24px;
+}
+.shell.embedded .inbox-flow .repo-title {
+  margin-top: 0;
+}
+@media (min-width: 861px) {
+  .shell.embedded .inbox-flow .item {
+    grid-template-columns: 18px 136px minmax(0, 1fr) auto;
+  }
+}
+
