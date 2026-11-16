@@ -676,7 +676,9 @@ and CI find it. `test-extension.mjs` drives the extension in a fixture page in
 headless Chrome. `test-update.mjs` needs no browser or Desk, but needs
 `python3`: it builds release bundles from this folder, installs one into an
 empty home with a stand-in for T3 Code's app, and runs the installed
-`t3-custom update` and injector against a local releases list.
+`t3-custom update` and injector against a local releases list. `test-fixture-desk.mjs` checks that the fixture Desk's
+address is read only from a whole "serving on" line, however its output is
+split.
 
 **In CI.** The `extension` job in `.github/workflows/ci.yml` runs
 `node run-tests.mjs` on Linux in headless Chrome, after building

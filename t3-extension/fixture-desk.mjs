@@ -89,6 +89,11 @@ export async function writeFixtureRepository(root) {
   git('switch', '-q', 'master');
 }
 
+// The address in atelier-desk's "serving on <url>" line, once the whole line has arrived, or null.
+export function servingUrl(text) {
+  return text.match(/serving on (http:\/\/\S+)\r?\n/)?.[1] ?? null;
+}
+
 // Builds the fixture repository under a new temporary directory and serves it with atelier-desk on
 // a free loopback port. `stop()` ends the Desk and removes the directory; `log()` is its output.
 export async function startFixtureDesk() {
@@ -105,12 +110,16 @@ export async function startFixtureDesk() {
   const desk = spawn(binary, ['--config', config], { stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '';
   const url = await new Promise((resolve, reject) => {
-    const read = chunk => {
-      output += chunk;
-      const serving = output.match(/serving on (http:\/\/\S+)/);
-      if (serving) resolve(serving[1]);
+    // Each stream on its own: a chunk can end mid-line, and the two streams' chunks interleave.
+    const listen = stream => {
+      let text = '';
+      stream.on('data', chunk => {
+        output += chunk; text += chunk;
+        const serving = servingUrl(text);
+        if (serving) resolve(serving);
+      });
     };
-    desk.stdout.on('data', read); desk.stderr.on('data', read);
+    listen(desk.stdout); listen(desk.stderr);
     desk.on('error', reject);
     desk.on('exit', code => reject(new Error(`atelier-desk exited with ${code} before serving:\n${output}`)));
   });
