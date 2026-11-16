@@ -874,20 +874,24 @@ function syncSidebar() {
 }
 
 // The count: needs-human items, proposed plans and waiting threads, across repositories and Desks.
+// A Desk that cannot be read, or a repository it reports with an error (its lists are then empty),
+// shows "!" beside the count of what could be read, with each error in the row's tooltip.
 async function readInbox() {
-  const errors = []; let count = 0;
+  const errors = []; let count = 0; let read = 0;
   await Promise.all(deskUrls.map(async desk => {
     try {
       for (const repo of (await api.request('desk-get', { desk, path: '/api/inbox' })).repos) {
+        if (repo.error) errors.push(`${desk} could not read ${repo.repo}: ${repo.error}`);
         count += (repo.needs_human ?? []).reduce((sum, group) => sum + group.items.length, 0) + (repo.proposed ?? []).length + (repo.threads ?? []).length;
       }
+      read++;
     } catch (error) { errors.push(`GET ${desk}/api/inbox: ${error.message}`); }
   }));
   if (api.signal.aborted) return;
-  inboxCount.textContent = errors.length ? '!' : String(count);
+  inboxCount.textContent = !errors.length ? String(count) : read ? `${count} !` : '!';
   inboxCount.toggleAttribute('data-error', errors.length > 0);
   inboxCount.toggleAttribute('data-zero', !errors.length && count === 0);
-  inboxRow.title = errors.length ? `Atelier inbox: ${errors.join('; ')}` : `Atelier inbox: ${count} waiting (read ${new Date().toLocaleTimeString()})`;
+  inboxRow.title = errors.length ? `Atelier inbox: ${read ? `${count} waiting in what could be read; ` : ''}${errors.join('; ')}` : `Atelier inbox: ${count} waiting (read ${new Date().toLocaleTimeString()})`;
 }
 const readDesks = () => { void readInbox(); void readSidebar(); };
 readDesks();

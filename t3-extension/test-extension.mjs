@@ -108,6 +108,12 @@ function deskProxyServer(requests, options) {
       if (options.slowEmbed) await delay(options.slowEmbed);
       response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify({ origins: [base] })); return;
     }
+    // inboxError adds a repository the Desk reports it could not read, as GET /api/inbox does.
+    if (request.url === '/api/inbox' && options.inboxError) {
+      const inbox = await (await fetch(realDesk + request.url)).json();
+      inbox.repos.push({ repo: 'unreadable', commit: null, error: 'git: not a repository', needs_human: [], proposed: [], threads: [] });
+      response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(inbox)); return;
+    }
     if (request.url === '/api/sidebar') { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(options.sidebar ?? { repos: [] })); return; }
     if (request.url === '/api/launch?repo=atelier' && options.launch) { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(options.launch)); return; }
     if (options.missing?.includes(request.url)) { response.writeHead(404, { 'content-type': 'application/json' }); response.end(JSON.stringify({ error: 'not here' })); return; }
@@ -376,6 +382,16 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   const [inboxReads, sidebarReads] = [reads('/api/inbox'), reads('/api/sidebar')];
   await evaluate('document.dispatchEvent(new Event("visibilitychange"))');
   await until(() => reads('/api/inbox') > inboxReads && reads('/api/sidebar') > sidebarReads, 'Inbox and missions read again when the window is shown');
+  // A repository the Desk could not read is not a clean count: "!" beside what could be read, the error in the tooltip.
+  firstDesk.inboxError = true;
+  await evaluate('document.dispatchEvent(new Event("visibilitychange"))');
+  const readable = 2 * inboxCountOf(await (await fetch(`${realDesk}/api/inbox`)).json());
+  await until(async () => (await evaluate('document.querySelector("[data-t3-inbox-count]").textContent')) === `${readable} !`, 'Inbox count marked for an unreadable repository');
+  assert(await evaluate('document.querySelector("[data-t3-inbox-count]").hasAttribute("data-error")'));
+  assert.match(await evaluate('document.querySelector("[data-t3-inbox-row]").title'), new RegExp(`${readable} waiting in what could be read; ${deskBase} could not read unreadable: git: not a repository`));
+  firstDesk.inboxError = false;
+  await evaluate('document.dispatchEvent(new Event("visibilitychange"))');
+  await until(async () => (await evaluate('document.querySelector("[data-t3-inbox-count]").textContent')) === String(readable), 'Clean inbox count again');
   const openInbox = async () => {
     await evaluate('document.querySelector("[data-t3-inbox-row]").click()');
     await until(async () => (await layerState())?.shown, 'Inbox layer open');
