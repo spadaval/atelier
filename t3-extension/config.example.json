@@ -5,15 +5,16 @@
     "t3code://app/"
   ],
   "desk": {
-    "baseUrl": "http://127.0.0.1:3780",
-    "repositories": [
-      {
-        "repo": "atelier",
-        "slug": "atelier",
-        "repositoryKeys": [
-          "github.com/spadaval/atelier"
-        ]
-      }
-    ]
+    "urls": [
+      "http://127.0.0.1:3780"
+    ],
+    "repositories": []
+  },
+  "settings": {
+    "enabled": true,
+    "references": true,
+    "followProject": true,
+    "pinnedRepo": null,
+    "mappings": {}
   }
 }

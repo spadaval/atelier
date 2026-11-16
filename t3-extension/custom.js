@@ -1,11 +1,18 @@
 // T3 extension UI. Desk remains the backend; no T3 credentials enter its iframe.
-const repositories = api.config.repositories ?? [];
-const deskBase = (api.config.baseUrl ?? 'http://127.0.0.1:3780').replace(/\/$/, '');
-const preferenceKey = 't3-custom:atelier:v1';
-let preferences;
-try { preferences = JSON.parse(localStorage.getItem(preferenceKey) ?? '{}'); } catch { preferences = {}; }
-preferences = { enabled: true, references: true, followProject: true, mappings: {}, openThreads: {}, ...preferences };
-const save = () => localStorage.setItem(preferenceKey, JSON.stringify(preferences));
+// The Desk is shown in its embedded mode and talks to this page over its host contract
+// (atelier: docs/architecture/desk.md, "The embedded mode" and "The host contract").
+const deskUrls = api.config.urls;
+// Manual repository overrides from config.json: extra repository keys or a different slug.
+const overrides = api.config.repositories;
+// The settings the Customizations section edits live in config.json; saving one rewrites it
+// through the injector, which then reapplies the extension.
+const settings = { enabled: true, references: true, followProject: true, pinnedRepo: null, mappings: {}, ...api.config.settings };
+// localStorage keeps only view state: which threads had the Desk open.
+const viewKey = 't3-custom:atelier:view:v1';
+let view;
+try { view = JSON.parse(localStorage.getItem(viewKey) ?? '{}'); } catch { view = {}; }
+view = { openThreads: {}, ...view };
+const saveView = () => localStorage.setItem(viewKey, JSON.stringify(view));
 const disposers = [];
 const listen = (node, name, callback, options = {}) => node.addEventListener(name, callback, { ...options, signal: api.signal });
 function element(tag, attributes = {}, ...children) {
@@ -13,10 +20,20 @@ function element(tag, attributes = {}, ...children) {
   for (const [name, value] of Object.entries(attributes)) {
     if (name === 'text') node.textContent = value;
     else if (name === 'class') node.className = value;
+    else if (name === 'html') node.innerHTML = value;
     else node.setAttribute(name, String(value));
   }
   node.append(...children); return node;
 }
+// Lucide icons, as T3 draws its own panel controls.
+const icon = paths => `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+const icons = {
+  close: icon('<path d="M18 6 6 18"/><path d="m6 6 12 12"/>'),
+  refresh: icon('<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>'),
+  external: icon('<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>'),
+  settings: icon('<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>'),
+  desk: icon('<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/>'),
+};
 const css = `
   :host { color: var(--foreground, #eee); font: 13px var(--font-sans, system-ui, sans-serif); }
   * { box-sizing: border-box; } [hidden] { display: none !important; }
@@ -32,14 +49,21 @@ const css = `
   label { display: flex; align-items: center; gap: 8px; line-height: 1.5; }
   select { max-width: 100%; background: var(--background, #202124); border: 1px solid var(--border, #60636a); padding: 6px; border-radius: 6px; }
   code { overflow-wrap: anywhere; font-size: 12px; }
-  .probes { margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.6; } .probes .missing { color: var(--destructive, #ff9292); }
+  ul { margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.6; } .missing { color: var(--destructive, #ff9292); }
 `;
 const addStyle = root => root.append(element('style', { text: css }));
 addStyle(api.root);
+// The Desk tab and its controls copy T3's own panel tab and icon-button metrics and colours.
 const globalStyle = element('style', { text: `
-  [data-t3-desk-tab], [data-t3-desk-launch] { font: inherit; font-size: 12px; cursor: pointer; padding: 4px 9px; margin: 0 3px; border-radius: 6px; color: var(--foreground); background: var(--secondary); white-space: nowrap; -webkit-app-region: no-drag; }
-  [data-t3-desk-tab][aria-pressed="true"] { background: var(--accent); box-shadow: inset 0 0 0 1px var(--border); }
-  [data-t3-desk-tab]:focus-visible, [data-t3-desk-launch]:focus-visible { outline: 2px solid var(--ring); }
+  [data-t3-desk-tab] { display: flex; align-items: center; gap: 2px; height: 24px; max-width: 12rem; flex-shrink: 0; padding: 0 8px 0 6px; border-radius: 6px; font-size: 12px; color: var(--muted-foreground); -webkit-app-region: no-drag; }
+  [data-t3-desk-tab][data-selected] { background: var(--accent); color: var(--foreground); }
+  [data-t3-desk-tab] > [data-t3-desk-label] { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: none; border: 0; padding: 0; color: inherit; font: inherit; cursor: pointer; }
+  [data-t3-desk-icon], [data-t3-desk-launch] { display: inline-flex; align-items: center; justify-content: center; gap: 4px; flex-shrink: 0; min-width: 24px; height: 24px; padding: 0 4px; border: 0; border-radius: 6px; background: transparent; color: var(--muted-foreground); font: inherit; font-size: 12px; cursor: pointer; text-decoration: none; -webkit-app-region: no-drag; }
+  [data-t3-desk-tab] > [data-t3-desk-icon] { min-width: 16px; height: 16px; padding: 0; }
+  [data-t3-desk-launch] { height: 28px; padding: 0 6px; color: var(--foreground); }
+  [data-t3-desk-icon]:hover, [data-t3-desk-launch]:hover { background: var(--accent); color: var(--foreground); }
+  [data-t3-desk-controls] { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+  :is([data-t3-desk-tab], [data-t3-desk-controls]) :focus-visible, [data-t3-desk-launch]:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
   [data-t3-desk-selected] > :not([data-t3-desk-mount]) { visibility: hidden !important; }
   [data-t3-desk-tabbar] ${hostSelectors.panelTab} { background: transparent !important; color: var(--muted-foreground) !important; }
   ::highlight(t3-atelier-refs) { color: var(--primary, #8ab4ff); text-decoration: underline; }
@@ -51,7 +75,7 @@ let host;
 let hostError = null;
 let current = null;
 if (location.hash.includes('/settings')) {
-  try { current = JSON.parse(sessionStorage.getItem(preferenceKey + ':context') ?? 'null'); } catch {}
+  try { current = JSON.parse(sessionStorage.getItem(viewKey + ':context') ?? 'null'); } catch {}
 }
 let routeSeen = '';
 let contextGeneration = 0;
@@ -64,49 +88,71 @@ let scanTimer;
 let focusSettings = false;
 const projectKey = context => context ? `${context.environmentId}:${context.projectId}` : '';
 const threadKey = context => context ? `${context.environmentId}:${context.threadId}` : '';
+
+// Repositories as the Desks report them (GET /api/repos), each with the Desk that serves it.
+// A repository matches a T3 project when its identity equals the project's repositoryIdentity.canonicalKey.
+let repositories = [];
+const deskStatus = new Map(deskUrls.map(desk => [desk, { loading: true }]));
+async function loadRepositories() {
+  await Promise.all(deskUrls.map(async desk => {
+    try { deskStatus.set(desk, { repos: (await api.request('desk-get', { desk, path: '/api/repos' })).repos }); }
+    catch (error) { deskStatus.set(desk, { error }); }
+  }));
+  if (api.signal.aborted) return;
+  repositories = deskUrls.flatMap(desk => (deskStatus.get(desk).repos ?? []).map(repo => {
+    const override = overrides.find(entry => entry.repo === repo.name);
+    return { repo: repo.name, identity: repo.identity, slug: override?.slug ?? repo.name, keys: [repo.identity, ...(override?.repositoryKeys ?? [])].filter(Boolean), desk };
+  }));
+  buildPattern(); scheduleDOM(); queueScan();
+}
+const repositoryNamed = name => repositories.find(repo => repo.repo === name) ?? null;
 function mappedRepository() {
   const key = projectKey(current);
-  if (Object.hasOwn(preferences.mappings, key)) return repositories.find(repo => repo.repo === preferences.mappings[key]) ?? null;
-  return repositories.find(repo => repo.repositoryKeys?.includes(current?.repositoryKey)) ?? null;
+  if (Object.hasOwn(settings.mappings, key)) return repositoryNamed(settings.mappings[key]);
+  return repositories.find(repo => repo.keys.includes(current?.repositoryKey)) ?? null;
 }
 function selectedRepository() {
-  if (referenceOverride?.projectKey === projectKey(current)) return repositories.find(repo => repo.repo === referenceOverride.repo) ?? null;
-  return preferences.followProject ? mappedRepository() : repositories.find(repo => repo.repo === preferences.pinnedRepo) ?? mappedRepository() ?? repositories[0] ?? null;
+  if (referenceOverride?.projectKey === projectKey(current)) return repositoryNamed(referenceOverride.repo);
+  return settings.followProject ? mappedRepository() : repositoryNamed(settings.pinnedRepo) ?? mappedRepository() ?? repositories[0] ?? null;
+}
+async function saveSettings() {
+  try { await api.request('save-settings', settings); } catch (error) { displayError(error); }
 }
 // The Desk panel needs T3's panel store, project context and a slot to mount in;
 // references need only the conversation DOM and otherwise open Desk externally.
 const deskHooks = ['module:workspace-panel-store', 'module:atom-registry', 'module:thread-snapshot-atom', 'dom:panel', 'dom:panelContent'];
 const deskAvailable = () => Boolean(host?.panel && host?.context) && !deskHooks.some(name => hostProbes[name]?.ok === false);
-globalThis.__t3Custom.diagnostics = () => ({ probes: hostProbes, modules: hostImportedModules, context: current, mappedRepository: mappedRepository()?.repo ?? null, selectedRepository: selectedRepository()?.repo ?? null, referenceOverride, desiredOpen, deskAvailable: deskAvailable() });
+globalThis.__t3Custom.diagnostics = () => ({ probes: hostProbes, modules: hostImportedModules, context: current, repositories, mappedRepository: mappedRepository()?.repo ?? null, selectedRepository: selectedRepository()?.repo ?? null, referenceOverride, desiredOpen, deskAvailable: deskAvailable(), frame: { desk: frameDesk, path: framePath, title: deskTitle, ready: deskReady } });
 
-// The independent recovery/settings button is created before any host adapter is used.
-const settingsButton = element('button', { id: 'extension-settings', text: '⚙', 'aria-label': 'T3 Custom settings', title: 'Customizations' });
-settingsButton.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:40;width:34px;height:34px;padding:0;font-size:18px';
-api.root.append(settingsButton);
 function openSettings() { focusSettings = true; location.hash = '/settings/general'; scheduleDOM(); }
-listen(settingsButton, 'click', openSettings);
 
 const mount = element('div', { 'data-t3-desk-mount': '', hidden: '' });
 mount.style.cssText = 'position:absolute;inset:0;z-index:1;min-width:0;min-height:0';
 const panelRoot = mount.attachShadow({ mode: 'open' }); addStyle(panelRoot);
-panelRoot.append(element('style', { text: ':host{display:block;height:100%}.panel{height:100%;min-height:0;display:flex;flex-direction:column;background:var(--background,#202124)}header{padding:7px 10px;border-bottom:1px solid var(--border,#60636a)}iframe{flex:1;min-height:0;width:100%;border:0;background:var(--background,#202124)}.empty{padding:20px;max-width:55ch}' }));
-const scopeLabel = element('span', { class: 'muted grow' });
-const refreshDesk = element('button', { text: 'Refresh', title: 'Refresh Desk' });
-const externalDesk = element('a', { text: 'Open ↗', target: '_blank', rel: 'noopener noreferrer' });
-const closeDesk = element('button', { text: 'Close', 'aria-label': 'Close Desk surface' });
+panelRoot.append(element('style', { text: ':host{display:block;height:100%}.panel{height:100%;min-height:0;display:flex;flex-direction:column;background:var(--background,#202124)}iframe{flex:1;min-height:0;width:100%;border:0;background:var(--background,#202124)}.empty{padding:20px;max-width:55ch}.notice,.panel>.error{padding:6px 10px;font-size:12px;border-bottom:1px solid var(--border,#60636a)}' }));
+const notice = element('p', { class: 'notice muted', role: 'status', hidden: '' });
 const panelError = element('p', { class: 'error', hidden: '' });
 const iframe = element('iframe', { title: 'Atelier Desk' });
 const linkProject = element('button', { text: 'Link project in Customizations' });
-const empty = element('div', { class: 'empty stack' }, element('h3', { text: 'No Atelier repository linked' }), element('p', { class: 'muted', text: 'Choose the repository for this T3 project in Customizations.' }), linkProject);
-const panel = element('div', { class: 'panel' }, element('header', { class: 'row' }, element('strong', { text: 'Desk' }), scopeLabel, externalDesk, refreshDesk, closeDesk), panelError, empty, iframe);
-panelRoot.append(panel);
+const empty = element('div', { class: 'empty stack' }, element('h3', { text: 'No Atelier repository linked' }), element('p', { class: 'muted', text: 'No Desk serves a repository with this project\'s identity. Choose one for this T3 project in Customizations.' }), linkProject);
+panelRoot.append(element('div', { class: 'panel' }, notice, panelError, empty, iframe));
+let noticeTimer;
+function notify(text) {
+  notice.textContent = text; notice.hidden = false;
+  clearTimeout(noticeTimer); noticeTimer = setTimeout(() => { notice.hidden = true; }, 8000);
+}
 const nativeInert = new Map();
 const positions = new Map();
 const areaLabels = new Map();
 const markedTabbars = new Set();
 let surfaceContent;
 let iframeRepository = null;
-let iframePath = null;
+// The Desk shown in the iframe, its route without /embed (from desk:navigated once it is ready),
+// and its page title.
+let frameDesk = null;
+let framePath = null;
+let deskTitle = '';
+let deskReady = false;
 function restoreNative() {
   for (const [node, inert] of nativeInert) node.inert = inert;
   nativeInert.clear(); surfaceContent?.removeAttribute('data-t3-desk-selected');
@@ -115,20 +161,26 @@ function restoreNative() {
   for (const [area, label] of areaLabels) label === null ? area.removeAttribute('aria-label') : area.setAttribute('aria-label', label);
   areaLabels.clear();
 }
-function navigateDesk(repo, path = `/r/${encodeURIComponent(repo.repo)}`) {
-  const url = deskBase + path;
-  if (iframePath !== url) { iframe.src = url; iframePath = url; }
-  iframeRepository = repo.repo; externalDesk.href = url;
+const repositoryPath = repo => `/r/${encodeURIComponent(repo.repo)}`;
+const recordPath = record => `/r/${encodeURIComponent(record.repo)}/${record.kind === 'mission' ? 'mission' : 'item'}/${encodeURIComponent(record.id)}`;
+// The panel loads the embedded mode; Open externally keeps the normal address.
+function navigateDesk(repo, path = repositoryPath(repo)) {
+  if (frameDesk !== repo.desk || framePath !== path) loadFrame(repo.desk, path);
+  iframeRepository = repo.repo;
+}
+function loadFrame(desk, path) {
+  frameDesk = desk; framePath = path; deskReady = false; deskTitle = ''; sentTheme = '';
+  iframe.src = `${desk}/embed${path}`;
+  scheduleDOM();
 }
 async function showDesk(reference) {
-  if (!preferences.enabled) { preferences.enabled = true; save(); }
+  if (!settings.enabled) { settings.enabled = true; void saveSettings(); }
   if (!current || !deskAvailable()) { openSettings(); return; }
   if (reference) {
     referenceOverride = { projectKey: projectKey(current), repo: reference.repo };
-    const repo = repositories.find(repo => repo.repo === reference.repo);
-    navigateDesk(repo, `/r/${encodeURIComponent(repo.repo)}/${reference.kind === 'mission' ? 'mission' : 'item'}/${encodeURIComponent(reference.id)}`);
+    navigateDesk(repositoryNamed(reference.repo), recordPath(reference));
   }
-  desiredOpen = true; preferences.openThreads[threadKey(current)] = true; save();
+  desiredOpen = true; view.openThreads[threadKey(current)] = true; saveView();
   if (location.hash.includes('/settings')) location.hash = `/${current.environmentId}/${encodeURIComponent(current.threadId)}`;
   scheduleDOM();
   // A stop or reinjection during the wait must not open anything afterwards.
@@ -136,20 +188,63 @@ async function showDesk(reference) {
   // T3's panel did not render a slot (the probe now names the missing hook): use the browser.
   hideDesk();
   const repo = selectedRepository();
-  window.open(reference ? referenceUrl(reference) : repo ? `${deskBase}/r/${encodeURIComponent(repo.repo)}` : deskBase, '_blank', 'noopener');
+  window.open(reference ? referenceUrl(reference) : repo ? repo.desk + repositoryPath(repo) : deskUrls[0], '_blank', 'noopener');
 }
 function hideDesk() {
   desiredOpen = false;
-  if (current) { preferences.openThreads[threadKey(current)] = false; save(); }
+  if (current) { view.openThreads[threadKey(current)] = false; saveView(); }
   scheduleDOM();
 }
-listen(refreshDesk, 'click', () => { if (iframePath) iframe.src = iframePath; });
-listen(closeDesk, 'click', hideDesk); listen(linkProject, 'click', openSettings);
-listen(iframe, 'error', () => { panelError.hidden = false; panelError.textContent = `Could not load ${iframePath}. Check connectivity to ${deskBase} and use Refresh.`; });
+listen(linkProject, 'click', openSettings);
+listen(iframe, 'error', () => { panelError.hidden = false; panelError.textContent = `Could not load ${iframe.src}. Check connectivity to ${frameDesk} and use Refresh.`; });
 
-const tab = element('button', { 'data-t3-desk-tab': '', text: 'Desk', 'aria-pressed': 'false', title: 'Atelier Desk' });
-const launch = element('button', { 'data-t3-desk-launch': '', text: 'Desk', 'aria-label': 'Open Atelier Desk' });
-listen(tab, 'click', () => desiredOpen ? hideDesk() : void showDesk());
+// The host contract. Messages count only from the Desk iframe's window and the Desk's origin,
+// and every message to it names that origin as its target.
+const deskOrigin = () => new URL(frameDesk).origin;
+let sentTheme = '';
+function sendTheme(always) {
+  if (!deskReady) return;
+  const theme = readHostTheme(api.root);
+  const text = JSON.stringify(theme);
+  if (!always && text === sentTheme) return;
+  sentTheme = text;
+  iframe.contentWindow.postMessage({ type: 'host:theme', ...theme }, deskOrigin());
+}
+disposers.push(observeHostTheme(() => sendTheme(false)));
+// Seam: the Desk's contract is gaining a message that tells it which thread T3 shows. Send it
+// from here once the contract defines it; this is called when the Desk becomes ready and when
+// T3's current thread changes. Until then nothing is sent.
+function tellDeskThread() {}
+function openThread(threadId) {
+  if (!host?.findThread) { notify(`Cannot open thread ${threadId}: T3 hook module:environment-atoms is missing (see Customizations).`); return; }
+  const environmentId = host.findThread(threadId);
+  if (!environmentId) { notify(`Thread ${threadId} is not in any connected T3 environment.`); return; }
+  host.showThread(environmentId, threadId);
+}
+listen(window, 'message', event => {
+  if (!frameDesk || event.source !== iframe.contentWindow || event.origin !== deskOrigin()) return;
+  const message = event.data;
+  if (!message || typeof message !== 'object') return;
+  if (message.type === 'desk:ready') { deskReady = true; sendTheme(true); tellDeskThread(); }
+  else if (message.type === 'desk:navigated' && typeof message.path === 'string' && message.path.startsWith('/')) {
+    framePath = message.path; deskTitle = String(message.title ?? ''); scheduleDOM();
+  } else if (message.type === 'desk:open-thread' && typeof message.thread === 'string') openThread(message.thread);
+});
+
+// The Desk tab sits in T3's tab strip like a native one: close icon, then the Desk's page title.
+// Its controls (Refresh, Open externally, Customizations) follow it while the Desk is shown.
+const closeDesk = element('button', { 'data-t3-desk-icon': '', 'aria-label': 'Close Desk', title: 'Close Desk', html: icons.close });
+const tabLabel = element('button', { 'data-t3-desk-label': '', 'aria-pressed': 'false', text: 'Desk' });
+const tab = element('div', { 'data-t3-desk-tab': '' }, closeDesk, tabLabel);
+const refreshDesk = element('button', { 'data-t3-desk-icon': '', 'aria-label': 'Refresh Desk', title: 'Refresh Desk', html: icons.refresh });
+const externalDesk = element('a', { 'data-t3-desk-icon': '', 'data-t3-desk-external': '', 'aria-label': 'Open Desk externally', title: 'Open externally', target: '_blank', rel: 'noopener noreferrer', html: icons.external });
+const settingsDesk = element('button', { 'data-t3-desk-icon': '', 'aria-label': 'Atelier customizations', title: 'Customizations', html: icons.settings });
+const controls = element('div', { 'data-t3-desk-controls': '', hidden: '' }, refreshDesk, externalDesk, settingsDesk);
+const launch = element('button', { 'data-t3-desk-launch': '', 'aria-label': 'Open Atelier Desk', title: 'Atelier Desk', html: `${icons.desk}<span>Desk</span>` });
+listen(tabLabel, 'click', () => desiredOpen ? hideDesk() : void showDesk());
+listen(closeDesk, 'click', hideDesk);
+listen(refreshDesk, 'click', () => { if (frameDesk) loadFrame(frameDesk, framePath); });
+listen(settingsDesk, 'click', openSettings);
 listen(launch, 'click', () => void showDesk());
 listen(document, 'click', event => {
   const target = event.target instanceof Element ? event.target : null;
@@ -161,14 +256,16 @@ function syncPanel() {
   const content = area?.querySelector(hostSelectors.panelContent);
   const tabbar = area?.querySelector(hostSelectors.panelTabbar);
   const add = tabbar?.querySelector(hostSelectors.panelAddButton);
-  if (add && tab.parentElement !== add.parentElement) add.before(tab);
+  if (add && tab.parentElement !== add.parentElement) add.before(tab, controls);
   const toolbar = [...document.querySelectorAll(hostSelectors.layoutControls)].find(node => node.getBoundingClientRect().width > 0);
   if (toolbar && launch.parentElement !== toolbar) toolbar.prepend(launch);
-  const allowed = preferences.enabled && deskAvailable() && Boolean(current) && !location.hash.includes('/settings');
+  const allowed = settings.enabled && deskAvailable() && Boolean(current) && !location.hash.includes('/settings');
   tab.hidden = launch.hidden = !allowed;
   const state = allowed && host.panel.state(current);
   const visible = allowed && desiredOpen && state?.isOpen && Boolean(content) && area.getBoundingClientRect().width > 0;
-  tab.setAttribute('aria-pressed', String(Boolean(visible)));
+  tabLabel.setAttribute('aria-pressed', String(Boolean(visible)));
+  tab.toggleAttribute('data-selected', Boolean(visible));
+  controls.hidden = !visible;
   if (!visible) { mount.hidden = true; restoreNative(); return; }
   if (surfaceContent !== content) { restoreNative(); surfaceContent = content; }
   if (!positions.has(content)) { positions.set(content, content.style.position); if (getComputedStyle(content).position === 'static') content.style.position = 'relative'; }
@@ -177,12 +274,14 @@ function syncPanel() {
   tabbar?.setAttribute('data-t3-desk-tabbar', ''); if (tabbar) markedTabbars.add(tabbar);
   for (const child of content.children) if (child !== mount && !nativeInert.has(child)) { nativeInert.set(child, child.inert); child.inert = true; }
   mount.hidden = false;
-  if (!areaLabels.has(area)) areaLabels.set(area, area.getAttribute('aria-label'));
-  area.setAttribute('aria-label', 'Workspace panel: Atelier Desk');
   const repo = selectedRepository();
-  scopeLabel.textContent = `${current.projectName} · ${preferences.followProject ? 'Following project' : 'Pinned'}`;
-  empty.hidden = Boolean(repo); iframe.hidden = externalDesk.hidden = refreshDesk.hidden = !repo;
+  empty.hidden = Boolean(repo); iframe.hidden = refreshDesk.hidden = externalDesk.hidden = !repo;
   if (repo && iframeRepository !== repo.repo) navigateDesk(repo);
+  const label = repo && deskTitle ? deskTitle : 'Desk';
+  tabLabel.textContent = label; tab.title = repo ? `Atelier Desk: ${deskTitle || repo.repo}` : 'Atelier Desk';
+  if (frameDesk) externalDesk.href = frameDesk + framePath;
+  if (!areaLabels.has(area)) areaLabels.set(area, area.getAttribute('aria-label'));
+  area.setAttribute('aria-label', `Workspace panel: Atelier Desk${deskTitle ? `, ${deskTitle}` : ''}`);
 }
 
 const settingsHost = element('section', { id: 't3-custom-settings', 'data-t3-custom-settings': '' });
@@ -190,13 +289,16 @@ settingsHost.style.cssText = 'display:block;margin:24px 0;padding:20px 0;border-
 const settingsRoot = settingsHost.attachShadow({ mode: 'open' }); addStyle(settingsRoot);
 const statusText = element('p', { class: 'muted', text: 'Reading injector status…' });
 const statusError = element('p', { class: 'error', hidden: '' });
+const deskList = element('ul', { 'aria-label': 'Desks' });
 const contextText = element('p', { class: 'muted' });
-const probeList = element('ul', { class: 'probes', 'aria-label': 'T3 hooks used by this extension' });
-const mapping = element('select', { 'aria-label': 'Atelier repository for current T3 project' }, element('option', { value: '', text: 'Not linked' }), ...repositories.map(repo => element('option', { value: repo.repo, text: repo.repo })));
-const pinned = element('select', { 'aria-label': 'Pinned Atelier repository' }, ...repositories.map(repo => element('option', { value: repo.repo, text: repo.repo })));
+const overrideList = element('ul', { 'aria-label': 'Manual repository overrides' });
+const probeList = element('ul', { 'aria-label': 'T3 hooks used by this extension' });
+const mapping = element('select', { id: 'project-mapping', 'aria-label': 'Atelier repository for current T3 project' });
+const pinned = element('select', { id: 'pinned-repository', 'aria-label': 'Pinned Atelier repository' });
+const toggles = {};
 function checkbox(key, title) {
-  const input = element('input', { type: 'checkbox' }); input.checked = preferences[key];
-  listen(input, 'change', () => { preferences[key] = input.checked; save(); referenceOverride = null; syncSettings(); scheduleDOM(); queueScan(); });
+  const input = toggles[key] = element('input', { type: 'checkbox', 'data-setting': key }); input.checked = settings[key];
+  listen(input, 'change', () => { settings[key] = input.checked; referenceOverride = null; void saveSettings(); syncSettings(); scheduleDOM(); queueScan(); });
   return element('label', {}, input, document.createTextNode(title));
 }
 const reloadScripts = element('button', { id: 'reload-scripts', text: 'Reload scripts' });
@@ -205,16 +307,24 @@ const refreshStatus = element('button', { text: 'Refresh status' });
 const deskAction = element('button', { text: 'Open Desk' });
 settingsRoot.append(element('div', { class: 'stack' }, element('h2', { text: 'Customizations' }), statusText, statusError,
   element('div', { class: 'row' }, reloadScripts, refreshStatus, openFolder, deskAction),
-  element('h3', { text: 'T3 hooks' }), probeList,
+  element('h3', { text: 'Desks' }), deskList,
+  element('h3', { text: 'Settings' }), element('p', { class: 'muted', text: `Saved in ${api.home}${api.home.includes('\\') ? '\\' : '/'}config.json` }),
   checkbox('enabled', 'Enable the Atelier Desk surface'), checkbox('references', 'Show Atelier reference links and hovercards'), checkbox('followProject', 'Follow the current T3 project'),
   contextText, element('label', {}, document.createTextNode('Project repository'), mapping), element('label', { id: 'pinned-row' }, document.createTextNode('Pinned repository'), pinned),
-  element('p', { class: 'muted', text: `Desk backend: ${deskBase}` }), element('code', { text: api.home })));
+  element('h3', { text: 'Manual overrides' }), overrideList,
+  element('h3', { text: 'T3 hooks' }), probeList));
 listen(reloadScripts, 'click', () => api.reloadScripts());
 listen(openFolder, 'click', () => void api.request('open-folder').catch(error => displayError(error)));
-listen(refreshStatus, 'click', () => void readStatus());
+listen(refreshStatus, 'click', () => { void readStatus(); void loadRepositories(); });
 listen(deskAction, 'click', () => void showDesk());
-listen(mapping, 'change', () => { if (!current) return; preferences.mappings[projectKey(current)] = mapping.value; save(); referenceOverride = null; scheduleDOM(); });
-listen(pinned, 'change', () => { preferences.pinnedRepo = pinned.value; save(); referenceOverride = null; scheduleDOM(); });
+// Automatic follows the Desk's repository identity; anything else is a manual override.
+listen(mapping, 'change', () => {
+  if (!current) return;
+  if (mapping.value === '@automatic') delete settings.mappings[projectKey(current)];
+  else settings.mappings[projectKey(current)] = mapping.value;
+  referenceOverride = null; void saveSettings(); scheduleDOM();
+});
+listen(pinned, 'change', () => { settings.pinnedRepo = pinned.value; referenceOverride = null; void saveSettings(); scheduleDOM(); });
 function displayError(error) { statusError.hidden = false; statusError.textContent = error.message ?? String(error); }
 async function readStatus() {
   try {
@@ -230,14 +340,38 @@ function syncProbes() {
   const deskMissing = deskHooks.filter(missing);
   const rows = Object.entries(hostProbes).map(([name, probe]) => element('li', { class: probe.ok === false ? 'missing' : '', text: `${probe.ok ? '✓' : probe.ok === false ? '✗' : '…'} ${name}: ${probe.detail}` }));
   rows.unshift(element('li', { class: deskMissing.length ? 'missing' : '', text: host ? `Desk panel: ${deskMissing.length ? `off, missing ${deskMissing.join(', ')}` : 'on'}` : 'Desk panel: looking for T3 hooks…' }));
+  if (host) rows.splice(1, 0, element('li', { class: host.findThread ? '' : 'missing', text: `Opening threads from the Desk: ${host.findThread ? 'on' : 'off, missing module:environment-atoms'}` }));
   probeList.replaceChildren(...rows);
 }
+const options = (select, entries) => {
+  const value = select.value;
+  select.replaceChildren(...entries.map(([key, text]) => element('option', { value: key, text })));
+  select.value = value;
+};
 function syncSettings() {
   syncProbes();
-  contextText.textContent = current ? `Current project: ${current.projectName}${current.repositoryKey ? ` (${current.repositoryKey})` : ''}` : 'Open a T3 thread to link its project.';
-  mapping.disabled = !current; mapping.value = mappedRepository()?.repo ?? '';
+  deskList.replaceChildren(...deskUrls.map(desk => {
+    const status = deskStatus.get(desk);
+    const text = status.loading ? 'reading…' : status.error ? `unreachable: ${status.error.message}`
+      : `reachable, ${status.repos.length} repositories: ${status.repos.map(repo => `${repo.name} (${repo.identity ?? 'no identity'})`).join(', ')}`;
+    return element('li', { class: status.error ? 'missing' : '', text: `${desk}: ${text}` });
+  }));
+  const automatic = current && repositories.find(repo => repo.keys.includes(current.repositoryKey));
+  options(mapping, [['@automatic', `Automatic: ${automatic ? automatic.repo : 'no Desk repository has this identity'}`], ['', 'Not linked'], ...repositories.map(repo => [repo.repo, repo.repo])]);
+  options(pinned, repositories.map(repo => [repo.repo, repo.repo]));
+  contextText.textContent = current ? `Current project: ${current.projectName}${current.repositoryKey ? ` (${current.repositoryKey})` : ' (no repository identity)'}` : 'Open a T3 thread to link its project.';
+  mapping.disabled = !current;
+  mapping.value = current && Object.hasOwn(settings.mappings, projectKey(current)) ? settings.mappings[projectKey(current)] : '@automatic';
   pinned.value = selectedRepository()?.repo ?? repositories[0]?.repo ?? '';
-  settingsRoot.querySelector('#pinned-row').hidden = preferences.followProject;
+  settingsRoot.querySelector('#pinned-row').hidden = settings.followProject;
+  for (const [key, input] of Object.entries(toggles)) input.checked = settings[key];
+  const rows = Object.entries(settings.mappings).map(([key, repo]) => {
+    const remove = element('button', { text: 'Remove', 'aria-label': `Remove override for ${key}` });
+    remove.addEventListener('click', () => { delete settings.mappings[key]; void saveSettings(); syncSettings(); scheduleDOM(); });
+    return element('li', { class: 'row' }, element('span', { text: `Project ${key} → ${repo || 'not linked'}` }), remove);
+  });
+  for (const entry of overrides) rows.push(element('li', { text: `config.json desk.repositories: ${entry.repo}${entry.slug ? `, slug ${entry.slug}` : ''}${entry.repositoryKeys?.length ? `, keys ${entry.repositoryKeys.join(', ')}` : ''}` }));
+  overrideList.replaceChildren(...(rows.length ? rows : [element('li', { class: 'muted', text: 'None: projects follow the repository identity the Desk reports.' })]));
   deskAction.disabled = !current || !host;
   const target = location.hash.startsWith('#/settings/general') && document.querySelector(hostSelectors.settingsPage);
   if (target) {
@@ -256,11 +390,12 @@ async function updateContext() {
     const next = await host.context();
     if (api.signal.aborted || generation !== contextGeneration) return;
     current = next;
-    if (current) sessionStorage.setItem(preferenceKey + ':context', JSON.stringify(current));
+    if (current) sessionStorage.setItem(viewKey + ':context', JSON.stringify(current));
     const key = projectKey(current);
     if (key !== lastProject) { referenceOverride = null; lastProject = key; }
-    desiredOpen = Boolean(preferences.openThreads[threadKey(current)]);
+    desiredOpen = Boolean(view.openThreads[threadKey(current)]);
     nativeActiveId = current && (host.panel?.state(current)?.activeSurfaceId ?? null);
+    tellDeskThread();
     scheduleDOM(); queueScan();
   } catch (error) { if (!api.signal.aborted && generation === contextGeneration) { hostError = error; displayError(error); api.reportError(error); } }
 }
@@ -278,10 +413,16 @@ card.style.cssText = 'position:fixed;inset:auto;margin:0;width:360px;max-width:c
 api.root.append(card);
 let references = []; let hoverTimer; let dismissTimer; let activeReference = null; let pointerOverCard = false; let rectFrame = 0;
 const referenceCache = new Map();
-const slugs = repositories.map(repo => repo.slug).filter(Boolean).sort((a, b) => b.length - a.length);
-const escapeRegex = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const pattern = slugs.length ? new RegExp(`(?<![\\w-])(?:${slugs.map(escapeRegex).join('|')})-[a-z0-9]+(?![\\w-])`, 'g') : null;
-const referenceUrl = ref => `${deskBase}/r/${encodeURIComponent(ref.repo)}/${ref.kind === 'mission' ? 'mission' : 'item'}/${encodeURIComponent(ref.id)}`;
+let pattern = null;
+// A reference is a repository's slug, a dash and a lowercase-letter/digit suffix. The slug is the
+// Desk's repository name unless config.json's desk.repositories gives another.
+function buildPattern() {
+  const escape = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const slugs = [...new Set(repositories.map(repo => repo.slug))].sort((a, b) => b.length - a.length);
+  pattern = slugs.length ? new RegExp(`(?<![\\w-])(?:${slugs.map(escape).join('|')})-[a-z0-9]+(?![\\w-])`, 'g') : null;
+}
+// A reference's address before it is resolved names the repository its slug belongs to.
+const referenceUrl = ref => (ref.desk ?? repositoryNamed(ref.repo)?.desk ?? deskUrls[0]) + recordPath(ref);
 function hideCard() {
   clearTimeout(hoverTimer); clearTimeout(dismissTimer); activeReference = null; pointerOverCard = false;
   if (card.matches(':popover-open')) card.hidePopover();
@@ -296,51 +437,70 @@ function positionCard(ref) {
   const height = card.getBoundingClientRect().height;
   card.style.top = `${Math.max(12, rect.bottom + height + 12 > innerHeight ? rect.top - height - 8 : rect.bottom + 8)}px`;
 }
-async function readReference(ref) {
-  const key = `${ref.repo}/${ref.id}`;
-  let cached = referenceCache.get(key);
-  if (!cached || Date.now() - cached.at > 30000) {
-    const read = async () => {
-      try { return { kind: 'item', data: await api.request('desk-get', { path: `/api/repos/${encodeURIComponent(ref.repo)}/items/${ref.id}` }) }; }
-      catch (error) { if (error.status !== 404) throw error; }
-      return { kind: 'mission', data: await api.request('desk-get', { path: `/api/repos/${encodeURIComponent(ref.repo)}/missions/${ref.id}` }) };
-    };
-    cached = { at: Date.now(), promise: read() }; referenceCache.set(key, cached);
+// One read resolves an ID: GET /api/records/{id} names its repository and kind. Each Desk is asked
+// in the configured order until one has it. Cached for 30 seconds.
+function cached(key, read) {
+  let entry = referenceCache.get(key);
+  if (!entry || Date.now() - entry.at > 30000) { entry = { at: Date.now(), promise: read() }; referenceCache.set(key, entry); }
+  return entry.promise;
+}
+const readRecord = id => cached(`record:${id}`, async () => {
+  for (const desk of deskUrls) {
+    try { return { ...(await api.request('desk-get', { desk, path: `/api/records/${id}` })), desk }; }
+    catch (error) { if (error.status !== 404) throw error; }
   }
-  return cached.promise;
+  throw Object.assign(new Error(`No item or mission ${id} was found on ${deskUrls.join(', ')}.`), { status: 404 });
+});
+// The hovercard's further lines (priority, holder, checks, blockers, goal) come from the record's own route.
+const readDetails = record => cached(`details:${record.desk}${recordPath(record)}`, () =>
+  api.request('desk-get', { desk: record.desk, path: `/api/repos/${encodeURIComponent(record.repo)}/${record.kind === 'mission' ? 'missions' : 'items'}/${record.id}` }));
+async function resolveReference(ref) {
+  const record = await readRecord(ref.id);
+  Object.assign(ref, { repo: record.repo, kind: record.kind, desk: record.desk });
+  ref.anchor.href = referenceUrl(ref);
+  return record;
 }
 async function activateReference(ref, external = false) {
   try {
-    ref.kind = (await readReference(ref)).kind;
+    await resolveReference(ref);
     if (api.signal.aborted) return;
-    ref.anchor.href = referenceUrl(ref);
     hideCard();
-    if (external || !deskAvailable()) window.open(referenceUrl(ref), '_blank', 'noopener');
+    if (external || !deskAvailable() || !repositoryNamed(ref.repo)) window.open(referenceUrl(ref), '_blank', 'noopener');
     else await showDesk(ref);
   } catch { if (!api.signal.aborted) void showCard(ref); }
 }
+function forget(ref) { for (const key of referenceCache.keys()) if (key === `record:${ref.id}` || key.endsWith(`/${ref.id}`)) referenceCache.delete(key); }
 async function showCard(ref) {
   clearTimeout(dismissTimer); activeReference = ref;
   card.replaceChildren(element('strong', { text: ref.id }), element('p', { class: 'muted', text: 'Loading from Desk…' }));
   if (!card.matches(':popover-open')) card.showPopover(); positionCard(ref);
   try {
-    const result = await readReference(ref);
+    const record = await resolveReference(ref);
     if (api.signal.aborted || activeReference !== ref) return;
-    ref.kind = result.kind; ref.anchor.href = referenceUrl(ref);
-    const data = result.data; const row = result.kind === 'item' ? data.row : data.mission;
-    const detail = element('div', { class: 'stack' }, element('div', { class: 'row' }, element('strong', { class: 'grow', text: ref.id }), element('span', { class: 'muted', text: ref.repo })), element('h3', { text: row.title }),
-      element('p', { text: [row.status ?? row.state, row.priority, row.holder && `Held by ${row.holder}`].filter(Boolean).join(' · ') }));
-    if (data.done_when?.length) detail.append(element('p', { class: 'muted', text: `${data.done_when.filter(line => line.ticked).length}/${data.done_when.length} completion checks` }));
-    if (row.waiting_on?.length || data.blocked_by?.length) detail.append(element('p', { text: `Blocked by ${(row.waiting_on?.length ? row.waiting_on : data.blocked_by).join(', ')}` }));
-    if (data.goal) detail.append(element('p', { class: 'muted', text: data.goal.slice(0, 240) }));
+    const status = element('p', { text: `${record.kind} · ${record.status}` });
+    const more = element('div', { class: 'stack' }, element('p', { class: 'muted', text: 'Reading details…' }));
     const open = element('button', { text: 'Open in Desk' }); open.addEventListener('click', () => void activateReference(ref));
-    const refresh = element('button', { text: 'Refresh' }); refresh.addEventListener('click', () => { referenceCache.delete(`${ref.repo}/${ref.id}`); void showCard(ref); });
-    detail.append(element('p', { class: 'muted', text: `Read from ${data.read_from ?? 'Desk'} · cached up to 30 seconds` }), element('div', { class: 'row' }, open, refresh, element('a', { text: 'Open externally ↗', href: referenceUrl(ref), target: '_blank', rel: 'noopener noreferrer' })));
-    card.replaceChildren(detail); ref.anchor.setAttribute('aria-label', `${ref.id}: ${row.title}`); positionCard(ref);
+    const refresh = element('button', { text: 'Refresh' }); refresh.addEventListener('click', () => { forget(ref); void showCard(ref); });
+    const detail = element('div', { class: 'stack' }, element('div', { class: 'row' }, element('strong', { class: 'grow', text: ref.id }), element('span', { class: 'muted', text: record.repo })), element('h3', { text: record.title }),
+      status, more, element('div', { class: 'row' }, open, refresh, element('a', { text: 'Open externally ↗', href: referenceUrl(ref), target: '_blank', rel: 'noopener noreferrer' })));
+    card.replaceChildren(detail); ref.anchor.setAttribute('aria-label', `${ref.id}: ${record.title}`); positionCard(ref);
+    try {
+      const data = await readDetails(record);
+      if (api.signal.aborted || activeReference !== ref) return;
+      const row = record.kind === 'item' ? data.row : data.mission;
+      status.textContent = [record.kind, record.status, row?.priority, row?.holder && `Held by ${row.holder}`].filter(Boolean).join(' · ');
+      const lines = [];
+      if (data.done_when?.length) lines.push(element('p', { class: 'muted', text: `${data.done_when.filter(line => line.ticked).length}/${data.done_when.length} completion checks` }));
+      if (row?.waiting_on?.length || data.blocked_by?.length) lines.push(element('p', { text: `Blocked by ${(row.waiting_on?.length ? row.waiting_on : data.blocked_by).join(', ')}` }));
+      if (data.goal) lines.push(element('p', { class: 'muted', text: data.goal.slice(0, 240) }));
+      lines.push(element('p', { class: 'muted', text: `Read from ${data.read_from ?? 'Desk'} · cached up to 30 seconds` }));
+      more.replaceChildren(...lines);
+    } catch (error) { if (!api.signal.aborted) more.replaceChildren(element('p', { class: 'error', text: error.message })); }
+    positionCard(ref);
   } catch (error) {
     if (api.signal.aborted || activeReference !== ref) return;
-    const retry = element('button', { text: 'Retry' }); retry.addEventListener('click', () => { referenceCache.delete(`${ref.repo}/${ref.id}`); void showCard(ref); });
-    card.replaceChildren(element('strong', { text: ref.id }), element('p', { class: 'error', text: error.status === 404 ? `No item or mission ${ref.id} was found in ${ref.repo}.` : error.message }), retry); positionCard(ref);
+    const retry = element('button', { text: 'Retry' }); retry.addEventListener('click', () => { forget(ref); void showCard(ref); });
+    card.replaceChildren(element('strong', { text: ref.id }), element('p', { class: 'error', text: error.message }), retry); positionCard(ref);
   }
 }
 function updateReferenceRects() {
@@ -356,7 +516,7 @@ function scanReferences() {
   if (api.signal.aborted) return;
   const previous = references; references = []; CSS.highlights?.delete('t3-atelier-refs');
   const conversation = document.querySelector(hostSelectors.conversation);
-  if (!preferences.references || !pattern || !conversation) { hideCard(); referenceLayer.replaceChildren(); return; }
+  if (!settings.references || !pattern || !conversation) { hideCard(); referenceLayer.replaceChildren(); return; }
   const existing = new Map();
   for (const ref of previous) {
     if (!existing.has(ref.node)) existing.set(ref.node, new Map());
@@ -411,13 +571,16 @@ const observer = new MutationObserver(records => {
 });
 observer.observe(document.body, { childList: true, subtree: true, characterData: true });
 disposers.push(() => {
-  observer.disconnect(); clearTimeout(scanTimer); clearTimeout(hoverTimer); clearTimeout(dismissTimer); clearTimeout(domFrame); cancelAnimationFrame(rectFrame);
-  hideCard(); restoreNative(); mount.remove(); tab.remove(); launch.remove(); settingsHost.remove(); CSS.highlights?.delete('t3-atelier-refs');
+  observer.disconnect(); clearTimeout(scanTimer); clearTimeout(hoverTimer); clearTimeout(dismissTimer); clearTimeout(domFrame); clearTimeout(noticeTimer); cancelAnimationFrame(rectFrame);
+  hideCard(); restoreNative(); mount.remove(); tab.remove(); controls.remove(); launch.remove(); settingsHost.remove(); CSS.highlights?.delete('t3-atelier-refs');
   for (const [node, position] of positions) node.style.position = position;
 });
 const routeTimer = setInterval(() => { if (routeSeen !== location.hash) { routeSeen = location.hash; if (host) void updateContext(); else scheduleDOM(); } }, 300);
 disposers.push(() => clearInterval(routeTimer));
 listen(window, 'hashchange', () => { routeSeen = location.hash; if (host) void updateContext(); });
+// The Customizations section and references do not wait for T3's hooks.
+const repositoriesLoaded = loadRepositories();
+scheduleDOM();
 try {
   host = await createHostAdapter(api);
   if (host.panel) disposers.push(host.panel.subscribe(() => {
@@ -430,5 +593,6 @@ try {
 } catch (error) {
   if (!api.signal.aborted) { hostError = error; displayError(error); throw error; }
 }
+await repositoriesLoaded;
 scheduleDOM(); queueScan();
-api.log('Atelier extension ready', { repositories: repositories.map(repo => repo.repo) });
+api.log('Atelier extension ready', { desks: deskUrls, repositories: repositories.map(repo => repo.repo) });

@@ -58,7 +58,25 @@ const appEnvironment = config => {
   for (const name of Object.keys(env)) if (/^(T3CODE_|ELECTRON_RUN_AS_NODE$|NODE_OPTIONS$)/i.test(name)) delete env[name];
   return { ...env, ...config.appEnv };
 };
-const loadConfig = async () => JSON.parse(await fs.readFile(path.join(home, 'config.json'), 'utf8'));
+const configPath = path.join(home, 'config.json');
+const loadConfig = async () => JSON.parse(await fs.readFile(configPath, 'utf8'));
+// desk.urls lists the Desks; the older form has a single desk.baseUrl.
+const deskUrls = config => (config.desk?.urls ?? [config.desk?.baseUrl ?? 'http://127.0.0.1:3780']).map(url => url.replace(/\/$/, ''));
+// What the client sees of config.json: the Desks, manual repository overrides and the settings
+// the Customizations page edits.
+const clientConfig = config => ({ urls: deskUrls(config), repositories: config.desk?.repositories ?? [], settings: config.settings ?? {} });
+// The settings the Customizations page may write, checked field by field.
+function checkSettings(settings) {
+  const fail = message => { throw new Error(`save-settings: ${message}`); };
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) fail('settings must be an object');
+  const allowed = { enabled: 'boolean', references: 'boolean', followProject: 'boolean', pinnedRepo: 'string', mappings: 'object' };
+  for (const [key, value] of Object.entries(settings)) {
+    if (!(key in allowed)) fail(`unknown setting ${key}`);
+    if (value !== null && typeof value !== allowed[key]) fail(`${key} must be a ${allowed[key]}, got ${typeof value}`);
+  }
+  for (const [key, repo] of Object.entries(settings.mappings ?? {})) if (typeof repo !== 'string') fail(`mapping ${key} must name a repository`);
+  return settings;
+}
 const log = (message, extra = {}) => console.log(JSON.stringify({ time: new Date().toISOString(), message, ...extra }));
 async function debugPortOpen(config) {
   try {
@@ -158,7 +176,7 @@ async function buildBundle(config) {
         onCleanup: callback => cleanups.push(callback),
         log: (...args) => console.info('[T3 Custom]', ...args),
         reloadScripts: () => report('reload-request'),
-        config: ${JSON.stringify(config.desk ?? {})},
+        config: ${JSON.stringify(clientConfig(config))},
         home: ${JSON.stringify(home)},
         request: (action, payload = {}) => new Promise((resolve, reject) => {
           const id = crypto.randomUUID();
@@ -229,14 +247,21 @@ async function daemon() {
       else if (report.action === 'open-folder') {
         await platform.openFolder(home); data = { opened: true };
       } else if (report.action === 'desk-get') {
-        const requested = report.payload.path;
-        const match = /^\/api\/repos(?:\/([^/]+)\/(?:items|missions)\/([a-z0-9-]+))?$/.exec(requested);
-        if (!match || (match[1] && !config.desk.repositories.some(repo => repo.repo === decodeURIComponent(match[1])))) throw new Error(`Desk read is not allowed: ${requested}`);
-        const url = config.desk.baseUrl.replace(/\/$/, '') + requested;
+        // Only reads, only from a configured Desk: the repository list, one record, or one item or mission.
+        const { desk, path: requested } = report.payload;
+        if (!deskUrls(config).includes(desk)) throw new Error(`Desk read is not allowed: ${desk} is not in desk.urls of ${configPath}`);
+        if (!/^\/api\/(repos|records\/[a-z0-9-]+|repos\/[^/]+\/(items|missions)\/[a-z0-9-]+)$/.test(requested)) throw new Error(`Desk read is not allowed: ${requested}`);
+        const url = desk + requested;
         const result = await fetch(url, { signal: AbortSignal.timeout(15000), headers: { accept: 'application/json' }, redirect: 'error' });
         const body = await result.json();
         if (!result.ok) { const error = new Error(`GET ${url}: HTTP ${result.status}: ${body.error ?? result.statusText}`); error.status = result.status; throw error; }
         data = body;
+      } else if (report.action === 'save-settings') {
+        // Written into config.json, which the watcher then reapplies.
+        const next = await loadConfig();
+        next.settings = checkSettings(report.payload);
+        await fs.writeFile(configPath, JSON.stringify(next, null, 2) + '\n');
+        data = { saved: configPath };
       } else throw new Error(`Unsupported injector request: ${report.action}`);
       response = { data };
     } catch (error) { response = { error: { message: error.message, status: error.status ?? null } }; }
