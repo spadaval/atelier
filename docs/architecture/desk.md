@@ -372,6 +372,7 @@ Without one it links to T3 Code's web address in a new tab, as before.
 | `type` | Fields | What the Desk does |
 | --- | --- | --- |
 | `host:theme` | `colors`: any of `background`, `foreground`, `surface`, `border`, `muted` (secondary text) and `accent`, each a CSS colour; `font`: a CSS font family list; `scheme`: `light` or `dark` | Sets its tokens from them, without a reload |
+| `host:thread` | `thread`: the identity of the thread the host is showing, as the records hold it (the form `desk:open-thread` sends) | Opens the page for what that thread holds now (below), when it names another thread than the last `host:thread` did |
 
 The theme maps onto the tokens at the top of `desk/src/styles.css`:
 `background` to `--bg`, `foreground` to `--ink`, `surface` to `--panel`,
@@ -391,9 +392,26 @@ that refers outside itself (`var()`, `env()`, `url()`, `inherit`, or
 `currentColor` anywhere in it), is
 dropped and its token keeps its value.
 
-What a host sends is only displayed. No message makes the Desk write, act,
-fetch from another origin or navigate; the Desk navigates only when the
-human follows a link inside it.
+**Following the thread** (item atelier-knx8; `desk/src/lib/follow.ts`).
+On `host:thread` the Desk reads `GET /api/ties?thread=<identity>` and opens
+one page from the ties whose `current` is true, the first of: the item the
+thread implements, the item it reviews, the mission it leads, the mission it
+plans, the mission whose plan it reviews. With no current tie, as for a
+thread tied to nothing or only to done or dropped work, it opens the inbox.
+It replaces the frame's history entry rather than adding one, so the host's
+back button does not walk through the threads it showed. Above that page one
+line names the thread's part, such as "This thread implements this item"
+or, on the inbox, "This thread holds no open work"; the line goes once the
+human leaves the page. A `host:thread` that names the thread the last one
+named changes nothing, so the page the human has moved to stays; one that
+names another thread opens that thread's page. If the read fails the page
+stays where it is, with no line, since the last thread's line no longer
+applies.
+
+What a host sends is only displayed. No message makes the Desk write or
+act, fetch from another origin, or go outside its own routes: a theme sets
+tokens, and a thread identity is only looked up, to choose which of the
+Desk's pages to show.
 
 ## Routes
 

@@ -5,7 +5,8 @@
  * that window's origin is one the server lists (`GET /api/embed`); with no
  * listed parent it sends nothing and reads nothing, and the Desk works as it
  * does unframed. What the host sends is data: a theme is applied only where
- * it parses, and no message makes the Desk write, act or navigate.
+ * it parses, a thread identity is only looked up, and no message makes the
+ * Desk write, act or leave its own routes.
  */
 import { useSyncExternalStore } from "react";
 import type { EmbedResponse } from "../api/EmbedResponse";
@@ -19,7 +20,7 @@ export type DeskMessage =
   | { type: "desk:open-thread"; thread: string };
 
 /** Where the contract stands: the listed origins, and the parent's once it is known to be one of them. */
-const state: { origins: string[]; parent: string | null } = { origins: [], parent: null };
+const state: { origins: string[]; parent: string | null; thread: string | null } = { origins: [], parent: null, thread: null };
 const listeners = new Set<() => void>();
 let theme: HostTheme = { colours: {} };
 let lastReport = "";
@@ -33,15 +34,28 @@ export function connected(): boolean {
   return state.parent !== null;
 }
 
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
 /** Whether the Desk has a listed parent, for a component that should change when it gains one. */
 export function useConnected(): boolean {
+  return useSyncExternalStore(subscribe, connected, () => false);
+}
+
+/**
+ * The identity of the thread the host last said it shows (`host:thread`), or
+ * null before it says one. It changes only when the host names another
+ * thread, so a message for the same thread changes nothing.
+ */
+export function useHostThread(): string | null {
   return useSyncExternalStore(
-    (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    connected,
-    () => false,
+    subscribe,
+    () => state.thread,
+    () => null,
   );
 }
 
@@ -82,6 +96,12 @@ function receive(event: MessageEvent) {
   if (message.type === "host:theme") {
     theme = merge(theme, message);
     apply(theme);
+  } else if (message.type === "host:thread") {
+    // An identity is only ever looked up (`GET /api/ties`), never followed.
+    const thread = message.thread;
+    if (typeof thread !== "string" || thread === "" || thread === state.thread) return;
+    state.thread = thread;
+    changed();
   }
 }
 

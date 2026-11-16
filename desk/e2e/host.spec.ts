@@ -1,7 +1,7 @@
 import { expect, test, type Frame, type Page } from "@playwright/test";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { live, z4cr } from "./fixtures";
+import { live, tied, z4cr } from "./fixtures";
 import { serve } from "./helpers";
 
 // The host contract (docs/architecture/desk.md, "The host contract"): a
@@ -152,4 +152,71 @@ test("with no origin listed, the framed Desk draws and sends and reads nothing",
   expect(await drawn(frame)).toEqual(before);
   expect(await received(page)).toEqual([]);
   await expect(frame.getByRole("link", { name: "Inbox", exact: true })).toBeVisible();
+});
+
+// Following the host's thread (`host:thread`): the Desk opens the page for
+// what the thread holds now, and names the thread's part on it.
+const follows = [
+  { who: "an implementer", thread: tied.implementer, path: "/r/atelier/item/atelier-uwxy", line: "This thread implements this item." },
+  { who: "a lead", thread: tied.lead, path: "/r/atelier/mission/atelier-z4cr", line: "This thread leads this mission." },
+  { who: "a thread with no tie", thread: tied.none, path: "/inbox", line: "This thread holds no open work." },
+  { who: "a thread that implemented a done item and reviews another", thread: tied.pastAndReview, path: "/r/atelier/item/atelier-u1ko", line: "This thread reviews this item." },
+  { who: "a thread with only past ties", thread: tied.pastOnly, path: "/inbox", line: "This thread holds no open work." },
+];
+
+const at = (frame: Frame) => new URL(frame.url()).pathname;
+
+for (const f of follows) {
+  test(`the host's thread opens its page: ${f.who}`, async ({ page }) => {
+    const frame = await host(page, listed, "/", [listed]);
+    await expect.poll(async () => (await received(page)).map((m) => m.data.type)).toContain("desk:navigated");
+    await send(page, { type: "host:thread", thread: f.thread });
+    await expect.poll(() => at(frame)).toBe(`/embed${f.path}`);
+    await expect(frame.locator(".thread-part")).toHaveText(f.line);
+    await expect.poll(async () => (await received(page)).filter((m) => m.data.type === "desk:navigated").at(-1)?.data.path).toBe(f.path);
+  });
+}
+
+test("the same thread again leaves the page alone, and another thread changes it", async ({ page }) => {
+  const frame = await host(page, listed, "/", [listed]);
+  await expect.poll(async () => (await received(page)).map((m) => m.data.type)).toContain("desk:navigated");
+  await send(page, { type: "host:thread", thread: tied.implementer });
+  await expect.poll(() => at(frame)).toBe("/embed/r/atelier/item/atelier-uwxy");
+
+  // The human moves on; the host names the same thread again.
+  await frame.getByRole("link", { name: "Inbox", exact: true }).click();
+  await expect.poll(() => at(frame)).toBe("/embed/inbox");
+  await expect(frame.locator(".thread-part")).toHaveCount(0);
+  await send(page, { type: "host:thread", thread: tied.implementer });
+  await page.waitForTimeout(300);
+  expect(at(frame)).toBe("/embed/inbox");
+
+  // Another thread opens its own page.
+  await send(page, { type: "host:thread", thread: tied.lead });
+  await expect.poll(() => at(frame)).toBe("/embed/r/atelier/mission/atelier-z4cr");
+  await expect(frame.locator(".thread-part")).toHaveText("This thread leads this mission.");
+
+  // A thread the host showed before is another thread again once it has moved off it.
+  await send(page, { type: "host:thread", thread: tied.implementer });
+  await expect.poll(() => at(frame)).toBe("/embed/r/atelier/item/atelier-uwxy");
+});
+
+test("a thread whose ties cannot be read leaves the page, without the last thread's line", async ({ page }) => {
+  const frame = await host(page, listed, "/", [listed]);
+  await expect.poll(async () => (await received(page)).map((m) => m.data.type)).toContain("desk:navigated");
+  await send(page, { type: "host:thread", thread: tied.implementer });
+  await expect(frame.locator(".thread-part")).toHaveText("This thread implements this item.");
+  await send(page, { type: "host:thread", thread: tied.unreadable });
+  await expect(frame.locator(".thread-part")).toHaveCount(0);
+  await page.waitForTimeout(300);
+  expect(at(frame)).toBe("/embed/r/atelier/item/atelier-uwxy");
+  await expect(frame.locator(".thread-part")).toHaveCount(0);
+});
+
+test("a host whose origin is not listed cannot move the Desk", async ({ page }) => {
+  const frame = await host(page, stranger, "/", [listed]);
+  await send(page, { type: "host:thread", thread: tied.implementer });
+  await page.waitForTimeout(300);
+  expect(at(frame)).toBe("/embed/");
+  await expect(frame.locator(".thread-part")).toHaveCount(0);
 });
