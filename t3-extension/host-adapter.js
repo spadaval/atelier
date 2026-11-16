@@ -17,6 +17,11 @@ const hostSelectors = {
   sidebarSearch: '[data-workspace-area="sidebar"] [data-slot="sidebar-group"] input[type="search"]',
   mainInset: 'main[data-slot="sidebar-inset"]',
   sidebarRow: '[data-sidebar-row]',
+  // Missions: T3's own thread list items, hidden by CSS when a mission holds the thread.
+  threadItem: '[data-thread-item]',
+  // Quick launch: T3's composer editor (ProseMirror). Project home: the breadcrumb's project button.
+  composerEditor: '[data-testid="composer-editor"]',
+  breadcrumbProject: 'nav[aria-label="Thread breadcrumb"] li:first-child button',
 };
 // ok: true (found), false (missing), null (DOM hook not on screen yet).
 const hostProbes = Object.fromEntries(Object.keys(hostSelectors).map(name => [`dom:${name}`, { ok: null, detail: `${hostSelectors[name]} not seen yet` }]));
@@ -135,19 +140,25 @@ async function createHostAdapter(api) {
     const project = registry.get(threads.snapshotAtom(draft.environmentId))?.projects.find(project => project.id === draft.projectId);
     return { draftId, environmentId: draft.environmentId, projectId: draft.projectId, projectName: project?.title ?? null, repositoryKey: project?.repositoryIdentity?.canonicalKey ?? draft.logicalProjectKey ?? null };
   }
-  // Threads this thread started: T3's lineage.parentThreadId, in every connected environment.
-  function children(threadId) {
-    const ids = [];
+  // Every thread of the connected environments, with who started it: lineage.parentThreadId for a
+  // local subagent (delegate_task), delegatedFrom.threadId for a thread a linked environment's
+  // agent delegated or launched here (the creator's thread ID in that other environment).
+  function threadList() {
+    const list = [];
     for (const environmentId of registry.get(environments.connectedEnvironmentIdsAtom) ?? []) {
       for (const thread of registry.get(threads.snapshotAtom(environmentId))?.threads ?? []) {
-        if (thread.lineage?.parentThreadId === threadId) ids.push(thread.id);
+        list.push({ environmentId, id: thread.id, title: thread.title, status: thread.status, parent: thread.lineage?.parentThreadId ?? null, delegatedFrom: thread.delegatedFrom?.threadId ?? null });
       }
     }
-    return ids.sort();
+    if (list.length && !hostProbes['state:thread-origin']?.ok) setHostProbe('state:thread-origin', true, `lineage.parentThreadId on ${list.filter(t => t.parent).length}, delegatedFrom.threadId on ${list.filter(t => t.delegatedFrom).length} of ${list.length} threads`);
+    return list;
   }
+  // Threads this thread started, by either link.
+  const children = threadId => threadList().filter(thread => thread.parent === threadId || thread.delegatedFrom === threadId).map(thread => thread.id).sort();
   return {
     draftContext: registry && threads && drafts ? draftContext : null,
     children: registry && threads && environments ? children : null,
+    threadList: registry && threads && environments ? threadList : null,
     // null means the surfaces that need this hook are off; hostProbes says why.
     context: registry && threads ? context : null,
     findThread: registry && threads && environments ? findThread : null,

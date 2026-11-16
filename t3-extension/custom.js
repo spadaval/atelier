@@ -443,7 +443,7 @@ async function updateContext() {
 function scheduleDOM() {
   if (domFrame || api.signal.aborted) return;
   // Electron suspends animation frames while its window is hidden.
-  domFrame = setTimeout(() => { domFrame = 0; syncPanel(); syncSettings(); syncHome(); syncInbox(); }, 0);
+  domFrame = setTimeout(() => { domFrame = 0; syncPanel(); syncSettings(); syncQuickLaunch(); syncSidebar(); }, 0);
 }
 
 // Ranges and transparent keyboard links leave React's message text untouched.
@@ -608,115 +608,213 @@ listen(document, 'click', event => {
 listen(document, 'scroll', queueRects, { capture: true }); listen(window, 'resize', queueRects);
 listen(document, 'visibilitychange', () => { scheduleDOM(); queueRects(); });
 
-// Other Desk frames: the project home under the new-thread composer and the inbox layer. Each
-// speaks the same contract: it is themed on desk:ready and its desk:open-thread navigates T3.
-function deskFrame(title, onOpenThread) {
-  const frame = { iframe: element('iframe', { title }), desk: null, path: null, ready: false, theme: '', onOpenThread };
-  frame.iframe.style.cssText = 'display:block;width:100%;height:100%;border:0;background:var(--background)';
-  frame.load = (desk, path) => {
-    if (frame.desk === desk && frame.path === path) return;
-    frame.desk = desk; frame.path = path; frame.ready = false; frame.theme = '';
-    frame.iframe.src = `${desk}/embed${path}`;
-  };
-  frame.sendTheme = always => {
-    if (!frame.ready || !frame.iframe.contentWindow) return;
-    const theme = readHostTheme(api.root); const text = JSON.stringify(theme);
-    if (!always && text === frame.theme) return;
-    frame.theme = text;
-    frame.iframe.contentWindow.postMessage({ type: 'host:theme', ...theme }, new URL(frame.desk).origin);
-  };
-  return frame;
+// The layer: one Desk frame over T3's main area, leaving the sidebar usable. It shows the inbox,
+// a mission's mission control, or a project's home. It speaks the host contract: themed on
+// desk:ready, desk:open-thread navigates T3 and closes it, desk:key Escape closes it.
+const layerFrame = { iframe: element('iframe', { title: 'Atelier Desk' }), desk: null, path: null, ready: false, theme: '' };
+layerFrame.iframe.style.cssText = 'display:block;width:100%;height:100%;border:0;background:var(--background)';
+function sendLayerTheme(always) {
+  if (!layerFrame.ready || !layerFrame.iframe.contentWindow) return;
+  const theme = readHostTheme(api.root); const text = JSON.stringify(theme);
+  if (!always && text === layerFrame.theme) return;
+  layerFrame.theme = text;
+  layerFrame.iframe.contentWindow.postMessage({ type: 'host:theme', ...theme }, new URL(layerFrame.desk).origin);
 }
-const otherFrames = [];
 listen(window, 'message', event => {
-  const frame = otherFrames.find(frame => frame.desk && event.source === frame.iframe.contentWindow && event.origin === new URL(frame.desk).origin);
+  if (!layerFrame.desk || event.source !== layerFrame.iframe.contentWindow || event.origin !== new URL(layerFrame.desk).origin) return;
   const message = event.data;
-  if (!frame || !message || typeof message !== 'object') return;
-  if (message.type === 'desk:ready') { frame.ready = true; frame.sendTheme(true); }
-  else if (message.type === 'desk:open-thread' && typeof message.thread === 'string') { openThread(message.thread); frame.onOpenThread?.(); }
+  if (!message || typeof message !== 'object') return;
+  if (message.type === 'desk:ready') { layerFrame.ready = true; sendLayerTheme(true); }
+  else if (message.type === 'desk:open-thread' && typeof message.thread === 'string') { openThread(message.thread); closeLayer(); }
+  else if (message.type === 'desk:key' && message.key === 'Escape') closeLayer();
 });
-disposers.push(observeHostTheme(() => { for (const frame of otherFrames) frame.sendTheme(false); }));
-
-// Project home: on T3's new-thread screen (#/draft/<id>) for a project with a Desk repository,
-// /embed/home/<repo> fills the space below the composer, which is moved up from the centre.
-const home = deskFrame('Atelier project home');
-otherFrames.push(home);
-const homeMount = element('div', { 'data-t3-home-mount': '', hidden: '' }, home.iframe);
-let movedOverlay = null;
-function restoreOverlay() {
-  if (!movedOverlay) return;
-  movedOverlay.style.alignItems = ''; movedOverlay.style.paddingTop = '';
-  movedOverlay = null;
+disposers.push(observeHostTheme(() => sendLayerTheme(false)));
+// layer: { key, desk, path }; key is 'inbox', 'mission:<desk>/<repo>/<id>' or 'home:<desk>/<repo>'.
+let layer = null;
+function openLayer(key, desk, path) {
+  layer = { key, desk, path };
+  if (layerFrame.desk !== desk || layerFrame.path !== path) {
+    Object.assign(layerFrame, { desk, path, ready: false, theme: '' });
+    layerFrame.iframe.src = `${desk}/embed${path}`;
+  }
+  scheduleDOM();
 }
-function syncHome() {
-  observeHostDom();
-  const draft = settings.enabled ? host?.draftContext?.() : null;
-  const repo = draft && mappedRepository(draft);
-  const overlay = repo && document.querySelector(hostSelectors.composerOverlay);
-  const stack = overlay?.querySelector(hostSelectors.composerStack);
-  if (!stack) { homeMount.hidden = true; restoreOverlay(); return; }
-  if (movedOverlay !== overlay) { restoreOverlay(); movedOverlay = overlay; }
-  // T3 centres the composer; the heading above it (about 84px) stays visible.
-  overlay.style.alignItems = 'flex-start'; overlay.style.paddingTop = '104px';
-  const canvas = overlay.parentElement;
-  if (homeMount.parentElement !== canvas) canvas.append(homeMount);
-  home.load(repo.desk, `/home/${encodeURIComponent(repo.repo)}`);
-  const area = canvas.getBoundingClientRect(); const composer = stack.getBoundingClientRect();
-  const width = Math.min(900, Math.max(600, composer.width), area.width - 32);
-  homeMount.style.cssText = `position:absolute;z-index:21;top:${Math.round(composer.bottom - area.top + 12)}px;bottom:0;left:${Math.round((area.width - width) / 2)}px;width:${Math.round(width)}px`;
-  homeMount.hidden = false;
-}
+function closeLayer() { if (!layer) return; layer = null; scheduleDOM(); }
+const toggleLayer = (key, desk, path) => layer?.key === key ? closeLayer() : openLayer(key, desk, path);
+const layerClose = element('button', { 'data-t3-layer-close': '', 'aria-label': 'Close', title: 'Close (Esc)', html: icons.close });
+const layerNode = element('div', { 'data-t3-layer': '', hidden: '' }, layerFrame.iframe, layerClose);
+listen(layerClose, 'click', closeLayer);
+listen(document, 'keydown', event => { if (event.key === 'Escape' && layer) closeLayer(); });
+// Going to a thread in the sidebar, or anywhere else in T3, closes the layer.
+listen(document, 'click', event => { if (event.target instanceof Element && event.target.closest(hostSelectors.sidebarRow)) closeLayer(); }, { capture: true });
+listen(window, 'hashchange', closeLayer);
 
-// Inbox: a row near the top of T3's sidebar with the count of what waits on the human, and a
-// layer over T3's main area showing /embed/inbox. The sidebar stays usable beside it.
-const inbox = deskFrame('Atelier inbox', () => closeInbox());
-otherFrames.push(inbox);
-const inboxCount = element('span', { 'data-t3-inbox-count': '', text: '…' });
-const inboxRow = element('div', { 'data-t3-inbox-row': '', role: 'button', tabindex: '0', 'aria-label': 'Atelier inbox', 'aria-pressed': 'false', title: 'Atelier inbox' },
-  element('span', { 'data-t3-inbox-icon': '', html: icon('<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>') }),
-  element('span', { 'data-t3-inbox-label': '', text: 'Inbox' }), inboxCount);
-const inboxRowWrap = element('div', { 'data-t3-inbox-wrap': '' }, inboxRow);
-const inboxClose = element('button', { 'data-t3-inbox-close': '', 'aria-label': 'Close inbox', title: 'Close inbox (Esc)', html: icons.close });
-const inboxLayer = element('div', { 'data-t3-inbox-layer': '', hidden: '' }, inbox.iframe, inboxClose);
-const inboxStyle = element('style', { text: `
-  [data-t3-inbox-wrap] { padding: 0 var(--sidebar-content-inset, 8px) 4px; flex-shrink: 0; }
-  [data-t3-inbox-row] { display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 10px; border-radius: 6px; cursor: pointer; font-size: 14px; color: var(--sidebar-muted-foreground); user-select: none; outline: none; -webkit-app-region: no-drag; }
-  [data-t3-inbox-row]:hover { background: var(--sidebar-row-hover); color: var(--sidebar-foreground); }
-  [data-t3-inbox-row][aria-pressed="true"] { background: var(--sidebar-row-active); color: var(--sidebar-foreground); }
-  [data-t3-inbox-row]:focus-visible { box-shadow: inset 0 0 0 2px var(--ring); }
-  [data-t3-inbox-icon] { display: inline-flex; width: 16px; height: 16px; } [data-t3-inbox-icon] svg { width: 16px; height: 16px; }
-  [data-t3-inbox-label] { flex: 1; min-width: 0; }
+const icons2 = {
+  inbox: icon('<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>'),
+  chevron: icon('<path d="m9 18 6-6-6-6"/>'),
+  target: icon('<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>'),
+};
+const extStyle = element('style', { text: `
+  [data-t3-ext-sidebar] { flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; max-height: 45vh; padding: 0 var(--sidebar-content-inset, 8px) 4px; }
+  [data-t3-ext-sidebar] button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: start; -webkit-app-region: no-drag; }
+  [data-t3-side-row] { display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 10px; border-radius: 6px; cursor: pointer; font-size: 14px; color: var(--sidebar-muted-foreground); user-select: none; outline: none; -webkit-app-region: no-drag; min-width: 0; }
+  [data-t3-side-row]:hover { background: var(--sidebar-row-hover); color: var(--sidebar-foreground); }
+  [data-t3-side-row][aria-pressed="true"] { background: var(--sidebar-row-active); color: var(--sidebar-foreground); }
+  [data-t3-side-row]:focus-visible, [data-t3-ext-sidebar] button:focus-visible { box-shadow: inset 0 0 0 2px var(--ring); outline: none; }
+  [data-t3-side-icon] { display: inline-flex; flex-shrink: 0; width: 16px; height: 16px; } [data-t3-side-icon] svg { width: 16px; height: 16px; }
+  [data-t3-side-label] { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   [data-t3-inbox-count] { font-size: 12px; font-variant-numeric: tabular-nums; min-width: 20px; padding: 1px 6px; border-radius: 999px; text-align: center; background: var(--sidebar-row-active); color: var(--sidebar-foreground); }
   [data-t3-inbox-count][data-zero] { background: transparent; color: var(--sidebar-muted-foreground); }
   [data-t3-inbox-count][data-error] { color: var(--destructive); }
-  [data-t3-inbox-layer] { position: absolute; inset: 0; z-index: 60; background: var(--background); -webkit-app-region: no-drag; }
-  [data-t3-inbox-close] { position: absolute; top: 8px; right: 12px; z-index: 1; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--foreground); cursor: pointer; -webkit-app-region: no-drag; }
-  [data-t3-inbox-close]:hover { background: var(--accent); }
-  [data-t3-inbox-open] [data-sidebar-row][aria-current] { background: transparent !important; }
+  [data-t3-missions-head] { display: flex; align-items: center; justify-content: space-between; padding: 10px 10px 4px; font-size: 12px; color: var(--sidebar-muted-foreground); }
+  [data-t3-missions-head] button { font-size: 11px; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--border) !important; color: var(--sidebar-muted-foreground); }
+  [data-t3-missions-head] button[aria-pressed="true"] { background: var(--sidebar-row-active); color: var(--sidebar-foreground); }
+  [data-t3-missions] { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+  [data-t3-missions-list] { overflow: auto; min-height: 0; flex: 1; }
+  [data-t3-mission] [data-t3-side-row] { gap: 6px; padding-left: 4px; height: 42px; }
+  [data-t3-two-line] { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+  [data-t3-two-line] > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  [data-t3-expand] { display: inline-flex; width: 18px; height: 18px; align-items: center; justify-content: center; border-radius: 4px; flex-shrink: 0; transition: transform .1s; }
+  [data-t3-expand]:hover { background: var(--sidebar-row-hover); }
+  [data-t3-expand][aria-expanded="true"] { transform: rotate(90deg); }
+  [data-t3-meta] { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--sidebar-muted-foreground); white-space: nowrap; }
+  [data-t3-waiting] { width: 7px; height: 7px; border-radius: 50%; background: var(--warning, #f5a524); flex-shrink: 0; }
+  [data-t3-mission-body] { padding: 0 0 6px 24px; display: flex; flex-direction: column; gap: 1px; }
+  [data-t3-group] { font-size: 11px; color: var(--sidebar-muted-foreground); padding: 6px 6px 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  [data-t3-thread] { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 6px; border-radius: 6px; font-size: 13px; color: var(--sidebar-muted-foreground); min-width: 0; width: 100%; }
+  button[data-t3-thread]:hover { background: var(--sidebar-row-hover); color: var(--sidebar-foreground); }
+  [data-t3-thread][data-unknown] { opacity: .55; cursor: default; }
+  [data-t3-thread][aria-current="page"] { background: var(--sidebar-row-active); color: var(--sidebar-foreground); }
+  [data-t3-role] { font-size: 10px; text-transform: uppercase; letter-spacing: .03em; color: var(--sidebar-muted-foreground); flex-shrink: 0; }
+  [data-t3-missions-note] { font-size: 12px; color: var(--sidebar-muted-foreground); padding: 4px 10px; overflow-wrap: anywhere; }
+  [data-t3-missions-note][data-error] { color: var(--destructive); }
+  [data-t3-layer] { position: absolute; inset: 0; z-index: 60; background: var(--background); -webkit-app-region: no-drag; }
+  [data-t3-layer-close] { position: absolute; top: 8px; right: 12px; z-index: 1; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--foreground); cursor: pointer; -webkit-app-region: no-drag; }
+  [data-t3-layer-close]:hover { background: var(--accent); }
+  [data-t3-layer-open] [data-sidebar-row][aria-current] { background: transparent !important; }
+  [data-t3-launch] { position: absolute; z-index: 21; display: flex; flex-wrap: nowrap; overflow: hidden; align-items: center; gap: 6px; padding: 0 12px; font-size: 12px; color: var(--muted-foreground); }
+  [data-t3-launch] button { display: inline-flex; align-items: center; gap: 6px; max-width: 260px; height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--card); color: var(--foreground); font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; overflow: hidden; }
+  [data-t3-launch] button:hover { background: var(--accent); }
+  [data-t3-launch] > * { flex-shrink: 0; } [data-t3-launch] > button[data-next] { flex-shrink: 1; min-width: 96px; }
+  [data-t3-launch] button > span { overflow: hidden; text-overflow: ellipsis; }
+  [data-t3-launch] code { font-size: 11px; color: var(--muted-foreground); }
+  [data-t3-launch] [data-t3-launch-label] { margin-right: 2px; }
+  [data-t3-launch] [data-error] { color: var(--destructive); }
 ` });
-document.head.append(inboxStyle);
-let inboxOpen = false;
-function openInbox() { inboxOpen = true; inbox.load(deskUrls[0], '/inbox'); scheduleDOM(); }
-function closeInbox() { if (!inboxOpen) return; inboxOpen = false; scheduleDOM(); }
-listen(inboxRow, 'click', () => inboxOpen ? closeInbox() : openInbox());
-listen(inboxRow, 'keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); inboxRow.click(); } });
-listen(inboxClose, 'click', closeInbox);
-listen(document, 'keydown', event => { if (event.key === 'Escape' && inboxOpen) closeInbox(); });
-// Going to a thread in the sidebar, or anywhere else in T3, closes the layer.
-listen(document, 'click', event => { if (event.target instanceof Element && event.target.closest(hostSelectors.sidebarRow)) closeInbox(); }, { capture: true });
-listen(window, 'hashchange', closeInbox);
-function syncInbox() {
+document.head.append(extStyle);
+
+// The sidebar block under T3's search: the Inbox row, then the Missions section.
+const inboxCount = element('span', { 'data-t3-inbox-count': '', text: '…' });
+const inboxRow = element('div', { 'data-t3-side-row': '', 'data-t3-inbox-row': '', 'data-layer-key': 'inbox', role: 'button', tabindex: '0', 'aria-pressed': 'false', title: 'Atelier inbox' },
+  element('span', { 'data-t3-side-icon': '', html: icons2.inbox }), element('span', { 'data-t3-side-label': '', text: 'Inbox' }), inboxCount);
+const keyActivate = node => listen(node, 'keydown', event => { if (event.target === node && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); node.click(); } });
+listen(inboxRow, 'click', () => toggleLayer('inbox', deskUrls[0], '/inbox')); keyActivate(inboxRow);
+const showAllToggle = element('button', { 'aria-pressed': 'false', title: 'Show threads that belong to a mission in T3\'s own list too', text: 'Show all threads' });
+const missionsList = element('div', { 'data-t3-missions-list': '' });
+const missionsSection = element('div', { 'data-t3-missions': '' }, element('div', { 'data-t3-missions-head': '' }, element('span', { text: 'Missions' }), showAllToggle), missionsList);
+const extSidebar = element('div', { 'data-t3-ext-sidebar': '' }, inboxRow, missionsSection);
+
+// View state in localStorage: which missions are expanded, and whether T3's list shows all threads.
+const missionViewKey = 't3-custom:atelier:missions:v1';
+let missionView;
+try { missionView = JSON.parse(localStorage.getItem(missionViewKey) ?? '{}'); } catch { missionView = {}; }
+missionView = { expanded: {}, showAll: false, ...missionView };
+const saveMissionView = () => localStorage.setItem(missionViewKey, JSON.stringify(missionView));
+listen(showAllToggle, 'click', () => { missionView.showAll = !missionView.showAll; saveMissionView(); renderMissions(); });
+
+// GET /api/sidebar from each Desk; each mission keeps the Desk that served it.
+let sidebarRepos = null; let sidebarErrors = [];
+async function readSidebar() {
+  const repos = []; const errors = [];
+  await Promise.all(deskUrls.map(async desk => {
+    try { for (const repo of (await api.request('desk-get', { desk, path: '/api/sidebar' })).repos) repos.push({ ...repo, desk }); }
+    catch (error) { errors.push(`GET ${desk}/api/sidebar: ${error.message}`); }
+  }));
+  if (api.signal.aborted) return;
+  sidebarRepos = repos; sidebarErrors = errors; renderMissions();
+}
+// Each open mission with its threads; a thread T3 knows shows T3's live title and status. "Other
+// threads" are T3 threads whose creator (lineage.parentThreadId, or delegatedFrom.threadId for a
+// thread delegated from a linked environment) is one of the mission's threads.
+function missionModel() {
+  const t3 = host?.threadList?.() ?? [];
+  return (sidebarRepos ?? []).flatMap(repo => repo.missions.map(mission => {
+    const own = new Set([...mission.threads, ...mission.items.flatMap(item => item.threads)].map(thread => thread.identity));
+    const other = t3.filter(thread => !own.has(thread.id) && (own.has(thread.parent) || own.has(thread.delegatedFrom)));
+    return { key: `${repo.desk}/${repo.repo}/${mission.id}`, repo: repo.repo, desk: repo.desk, mission, other, own };
+  }));
+}
+const hideStyle = element('style', { 'data-t3-hide-threads': '' });
+document.head.append(hideStyle);
+let missionsSignature = '';
+function renderMissions() {
+  const t3 = new Map((host?.threadList?.() ?? []).map(thread => [thread.id, thread]));
+  const model = missionModel();
+  // T3's own rows (li[data-thread-item="<environment>:<thread>"]) of mission threads are hidden with
+  // CSS, so React's nodes stay where React put them.
+  const hidden = missionView.showAll ? [] : [...new Set(model.flatMap(entry => [...entry.own, ...entry.other.map(thread => thread.id)]))].filter(id => t3.has(id));
+  hideStyle.textContent = hidden.length ? `${hidden.map(id => `${hostSelectors.threadItem.slice(0, -1)}$=${JSON.stringify(':' + id)}]`).join(',\n')} { display: none !important; }` : '';
+  showAllToggle.setAttribute('aria-pressed', String(missionView.showAll));
+  showAllToggle.title = missionView.showAll ? 'T3\'s list shows every thread' : `${hidden.length} mission threads are hidden from T3's list`;
+  const signature = JSON.stringify([model.map(entry => [entry.key, entry.mission, entry.other.map(thread => [thread.id, thread.title, thread.status])]), [...t3.values()].map(thread => [thread.id, thread.title, thread.status]), missionView.expanded, sidebarErrors, current?.threadId]);
+  if (signature === missionsSignature) return;
+  missionsSignature = signature;
+  const nodes = [];
+  for (const error of sidebarErrors) nodes.push(element('div', { 'data-t3-missions-note': '', 'data-error': '', text: error }));
+  if (!sidebarRepos && !sidebarErrors.length) nodes.push(element('div', { 'data-t3-missions-note': '', text: 'Reading missions…' }));
+  if (sidebarRepos && !model.length && !sidebarErrors.length) nodes.push(element('div', { 'data-t3-missions-note': '', text: 'No open missions.' }));
+  const threadEntry = (identity, role) => {
+    const thread = t3.get(identity);
+    if (!thread) return element('div', { 'data-t3-thread': '', 'data-unknown': '', title: `${identity}: not a thread of any connected T3 environment` },
+      element('span', { 'data-t3-role': '', text: role }), element('span', { 'data-t3-side-label': '', text: identity.length > 18 ? `${identity.slice(0, 8)}…${identity.slice(-6)}` : identity }));
+    const node = element('button', { 'data-t3-thread': '', title: `${thread.title} (${thread.status})` },
+      element('span', { 'data-t3-role': '', text: role }), element('span', { 'data-t3-side-label': '', text: thread.title }), element('span', { 'data-t3-meta': '', text: thread.status }));
+    if (current?.threadId === thread.id) node.setAttribute('aria-current', 'page');
+    node.addEventListener('click', () => host.showThread(thread.environmentId, thread.id));
+    return node;
+  };
+  for (const entry of model) {
+    const { mission } = entry;
+    const expanded = Boolean(missionView.expanded[entry.key]);
+    const expand = element('button', { 'data-t3-expand': '', 'aria-expanded': String(expanded), 'aria-label': `${expanded ? 'Collapse' : 'Expand'} ${mission.title}`, html: icons2.chevron });
+    const row = element('div', { 'data-t3-side-row': '', 'data-layer-key': `mission:${entry.key}`, role: 'button', tabindex: '0', 'aria-pressed': String(layer?.key === `mission:${entry.key}`), title: `${mission.id}: ${mission.title} (${mission.state}) — open mission control` },
+      expand, element('span', { 'data-t3-two-line': '' }, element('span', { text: mission.title }), element('span', { 'data-t3-meta': '', text: `${entry.repo} · ${mission.done}/${mission.total} done${mission.state === 'in_progress' ? '' : ` · ${mission.state}`}` })),
+      ...(mission.waiting > 0 ? [element('span', { 'data-t3-waiting': '', title: `${mission.waiting} waiting on you` })] : []));
+    expand.addEventListener('click', event => { event.stopPropagation(); missionView.expanded[entry.key] = !expanded; if (!missionView.expanded[entry.key]) delete missionView.expanded[entry.key]; saveMissionView(); renderMissions(); });
+    row.addEventListener('click', () => toggleLayer(`mission:${entry.key}`, entry.desk, `/mission/${encodeURIComponent(entry.repo)}/${encodeURIComponent(mission.id)}`));
+    keyActivate(row);
+    const block = element('div', { 'data-t3-mission': '' }, row);
+    if (expanded) {
+      const body = element('div', { 'data-t3-mission-body': '' });
+      for (const item of mission.items) {
+        if (!item.threads.length) continue;
+        body.append(element('div', { 'data-t3-group': '', title: `${item.id}: ${item.title} (${item.status})`, text: `${item.id} · ${item.title}` }), ...item.threads.map(thread => threadEntry(thread.identity, thread.role)));
+      }
+      if (mission.threads.length) body.append(element('div', { 'data-t3-group': '', text: 'Mission' }), ...mission.threads.map(thread => threadEntry(thread.identity, thread.role)));
+      if (entry.other.length) body.append(element('div', { 'data-t3-group': '', text: 'Other threads' }), ...entry.other.map(thread => threadEntry(thread.id, thread.parent ? 'child' : 'delegated')));
+      if (!body.children.length) body.append(element('div', { 'data-t3-group': '', text: 'No threads yet.' }));
+      block.append(body);
+    }
+    nodes.push(block);
+  }
+  missionsList.replaceChildren(...nodes);
+}
+// T3's titles and statuses change as threads run.
+const missionsTimer = setInterval(renderMissions, 3000);
+
+function syncSidebar() {
   const search = document.querySelector(hostSelectors.sidebarSearch);
   const group = search?.closest('[data-slot="sidebar-group"]')?.parentElement;
-  if (group && settings.enabled) { if (inboxRowWrap.previousElementSibling !== group) group.after(inboxRowWrap); }
-  else inboxRowWrap.remove();
+  if (group && settings.enabled) { if (extSidebar.previousElementSibling !== group) group.after(extSidebar); }
+  else extSidebar.remove();
   const main = document.querySelector(hostSelectors.mainInset);
-  const shown = inboxOpen && Boolean(main) && settings.enabled;
-  inboxRow.setAttribute('aria-pressed', String(shown));
-  document.documentElement.toggleAttribute('data-t3-inbox-open', shown);
-  if (shown && inboxLayer.parentElement !== main) main.append(inboxLayer);
-  inboxLayer.hidden = !shown;
+  const shown = Boolean(layer) && Boolean(main) && settings.enabled;
+  for (const row of extSidebar.querySelectorAll('[data-layer-key]')) row.setAttribute('aria-pressed', String(shown && row.dataset.layerKey === layer.key));
+  document.documentElement.toggleAttribute('data-t3-layer-open', shown);
+  if (shown && layerNode.parentElement !== main) main.append(layerNode);
+  layerNode.hidden = !shown;
 }
+
 // The count: needs-human items, proposed plans and waiting threads, across repositories and Desks.
 async function readInbox() {
   const errors = []; let count = 0;
@@ -725,7 +823,7 @@ async function readInbox() {
       for (const repo of (await api.request('desk-get', { desk, path: '/api/inbox' })).repos) {
         count += (repo.needs_human ?? []).reduce((sum, group) => sum + group.items.length, 0) + (repo.proposed ?? []).length + (repo.threads ?? []).length;
       }
-    } catch (error) { errors.push(`${desk}/api/inbox: ${error.message}`); }
+    } catch (error) { errors.push(`GET ${desk}/api/inbox: ${error.message}`); }
   }));
   if (api.signal.aborted) return;
   inboxCount.textContent = errors.length ? '!' : String(count);
@@ -733,9 +831,73 @@ async function readInbox() {
   inboxCount.toggleAttribute('data-zero', !errors.length && count === 0);
   inboxRow.title = errors.length ? `Atelier inbox: ${errors.join('; ')}` : `Atelier inbox: ${count} waiting (read ${new Date().toLocaleTimeString()})`;
 }
-void readInbox();
-const inboxTimer = setInterval(readInbox, 60000);
-disposers.push(() => { clearInterval(inboxTimer); inboxRowWrap.remove(); inboxLayer.remove(); inboxStyle.remove(); homeMount.remove(); restoreOverlay(); document.documentElement.removeAttribute('data-t3-inbox-open'); });
+const readDesks = () => { void readInbox(); void readSidebar(); };
+readDesks();
+const deskTimer = setInterval(readDesks, 60000);
+
+// Quick launch: one row under the new-thread composer for a project with a Desk repository, from
+// GET /api/launch?repo=<repo>. A chip puts a prompt in the composer; it is never sent.
+const launchRow = element('div', { 'data-t3-launch': '', hidden: '' });
+let launchKey = null;
+// T3's composer is a ProseMirror (TipTap) editor: select its content and insert the text with
+// execCommand('insertText'), which fires the beforeinput/input events ProseMirror handles.
+function setComposerText(text) {
+  const editor = document.querySelector(hostSelectors.composerEditor);
+  if (!editor) { api.reportError(new Error(`Quick launch: T3's composer editor (${hostSelectors.composerEditor}) is not on screen`)); return; }
+  editor.focus();
+  getSelection().selectAllChildren(editor);
+  if (!document.execCommand('insertText', false, text)) api.reportError(new Error('Quick launch: the composer refused execCommand insertText'));
+}
+async function readLaunch(repo) {
+  const key = repositoryKey(repo);
+  launchRow.replaceChildren(element('span', { text: 'Reading next work…' }));
+  let data;
+  try { data = await api.request('desk-get', { desk: repo.desk, path: `/api/launch?repo=${encodeURIComponent(repo.repo)}` }); }
+  catch (error) { if (launchKey === key) launchRow.replaceChildren(element('span', { 'data-error': '', text: `GET ${repo.desk}/api/launch?repo=${repo.repo}: ${error.message}` })); return; }
+  if (api.signal.aborted || launchKey !== key) return;
+  const chip = (content, title, onClick, next) => { const node = element('button', { title, ...(next ? { 'data-next': '' } : {}) }, ...content); node.addEventListener('click', onClick); return node; };
+  const short = text => text.length > 30 ? `${text.slice(0, 28)}…` : text;
+  const nodes = [];
+  if (data.ready.length) nodes.push(element('span', { 'data-t3-launch-label': '', text: 'Next up' }));
+  for (const item of data.ready.slice(0, 3)) {
+    nodes.push(chip([element('code', { text: item.id }), element('span', { text: short(item.title) })], `${item.id}: ${item.title}${item.priority ? ` (${item.priority})` : ''} — put a start prompt in the composer`,
+      () => setComposerText(`Start ${item.id}: run \`atelier start ${item.id}\` in a fresh checkout and follow what it prints.`), true));
+  }
+  nodes.push(chip([element('span', { text: 'Plan a mission' })], 'Put a planning prompt in the composer', () => setComposerText('Let\'s plan a mission for ')));
+  if (data.waiting > 0) nodes.push(chip([element('span', { text: `Waiting on you (${data.waiting})` })], 'Open the inbox', () => openLayer('inbox', deskUrls[0], '/inbox')));
+  launchRow.replaceChildren(...nodes);
+}
+function syncQuickLaunch() {
+  observeHostDom();
+  const draft = settings.enabled ? host?.draftContext?.() : null;
+  const repo = draft && mappedRepository(draft);
+  const overlay = repo && document.querySelector(hostSelectors.composerOverlay);
+  const stack = overlay?.querySelector(hostSelectors.composerStack);
+  if (!stack) { launchRow.hidden = true; launchKey = null; return; }
+  const canvas = overlay.parentElement;
+  if (launchRow.parentElement !== canvas) canvas.append(launchRow);
+  if (launchKey !== repositoryKey(repo)) { launchKey = repositoryKey(repo); void readLaunch(repo); }
+  const area = canvas.getBoundingClientRect(); const composer = stack.getBoundingClientRect();
+  launchRow.style.cssText = `top:${Math.round(composer.bottom - area.top + 8)}px;left:${Math.round(composer.left - area.left)}px;width:${Math.round(composer.width)}px`;
+  launchRow.hidden = false;
+}
+
+// Project home: the project's name in T3's breadcrumb opens /embed/home/<repo> in the layer
+// instead of starting a new thread, for a project with a Desk repository.
+listen(document, 'click', event => {
+  const target = event.target instanceof Element ? event.target.closest(hostSelectors.breadcrumbProject) : null;
+  if (!target || !settings.enabled) return;
+  const repo = mappedRepository(current ?? host?.draftContext?.() ?? null);
+  if (!repo) return;
+  event.preventDefault(); event.stopPropagation();
+  toggleLayer(`home:${repositoryKey(repo)}`, repo.desk, `/home/${encodeURIComponent(repo.repo)}`);
+}, { capture: true });
+
+disposers.push(() => {
+  clearInterval(deskTimer); clearInterval(missionsTimer);
+  extSidebar.remove(); layerNode.remove(); launchRow.remove(); extStyle.remove(); hideStyle.remove();
+  document.documentElement.removeAttribute('data-t3-layer-open');
+});
 listen(window, 'resize', scheduleDOM);
 
 const observer = new MutationObserver(records => {

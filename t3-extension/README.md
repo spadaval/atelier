@@ -114,26 +114,38 @@ and moving the iframe reloads it. Two loads keep their page instead: a reference
 clicked in the conversation opens that record, and Refresh reloads the page
 shown; the Desk is not told the current thread on those, only the next one.
 
-## Spike: thread panel, project home, inbox (branch `spike/t3-home`)
+## Spike: missions sidebar, layer, quick launch (branch `spike/t3-home`)
 
 A rough build to look at, against the spike Desk (`http://buildbot:3781`); untested
-beyond the screenshots in `artifacts/spike/`.
+beyond the screenshots in `artifacts/spike/` and `artifacts/spike/round2/`.
 
-- `host:thread` is `{thread, repository, children, mentioned}`: `repository` is the
-  project's Desk repository name (absent if none), `children` the threads whose
-  T3 `lineage.parentThreadId` is this thread in any connected environment (read
-  every 3 seconds), `mentioned` the IDs the reference scanner found. It is sent
-  again whenever any of these change.
-- On T3's new-thread screen (`#/draft/<id>`, project from T3's composer draft
-  store) for a project with a Desk repository, `/embed/home/<repo>` fills the
-  space under the composer, which is moved from the centre to near the top.
-- An **Inbox** row under the sidebar's search shows the count from each Desk's
-  `GET /api/inbox` (needs-human items + proposed plans + waiting threads),
-  read every minute. Clicking it opens `/embed/inbox` over T3's main area; Esc,
-  the close button, the row again, a sidebar thread or any route change close it.
-- New hooks, each a probe: `module:composer-draft-store`, `route:draft`,
-  `dom:composerOverlay`, `dom:composerStack`, `dom:sidebarSearch`,
-  `dom:mainInset`, `dom:sidebarRow`. The bridge also allows `GET /api/inbox`.
+- **Layer.** One Desk frame over T3's main area (`main[data-slot=sidebar-inset]`),
+  sidebar left usable: the inbox, mission control or the project home. Esc, the
+  close button, the same row again, any T3 route change, `desk:open-thread` and
+  `desk:key {key: "Escape"}` from its frame close it.
+- **Sidebar.** Under T3's search: the Inbox row (count from `GET /api/inbox`),
+  then a Missions section from `GET /api/sidebar`, both read every minute. A
+  mission row opens `/embed/mission/<repo>/<id>` in the layer; its chevron
+  expands it (kept in localStorage `t3-custom:atelier:missions:v1`) to its
+  threads by item, then mission threads, then "Other threads": T3 threads whose
+  `lineage.parentThreadId` or `delegatedFrom.threadId` is one of the mission's.
+  A thread T3 knows shows its live title and status and opens on click.
+- **Hiding.** T3's own list items (`li[data-thread-item="<env>:<thread>"]`) of
+  mission threads are hidden by a stylesheet; "Show all threads" turns it off.
+- **Quick launch.** On the new-thread screen of a project with a Desk
+  repository, a row under the composer from `GET /api/launch?repo=<repo>`: up to
+  three Next up chips and "Plan a mission" put a prompt in the composer
+  (`execCommand('insertText')` on T3's ProseMirror editor), "Waiting on you (N)"
+  opens the inbox.
+- **Project home.** The project button in T3's thread breadcrumb opens
+  `/embed/home/<repo>` in the layer instead of starting a new thread.
+- `host:thread` is `{thread, repository, children, mentioned}`; `children` uses
+  both creator links above.
+- Hooks, each a probe: `module:composer-draft-store`, `route:draft`,
+  `state:thread-origin`, `dom:composerOverlay`, `dom:composerStack`,
+  `dom:composerEditor`, `dom:sidebarSearch`, `dom:mainInset`, `dom:sidebarRow`,
+  `dom:threadItem`, `dom:breadcrumbProject`. The bridge also allows
+  `GET /api/inbox`, `/api/sidebar` and `/api/launch?repo=<name>`.
 
 ## Project context
 
