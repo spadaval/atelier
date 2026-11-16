@@ -1,5 +1,43 @@
 # Verification
 
+## Following the thread and in-place settings, Windows, November 15, 2026
+
+Same T3 build and test instance (port 9333) as below; Desk at
+`http://buildbot:3780` with `host:thread` (atelier item atelier-knx8,
+`desk/src/lib/follow.ts`). The daily instance was not touched.
+
+- `node test-extension.mjs` passes (16 checks, three runs in a row). The real
+  Desk app in the fixture received `host:thread` for `thread-a` on ready, read
+  `/api/ties?thread=thread-a`, and opened the inbox with "This thread holds no
+  open work."; a frame listener saw exactly `thread-b`, `thread-a` for the
+  switches and nothing more after going to Settings and back to `thread-a`;
+  removing the mount (as a T3 re-render does) reloaded the Desk and it was told
+  `thread-a` again; after a reference click the Desk stayed on the item. A
+  mapping saved from Settings left the extension root and the iframe in place
+  (no new `/embed` document request); an outside edit of `config.json`
+  reapplied the extension.
+- `node test-contract.mjs --port 9333 --thread <atelier test thread>`: all 17
+  probes ok, 5 of 320 renderer modules imported.
+- In the test instance, in the "Atelier extension test thread" of the `atelier`
+  project, opening the Desk loaded `http://buildbot:3780/embed/` and the Desk
+  went to `/embed/inbox` with "This thread holds no open work." (the thread holds
+  no Atelier work) (`artifacts/follows-thread.png`). After moving to
+  `/embed/r/atelier` inside the Desk, switching to a thread of another project
+  and back opened the inbox and its line again. Turning "Show Atelier reference
+  links" off and on in Customizations kept the extension root and the Desk
+  frame's window (a marker set in it survived); `injector.log` shows "Settings
+  saved; applied in place" twice and no reload.
+
+Found and fixed during this run: when T3 unmounted and re-rendered its panel slot
+(switching to a thread whose panel was closed and back), the moved iframe
+reloaded and the fresh Desk was not told the thread, and a post to the detached
+frame threw. Each `desk:ready` now decides afresh whether to send.
+
+Not verified: a thread that holds an item or mission in the test instance (the
+only such threads are on the Desk's own T3 server, which the test instance is
+not paired with), so the item and mission pages and their lines were seen only
+in the Desk's own tests.
+
 ## Embedded Desk and host contract, Windows, November 15, 2026
 
 T3 Code Nightly `0.1.10-nightly.20261115.4749`, Atelier Desk at

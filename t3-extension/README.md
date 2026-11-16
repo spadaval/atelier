@@ -79,9 +79,10 @@ restores native content. This is an injected surface adapter, not a registered
 public T3 plugin type. Existing native surfaces remain in T3's state; their DOM
 is left mounted and is hidden/inert only while Desk occupies the slot.
 
-The panel holds only the Desk, loaded under `/embed` (for example
-`http://buildbot:3780/embed/r/atelier`), so the Desk draws no sidebar, theme
-toggle or footer of its own. The Desk tab looks like T3's own tabs: a close icon,
+The panel holds only the Desk, opened at `/embed/` of the project's Desk (for
+example `http://buildbot:3780/embed/`), so the Desk draws no sidebar, theme
+toggle or footer of its own, and the Desk chooses the page (see Following the
+thread below). The Desk tab looks like T3's own tabs: a close icon,
 then the title of the Desk page shown, from the Desk's `desk:navigated` message.
 Three icon buttons follow T3's tab list while the Desk is shown: Refresh (reloads
 the Desk page shown), Open externally (the same page at its normal, non-embedded
@@ -101,10 +102,17 @@ an item), T3 goes to `#/<environment>/<thread>` for the connected environment
 whose threads include it. A thread in no connected environment opens nothing, and
 the panel says so in a line at its top for 8 seconds.
 
-The Desk will also be told which thread T3 shows; that message is still being
-added to the Desk's contract, so nothing is sent yet. `tellDeskThread` in
-`custom.js` is where it goes: it is already called when the Desk becomes ready
-and when T3's thread changes.
+**Following the thread.** The extension sends `host:thread` with T3's thread
+ID, whole, as in the route: after each `desk:ready` and whenever T3's route
+changes to another thread. The Desk opens the item or mission that thread holds
+now, or the inbox, with one line naming the thread's part ("This thread
+implements this item.", "This thread holds no open work."). The same thread is
+never sent twice in a row to the same Desk, so a page the human moves to in the
+Desk stays until T3 shows another thread. Every `desk:ready` is a fresh Desk that
+knows no thread, so it is told again, including when T3 re-renders its panel slot
+and moving the iframe reloads it. Two loads keep their page instead: a reference
+clicked in the conversation opens that record, and Refresh reloads the page
+shown; the Desk is not told the current thread on those, only the next one.
 
 ## Project context
 
@@ -121,9 +129,9 @@ directory paths are not used as identity. Manual mappings are keyed by T3
 environment ID and project ID. Worktrees or clones with the same repository
 identity resolve to the same Desk repository.
 
-Threads in the same repository preserve iframe navigation. Switching to an
-unmapped project shows an explicit empty state instead of the previous
-repository's content. Link that project in Customizations, or turn off Follow
+The project's repository picks which Desk the panel shows and whether it shows
+one; the page within it is the Desk's choice. Switching to an unmapped project
+shows an explicit empty state instead of the previous repository's content. Link that project in Customizations, or turn off Follow
 current project and choose a pinned repository. Clicking a valid cross-project
 reference explicitly opens that reference, without silently changing the mapping.
 
@@ -154,10 +162,15 @@ under `settings`:
 }
 ```
 
-A change in the section is sent to the injector as a `save-settings` request,
-which checks each field and rewrites `config.json`; the injector's file watcher
-then reapplies the extension, as for any edit of that file. Editing the file by
-hand works the same way. T3's localStorage keeps only view state, which threads
+A change in the section takes effect in the page at once and is sent to the
+injector as a `save-settings` request, which checks each field and rewrites
+`config.json`. The injector recognises its own write (the file is exactly what it
+wrote and nothing but `settings` changed) and only updates the script a reloaded
+T3 document will run: the running extension and the Desk iframe are not
+reloaded (`injector.log`: "Settings saved; applied in place"). Any other edit of
+`config.json`, by hand or by another program, reapplies the extension as before.
+With several T3 windows, the others pick up a saved setting when they next
+reload. T3's localStorage keeps only view state, which threads
 had the Desk open (`t3-custom:atelier:view:v1`), and sessionStorage the last
 project context while Settings is shown. Settings kept in localStorage by an
 earlier version are not carried over.
@@ -341,15 +354,20 @@ and Chrome on macOS; set `BROWSER` to use another Chromium. It checks:
 - the tab label from `desk:navigated`;
 - that messages posted by the page itself and by a frame of another origin
   change nothing;
+- `host:thread` on `desk:ready` (the real Desk reads `/api/ties` for the
+  fixture's thread and opens the inbox with "This thread holds no open work."),
+  on each switch to another thread, again to a Desk reloaded because its mount
+  was moved, and never twice in a row for the same thread (Settings and back);
 - `desk:open-thread` going to `#/env/thread-b`, and the notice for an unknown
   thread;
 - the bridge's allow-list (no action endpoints, no unconfigured Desk);
-- references, keyboard hovercards, click-through and streaming, and that a
-  mission is resolved with one `/api/records` read and never asked for as an
+- references, keyboard hovercards, click-through (the Desk stays on the
+  record) and streaming, and that a mission is resolved with one `/api/records` read and never asked for as an
   item;
 - a manual mapping saved from Settings landing in `config.json` under
-  `settings`, the extension being reapplied, and localStorage holding only view
-  state;
+  `settings` and applying without reinjecting the extension or reloading the
+  Desk iframe, an outside edit of `config.json` reapplying it, and localStorage
+  holding only view state;
 - Settings reinjection, native-surface coexistence, the renamed panel slot
   fallback, and clean removal.
 
@@ -367,11 +385,9 @@ on the Desk's side:
 1. **The Atelier slug in `/api/repos`.** The extension uses the repository name
    as the reference prefix; a repository whose slug differs needs a
    `desk.repositories` override.
-2. **Telling the Desk which thread T3 shows.** Being added to the contract;
-   `tellDeskThread` in `custom.js` is the seam for it.
-3. **Hovercard fields in `/api/records/{id}`.** Priority, holder, blockers and
+2. **Hovercard fields in `/api/records/{id}`.** Priority, holder, blockers and
    completion counts still need a second read of the item or mission route.
-4. **CORS for reads.** Reads go through the injector because the Desk sends no
+3. **CORS for reads.** Reads go through the injector because the Desk sends no
    CORS headers.
 
 Desk must already be reachable at the configured URL; the extension does not
