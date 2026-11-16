@@ -44,7 +44,8 @@ const byThreadKey = Object.fromEntries(['thread-a', 'thread-b', 'thread-c'].map(
 const state = { byThreadKey, openBrowser() {}, show({ environmentId, threadId }) { byThreadKey[environmentId + ':' + threadId].isOpen = true; for (const listener of listeners) listener(); } };
 export const s = { getState: () => state, subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener); } };`,
   'registry-fixture.js': `export const r = { '~effect/reactivity/AtomRegistry': '~effect/reactivity/AtomRegistry', get: atom => atom };`,
-  'shell-fixture.js': `export const c = { hasSnapshotAtom: () => true, stateValueAtom: environmentId => ({ status: 'live', snapshot: { _tag: 'Some', value: ${JSON.stringify(shell)} } }) };`,
+  'shell-fixture.js': `let reads = 0; const snapshot = ${JSON.stringify(shell)};
+export const c = { familyAtom() {}, mountRows() {}, snapshotAtom: environmentId => reads++ ? snapshot : { ...snapshot, threads: [] } };`,
   'index-fixture.js': `import './panel-fixture.js'; import './registry-fixture.js'; import './shell-fixture.js';
 new Worker('/assets/imageDecode.worker-fixture.js');`,
   // Like T3's image decoder worker: its top-level code must never run in the window.
@@ -85,11 +86,11 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   injector = spawn(process.execPath, [path.join(root, 't3-custom.mjs'), 'daemon', '--home', temp], { stdio: ['ignore', injectorLog.fd, injectorLog.fd] });
   await injectorLog.close();
   const evaluate = expression => page.evaluate(expression);
-  await until(() => evaluate('Boolean(document.querySelector("[data-t3-desk-launch]"))'), 'Extension initialization');
+  await until(() => evaluate('Boolean(document.querySelector("[data-t3-desk-launch]:not([hidden])"))'), 'Extension initialization and thread context');
   const discovery = await evaluate(`({ workerLoaded: performance.getEntriesByType('resource').some(entry => entry.name.includes('.worker-')), ranInWindow: globalThis.workerScriptRanInWindow ?? false, modules: __t3Custom.diagnostics().modules, probes: Object.entries(__t3Custom.diagnostics().probes).filter(([name]) => name.startsWith('module:')).map(([name, probe]) => name + '=' + probe.ok) })`);
   assert(discovery.workerLoaded, 'the fixture worker should be among the page resources');
   assert.equal(discovery.ranInWindow, false, `discovery imported a worker script into the window: ${discovery.modules.join(', ')}`);
-  assert.deepEqual(discovery.probes, ['module:workspace-panel-store=true', 'module:atom-registry=true', 'module:shell-state-atom=true']);
+  assert.deepEqual(discovery.probes, ['module:workspace-panel-store=true', 'module:atom-registry=true', 'module:thread-snapshot-atom=true']);
   console.log(`PASS: real discovery found every hook in ${discovery.modules.length} declared modules and never ran the worker script in the window`);
   await evaluate('document.querySelector("[data-t3-desk-launch]").click()');
   await until(() => evaluate('Boolean(document.querySelector("[data-right-panel-surface-content] > [data-t3-desk-mount]:not([hidden])"))'), 'Docked Desk');

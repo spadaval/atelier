@@ -33,7 +33,7 @@ async function createHostAdapter(api) {
   const shapes = {
     'workspace-panel-store': value => typeof value.subscribe === 'function' && ['byThreadKey', 'show', 'openBrowser'].every(key => key in value.getState()),
     'atom-registry': value => '~effect/reactivity/AtomRegistry' in value && typeof value.get === 'function',
-    'shell-state-atom': value => typeof value.stateValueAtom === 'function' && typeof value.hasSnapshotAtom === 'function',
+    'thread-snapshot-atom': value => ['snapshotAtom', 'familyAtom', 'mountRows'].every(key => typeof value[key] === 'function'),
   };
   // Last seen chunk names only decide the search order, so a renamed chunk costs time, not a hook.
   const likelyChunks = /\/(terminalFocus|session|utils)-[^/]*\.js$/;
@@ -70,36 +70,42 @@ async function createHostAdapter(api) {
   }
   const panelStore = found['workspace-panel-store'];
   const registry = found['atom-registry'];
-  const shell = found['shell-state-atom'];
+  const threads = found['thread-snapshot-atom'];
 
-  // T3's own copy of the environment's projects and threads. Reading it needs no request,
-  // so it works whichever way T3 authenticates to that environment.
-  async function snapshotFor(environmentId) {
-    const deadline = Date.now() + 15000;
-    while (!api.signal.aborted && Date.now() < deadline) {
-      const snapshot = registry.get(shell.stateValueAtom(environmentId))?.snapshot;
-      if (snapshot?._tag === 'Some') return snapshot.value;
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-    if (api.signal.aborted) throw new DOMException('Extension was reloaded', 'AbortError');
-    throw new Error(`T3 adapter: environment ${environmentId} had no project list within 15 seconds. Check its connection in T3, then reload scripts.`);
-  }
+  // Reads T3's own list of the environment's projects and threads, with the rows T3 loads
+  // separately for an older or child thread merged in. It needs no request, so it works
+  // whichever way T3 authenticates to that environment.
   async function context() {
-    const route = new URL(location.hash.slice(1) || '/', 'https://t3.invalid');
+    const hash = location.hash;
+    const route = new URL(hash.slice(1) || '/', 'https://t3.invalid');
     if (route.pathname.startsWith('/settings')) return null;
     const [, environmentId, encodedThreadId] = route.pathname.split('/');
     if (!environmentId || !encodedThreadId) return null;
     const threadId = decodeURIComponent(encodedThreadId);
-    const snapshot = await snapshotFor(environmentId);
-    const thread = snapshot.threads.find(thread => thread.id === threadId);
-    const project = snapshot.projects.find(project => project.id === thread?.projectId);
-    setHostProbe('route:thread', Boolean(project), project ? `#/${environmentId}/<thread>` : `#/${environmentId}/${threadId} names no thread with a project in that environment`);
-    if (!project) return null;
-    return { environmentId, threadId, projectId: project.id, projectName: project.title, repositoryKey: project.repositoryIdentity?.canonicalKey ?? null };
+    // T3 shows a cached list first and adds this thread's row when it has synchronised or
+    // loaded it, so keep looking while the route is still this thread.
+    const deadline = Date.now() + 15000;
+    let snapshot = null;
+    while (!api.signal.aborted && location.hash === hash) {
+      snapshot = registry.get(threads.snapshotAtom(environmentId));
+      const thread = snapshot?.threads.find(thread => thread.id === threadId);
+      const project = snapshot?.projects.find(project => project.id === thread?.projectId);
+      if (project) {
+        setHostProbe('route:thread', true, `#/${environmentId}/<thread>`);
+        return { environmentId, threadId, projectId: project.id, projectName: project.title, repositoryKey: project.repositoryIdentity?.canonicalKey ?? null };
+      }
+      if (Date.now() >= deadline) break;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    if (api.signal.aborted) throw new DOMException('Extension was reloaded', 'AbortError');
+    if (location.hash !== hash) return null;
+    if (!snapshot) throw new Error(`T3 adapter: environment ${environmentId} had no project list within 15 seconds. Check its connection in T3, then reload scripts.`);
+    setHostProbe('route:thread', false, `#/${environmentId}/${threadId} named no thread with a project in that environment within 15 seconds`);
+    return null;
   }
   return {
     // null means the surfaces that need this hook are off; hostProbes says why.
-    context: registry && shell ? context : null,
+    context: registry && threads ? context : null,
     panel: panelStore ? {
       state: context => panelStore.getState().byThreadKey[`${context.environmentId}:${context.threadId}`],
       // Opens T3's panel and resolves to its content slot, or to null with the missing hook recorded.

@@ -75,7 +75,7 @@ function selectedRepository() {
 }
 // The Desk panel needs T3's panel store, project context and a slot to mount in;
 // references need only the conversation DOM and otherwise open Desk externally.
-const deskHooks = ['module:workspace-panel-store', 'module:atom-registry', 'module:shell-state-atom', 'dom:panel', 'dom:panelContent'];
+const deskHooks = ['module:workspace-panel-store', 'module:atom-registry', 'module:thread-snapshot-atom', 'dom:panel', 'dom:panelContent'];
 const deskAvailable = () => Boolean(host?.panel && host?.context) && !deskHooks.some(name => hostProbes[name]?.ok === false);
 globalThis.__t3Custom.diagnostics = () => ({ probes: hostProbes, modules: hostImportedModules, context: current, mappedRepository: mappedRepository()?.repo ?? null, selectedRepository: selectedRepository()?.repo ?? null, referenceOverride, desiredOpen, deskAvailable: deskAvailable() });
 

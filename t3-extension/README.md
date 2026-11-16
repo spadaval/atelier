@@ -174,7 +174,7 @@ network-facing debugging listener is enabled.
 `host-adapter.js` names each private hook and probes it at startup:
 
 - `module:workspace-panel-store`, `module:atom-registry`,
-  `module:shell-state-atom`: found by the shape of their exports, not by
+  `module:thread-snapshot-atom`: found by the shape of their exports, not by
   chunk or minified export names (the registry is recognised by Effect's
   `~effect/reactivity/AtomRegistry` type id). Discovery only imports modules the
   renderer itself loads as modules (its entry script and `modulepreload` links),
@@ -183,8 +183,8 @@ network-facing debugging listener is enabled.
   they change it searches the rest (80 of 320 on the current build).
   `__t3Custom.diagnostics().modules` lists what it imported.
 - `route:thread`: the `#/<environment>/<thread>` route, checked when a thread is
-  opened. The thread's project and repository come from T3's own shell state
-  atom, so the adapter makes no request to the T3 server and needs none of its
+  opened. The thread's project and repository come from T3's own thread
+  snapshot atom, so the adapter makes no request to the T3 server and needs none of its
   credentials.
 - `dom:*`: the DOM attributes the panel, references and settings attach to.
   They are confirmed when first seen, since T3 renders them only on demand.
@@ -193,7 +193,8 @@ network-facing debugging listener is enabled.
 
 A missing hook is reported by name in Customizations, in `t3-custom status`, and
 in `injector.log`, and turns off only the surface that needs it: the Desk panel
-needs the panel store, the registry, the connection atom and the panel slot;
+needs the panel store, the registry, the thread snapshot atom and the panel
+slot;
 references need the conversation DOM, and open Desk in the browser while the
 panel is off; the settings section needs the settings page.
 
