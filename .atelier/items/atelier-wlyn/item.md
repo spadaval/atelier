@@ -91,7 +91,7 @@ Tests:
   Two mutations fail it as they should: dropping the draft filter fails the `--check` assertion, and skipping the checksum comparison fails the refusal assertion.
 - `test-extension.mjs` now points `releases` at its fixture server, which answers 503, so the test no longer reaches GitHub. It checks that the Customizations section shows `Release check failed: Looking up releases: GET <base>/releases: HTTP 503 Service Unavailable` with no Update button. It then writes an `update.json` reporting 0.5.0 and checks that `Update to 0.5.0` appears and that the toggle is off.
 - Locally, `node run-tests.mjs` passed both files: test-extension in 42s, run against the `atelier-desk` binary and `desk/dist` from the `atelier-spike-t3` checkout, and test-update in 2s. `scripts/t3-extension-release.sh bundle` then `verify` at `d3b82ca13` installed into an empty home, and `t3-custom check` printed `release` `0.0.0-dev.test`.
-- CI on pull request #186 at `10dbd7cfa` (code as of `d3b82ca13`): https://github.com/spadaval/atelier/actions/runs/43952390974. Its `extension` job runs `node run-tests.mjs`, which runs `test-extension.mjs` and `test-update.mjs`. The release workflow's bundle check on the same commit: https://github.com/spadaval/atelier/actions/runs/43952390934. Both were still running when this was written; the reviewer reads their outcome there.
+- CI on pull request #186 at `10dbd7cfa` (code as of `d3b82ca13`): https://github.com/spadaval/atelier/actions/runs/43952390974. Its `extension` job runs `node run-tests.mjs`, which runs `test-extension.mjs` and `test-update.mjs`. The release workflow's bundle check on the same commit: https://github.com/spadaval/atelier/actions/runs/43952390934. That run failed at `git diff --check` on a blank line at the end of this file, so its `extension` job was skipped; the release workflow's run passed. Round 2's run is linked under Responses.
 
 Not proven:
 
@@ -99,3 +99,8 @@ Not proven:
 - Nothing has run against a real published release, since none exists yet.
 - The GitHub API's unauthenticated limit is 60 requests an hour per IP address. A daily check is far under it.
 - The list is read with `per_page=100` and no paging. That holds while the newest extension release is among the 100 newest releases.
+
+### Responses
+
+- 1-4i4u.1: fixed in 99b178aa7. The item no longer ends with a blank line, and `git diff --check origin/master...HEAD` is clean. The CI run for round 2 is linked when the pull request runs it.
+- 1-4i4u.2: fixed in b723a8d77. `get` now reads the body (`json`, `text` or `arrayBuffer`) inside the same wrapper as the request. A failure while the body arrives now reads, for example, `Downloading t3-extension-0.2.0.zip: GET <url>: reading the response: terminated`. `test-update.mjs` has a new case: the fixture sends 200 with the full `Content-Length`, writes 100 bytes and drops the connection. The case asserts the message and that `VERSION` and `custom.js` are unchanged. With the wrapper removed, it fails with `actual: 'terminated'`.
