@@ -372,7 +372,7 @@ Without one it links to T3 Code's web address in a new tab, as before.
 | `type` | Fields | What the Desk does |
 | --- | --- | --- |
 | `host:theme` | `colors`: any of `background`, `foreground`, `surface`, `border`, `muted` (secondary text) and `accent`, each a CSS colour; `font`: a CSS font family list; `scheme`: `light` or `dark` | Sets its tokens from them, without a reload |
-| `host:thread` | `thread`: the identity of the thread the host is showing, as the records hold it (the form `desk:open-thread` sends) | Opens the page for what that thread holds now (below), when it names another thread than the last `host:thread` did |
+| `host:thread` | `thread`: the identity of the thread the host is showing, as the records hold it (the form `desk:open-thread` sends); `repository`, optional: the name of the Desk repository the host's project maps to, as `GET /api/repos` names it | Opens the page for what that thread holds now (below), when it names another thread than the last `host:thread` did |
 
 The theme maps onto the tokens at the top of `desk/src/styles.css`:
 `background` to `--bg`, `foreground` to `--ink`, `surface` to `--panel`,
@@ -397,13 +397,23 @@ On `host:thread` the Desk reads `GET /api/ties?thread=<identity>` and opens
 one page from the ties whose `current` is true, the first of: the item the
 thread implements, the item it reviews, the mission it leads, the mission it
 plans, the mission whose plan it reviews. With no current tie, as for a
-thread tied to nothing or only to done or dropped work, it opens the inbox.
+thread tied to nothing or only to done or dropped work, it opens the page of
+the message's `repository` (`/r/{repo}`) when `GET /api/repos` lists that
+repository and can read it, since a panel beside one thread should show
+nothing wider than that thread's project (item atelier-jzaw). It opens the
+inbox when the message names no repository, names one the Desk does not
+serve or cannot read, or the list cannot be read. The host sends the
+repository because only it knows which project a thread belongs to; a
+thread with no ties tells the Desk nothing. A thread with a current tie
+opens that tie's page, whatever `repository` says.
 It replaces the frame's history entry rather than adding one, so the host's
 back button does not walk through the threads it showed. Above that page one
-line names the thread's part, such as "This thread implements this item"
-or, on the inbox, "This thread holds no open work"; the line goes once the
+line names the thread's part, such as "This thread implements this item",
+on a repository's page "This thread holds no open work in this project", or,
+on the inbox, "This thread holds no open work"; the line goes once the
 human leaves the page. A `host:thread` that names the thread the last one
-named changes nothing, so the page the human has moved to stays; one that
+named changes nothing, even with another `repository`, so the page the
+human has moved to stays; one that
 names another thread opens that thread's page. If the read fails the page
 stays where it is, with no line, since the last thread's line no longer
 applies.
