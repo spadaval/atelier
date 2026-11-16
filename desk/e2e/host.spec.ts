@@ -325,7 +325,10 @@ test("mission control's keys select items, open threads and pages, and page the 
   await expect.poll(() => new URL(frame.url()).searchParams.get("item")).toBe("atelier-1ie1");
   await body.press("k");
   await expect.poll(selected).toBe("atelier-uwxy");
+  // Each key waits for the last to show: two keys inside one render move
+  // from the same row (atelier-zc0o).
   await body.press("j");
+  await expect.poll(selected).toBe("atelier-1ie1");
   await body.press("k");
   await expect.poll(selected).toBe("atelier-uwxy");
 

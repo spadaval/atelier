@@ -32,15 +32,22 @@ import type { ThreadsResponse } from "../src/api/ThreadsResponse";
 import type { Tie } from "../src/api/Tie";
 
 const commit = "2116defdde63afdadad2dddead0945cb50c21c42";
-/** The time `seconds` before the fixtures were loaded, as RFC 3339. */
-const ago = (seconds: number) => new Date(Date.now() - seconds * 1000).toISOString();
+/**
+ * The instant every page under test believes it is: `serve` sets the page's
+ * clock to it, and each time below is counted back from it, so an age the
+ * page shows does not depend on when the suite runs. A Friday afternoon,
+ * two days after `at`.
+ */
+export const now = Date.parse("2026-11-13T15:00:00Z");
+/** The time `seconds` before `now`, as RFC 3339. */
+const ago = (seconds: number) => new Date(now - seconds * 1000).toISOString();
 const at = "2026-11-11T03:50:46+00:00";
 /** T3 Code read 4 seconds ago. */
 const t3: T3State = { reachable: true, age_seconds: 4, error: null };
 /** T3 Code never read: these pages say threads are unavailable. */
 export const unreachable: T3State = { reachable: false, age_seconds: null, error: "T3 Code did not answer: connection refused" };
-/** Fetched from origin two minutes before the page is read. */
-export const fetched: FetchMark = { remote: "origin", at: new Date(Date.now() - 120_000).toISOString(), error: null, every_seconds: 300 };
+/** Fetched from origin two minutes before `now`. */
+export const fetched: FetchMark = { remote: "origin", at: ago(120), error: null, every_seconds: 300 };
 const thread = "thread:delegated-task:command%3Amcp%3Ad4040a34-c28b-4672-8918-87b1ffbc9fe0%3Adelegate-task%3A4e47a5ad";
 /** A Codex subagent's identity: a slash, and no T3 thread of its own. */
 export const codexChild = "019a6d2e-codex-parent/review-child:7";
@@ -877,6 +884,6 @@ export const events: HistoryEvent[] = [
 /** `/api/history` with its `days` and `ids` filters. */
 export function history(days: string | null, ids: string | null): HistoryResponse {
   const wanted = ids ? new Set(ids.split(",")) : null;
-  const since = days ? Date.now() - Number(days) * 86_400_000 : -Infinity;
+  const since = days ? now - Number(days) * 86_400_000 : -Infinity;
   return { repo: "atelier", events: events.filter((e) => Date.parse(e.at) >= since && (!wanted || wanted.has(e.id))) };
 }
