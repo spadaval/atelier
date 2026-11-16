@@ -42,6 +42,8 @@ const shell = {
     // A subagent of thread-a (delegate_task), and a thread a linked environment's agent started from thread-b.
     { id: 'thread-child', projectId: 'project-a', title: 'Child of A', status: 'idle', lineage: { parentThreadId: 'thread-a' } },
     { id: 'thread-delegated', projectId: 'project-a', title: 'Delegated from B', status: 'idle', lineage: { parentThreadId: null }, delegatedFrom: { environmentId: 'env-remote', threadId: 'thread-b', title: 'Thread B' } },
+    // An ID with a colon whose list item ends like thread-a's ("env:other:thread-a"); no mission holds it.
+    { id: 'other:thread-a', projectId: 'project-c', title: 'Other A', status: 'idle', lineage: { parentThreadId: null } },
   ],
 };
 // T3's composer drafts: a new-thread screen for the mapped project and one for the unmapped one.
@@ -458,15 +460,25 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   console.log('PASS: Missions from /api/sidebar start collapsed, expand (remembered in localStorage) to threads by item, the mission\'s threads and Other threads by lineage and delegatedFrom; a known thread opens, an unknown one is dimmed');
   // T3's own list items of those threads are hidden, with a note; the toggle shows them again.
   const listShown = () => evaluate('[...document.querySelectorAll("[data-thread-item]")].filter(node => node.getBoundingClientRect().height > 0).map(node => node.dataset.threadItem)');
-  await until(async () => JSON.stringify(await listShown()) === '["env:thread-c"]', 'Mission threads hidden from T3\'s list');
+  await until(async () => JSON.stringify(await listShown()) === '["env:thread-c","env:other:thread-a"]', 'Mission threads hidden from T3\'s list, and only they');
   assert.equal(await evaluate('document.querySelector("[data-t3-missions-hidden]").textContent'), ' · 4 hidden from T3\'s list');
   await evaluate('document.querySelector("[data-t3-show-all]").click()');
-  await until(async () => (await listShown()).length === 5, 'Show all threads');
+  await until(async () => (await listShown()).length === 6, 'Show all threads');
   assert.equal(await evaluate('document.querySelector("[data-t3-missions-hidden]").textContent'), '');
   assert.equal(await evaluate('JSON.parse(localStorage.getItem("t3-custom:atelier:missions:v1")).showAll'), true);
   await evaluate('document.querySelector("[data-t3-show-all]").click()');
-  await until(async () => (await listShown()).length === 1, 'Mission threads hidden again');
-  console.log('PASS: T3\'s list items of mission threads are hidden with an "N hidden" note, and "Show all threads" shows them again');
+  await until(async () => (await listShown()).length === 2, 'Mission threads hidden again');
+  // With the Atelier views turned off the Missions section goes, and so does the hiding.
+  await evaluate('location.hash = "/settings/general"');
+  const settingToggle = name => `document.querySelector("#t3-custom-settings").shadowRoot.querySelector('[data-setting="${name}"]')`;
+  await until(() => evaluate(`Boolean(${settingToggle('enabled')})`), 'Settings section for the views toggle');
+  await evaluate(`${settingToggle('enabled')}.click()`);
+  await until(async () => (await listShown()).length === 6 && await evaluate('!document.querySelector("[data-t3-ext-sidebar]")'), 'T3\'s list whole with the views off');
+  await evaluate(`${settingToggle('enabled')}.click()`);
+  await until(async () => (await listShown()).length === 2 && await evaluate('Boolean(document.querySelector("[data-t3-ext-sidebar]"))'), 'Hiding back with the views on');
+  await evaluate('location.hash = "/env/thread-b"');
+  await until(() => evaluate('__t3Custom.diagnostics().context?.threadId === "thread-b"'), 'Back on thread-b');
+  console.log('PASS: T3\'s list items of mission threads, and no other thread\'s, are hidden with an "N hidden" note; "Show all threads" and turning the views off show them again');
   // A mission row opens mission control in the layer, selected, with focus; the row again closes it.
   await evaluate(`${missionRow}.click()`);
   await until(async () => (await layerState())?.key === `mission:${missionKey}` && (await layerState()).shown, 'Mission control in the layer');
@@ -542,7 +554,8 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   assert(settingsText.includes(`${deskBase}: reachable`) && settingsText.includes(`atelier (${fixtureRepositoryKey})`), settingsText);
   assert(settingsText.includes('module:environment-atoms') && settingsText.includes('css:theme'), settingsText);
   await evaluate(`(()=>{const select=document.querySelector("#t3-custom-settings").shadowRoot.querySelector("#project-mapping");select.value="${deskBase}/r/atelier";select.dispatchEvent(new Event("change"))})()`);
-  const saved = await until(async () => JSON.parse(await fs.readFile(path.join(temp, 'config.json'), 'utf8')).settings, 'Settings written to config.json');
+  // The views toggle was saved earlier; wait for this mapping.
+  const saved = await until(async () => { const settings = JSON.parse(await fs.readFile(path.join(temp, 'config.json'), 'utf8')).settings; return settings?.mappings?.['env:project-c'] && settings; }, 'Settings written to config.json');
   assert.deepEqual(saved.mappings, { 'env:project-c': `${deskBase}/r/atelier` });
   assert.equal(saved.references, true);
   // A save from the settings page applies in place: no reinjection, no Desk reload.
@@ -593,6 +606,8 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   await evaluate('document.querySelector("#search-wrap input").type = "text"');
   await until(() => evaluate('__t3Custom.diagnostics().probes["dom:sidebarSearch"].ok === false && !document.querySelector("[data-t3-ext-sidebar]")'), 'Sidebar views off without T3\'s search field', 10000);
   assert.deepEqual(await evaluate('__t3Custom.diagnostics().views.sidebar'), ['dom:sidebarSearch']);
+  // Without the Missions section and its toggle, none of T3's own rows stays hidden.
+  assert.equal(await evaluate('[...document.querySelectorAll("[data-thread-item]")].filter(node => node.getBoundingClientRect().height > 0).length'), 6, 'mission threads stayed hidden without the Missions section');
   assert(await evaluate('!document.querySelector("[data-t3-desk-mount]").hidden && __t3Custom.diagnostics().deskAvailable'), 'the Desk panel went with the sidebar hook');
   await evaluate('(()=>{const link=document.querySelector("#t3-custom-root").shadowRoot.querySelector("[data-atelier-id]");link.blur();link.focus()})()');
   await until(() => evaluate('Boolean(document.querySelector("#t3-custom-root").shadowRoot.querySelector("#atelier-hovercard h3"))'), 'References without the sidebar hook');

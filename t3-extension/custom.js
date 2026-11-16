@@ -797,9 +797,15 @@ function renderMissions() {
   // T3's own list items (li[data-thread-item="<environment>:<thread>"]) of mission threads are
   // hidden with CSS, so React's nodes stay where React put them. T3's Working and Settled counts
   // still include them; the note beside the title says how many are hidden.
-  const hidden = missionView.showAll || !viewOn('hiding') ? [] : [...new Set(model.flatMap(entry => [...entry.own, ...entry.other.map(thread => thread.id)]))].filter(id => t3.has(id));
+  // Only while the Missions section is shown, with its toggle: with the views off or without the
+  // sidebar hook, T3's list is left whole.
+  const missionsShown = settings.enabled && viewOn('sidebar') && extSidebar.isConnected;
+  const hiddenIds = missionView.showAll || !viewOn('hiding') || !missionsShown ? new Set() : new Set(model.flatMap(entry => [...entry.own, ...entry.other.map(thread => thread.id)]));
+  // One exact selector per environment and thread T3 lists: a thread ID may itself hold colons,
+  // so a suffix match on ":<thread>" could hide another thread.
+  const hidden = list.filter(thread => hiddenIds.has(thread.id));
   const itemAttribute = hostSelectors.threadItem.slice(1, -1);
-  hideStyle.textContent = hidden.length ? `${hidden.map(id => `[${itemAttribute}$=${JSON.stringify(':' + id)}]`).join(',\n')} { display: none !important; }` : '';
+  hideStyle.textContent = hidden.length ? `${hidden.map(thread => `[${itemAttribute}="${CSS.escape(`${thread.environmentId}:${thread.id}`)}"]`).join(',\n')} { display: none !important; }` : '';
   missionsHidden.textContent = hidden.length ? ` · ${hidden.length} hidden from T3's list` : '';
   showAllToggle.setAttribute('aria-pressed', String(missionView.showAll));
   showAllToggle.hidden = !viewOn('hiding');
@@ -858,8 +864,11 @@ function syncSidebar() {
   expectHostDom('sidebarRow', onMain && t3Threads, 'T3 listed its threads');
   const search = viewOn('sidebar') && document.querySelector(hostSelectors.sidebarSearch);
   const group = search?.closest('[data-slot="sidebar-group"]')?.parentElement;
+  const missionsWereShown = extSidebar.isConnected;
   if (group && settings.enabled) { if (extSidebar.previousElementSibling !== group) group.after(extSidebar); }
   else extSidebar.remove();
+  // Hiding follows the section: it starts when Missions appears and stops when it goes.
+  if (extSidebar.isConnected !== missionsWereShown) renderMissions();
   const main = document.querySelector(hostSelectors.mainInset);
   const shown = Boolean(layer) && Boolean(main) && settings.enabled;
   for (const row of extSidebar.querySelectorAll('[data-layer-key]')) row.setAttribute('aria-pressed', String(shown && row.dataset.layerKey === layer.key));
