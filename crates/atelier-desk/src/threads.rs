@@ -178,7 +178,10 @@ impl Threads {
         }
         let client = self.client.as_ref()?;
         let arguments = if full {
-            serde_json::json!({"threadId": id, "limit": 4, "maxCharsPerItem": 400, "view": "activity"})
+            // Without a position T3 Code gives a thread's first items to a
+            // client with no thread of its own; before the end gives its last.
+            let newest = i32::MAX;
+            serde_json::json!({"threadId": id, "limit": 4, "maxCharsPerItem": 400, "view": "activity", "beforePosition": newest})
         } else {
             serde_json::json!({"threadId": id, "limit": 1, "maxCharsPerItem": 1})
         };

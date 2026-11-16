@@ -624,7 +624,7 @@ async fn any_thread_is_read_by_its_identity_live_or_ended() {
     assert_eq!(asked.len(), 2);
     assert_eq!(
         asked[1],
-        json!({"threadId": ended, "limit": 4, "maxCharsPerItem": 400, "view": "activity"})
+        json!({"threadId": ended, "limit": 4, "maxCharsPerItem": 400, "view": "activity", "beforePosition": i32::MAX})
     );
 
     // A thread T3 Code does not know is not found, and asked for once a minute.

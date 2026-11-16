@@ -104,6 +104,32 @@ tab names the Desk, so the Desk draws no sidebar, brand or theme toggle of
 its own, only the page, its breadcrumb and a link to the inbox, laid out for
 a panel 400 to 750 pixels wide.
 
+Inside T3 Code the Desk also gives three views made for it, which Sumeet
+settled on in a spike on 2026-11-16:
+
+- **This thread**, in the right panel beside whichever thread he is
+  reading. It shows what that thread holds, the missions it planned or
+  leads with every item and the threads on each, the other threads it
+  started, the records its conversation names, and what of all that waits
+  on him. A thread that holds, started and names nothing shows its project
+  at a glance instead. It follows him from thread to thread.
+- **Mission control**, over T3 Code's main area, for one mission: one
+  screen of panes, after Factory's Mission Control, with the active item,
+  every item and its stage, a progress log of the mission's steps, and the
+  threads at work, with keys to move between items and open their threads.
+  It stays one screen down to the width of T3 Code's main area beside its
+  sidebar.
+- **The project home**, over T3 Code's main area, for one repository:
+  what is under way now, what comes next and what later, and a strip of
+  what started and merged each day this week.
+
+The inbox opened over the main area spreads into columns. T3 Code's own
+sidebar and project strip read their missions, threads and what can start
+from the Desk too, and draw them themselves. The progress log and the
+week's strip are read from commit subjects, so they can miss a step, and
+"waited on you" marks only the items he readied and those labelled
+needs-human.
+
 Every page that reads a repository says when the Desk last fetched its
 remote. The Desk fetches each one on a timer its configuration sets, every
 five minutes on this host, so work pushed from another clone shows within
