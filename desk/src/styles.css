@@ -3402,3 +3402,415 @@ a.q:hover {
   padding: 2px;
   font-size: 11.5px;
 }
+
+/* ------------------------------------------------- spike round 3: mission control */
+/* One terminal-style screen after Factory's Mission Control: bordered panes
+   that scroll inside themselves, monospace and dense, no page scroll. */
+.shell.embedded.bare .main:has(.mcx) {
+  height: 100dvh;
+}
+.mcx {
+  --mcx-line: color-mix(in srgb, var(--ink) 22%, var(--bg));
+  height: 100dvh;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) minmax(84px, 19%) auto;
+  gap: 10px;
+  padding: 8px 12px 6px;
+  font: 12.5px/1.55 var(--mono);
+  color: var(--ink-2);
+  background: var(--bg);
+  overflow: hidden;
+}
+.mcx button {
+  font: inherit;
+  color: inherit;
+}
+.mcx .dim {
+  color: var(--ink-3);
+}
+.mcx-top {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  min-width: 0;
+  white-space: nowrap;
+}
+.mcx-top b {
+  color: var(--ink);
+  font-weight: 700;
+}
+.mcx-top .ttl {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ink-2);
+}
+.mcx-top .right {
+  margin-left: auto;
+  color: var(--ink-3);
+}
+.mcx-top .sep {
+  margin: 0 8px;
+}
+.mcx-state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.mcx-state b {
+  color: var(--ink);
+  letter-spacing: 0.06em;
+}
+.sdot {
+  font-size: 11px;
+}
+.sdot.running {
+  color: var(--run);
+}
+.sdot.agreed {
+  color: var(--ink-3);
+}
+.sdot.proposed {
+  color: var(--you);
+}
+.sdot.done {
+  color: var(--ok);
+}
+.mcx-state .bar {
+  flex: 1;
+  height: 8px;
+  border: 1px solid var(--mcx-line);
+  background: color-mix(in srgb, var(--ink) 6%, var(--bg));
+}
+.mcx-state .bar i {
+  display: block;
+  height: 100%;
+  background: var(--ok);
+}
+.mcx-state .num {
+  color: var(--ink);
+}
+.mcx-main {
+  display: grid;
+  grid-template-columns: minmax(0, 6fr) minmax(0, 4fr);
+  gap: 12px;
+  min-height: 0;
+}
+.mcx-right {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
+}
+.mcx-pane {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--mcx-line);
+  border-radius: 3px;
+  padding: 12px 10px 6px;
+  margin-top: 6px;
+}
+.mcx-pane > header {
+  position: absolute;
+  top: -9px;
+  left: 8px;
+  right: 8px;
+  display: flex;
+  justify-content: space-between;
+  pointer-events: none;
+  line-height: 16px;
+}
+.mcx-pane .ptitle,
+.mcx-pane .pright {
+  padding: 0 6px;
+  background: var(--bg);
+  color: var(--ink);
+  font-weight: 600;
+  pointer-events: auto;
+}
+.mcx-pane .pright {
+  color: var(--ink-3);
+  font-weight: 400;
+}
+.mcx-pane .pbody {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.mcx-title {
+  margin: 0 0 6px;
+  color: var(--ink);
+  font-weight: 600;
+}
+.mcx-kv {
+  display: grid;
+  grid-template-columns: 10ch minmax(0, 1fr);
+  margin: 0 0 8px;
+}
+.mcx-kv dt {
+  color: var(--ink-3);
+}
+.mcx-kv dd {
+  margin: 0;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mcx h4 {
+  margin: 8px 0 2px;
+  font-size: inherit;
+  font-weight: 600;
+  color: var(--ink);
+}
+.mcx-bullets {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.mcx-bullets li {
+  display: grid;
+  grid-template-columns: 2ch minmax(0, 1fr);
+}
+.mcx-bullets:not(.ticks) li::before {
+  content: "•";
+  color: var(--ink-3);
+}
+.mcx-bullets .mark {
+  color: var(--ink-3);
+}
+.mcx-bullets li.on .mark {
+  color: var(--ok);
+}
+.mcx-bullets li.on {
+  color: var(--ink-3);
+}
+.mcx-more {
+  margin: 0 0 0 2ch;
+  color: var(--ink-3) !important;
+}
+.mcx-more:hover {
+  color: var(--ink) !important;
+}
+.mcx-quote {
+  margin: 10px 0 6px;
+  padding: 2px 0 2px 12px;
+  border-left: 2px solid var(--mcx-line);
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  font-style: italic;
+}
+.mcx-pr {
+  margin: 6px 0 0;
+}
+.mcx-pr a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--mcx-line);
+}
+.mcx-pr .ci.passing {
+  color: var(--ok);
+}
+.mcx-pr .ci.failing {
+  color: var(--bad);
+}
+.mcx-pr .ci.pending {
+  color: var(--run);
+}
+.mcx-row {
+  display: grid;
+  grid-template-columns: 2ch 14ch minmax(0, 1fr) auto;
+  gap: 8px;
+  width: 100%;
+  padding: 0 6px;
+  text-align: left;
+  white-space: nowrap;
+}
+.mcx-row:hover {
+  background: var(--hover);
+}
+.mcx-row.on {
+  background: color-mix(in srgb, var(--you) 16%, var(--bg));
+  color: var(--ink);
+}
+.mcx-row .id {
+  color: var(--ink-3);
+  overflow: hidden;
+}
+.mcx-row .t {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mcx-row .mark {
+  color: var(--ink-3);
+}
+.mcx-row.done .mark {
+  color: var(--ok);
+}
+.mcx-row.building .mark,
+.mcx-row.in_review .mark,
+.mcx-row.changes_requested .mark,
+.mcx-row.approved .mark {
+  color: var(--run);
+}
+.mcx-row.done,
+.mcx-row.dropped {
+  color: var(--ink-3);
+}
+.mcx .st.building {
+  color: var(--run);
+}
+.mcx .st.in_review {
+  color: var(--review);
+}
+.mcx .st.changes_requested,
+.mcx .st.stuck {
+  color: var(--bad);
+}
+.mcx .st.approved,
+.mcx .st.done {
+  color: var(--ok);
+}
+.mcx .st.draft,
+.mcx .st.dropped {
+  color: var(--ink-3);
+}
+.mcx-log {
+  display: grid;
+  grid-template-columns: 8ch minmax(0, 1fr) auto;
+  gap: 8px;
+  width: 100%;
+  height: 20px;
+  padding: 0 4px;
+  text-align: left;
+  white-space: nowrap;
+}
+.mcx-log:hover {
+  background: var(--hover);
+}
+.mcx-log .when {
+  color: var(--ink-3);
+}
+.mcx-log .what {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mcx-log .what.ok {
+  color: var(--ink);
+}
+.mcx-log .what.bad {
+  color: color-mix(in srgb, var(--bad) 80%, var(--ink));
+}
+.mcx-log .what.you {
+  color: var(--you-text);
+}
+.pager button {
+  padding: 0 4px;
+  color: var(--ink-2);
+}
+.pager button:disabled {
+  color: var(--ink-3);
+  opacity: 0.4;
+}
+.mcx-worker {
+  display: grid;
+  grid-template-columns: 2ch 12ch 14ch 12ch 12ch minmax(0, 1fr);
+  gap: 8px;
+  width: 100%;
+  padding: 1px 6px;
+  text-align: left;
+  white-space: nowrap;
+}
+.mcx-worker:hover {
+  background: var(--hover);
+}
+.mcx-worker .dot.running {
+  color: var(--run);
+}
+.mcx-worker .dot.waiting {
+  color: var(--you);
+}
+.mcx-worker .dot.done {
+  color: var(--ok);
+}
+.mcx-worker .role {
+  color: var(--ink);
+}
+.mcx-worker .on,
+.mcx-worker .model,
+.mcx-worker .time {
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mcx-worker .what {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ink-2);
+}
+.mcx-worker.live .what {
+  color: var(--ink);
+}
+.mcx-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 22px;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  height: 20px;
+}
+.mcx-keys kbd {
+  font: inherit;
+  color: var(--ink);
+  font-weight: 600;
+  margin-right: 4px;
+}
+.mcx-loading {
+  color: var(--ink-3);
+}
+/* Below 1000 pixels the panes stack and the page scrolls. */
+@media (max-width: 999px) {
+  .shell.embedded.bare .main:has(.mcx) {
+    height: auto;
+  }
+  .mcx {
+    height: auto;
+    grid-template-rows: none;
+    overflow: visible;
+  }
+  .mcx-main,
+  .mcx-right {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+  }
+  .mcx-pane.active .pbody,
+  .mcx-pane.items .pbody,
+  .mcx-pane.workers .pbody {
+    max-height: 50vh;
+  }
+  .mcx-pane .pbody {
+    flex: none;
+  }
+  .mcx-pane.log .pbody {
+    height: 260px;
+  }
+  .mcx-top .ttl {
+    display: none;
+  }
+  .mcx-worker {
+    grid-template-columns: 2ch 12ch 14ch minmax(0, 1fr);
+  }
+  .mcx-worker .model,
+  .mcx-worker .time {
+    display: none;
+  }
+}
+.mcx .ci {
+  border: 0;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+}

@@ -136,8 +136,8 @@ function EmbeddedShell({ children }: { children: ReactNode }) {
   useEffect(report, [location.pathname, location.search]);
   useFollowThread();
   // The project home sits under T3's composer and brings no chrome of its own.
-  // Spike, round 2: the home is a roadmap for the main area and keeps the top bar.
-  const bare = false;
+  // Mission control draws its own top bar, as Factory's does.
+  const bare = location.pathname.startsWith("/mission/");
   const main = useRef<HTMLDivElement>(null);
   const hosted = useConnected();
   useEffect(() => {

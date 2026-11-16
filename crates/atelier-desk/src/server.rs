@@ -821,13 +821,15 @@ fn last_commit(dir: &Path, branch: &str) -> Option<String> {
 #[derive(Deserialize)]
 struct IdQuery {
     id: String,
+    #[serde(default)]
+    full: Option<String>,
 }
 
 /// Spike: any thread T3 Code knows by its identity, live or ended.
-async fn thread(State(desk): State<Arc<Desk>>, Query(IdQuery { id }): Query<IdQuery>) -> Response {
+async fn thread(State(desk): State<Arc<Desk>>, Query(IdQuery { id, full }): Query<IdQuery>) -> Response {
     blocking(move || {
-        desk.threads
-            .info(&id)
+        let found = if full.is_some() { desk.threads.info_full(&id) } else { desk.threads.info(&id) };
+        found
             .ok_or_else(|| Failure::NotFound(format!("T3 Code knows no thread {id}.")))
     })
     .await

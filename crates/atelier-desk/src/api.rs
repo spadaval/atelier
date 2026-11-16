@@ -455,6 +455,10 @@ pub struct ThreadInfo {
     pub parent: Option<String>,
     pub model: Option<String>,
     pub live: bool,
+    /// Spike, with `full`: when its latest run started.
+    pub started_at: Option<String>,
+    /// Spike, with `full`: its latest tool call or message, in one line.
+    pub last_line: Option<String>,
 }
 
 /// `GET /api/threads`.

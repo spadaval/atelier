@@ -160,10 +160,39 @@ struct WaitingThread {
 }
 
 #[derive(Serialize)]
+struct Named {
+    id: String,
+    title: String,
+}
+
+#[derive(Serialize)]
+struct Holder {
+    identity: String,
+    title: Option<String>,
+}
+
+#[derive(Serialize)]
+struct InMotion {
+    id: String,
+    title: String,
+    /// `building`, `in review N`, `changes requested` or `approved`.
+    stage: String,
+    /// Since its latest recorded step.
+    age_seconds: Option<i64>,
+    holder: Option<Holder>,
+    /// Added: whether its holder is a live thread in T3 Code.
+    live: bool,
+}
+
+#[derive(Serialize)]
 pub struct Launch {
     ready: Vec<Ready>,
     waiting: usize,
     threads_waiting: Vec<WaitingThread>,
+    /// The top three things waiting on the human here.
+    waiting_items: Vec<Named>,
+    /// Every started item here, live first.
+    in_motion: Vec<InMotion>,
 }
 
 /// `GET /api/launch?repo=`: what can start now in one repository and
@@ -172,7 +201,12 @@ pub async fn launch(State(desk): State<Arc<Desk>>, Query(RepoQuery { repo }): Qu
     blocking(move || {
         let dir = desk.served(&repo)?;
         let missing = || format!("No repository {repo}.");
-        let motion = desk.repo_route(&repo, "motion", missing, |r| read::motion(r, &repo))?;
+        let mut motion = desk.repo_route(&repo, "motion", missing, |r| read::motion(r, &repo))?;
+        let snapshot0 = desk.threads.snapshot();
+        for item in &mut motion.items {
+            let agents = item.holder.iter_mut().chain(item.reviewer.iter_mut());
+            agents.for_each(|agent| snapshot0.join(std::slice::from_mut(agent)));
+        }
         let inbox = desk.repo_route(&repo, "inbox", missing, |r| read::inbox(r, &repo))?;
         let ready = (motion.ready.iter())
             .filter(|r| !r.needs_human)
@@ -192,10 +226,49 @@ pub async fn launch(State(desk): State<Arc<Desk>>, Query(RepoQuery { repo }): Qu
             })
             .collect();
         let needs: usize = inbox.needs_human.iter().map(|g| g.items.len()).sum();
+        // Waiting on him: proposed plans first (they go ahead unless he
+        // stops them), then needs-human items by priority.
+        let mut needing: Vec<&crate::api::ItemRow> = inbox.needs_human.iter().flat_map(|g| &g.items).collect();
+        let rank = |p: &crate::api::Priority| match p {
+            crate::api::Priority::Critical => 0,
+            crate::api::Priority::High => 1,
+            crate::api::Priority::Medium => 2,
+            crate::api::Priority::Low => 3,
+        };
+        needing.sort_by_key(|i| rank(&i.priority));
+        let waiting_items = (inbox.proposed.iter().map(|m| Named { id: m.id.clone(), title: m.title.clone() }))
+            .chain(needing.iter().map(|i| Named { id: i.id.clone(), title: i.title.clone() }))
+            .take(3)
+            .collect();
+        let recent = events(&dir, Some(60)).unwrap_or_default();
+        let now = chrono_now();
+        let mut in_motion: Vec<InMotion> = (motion.items.iter())
+            .map(|item| {
+                let submits = recent.iter().filter(|e| e.id == item.id && e.kind == "submitted").count();
+                let stage = match item.status {
+                    crate::api::Status::InReview => format!("in review {}", submits.max(1)),
+                    crate::api::Status::ChangesRequested => "changes requested".into(),
+                    crate::api::Status::Approved => "approved".into(),
+                    _ => "building".into(),
+                };
+                let last = recent.iter().find(|e| e.id == item.id).map(|e| e.at.clone()).or(item.changed_at.clone());
+                let age_seconds = last.and_then(|at| seconds_since(&at, now));
+                let agent = if matches!(item.status, crate::api::Status::InReview) { item.reviewer.as_ref().or(item.holder.as_ref()) } else { item.holder.as_ref() };
+                let live = agent.and_then(|a| a.thread.as_ref()).is_some();
+                let holder = agent.map(|a| Holder {
+                    identity: a.identity.clone(),
+                    title: a.thread.as_ref().map(|t| t.title.clone()).or_else(|| desk.threads.info(&a.identity).map(|i| i.title)),
+                });
+                InMotion { id: item.id.clone(), title: item.title.clone(), stage, age_seconds, holder, live }
+            })
+            .collect();
+        in_motion.sort_by_key(|i| (!i.live, i.age_seconds.unwrap_or(i64::MAX)));
         Ok(Launch {
             ready,
             waiting: needs + inbox.proposed.len() + threads_waiting.len(),
             threads_waiting,
+            waiting_items,
+            in_motion,
         })
     })
     .await
@@ -475,4 +548,16 @@ pub async fn roadmap(State(desk): State<Arc<Desk>>, Query(RepoQuery { repo }): Q
         Ok(Roadmap { repo, loose })
     })
     .await
+}
+
+/// Seconds since the Unix epoch, now.
+fn chrono_now() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
+}
+
+/// Seconds from an RFC 3339 time to `now`, read with `date`.
+fn seconds_since(at: &str, now: i64) -> Option<i64> {
+    let out = Command::new("date").args(["-d", at, "+%s"]).output().ok()?;
+    let then: i64 = String::from_utf8(out.stdout).ok()?.trim().parse().ok()?;
+    Some((now - then).max(0))
 }
