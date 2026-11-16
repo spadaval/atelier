@@ -19,3 +19,7 @@ hosting = "github"
 install-updater = false
 # On pull requests, only plan the release; tag pushes build and publish it
 pr-run-mode = "plan"
+# Only a tag starting with v releases atelier, so the T3 Code extension's
+# tags (t3-extension-v*, .github/workflows/t3-extension-release.yml) do not
+# start this release. dist names the workflow v-release.yml for it.
+tag-namespace = "v"
