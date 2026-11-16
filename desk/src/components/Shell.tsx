@@ -141,7 +141,9 @@ function useFollowThread(): Place | null {
         // names a repository the Desk serves; otherwise the inbox.
         let repository: string | null = null;
         if (tied(body.ties) === null && host.repository !== null) {
-          const repos = await read<ReposResponse>(api.repos());
+          // A list that cannot be read, by status or by a failed request,
+          // gives the inbox: the thread's ties were read, so its page moves.
+          const repos = await read<ReposResponse>(api.repos()).catch(() => null);
           if (repos !== null && serves(repos, host.repository)) repository = host.repository;
         }
         if (stale) return;

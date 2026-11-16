@@ -225,6 +225,17 @@ test("a thread whose ties cannot be read leaves the page, without the last threa
   await expect(frame.locator(".thread-part")).toHaveCount(0);
 });
 
+test("a repository list whose request fails gives the inbox, not the last thread's page", async ({ page }) => {
+  const frame = await host(page, listed, "/", [listed]);
+  await expect.poll(async () => (await received(page)).map((m) => m.data.type)).toContain("desk:navigated");
+  await send(page, { type: "host:thread", thread: tied.implementer });
+  await expect.poll(() => at(frame)).toBe("/embed/r/atelier/item/atelier-uwxy");
+  await page.route("**/api/repos", (route) => route.abort("connectionreset"));
+  await send(page, { type: "host:thread", thread: tied.none, repository: "atelier" });
+  await expect.poll(() => at(frame)).toBe("/embed/inbox");
+  await expect(frame.locator(".thread-part")).toHaveText("This thread holds no open work.");
+});
+
 test("a host whose origin is not listed cannot move the Desk", async ({ page }) => {
   const frame = await host(page, stranger, "/", [listed]);
   await send(page, { type: "host:thread", thread: tied.implementer });

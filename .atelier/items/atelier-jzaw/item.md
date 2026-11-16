@@ -71,4 +71,12 @@ when the thread holds nothing and the host names the project.
   and in "Following the thread".
 
 Checks: in `desk/`, `pnpm test` (60 passed), `pnpm build`, and `pnpm e2e`
-(116 passed, desktop and phone).
+(118 passed, desktop and phone).
+
+### Round 2
+
+Fixed review 1-8m4g's finding: a `GET /api/repos` request that rejects,
+such as a reset connection, now gives the inbox like a non-OK status does,
+instead of falling into the ties read's catch and leaving the last thread's
+page. `desk/e2e/host.spec.ts` adds a test that aborts the request after a
+thread switch and expects the inbox with its line.
