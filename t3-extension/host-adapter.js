@@ -33,7 +33,7 @@ async function createHostAdapter(api) {
   const shapes = {
     'workspace-panel-store': value => typeof value.subscribe === 'function' && ['byThreadKey', 'show', 'openBrowser'].every(key => key in value.getState()),
     'atom-registry': value => '~effect/reactivity/AtomRegistry' in value && typeof value.get === 'function',
-    'prepared-connection-atom': value => typeof value.preparedConnectionValueAtom === 'function',
+    'shell-state-atom': value => typeof value.stateValueAtom === 'function' && typeof value.hasSnapshotAtom === 'function',
   };
   // Last seen chunk names only decide the search order, so a renamed chunk costs time, not a hook.
   const likelyChunks = /\/(terminalFocus|session|utils)-[^/]*\.js$/;
@@ -70,48 +70,36 @@ async function createHostAdapter(api) {
   }
   const panelStore = found['workspace-panel-store'];
   const registry = found['atom-registry'];
-  const connections = found['prepared-connection-atom'];
+  const shell = found['shell-state-atom'];
 
-  async function connectionFor(environmentId) {
+  // T3's own copy of the environment's projects and threads. Reading it needs no request,
+  // so it works whichever way T3 authenticates to that environment.
+  async function snapshotFor(environmentId) {
     const deadline = Date.now() + 15000;
     while (!api.signal.aborted && Date.now() < deadline) {
-      const prepared = registry.get(connections.preparedConnectionValueAtom(environmentId));
-      // Option is deliberately unwrapped here; credentials stay inside T3's renderer.
-      const connection = prepared?.value ?? prepared;
-      if (connection?.httpBaseUrl) return connection;
+      const snapshot = registry.get(shell.stateValueAtom(environmentId))?.snapshot;
+      if (snapshot?._tag === 'Some') return snapshot.value;
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     if (api.signal.aborted) throw new DOMException('Extension was reloaded', 'AbortError');
-    throw new Error(`T3 adapter: environment ${environmentId} did not connect within 15 seconds. Check its connection in T3, then reload scripts.`);
+    throw new Error(`T3 adapter: environment ${environmentId} had no project list within 15 seconds. Check its connection in T3, then reload scripts.`);
   }
-  const shells = new Map();
   async function context() {
     const route = new URL(location.hash.slice(1) || '/', 'https://t3.invalid');
     if (route.pathname.startsWith('/settings')) return null;
     const [, environmentId, encodedThreadId] = route.pathname.split('/');
     if (!environmentId || !encodedThreadId) return null;
     const threadId = decodeURIComponent(encodedThreadId);
-    let cached = shells.get(environmentId);
-    if (!cached || Date.now() - cached.at > 30000 || !cached.value.threads.some(thread => thread.id === threadId)) {
-      const connection = await connectionFor(environmentId);
-      const headers = { 'x-t3-orchestration-protocol': '2' };
-      if (connection.httpAuthorization?.token) headers.Authorization = `Bearer ${connection.httpAuthorization.token}`;
-      const url = connection.httpBaseUrl.replace(/\/$/, '') + '/api/orchestration/shell';
-      const response = await fetch(url, { headers, signal: api.signal });
-      setHostProbe('http:orchestration-shell', response.ok, `GET ${url}: HTTP ${response.status}`);
-      if (!response.ok) throw new Error(`Read T3 project metadata for ${environmentId}: GET ${url}: HTTP ${response.status}`);
-      const value = await response.json();
-      cached = { at: Date.now(), value }; shells.set(environmentId, cached);
-    }
-    const thread = cached.value.threads.find(thread => thread.id === threadId);
-    const project = cached.value.projects.find(project => project.id === thread?.projectId);
+    const snapshot = await snapshotFor(environmentId);
+    const thread = snapshot.threads.find(thread => thread.id === threadId);
+    const project = snapshot.projects.find(project => project.id === thread?.projectId);
     setHostProbe('route:thread', Boolean(project), project ? `#/${environmentId}/<thread>` : `#/${environmentId}/${threadId} names no thread with a project in that environment`);
     if (!project) return null;
     return { environmentId, threadId, projectId: project.id, projectName: project.title, repositoryKey: project.repositoryIdentity?.canonicalKey ?? null };
   }
   return {
     // null means the surfaces that need this hook are off; hostProbes says why.
-    context: registry && connections ? context : null,
+    context: registry && shell ? context : null,
     panel: panelStore ? {
       state: context => panelStore.getState().byThreadKey[`${context.environmentId}:${context.threadId}`],
       // Opens T3's panel and resolves to its content slot, or to null with the missing hook recorded.

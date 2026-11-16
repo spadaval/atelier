@@ -32,6 +32,10 @@ async function control(action) {
   if (code) throw new Error(`${action}: ${output}`);
   return JSON.parse(output);
 }
+const shell = {
+  projects: [{ id: 'project-a', title: 'atelier', repositoryIdentity: { canonicalKey: fixtureRepositoryKey } }, { id: 'project-c', title: 'unlinked', repositoryIdentity: { canonicalKey: 'elsewhere/unlinked' } }],
+  threads: [{ id: 'thread-a', projectId: 'project-a' }, { id: 'thread-b', projectId: 'project-a' }, { id: 'thread-c', projectId: 'project-c' }],
+};
 // Modules shaped like T3's private hooks, so the real discovery code runs. Their names
 // differ from T3's chunk names, so discovery searches every declared module.
 const chunks = {
@@ -40,15 +44,11 @@ const byThreadKey = Object.fromEntries(['thread-a', 'thread-b', 'thread-c'].map(
 const state = { byThreadKey, openBrowser() {}, show({ environmentId, threadId }) { byThreadKey[environmentId + ':' + threadId].isOpen = true; for (const listener of listeners) listener(); } };
 export const s = { getState: () => state, subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener); } };`,
   'registry-fixture.js': `export const r = { '~effect/reactivity/AtomRegistry': '~effect/reactivity/AtomRegistry', get: atom => atom };`,
-  'connection-fixture.js': `export const c = { preparedConnectionValueAtom: environmentId => ({ _tag: 'Some', value: { httpBaseUrl: location.origin } }) };`,
-  'index-fixture.js': `import './panel-fixture.js'; import './registry-fixture.js'; import './connection-fixture.js';
+  'shell-fixture.js': `export const c = { hasSnapshotAtom: () => true, stateValueAtom: environmentId => ({ status: 'live', snapshot: { _tag: 'Some', value: ${JSON.stringify(shell)} } }) };`,
+  'index-fixture.js': `import './panel-fixture.js'; import './registry-fixture.js'; import './shell-fixture.js';
 new Worker('/assets/imageDecode.worker-fixture.js');`,
   // Like T3's image decoder worker: its top-level code must never run in the window.
   'imageDecode.worker-fixture.js': `if (typeof window !== 'undefined') globalThis.workerScriptRanInWindow = true;`,
-};
-const shell = {
-  projects: [{ id: 'project-a', title: 'atelier', repositoryIdentity: { canonicalKey: fixtureRepositoryKey } }, { id: 'project-c', title: 'unlinked', repositoryIdentity: { canonicalKey: 'elsewhere/unlinked' } }],
-  threads: [{ id: 'thread-a', projectId: 'project-a' }, { id: 'thread-b', projectId: 'project-a' }, { id: 'thread-c', projectId: 'project-c' }],
 };
 const html = `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; connect-src 'self' blob: http: https: ws: wss:; style-src 'self' 'unsafe-inline'; frame-src 'self' blob: http: https:; worker-src 'self' blob:"><title>Atelier extension fixture</title><script type="module" src="/assets/index-fixture.js"></script>${Object.keys(chunks).filter(name => !name.includes('worker')).map(name => `<link rel="modulepreload" href="/assets/${name}">`).join('')}<style>html{--background:#202124;--foreground:#eee;--border:#555;--secondary:#353639;--primary:#9bbcff}body{margin:0;background:#202124;color:#eee;font:14px system-ui}#app{height:100vh;display:flex;flex-direction:column}header{padding:12px;border-bottom:1px solid #555}#workspace{display:flex;flex:1;min-height:0}[data-workspace-area=conversation]{flex:1;padding:20px;min-width:0;overflow:auto}[data-workspace-area=panel]{width:750px;display:flex;flex-direction:column;min-width:0}[data-right-panel-tabbar]{height:52px;display:flex;align-items:center}[data-right-panel-tabbar]>div{display:flex;align-items:center}[data-right-panel-surface-content]{position:relative;flex:1;min-height:0}#native-content{padding:20px}#settings{overflow:auto;padding:24px;max-width:850px}#composer{margin-top:30px;border:1px solid #555;padding:12px}</style></head><body><div id="app"><header><span data-panel-layout-controls>Workspace controls</span></header><div id="workspace"><main data-workspace-area="conversation"><h1>Conversation</h1><p id="reference-prose">Investigate ${referenceId}, then <code>${referenceId}</code>. Ignore other-xabc and not-${referenceId}-extra.</p><pre>${referenceId}</pre><div id="composer" contenteditable="true">${referenceId}</div><p id="stream"></p></main><div data-workspace-area="panel"><div data-right-panel-tabbar><div><div data-active-tab="true"><button id="native-tab">Files</button></div><button aria-label="Add panel surface">+</button></div></div><div data-right-panel-surface-content><div id="native-content"><button id="native-control">Native file viewer</button></div></div></div></div><div id="settings" hidden><div data-settings-page-scroll><div><h1>General</h1><p>T3 settings fixture</p></div></div></div></div><script>
 addEventListener('hashchange',()=>{const settings=location.hash.includes('/settings');document.querySelector('#settings').hidden=!settings;document.querySelector('#workspace').style.display=settings?'none':'flex'});
@@ -57,7 +57,6 @@ const server = http.createServer((request, response) => {
   const url = new URL(request.url, 'http://fixture');
   const chunk = chunks[url.pathname.replace('/assets/', '')];
   if (chunk) { response.writeHead(200, { 'content-type': 'text/javascript' }); response.end(chunk); return; }
-  if (url.pathname === '/api/orchestration/shell') { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(shell)); return; }
   response.writeHead(200, { 'content-type': 'text/html' }); response.end(html);
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -90,7 +89,7 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   const discovery = await evaluate(`({ workerLoaded: performance.getEntriesByType('resource').some(entry => entry.name.includes('.worker-')), ranInWindow: globalThis.workerScriptRanInWindow ?? false, modules: __t3Custom.diagnostics().modules, probes: Object.entries(__t3Custom.diagnostics().probes).filter(([name]) => name.startsWith('module:')).map(([name, probe]) => name + '=' + probe.ok) })`);
   assert(discovery.workerLoaded, 'the fixture worker should be among the page resources');
   assert.equal(discovery.ranInWindow, false, `discovery imported a worker script into the window: ${discovery.modules.join(', ')}`);
-  assert.deepEqual(discovery.probes, ['module:workspace-panel-store=true', 'module:atom-registry=true', 'module:prepared-connection-atom=true']);
+  assert.deepEqual(discovery.probes, ['module:workspace-panel-store=true', 'module:atom-registry=true', 'module:shell-state-atom=true']);
   console.log(`PASS: real discovery found every hook in ${discovery.modules.length} declared modules and never ran the worker script in the window`);
   await evaluate('document.querySelector("[data-t3-desk-launch]").click()');
   await until(() => evaluate('Boolean(document.querySelector("[data-right-panel-surface-content] > [data-t3-desk-mount]:not([hidden])"))'), 'Docked Desk');

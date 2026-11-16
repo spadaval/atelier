@@ -174,7 +174,7 @@ network-facing debugging listener is enabled.
 `host-adapter.js` names each private hook and probes it at startup:
 
 - `module:workspace-panel-store`, `module:atom-registry`,
-  `module:prepared-connection-atom`: found by the shape of their exports, not by
+  `module:shell-state-atom`: found by the shape of their exports, not by
   chunk or minified export names (the registry is recognised by Effect's
   `~effect/reactivity/AtomRegistry` type id). Discovery only imports modules the
   renderer itself loads as modules (its entry script and `modulepreload` links),
@@ -182,8 +182,10 @@ network-facing debugging listener is enabled.
   last seen chunk names are tried first, so it normally imports 4 modules; if
   they change it searches the rest (80 of 320 on the current build).
   `__t3Custom.diagnostics().modules` lists what it imported.
-- `http:orchestration-shell` and `route:thread`: the project metadata read and
-  the `#/<environment>/<thread>` route, checked when a thread is opened.
+- `route:thread`: the `#/<environment>/<thread>` route, checked when a thread is
+  opened. The thread's project and repository come from T3's own shell state
+  atom, so the adapter makes no request to the T3 server and needs none of its
+  credentials.
 - `dom:*`: the DOM attributes the panel, references and settings attach to.
   They are confirmed when first seen, since T3 renders them only on demand.
   Opening Desk checks that T3's panel renders its content slot within 3 seconds;

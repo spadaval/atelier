@@ -16,7 +16,7 @@ read-only with the daily T3 server; the daily instance was never attached to.
   (`performance.timeOrigin` unchanged).
 - Injection works with T3's content security policy in force: the Desk iframe
   loads `http://buildbot:3780/r/atelier` and renders; no `Page.reload` is used.
-- `test-contract.mjs` reports all 13 hooks present and that discovery imported
+- `test-contract.mjs` reports all 12 hooks present and that discovery imported
   4 of 320 declared renderer modules (80 when the chunk-name hint misses), no
   workers; with a renamed store shape and settings selector, or a non-existent
   thread, it exits 1 naming them.
