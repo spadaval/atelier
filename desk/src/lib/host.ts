@@ -18,7 +18,8 @@ export type DeskMessage =
   | { type: "desk:ready"; version: 1 }
   | { type: "desk:navigated"; path: string; title: string }
   | { type: "desk:open-thread"; thread: string }
-  | { type: "desk:resized"; height: number };
+  | { type: "desk:resized"; height: number }
+  | { type: "desk:key"; key: "Escape" };
 
 /** Where the contract stands: the listed origins, and the parent's once it is known to be one of them. */
 /** Spike: everything a `host:thread` message says about the host's thread. */
@@ -172,6 +173,12 @@ export async function startHost() {
   state.origins = origins.filter((o) => typeof o === "string" && o !== "*" && o !== "null");
   if (state.origins.length === 0) return;
   window.addEventListener("message", receive);
+  // Escape that nothing in the Desk handled goes to the host, so it can
+  // close its panel or overlay. A Desk control that uses Escape calls
+  // preventDefault, and then the host is not told.
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !event.defaultPrevented) send({ type: "desk:key", key: "Escape" });
+  });
   new MutationObserver(report).observe(document.head, { subtree: true, childList: true, characterData: true });
   const parent = parentOrigin();
   if (parent !== null && state.origins.includes(parent)) connect(parent);

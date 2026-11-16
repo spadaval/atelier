@@ -113,6 +113,12 @@ export const api = {
   missions: (repo: string) => `/api/repos/${seg(repo)}/missions`,
   mission: (repo: string, id: string) => `/api/repos/${seg(repo)}/missions/${seg(id)}`,
   item: (repo: string, id: string) => `/api/repos/${seg(repo)}/items/${seg(id)}`,
+  sidebar: () => "/api/sidebar",
+  launch: (repo: string) => `/api/launch?repo=${seg(repo)}`,
+  history: (repo: string, opts: { days?: number; ids?: string[] } = {}) =>
+    `/api/history?repo=${seg(repo)}${opts.days ? `&days=${opts.days}` : ""}${opts.ids ? `&ids=${seg(opts.ids.join(","))}` : ""}`,
+  checks: (repo: string, pr: number) => `/api/checks?repo=${seg(repo)}&pr=${pr}`,
+  roadmap: (repo: string) => `/api/roadmap?repo=${seg(repo)}`,
   thread: (id: string) => `/api/thread?id=${seg(id)}`,
   record: (id: string) => `/api/records/${seg(id)}`,
   ties: (thread: string) => `/api/ties?thread=${seg(thread)}`,
@@ -158,6 +164,7 @@ export function useAll<T>(paths: string[], interval = 30_000): { data: (T | null
 export const to = {
   repo: (repo: string) => `/r/${seg(repo)}`,
   home: (repo: string) => `/home/${seg(repo)}`,
+  control: (repo: string, id: string) => `/mission/${seg(repo)}/${seg(id)}`,
   agents: (repo?: string) => (repo === undefined ? "/agents" : `/r/${seg(repo)}/agents`),
   proposed: () => "/proposed",
   motion: () => "/motion",

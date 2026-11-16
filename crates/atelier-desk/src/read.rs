@@ -1171,3 +1171,16 @@ fn judged_words(judged: Judged) -> String {
 fn time(time: &Time) -> String {
     time.to_rfc3339()
 }
+
+/// Spike: the items in no mission that are not done or dropped.
+pub fn loose(repo: &mut Repo) -> Result<Option<Vec<ItemRow>>> {
+    use atelier_core::model::Status as S;
+    let records = Records::read(repo)?;
+    let mut rows = Vec::new();
+    for entry in records.entries.iter() {
+        if entry.mission.is_none() && !matches!(entry.status, S::Done | S::Dropped) {
+            rows.push(item_row(entry, &records.items)?);
+        }
+    }
+    Ok(Some(rows))
+}

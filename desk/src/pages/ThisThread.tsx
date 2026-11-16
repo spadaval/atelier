@@ -1,4 +1,5 @@
 import { Check, ChevronRight, Clock, ExternalLink, GitPullRequest, Square, Target } from "lucide-react";
+import { useState } from "react";
 import { Link } from "react-router";
 import type { Agent } from "../api/Agent";
 import type { InboxResponse } from "../api/InboxResponse";
@@ -13,8 +14,9 @@ import { Crumbs } from "../components/Crumbs";
 import { ScopeBar, Skeleton, StatusGlyph } from "../components/ui";
 import { api, to, useAll, useData } from "../lib/api";
 import { openThread, useHostContext, type HostContext } from "../lib/host";
-import { countsLine, finished, statusName, statusTitle, total } from "../lib/words";
+import { countsLine, finished, roleWords, statusName, statusTitle, total } from "../lib/words";
 import { Block, ProjectGlance, Row, since, who } from "./Home";
+import { useThreads } from "./MissionControl";
 
 /** T3 Code's statuses for a thread whose work has ended. */
 const ENDED = new Set(["completed", "cancelled", "failed", "interrupted", "rolled_back"]);
@@ -169,6 +171,77 @@ function ChildRow({ id, info, ties, now }: { id: string; info: ThreadInfo | null
   );
 }
 
+/** One thread on an item, as a chip that opens it in T3 Code. */
+function ThreadChip({ agent, info }: { agent: Agent; info: ThreadInfo | undefined }) {
+  const status = agent.thread?.status ?? info?.status ?? "unknown";
+  const title = agent.thread?.title ?? info?.title ?? who(null, agent.identity);
+  const model = agent.thread?.model ?? info?.model ?? null;
+  return (
+    <button type="button" className="chip" onClick={() => openThread(agent.identity)} title={`${title}\n${roleWords[agent.role]}, ${status}${model ? `, ${model}` : ""}`}>
+      <span className={`pulse ${ENDED.has(status) ? "none" : status}`} aria-hidden />
+      <span className="role">{agent.role === "implementer" ? "impl" : agent.role === "reviewer" ? "review" : agent.role}</span>
+      <span className="st">{status.replaceAll("_", " ")}</span>
+      {model ? <span className="mono">{model.replace(/^claude-|^gpt-/, "")}</span> : null}
+    </button>
+  );
+}
+
+/** A mission this thread planned or leads, with its items and the threads on each. */
+function MissionWork({ tie, page, infos }: { tie: Tie; page: MissionPage | null; infos: Map<string, ThreadInfo> }) {
+  const counts = page?.mission.counts ?? [];
+  const items = page?.items ?? [];
+  return (
+    <section className="hold-card work-card">
+      <header>
+        <span className={`glyph ${page?.mission.status === "done" ? "ok" : page?.mission.in_progress ? "run" : "plain"}`}>
+          <Target size={15} aria-hidden />
+        </span>
+        <Link to={to.control(tie.repo, tie.id)} className="hold-title" title="Open mission control">
+          <span className="id">{tie.id}</span> {page?.mission.title ?? tie.title}
+        </Link>
+        <span className="tally" title={countsLine(counts)}>
+          {finished(counts)}/{total(counts)} done
+        </span>
+      </header>
+      <p className="hold-role">
+        This thread {VERBS[tie.role][tie.current ? 0 : 1]} this mission{page?.mission.status === "done" ? ", which is done" : ""}.
+      </p>
+      {page ? <ScopeBar counts={counts} tall /> : <Skeleton rows={2} />}
+      {items.length > 0 ? (
+        <div className="list hold-items">
+          {items.map((i) => {
+            const agents = (page?.threads ?? []).filter((a) => a.item === i.id && (a.role === "implementer" || a.role === "reviewer"));
+            return (
+              <div key={i.id} className="work-item">
+                <Link to={to.item(tie.repo, i.id)} className="glance-row">
+                  <StatusGlyph status={i.status} />
+                  <span className="id">{i.id}</span>
+                  <span className="title">{i.title}</span>
+                  <span className="note">
+                    <span className="stage">{statusName(i.status)}</span>
+                  </span>
+                </Link>
+                {agents.length > 0 ? (
+                  <div className="chips">
+                    {agents.map((a, at) => (
+                      <ThreadChip key={`${a.identity}${at}`} agent={a} info={infos.get(a.identity)} />
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+      <div className="hold-foot">
+        <Link to={to.control(tie.repo, tie.id)} className="more">
+          Mission control <ChevronRight size={13} aria-hidden />
+        </Link>
+      </div>
+    </section>
+  );
+}
+
 function MentionRow({ record }: { record: RecordName }) {
   const href = record.kind === "item" ? to.item(record.repo, record.id) : to.mission(record.repo, record.id);
   return (
@@ -201,10 +274,16 @@ function ThreadView({ context }: { context: HostContext }) {
   const missionTies = unique(current.filter((t) => t.kind === "mission"));
   const items = useAll<ItemPage>(itemTies.map((t) => api.item(t.repo, t.id)));
   const missions = useAll<MissionPage>(missionTies.map((t) => api.mission(t.repo, t.id)));
+  // Missions this thread planned or leads, done or not.
+  const workTies = unique(all.filter((t) => t.kind === "mission" && (t.role === "planner" || t.role === "lead")));
+  const work = useAll<MissionPage>(workTies.map((t) => api.mission(t.repo, t.id)));
+  const workAgents = work.data.flatMap((p) => (p?.threads ?? []).filter((a) => a.item !== null).map((a) => a.identity));
+  const workInfos = useThreads(workAgents);
   const childInfo = useAll<ThreadInfo>(context.children.map(api.thread));
   const childTies = useAll<TiesResponse>(context.children.map(api.ties));
   const named = useAll<RecordName>(context.mentioned.map(api.record));
   const now = Date.now();
+  const [showDone, setShowDone] = useState(false);
 
   if (!ties.data || !inbox.data || childTies.loading || named.loading) return <Skeleton rows={6} />;
 
@@ -219,6 +298,7 @@ function ThreadView({ context }: { context: HostContext }) {
   const records = new Set<string>([...current.map((t) => t.id), ...mentioned.map((r) => r.id)]);
   for (const t of childTies.data) for (const tie of t?.ties ?? []) if (tie.current) records.add(tie.id);
   for (const m of missions.data) for (const i of m?.items ?? []) records.add(i.id);
+  for (const m of work.data) if (m && m.mission.status !== "done") for (const i of m.items) records.add(i.id);
   const threads = new Set([context.thread, ...context.children]);
   const waitingItems = inbox.data.repos.flatMap((r) =>
     r.needs_human.flatMap((g) => g.items.filter((i) => records.has(i.id) || (g.mission !== null && records.has(g.mission))).map((row) => ({ repo: r.repo, row }))),
@@ -228,7 +308,9 @@ function ThreadView({ context }: { context: HostContext }) {
   const waits = waitingItems.length + waitingThreads.length + waitingPlans.length;
 
   const holds = itemTies.length + missionTies.length;
-  const empty = holds === 0 && context.children.length === 0 && mentioned.length === 0 && waits === 0;
+  // A child that no record names: the work above does not show it.
+  const others = context.children.map((id, at) => ({ id, at })).filter(({ at }) => (childTies.data[at]?.ties ?? []).length === 0);
+  const empty = holds === 0 && workTies.length === 0 && others.length === 0 && mentioned.length === 0 && waits === 0;
   const earlier = tieLine(all.filter((t) => !t.current));
 
   return (
@@ -286,10 +368,22 @@ function ThreadView({ context }: { context: HostContext }) {
             </section>
           ) : null}
 
-          {context.children.length > 0 ? (
-            <Block title="Started" tally={context.children.length}>
-              {context.children.map((id, at) => (
-                <ChildRow key={id} id={id} info={childInfo.data[at] ?? null} ties={childTies.data[at]?.ties ?? []} now={now} />
+          {workTies.length > 0 ? (
+            <section className="glance-block">
+              <div className="glance-head">
+                <h3>Work under this thread</h3>
+                <span className="tally">{workTies.length}</span>
+              </div>
+              {workTies.map((t, at) => (
+                <MissionWork key={`${t.repo}/${t.id}`} tie={t} page={work.data[at] ?? null} infos={workInfos} />
+              ))}
+            </section>
+          ) : null}
+
+          {others.length > 0 ? (
+            <Block title="Other threads it started" tally={others.length}>
+              {others.map(({ id, at }) => (
+                <ChildRow key={id} id={id} info={childInfo.data[at] ?? null} ties={[]} now={now} />
               ))}
             </Block>
           ) : null}
@@ -300,14 +394,21 @@ function ThreadView({ context }: { context: HostContext }) {
                 <MentionRow key={r.id} record={r} />
               ))}
               {doneMentioned.length > 0 ? (
-                <details className="fold-done">
-                  <summary>
-                    <ChevronRight size={13} aria-hidden /> {doneMentioned.length} done
-                  </summary>
-                  {doneMentioned.map((r) => (
-                    <MentionRow key={r.id} record={r} />
+                <>
+                  <div className="done-divider">
+                    Done or dropped: {doneMentioned.length} of {mentioned.length}
+                  </div>
+                  {(showDone ? doneMentioned : doneMentioned.slice(0, 4)).map((r) => (
+                    <div key={r.id} className="done-row">
+                      <MentionRow record={r} />
+                    </div>
                   ))}
-                </details>
+                  {doneMentioned.length > 4 && !showDone ? (
+                    <button type="button" className="fold" onClick={() => setShowDone(true)}>
+                      Show {doneMentioned.length - 4} more done
+                    </button>
+                  ) : null}
+                </>
               ) : null}
             </Block>
           ) : null}

@@ -7,6 +7,8 @@ use crate::api::{
     ProposedRepo, ProposedResponse, RepoSummary, ReposResponse, SessionRequest, StopAction,
     ThreadsResponse, TiesResponse,
 };
+mod spike;
+
 use crate::config::Config;
 use crate::fetch::{self, Fetches};
 use crate::news::News;
@@ -365,6 +367,11 @@ pub fn router_for(desk: Arc<Desk>) -> Router {
         .route("/api/ties", get(ties))
         .route("/api/threads", get(threads))
         .route("/api/thread", get(thread))
+        .route("/api/sidebar", get(spike::sidebar))
+        .route("/api/launch", get(spike::launch))
+        .route("/api/history", get(spike::history))
+        .route("/api/checks", get(spike::checks))
+        .route("/api/roadmap", get(spike::roadmap))
         .route("/api/proposed", get(proposed))
         .route("/api/motion", get(motion))
         .route("/api/disputed", get(disputed))

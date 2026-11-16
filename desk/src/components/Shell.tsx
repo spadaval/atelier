@@ -136,7 +136,8 @@ function EmbeddedShell({ children }: { children: ReactNode }) {
   useEffect(report, [location.pathname, location.search]);
   useFollowThread();
   // The project home sits under T3's composer and brings no chrome of its own.
-  const bare = location.pathname.startsWith("/home/");
+  // Spike, round 2: the home is a roadmap for the main area and keeps the top bar.
+  const bare = false;
   const main = useRef<HTMLDivElement>(null);
   const hosted = useConnected();
   useEffect(() => {

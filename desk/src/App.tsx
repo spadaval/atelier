@@ -10,7 +10,8 @@ import { DisputedPage } from "./pages/Disputed";
 import { MotionPage } from "./pages/Motion";
 import { ProposedPage } from "./pages/Proposed";
 import { ReposPage } from "./pages/Repos";
-import { HomePage } from "./pages/Home";
+import { MissionControlPage } from "./pages/MissionControl";
+import { RoadmapPage } from "./pages/Roadmap";
 import { ThisThreadPage } from "./pages/ThisThread";
 
 export function App() {
@@ -20,7 +21,8 @@ export function App() {
         <Route path="/" element={<ReposPage />} />
         <Route path="/inbox" element={<InboxPage />} />
         <Route path="/t" element={<ThisThreadPage />} />
-        <Route path="/home/:repo" element={<HomePage />} />
+        <Route path="/home/:repo" element={<RoadmapPage />} />
+        <Route path="/mission/:repo/:id" element={<MissionControlPage />} />
         <Route path="/proposed" element={<ProposedPage />} />
         <Route path="/motion" element={<MotionPage />} />
         <Route path="/disputed" element={<DisputedPage />} />
