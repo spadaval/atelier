@@ -227,7 +227,9 @@ let keepThread = null;
 function tellDeskThread() {
   if (!deskReady || !iframe.contentWindow || !current || current.threadId === threadSent) return;
   threadSent = current.threadId;
-  iframe.contentWindow.postMessage({ type: 'host:thread', thread: current.threadId }, deskOrigin());
+  // The repository lets the Desk show this project, not the system inbox, for a thread that holds nothing.
+  const repository = selectedRepository()?.repo;
+  iframe.contentWindow.postMessage({ type: 'host:thread', thread: current.threadId, ...(repository ? { repository } : {}) }, deskOrigin());
 }
 function openThread(threadId) {
   if (!host?.findThread) { notify(`Cannot open thread ${threadId}: T3 hook module:environment-atoms is missing (see Customizations).`); return; }
