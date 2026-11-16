@@ -71,13 +71,14 @@ What changed from the spike:
 - **Server.** The reads moved from `server/spike.rs` to `server/views.rs`,
   their types to `api.rs` with `ts-rs` (enums for the spike's string
   states, so the JSON is unchanged). Commands run through `bounded::run`,
-  which kills one past its deadline: `git log` 15 seconds, `gh pr view` 15,
-  `git for-each-ref` 10. History (`history.rs`) is read once per change of
+  whose deadline covers reading their output too: `git log` 15 seconds,
+  `gh pr view` 15, `git for-each-ref` 10. History (`history.rs`) is read once per change of
   the repository's commits through the Desk's own cache, not once per
   request, and filtered by `days` and `ids` in memory; it sorts by parsed
   time, since sorting the text put commits with other offsets out of order.
-  `changed_at` comes from one `git for-each-ref` per request instead of a
-  `git log` per item. Ages are computed with `chrono`, not by running
+  `changed_at` comes from one `git for-each-ref`, kept with the
+  repository's commits and shared by `/api/motion` and `/api/launch`,
+  instead of a `git log` per item on every request. Ages are computed with `chrono`, not by running
   `date` per item. The thread cache is bounded at 500 entries and drops
   stale ones; `/api/thread` refuses an identity that is empty, longer than
   512 characters or holds a control character. `/api/checks` keeps at most
@@ -96,8 +97,12 @@ What changed from the spike:
   a page he had moved to. Now only another thread opens `/t`; a change for
   the same thread updates `/t` where it is shown. This keeps the rule the
   contract had before ("the same thread again leaves the page alone").
-- **This thread** draws when its ties or the inbox cannot be read: a banner
-  names the failure, and it no longer claims the thread holds nothing.
+- **Failed reads.** This thread, the project glance and the project home
+  name a read that failed in a banner and draw what they could read; This
+  thread no longer claims a thread holds nothing when its ties failed.
+- **Children.** This thread lists a thread it started under "Other threads
+  it started" unless all that child works on now is drawn above (in Holds or
+  Work under this thread); the spike hid every child with any tie.
 - **Mission control** stacks below 860 pixels (was 1000), leaves 44 pixels
   clear at the top right, and wraps its top bar when stacked, which
   overflowed by 220 pixels at 420 wide.
@@ -129,3 +134,11 @@ elsewhere.
 changes). The progress log could read it instead of commit subjects and stop
 being approximate; I kept subjects, as the brief asks, and left that for a
 later item.
+
+### Responses
+
+- 1-e3g8.1: fixed in c395e4aa3. The deadline covers draining both pipes; a unit test runs `sh -c 'sleep 30 & exit 0'` with a 300 ms limit.
+- 1-e3g8.2: fixed in c395e4aa3. A child is listed unless all its current ties are drawn above, with its ties on its row; `host.spec.ts` covers a tieless parent whose child implements an item, and a lead whose child's item is in its mission.
+- 1-e3g8.3: fixed in c395e4aa3. The project home shows the roadmap's error and its missions; `views.spec.ts` fails `/api/roadmap`.
+- 1-e3g8.4: fixed in c395e4aa3. This thread and the project glance show the inbox's error and draw the rest; `host.spec.ts` fails `/api/inbox` for both.
+- 1-e3g8.5: fixed in c395e4aa3. Branch times are read through the Desk's cache keyed on the repository's commits; `views.rs` checks a second motion and launch build nothing, and a new commit is read.
