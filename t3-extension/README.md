@@ -122,7 +122,8 @@ beyond the screenshots in `artifacts/spike/` and `artifacts/spike/round2/`.
 - **Layer.** One Desk frame over T3's main area (`main[data-slot=sidebar-inset]`),
   sidebar left usable: the inbox, mission control or the project home. Esc, the
   close button, the same row again, any T3 route change, `desk:open-thread` and
-  `desk:key {key: "Escape"}` from its frame close it.
+  `desk:key {key: "Escape"}` from its frame close it. The frame gets focus as the
+  layer appears, so the Desk's keys work at once.
 - **Sidebar.** Under T3's search: the Inbox row (count from `GET /api/inbox`),
   then a Missions section from `GET /api/sidebar`, both read every minute. A
   mission row opens `/embed/mission/<repo>/<id>` in the layer; its chevron
@@ -132,11 +133,16 @@ beyond the screenshots in `artifacts/spike/` and `artifacts/spike/round2/`.
   A thread T3 knows shows its live title and status and opens on click.
 - **Hiding.** T3's own list items (`li[data-thread-item="<env>:<thread>"]`) of
   mission threads are hidden by a stylesheet; "Show all threads" turns it off.
-- **Quick launch.** On the new-thread screen of a project with a Desk
-  repository, a row under the composer from `GET /api/launch?repo=<repo>`: up to
-  three Next up chips and "Plan a mission" put a prompt in the composer
-  (`execCommand('insertText')` on T3's ProseMirror editor), "Waiting on you (N)"
-  opens the inbox.
+  T3's Working and Settled counts still include them; the Missions title says
+  "N hidden from T3's list" instead.
+- **Project strip.** On the new-thread screen of a project with a Desk
+  repository, a 176px strip under T3's composer controls, as wide as the
+  composer, from `GET /api/launch?repo=<repo>`: the project name (opens the
+  project home layer) and "Plan a mission" on its header line, then three cards,
+  Waiting on you (opens the inbox), In motion (opens the holder's thread when T3
+  knows it, else the item in the layer) and Next up (puts a start prompt in the
+  composer with `execCommand('insertText')`; never sends). Under 700px of
+  composer width the In motion card goes. Missing fields count as empty.
 - **Project home.** The project button in T3's thread breadcrumb opens
   `/embed/home/<repo>` in the layer instead of starting a new thread.
 - `host:thread` is `{thread, repository, children, mentioned}`; `children` uses

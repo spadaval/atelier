@@ -624,7 +624,7 @@ listen(window, 'message', event => {
   if (!layerFrame.desk || event.source !== layerFrame.iframe.contentWindow || event.origin !== new URL(layerFrame.desk).origin) return;
   const message = event.data;
   if (!message || typeof message !== 'object') return;
-  if (message.type === 'desk:ready') { layerFrame.ready = true; sendLayerTheme(true); }
+  if (message.type === 'desk:ready') { layerFrame.ready = true; sendLayerTheme(true); if (layer) layerFrame.iframe.focus(); }
   else if (message.type === 'desk:open-thread' && typeof message.thread === 'string') { openThread(message.thread); closeLayer(); }
   else if (message.type === 'desk:key' && message.key === 'Escape') closeLayer();
 });
@@ -637,13 +637,15 @@ function openLayer(key, desk, path) {
     Object.assign(layerFrame, { desk, path, ready: false, theme: '' });
     layerFrame.iframe.src = `${desk}/embed${path}`;
   }
-  scheduleDOM();
+  // The layer follows at once, not on the next DOM pass.
+  syncSidebar();
 }
-function closeLayer() { if (!layer) return; layer = null; scheduleDOM(); }
+function closeLayer() { if (!layer) return; layer = null; syncSidebar(); }
 const toggleLayer = (key, desk, path) => layer?.key === key ? closeLayer() : openLayer(key, desk, path);
 const layerClose = element('button', { 'data-t3-layer-close': '', 'aria-label': 'Close', title: 'Close (Esc)', html: icons.close });
 const layerNode = element('div', { 'data-t3-layer': '', hidden: '' }, layerFrame.iframe, layerClose);
 listen(layerClose, 'click', closeLayer);
+globalThis.__t3Custom.layerState = () => ({ layer, hidden: layerNode.hidden, connected: layerNode.isConnected, frame: layerFrame.iframe.src, ready: layerFrame.ready });
 listen(document, 'keydown', event => { if (event.key === 'Escape' && layer) closeLayer(); });
 // Going to a thread in the sidebar, or anywhere else in T3, closes the layer.
 listen(document, 'click', event => { if (event.target instanceof Element && event.target.closest(hostSelectors.sidebarRow)) closeLayer(); }, { capture: true });
@@ -692,14 +694,30 @@ const extStyle = element('style', { text: `
   [data-t3-layer-close] { position: absolute; top: 8px; right: 12px; z-index: 1; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--foreground); cursor: pointer; -webkit-app-region: no-drag; }
   [data-t3-layer-close]:hover { background: var(--accent); }
   [data-t3-layer-open] [data-sidebar-row][aria-current] { background: transparent !important; }
-  [data-t3-launch] { position: absolute; z-index: 21; display: flex; flex-wrap: nowrap; overflow: hidden; align-items: center; gap: 6px; padding: 0 12px; font-size: 12px; color: var(--muted-foreground); }
-  [data-t3-launch] button { display: inline-flex; align-items: center; gap: 6px; max-width: 260px; height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--card); color: var(--foreground); font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; overflow: hidden; }
-  [data-t3-launch] button:hover { background: var(--accent); }
-  [data-t3-launch] > * { flex-shrink: 0; } [data-t3-launch] > button[data-next] { flex-shrink: 1; min-width: 96px; }
-  [data-t3-launch] button > span { overflow: hidden; text-overflow: ellipsis; }
-  [data-t3-launch] code { font-size: 11px; color: var(--muted-foreground); }
-  [data-t3-launch] [data-t3-launch-label] { margin-right: 2px; }
-  [data-t3-launch] [data-error] { color: var(--destructive); }
+  [data-t3-strip] { position: absolute; z-index: 21; height: 176px; display: flex; flex-direction: column; gap: 8px; padding: 0 2px; font-size: 13px; color: var(--foreground); }
+  [data-t3-strip] button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: start; }
+  [data-t3-strip-head] { display: flex; align-items: center; justify-content: space-between; height: 24px; flex-shrink: 0; padding: 0 4px; }
+  [data-t3-strip-project] { font-size: 12px; color: var(--muted-foreground) !important; text-decoration: underline; text-decoration-color: color-mix(in oklab, currentColor 35%, transparent); text-underline-offset: 3px; }
+  [data-t3-strip-project]:hover { color: var(--foreground) !important; }
+  [data-t3-strip-plan] { font-size: 12px !important; height: 24px; padding: 0 10px !important; border: 1px solid var(--border) !important; border-radius: 8px; color: var(--foreground); }
+  [data-t3-strip-plan]:hover { background: var(--accent) !important; }
+  [data-t3-cards] { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  [data-t3-strip][data-narrow] [data-t3-cards] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  [data-t3-strip][data-narrow] [data-t3-card-motion] { display: none; }
+  [data-t3-card-motion] { display: contents; }
+  [data-t3-card] { min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 1px; padding: 8px 6px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; }
+  [data-t3-strip] [data-t3-card-head] { display: flex; align-items: center; gap: 6px; padding: 0 6px 4px; font-size: 12px; font-weight: 500; color: var(--muted-foreground) !important; flex-shrink: 0; }
+  button[data-t3-card-head]:hover { color: var(--foreground) !important; }
+  [data-t3-card-count] { font-variant-numeric: tabular-nums; font-weight: 400; }
+  [data-t3-card-row] { display: flex; flex-direction: column; justify-content: center; min-width: 0; padding: 4px 6px !important; border-radius: 6px; line-height: 1.3; }
+  [data-t3-card-row]:hover { background: var(--accent) !important; }
+  [data-t3-row-line] { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+  [data-t3-strip] code { font-size: 11px; color: var(--muted-foreground); flex-shrink: 0; }
+  [data-t3-row-title] { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  [data-t3-row-meta] { flex-shrink: 0; font-size: 11px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+  [data-t3-row-faint] { font-size: 11px; color: var(--muted-foreground); opacity: .8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  [data-t3-card-empty] { padding: 4px 6px; font-size: 12px; color: var(--muted-foreground); }
+  [data-t3-strip-error] { font-size: 12px; color: var(--muted-foreground); padding: 4px; }
 ` });
 document.head.append(extStyle);
 
@@ -709,9 +727,10 @@ const inboxRow = element('div', { 'data-t3-side-row': '', 'data-t3-inbox-row': '
   element('span', { 'data-t3-side-icon': '', html: icons2.inbox }), element('span', { 'data-t3-side-label': '', text: 'Inbox' }), inboxCount);
 const keyActivate = node => listen(node, 'keydown', event => { if (event.target === node && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); node.click(); } });
 listen(inboxRow, 'click', () => toggleLayer('inbox', deskUrls[0], '/inbox')); keyActivate(inboxRow);
+const missionsHidden = element('span', { 'data-t3-missions-hidden': '' });
 const showAllToggle = element('button', { 'aria-pressed': 'false', title: 'Show threads that belong to a mission in T3\'s own list too', text: 'Show all threads' });
 const missionsList = element('div', { 'data-t3-missions-list': '' });
-const missionsSection = element('div', { 'data-t3-missions': '' }, element('div', { 'data-t3-missions-head': '' }, element('span', { text: 'Missions' }), showAllToggle), missionsList);
+const missionsSection = element('div', { 'data-t3-missions': '' }, element('div', { 'data-t3-missions-head': '' }, element('span', {}, document.createTextNode('Missions'), missionsHidden), showAllToggle), missionsList);
 const extSidebar = element('div', { 'data-t3-ext-sidebar': '' }, inboxRow, missionsSection);
 
 // View state in localStorage: which missions are expanded, and whether T3's list shows all threads.
@@ -754,6 +773,8 @@ function renderMissions() {
   // CSS, so React's nodes stay where React put them.
   const hidden = missionView.showAll ? [] : [...new Set(model.flatMap(entry => [...entry.own, ...entry.other.map(thread => thread.id)]))].filter(id => t3.has(id));
   hideStyle.textContent = hidden.length ? `${hidden.map(id => `${hostSelectors.threadItem.slice(0, -1)}$=${JSON.stringify(':' + id)}]`).join(',\n')} { display: none !important; }` : '';
+  // T3's Working and Settled counts still include these threads; the note says how many are hidden.
+  missionsHidden.textContent = hidden.length ? ` · ${hidden.length} hidden from T3's list` : '';
   showAllToggle.setAttribute('aria-pressed', String(missionView.showAll));
   showAllToggle.title = missionView.showAll ? 'T3\'s list shows every thread' : `${hidden.length} mission threads are hidden from T3's list`;
   const signature = JSON.stringify([model.map(entry => [entry.key, entry.mission, entry.other.map(thread => [thread.id, thread.title, thread.status])]), [...t3.values()].map(thread => [thread.id, thread.title, thread.status]), missionView.expanded, sidebarErrors, current?.threadId]);
@@ -812,7 +833,12 @@ function syncSidebar() {
   for (const row of extSidebar.querySelectorAll('[data-layer-key]')) row.setAttribute('aria-pressed', String(shown && row.dataset.layerKey === layer.key));
   document.documentElement.toggleAttribute('data-t3-layer-open', shown);
   if (shown && layerNode.parentElement !== main) main.append(layerNode);
+  // The Desk's pages take keys (mission control is keyboard-driven): its frame gets focus as the
+  // layer appears, and again on desk:ready for a page still loading.
+  const appearing = shown && layerNode.hidden;
   layerNode.hidden = !shown;
+  if (appearing) layerFrame.iframe.focus();
+  if (!shown && document.activeElement === layerFrame.iframe) layerFrame.iframe.blur();
 }
 
 // The count: needs-human items, proposed plans and waiting threads, across repositories and Desks.
@@ -835,37 +861,66 @@ const readDesks = () => { void readInbox(); void readSidebar(); };
 readDesks();
 const deskTimer = setInterval(readDesks, 60000);
 
-// Quick launch: one row under the new-thread composer for a project with a Desk repository, from
-// GET /api/launch?repo=<repo>. A chip puts a prompt in the composer; it is never sent.
-const launchRow = element('div', { 'data-t3-launch': '', hidden: '' });
-let launchKey = null;
+// Project strip: under the new-thread composer of a project with a Desk repository, three small
+// cards from GET /api/launch?repo=<repo>: Waiting on you, In motion, Next up. Fields the Desk does
+// not send yet count as empty. A Next up row puts a prompt in the composer; it is never sent.
+const strip = element('div', { 'data-t3-strip': '', hidden: '' });
+// The composer's width changes without a window resize (panels, sidebar); follow the canvas.
+const stripResize = new ResizeObserver(() => scheduleDOM());
+disposers.push(() => stripResize.disconnect());
+let launchKey = null; let launchAt = 0;
 // T3's composer is a ProseMirror (TipTap) editor: select its content and insert the text with
 // execCommand('insertText'), which fires the beforeinput/input events ProseMirror handles.
 function setComposerText(text) {
   const editor = document.querySelector(hostSelectors.composerEditor);
-  if (!editor) { api.reportError(new Error(`Quick launch: T3's composer editor (${hostSelectors.composerEditor}) is not on screen`)); return; }
+  if (!editor) { api.reportError(new Error(`Project strip: T3's composer editor (${hostSelectors.composerEditor}) is not on screen`)); return; }
   editor.focus();
   getSelection().selectAllChildren(editor);
-  if (!document.execCommand('insertText', false, text)) api.reportError(new Error('Quick launch: the composer refused execCommand insertText'));
+  if (!document.execCommand('insertText', false, text)) api.reportError(new Error('Project strip: the composer refused execCommand insertText'));
+}
+const age = seconds => seconds < 3600 ? `${Math.max(1, Math.round(seconds / 60))}m` : seconds < 86400 ? `${Math.round(seconds / 3600)}h` : `${Math.round(seconds / 86400)}d`;
+function stripCard(title, count, rows, empty, onHeader) {
+  const head = element(onHeader ? 'button' : 'div', { 'data-t3-card-head': '' }, element('span', { text: title }), element('span', { 'data-t3-card-count': '', text: String(count) }));
+  if (onHeader) head.addEventListener('click', onHeader);
+  return element('div', { 'data-t3-card': '' }, head, ...(rows.length ? rows : [element('div', { 'data-t3-card-empty': '', text: empty })]));
+}
+function stripRow(onClick, title, ...children) {
+  const node = element('button', { 'data-t3-card-row': '', title }, ...children);
+  node.addEventListener('click', onClick);
+  return node;
 }
 async function readLaunch(repo) {
   const key = repositoryKey(repo);
-  launchRow.replaceChildren(element('span', { text: 'Reading next work…' }));
   let data;
   try { data = await api.request('desk-get', { desk: repo.desk, path: `/api/launch?repo=${encodeURIComponent(repo.repo)}` }); }
-  catch (error) { if (launchKey === key) launchRow.replaceChildren(element('span', { 'data-error': '', text: `GET ${repo.desk}/api/launch?repo=${repo.repo}: ${error.message}` })); return; }
+  catch (error) { if (launchKey === key) strip.replaceChildren(element('div', { 'data-t3-strip-error': '', text: `GET ${repo.desk}/api/launch?repo=${repo.repo}: ${error.message}` })); return; }
   if (api.signal.aborted || launchKey !== key) return;
-  const chip = (content, title, onClick, next) => { const node = element('button', { title, ...(next ? { 'data-next': '' } : {}) }, ...content); node.addEventListener('click', onClick); return node; };
-  const short = text => text.length > 30 ? `${text.slice(0, 28)}…` : text;
-  const nodes = [];
-  if (data.ready.length) nodes.push(element('span', { 'data-t3-launch-label': '', text: 'Next up' }));
-  for (const item of data.ready.slice(0, 3)) {
-    nodes.push(chip([element('code', { text: item.id }), element('span', { text: short(item.title) })], `${item.id}: ${item.title}${item.priority ? ` (${item.priority})` : ''} — put a start prompt in the composer`,
-      () => setComposerText(`Start ${item.id}: run \`atelier start ${item.id}\` in a fresh checkout and follow what it prints.`), true));
-  }
-  nodes.push(chip([element('span', { text: 'Plan a mission' })], 'Put a planning prompt in the composer', () => setComposerText('Let\'s plan a mission for ')));
-  if (data.waiting > 0) nodes.push(chip([element('span', { text: `Waiting on you (${data.waiting})` })], 'Open the inbox', () => openLayer('inbox', deskUrls[0], '/inbox')));
-  launchRow.replaceChildren(...nodes);
+  const ready = data.ready ?? []; const waitingItems = data.waiting_items ?? []; const inMotion = data.in_motion ?? [];
+  const waiting = data.waiting ?? waitingItems.length;
+  const t3 = new Map((host?.threadList?.() ?? []).map(thread => [thread.id, thread]));
+  const openInbox = () => openLayer('inbox', deskUrls[0], '/inbox');
+  const openItem = id => openLayer(`item:${repo.desk}/${repo.repo}/${id}`, repo.desk, `/r/${encodeURIComponent(repo.repo)}/item/${encodeURIComponent(id)}`);
+  const waitingRows = waitingItems.slice(0, 2).map(item => stripRow(openInbox, `${item.id}: ${item.title}`, element('span', { 'data-t3-row-title': '', text: item.title })));
+  if (waiting > waitingRows.length && waitingRows.length) waitingRows.push(stripRow(openInbox, 'Open the inbox', element('span', { 'data-t3-row-faint': '', text: `${waiting - waitingRows.length} more` })));
+  if (!waitingRows.length && waiting > 0) waitingRows.push(stripRow(openInbox, 'Open the inbox', element('span', { 'data-t3-row-faint': '', text: `${waiting} waiting · open the inbox` })));
+  const motionRows = inMotion.slice(0, 3).map(item => {
+    const thread = item.holder && t3.get(item.holder.identity);
+    return stripRow(() => thread ? host.showThread(thread.environmentId, thread.id) : openItem(item.id), `${item.id}: ${item.title}${item.holder ? ` — held by ${item.holder.title}` : ''}${thread ? '' : ' (opens in the Desk)'}`,
+      element('span', { 'data-t3-row-line': '' }, element('code', { text: item.id }), element('span', { 'data-t3-row-title': '', text: item.title }), element('span', { 'data-t3-row-meta': '', text: [item.stage, item.age_seconds != null && age(item.age_seconds)].filter(Boolean).join(' · ') })),
+      ...(item.holder ? [element('span', { 'data-t3-row-faint': '', text: item.holder.title })] : []));
+  });
+  const nextRows = ready.slice(0, 3).map(item => stripRow(() => setComposerText(`Start ${item.id}: run \`atelier start ${item.id}\` in a fresh checkout and follow what it prints.`),
+    `${item.id}: ${item.title}${item.priority ? ` (${item.priority})` : ''} — put a start prompt in the composer`,
+    element('span', { 'data-t3-row-line': '' }, element('code', { text: item.id }), element('span', { 'data-t3-row-title': '', text: item.title }))));
+  const project = element('button', { 'data-t3-strip-project': '', title: `Open the ${repo.repo} project home`, text: repo.repo });
+  project.addEventListener('click', () => openLayer(`home:${repositoryKey(repo)}`, repo.desk, `/home/${encodeURIComponent(repo.repo)}`));
+  const plan = element('button', { 'data-t3-strip-plan': '', title: 'Put a planning prompt in the composer', text: 'Plan a mission' });
+  plan.addEventListener('click', () => setComposerText('Let\'s plan a mission for '));
+  strip.replaceChildren(element('div', { 'data-t3-strip-head': '' }, project, plan),
+    element('div', { 'data-t3-cards': '' },
+      stripCard('Waiting on you', waiting, waitingRows, 'Nothing waiting on you', openInbox),
+      element('div', { 'data-t3-card-motion': '' }, stripCard('In motion', inMotion.length, motionRows, 'Nothing in motion')),
+      stripCard('Next up', ready.length, nextRows, 'Nothing ready')));
 }
 function syncQuickLaunch() {
   observeHostDom();
@@ -873,13 +928,18 @@ function syncQuickLaunch() {
   const repo = draft && mappedRepository(draft);
   const overlay = repo && document.querySelector(hostSelectors.composerOverlay);
   const stack = overlay?.querySelector(hostSelectors.composerStack);
-  if (!stack) { launchRow.hidden = true; launchKey = null; return; }
+  if (!stack) { strip.hidden = true; launchKey = null; return; }
   const canvas = overlay.parentElement;
-  if (launchRow.parentElement !== canvas) canvas.append(launchRow);
-  if (launchKey !== repositoryKey(repo)) { launchKey = repositoryKey(repo); void readLaunch(repo); }
+  if (strip.parentElement !== canvas) { canvas.append(strip); stripResize.disconnect(); stripResize.observe(canvas); }
+  if (launchKey !== repositoryKey(repo) || Date.now() - launchAt > 60000) {
+    if (launchKey !== repositoryKey(repo)) strip.replaceChildren(element('div', { 'data-t3-strip-error': '', text: `Reading ${repo.repo} from the Desk…` }));
+    launchKey = repositoryKey(repo); launchAt = Date.now(); void readLaunch(repo);
+  }
   const area = canvas.getBoundingClientRect(); const composer = stack.getBoundingClientRect();
-  launchRow.style.cssText = `top:${Math.round(composer.bottom - area.top + 8)}px;left:${Math.round(composer.left - area.left)}px;width:${Math.round(composer.width)}px`;
-  launchRow.hidden = false;
+  // Below 700px the In motion card goes; the composer-filling Next up card stays.
+  strip.toggleAttribute('data-narrow', composer.width < 700);
+  strip.style.cssText = `top:${Math.round(composer.bottom - area.top + 12)}px;left:${Math.round(composer.left - area.left)}px;width:${Math.round(composer.width)}px`;
+  strip.hidden = false;
 }
 
 // Project home: the project's name in T3's breadcrumb opens /embed/home/<repo> in the layer
@@ -895,7 +955,7 @@ listen(document, 'click', event => {
 
 disposers.push(() => {
   clearInterval(deskTimer); clearInterval(missionsTimer);
-  extSidebar.remove(); layerNode.remove(); launchRow.remove(); extStyle.remove(); hideStyle.remove();
+  extSidebar.remove(); layerNode.remove(); strip.remove(); extStyle.remove(); hideStyle.remove();
   document.documentElement.removeAttribute('data-t3-layer-open');
 });
 listen(window, 'resize', scheduleDOM);
