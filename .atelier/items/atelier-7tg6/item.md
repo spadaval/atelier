@@ -3,13 +3,14 @@ schema: atelier.item
 schema_version: 3
 id: atelier-7tg6
 title: Run the extension's fixture test in CI against the Desk built from the same commit
-status: ready
+status: building
 mission: atelier-m8ye
 labels: []
 priority: medium
 blocked_by:
 - atelier-n4g7
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A932557e7-853d-4352-845a-e9951a7775d5%3Adelegate-task%3A70562b0f-0e5a-45cd-aa86-f4f7bf101722
 ready:
   by: 'sumeet, in conversation on 2026-11-16: do this, and the rest of the mission'
   at: 2026-11-16T19:26:24.749789035Z
