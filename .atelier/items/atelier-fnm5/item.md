@@ -3,13 +3,14 @@ schema: atelier.item
 schema_version: 3
 id: atelier-fnm5
 title: Let a host theme the embedded Desk and open threads for it
-status: ready
+status: building
 mission: atelier-61gh
 labels: []
 priority: medium
 blocked_by:
 - atelier-vg1l
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3Abedbfab3-88f2-4387-b923-ba6bd0a0f9b1%3Adelegate-task%3Ad60912f0-5bf6-42db-a388-3bc0bd0b6903
 ready:
   by: 'sumeet, in conversation on 2026-11-15: get that mission going'
   at: 2026-11-16T02:21:33.165230332Z
