@@ -44,6 +44,12 @@ pub struct Config {
     pub hosts: Vec<String>,
     /// The built app's directory. Without one only `/api` is served.
     pub app: Option<PathBuf>,
+    /// The origins of the pages that may frame the Desk and talk to it over
+    /// `postMessage`, such as `t3code://app`. The app posts only to a parent
+    /// whose origin is listed and reads messages only from one; empty, it
+    /// sends and reads nothing.
+    #[serde(default)]
+    pub embed_origins: Vec<String>,
     /// How to reach T3 Code. Without it the Desk makes no call to T3 Code
     /// and reports its threads as unavailable.
     pub t3: Option<T3Config>,
@@ -121,6 +127,14 @@ impl Config {
         if let Some(t3) = &mut config.t3 {
             t3.command = resolve(here, &t3.command);
         }
+        for origin in &config.embed_origins {
+            if !is_origin(origin) {
+                bail!(
+                    "{}: embed_origins holds {origin:?}, which is not an origin such as `t3code://app` or `https://host:port`",
+                    path.display()
+                );
+            }
+        }
         if config.roots.is_empty() && config.repos.is_empty() {
             bail!("{} names no repository and no root", path.display());
         }
@@ -180,6 +194,24 @@ impl Config {
     }
 }
 
+/// Whether `origin` is a serialized origin, `scheme://host[:port]`, with no
+/// path, and not the wildcard `*` or the opaque `null`, which would let any
+/// page read what the Desk posts.
+fn is_origin(origin: &str) -> bool {
+    let Some((scheme, rest)) = origin.split_once("://") else {
+        return false;
+    };
+    let scheme_ok = scheme.starts_with(|c: char| c.is_ascii_alphabetic())
+        && scheme
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "+-.".contains(c));
+    let host_ok = !rest.is_empty()
+        && rest
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "-.:[]".contains(c));
+    scheme_ok && host_ok
+}
+
 fn resolve(here: &Path, path: &Path) -> PathBuf {
     match (path.strip_prefix("~"), std::env::var_os("HOME")) {
         (Ok(rest), Some(home)) => PathBuf::from(home).join(rest),
@@ -220,6 +252,7 @@ mod tests {
             [dir.path().join("repos"), PathBuf::from("/srv")]
         );
         assert_eq!(config.app, None);
+        assert!(config.embed_origins.is_empty());
         assert_eq!(config.fetch_seconds, FETCH_SECONDS);
         assert!(config.notify.is_none());
         let home = PathBuf::from(std::env::var_os("HOME").unwrap());
@@ -281,5 +314,23 @@ mod tests {
             Config::load(&path).is_err(),
             "a notify command names a program"
         );
+
+        let framed = "caller = \"s\"\nrepos = [\"a\"]\nembed_origins = [\"t3code://app\", \"http://127.0.0.1:5733\"]\n";
+        std::fs::write(&path, framed).unwrap();
+        assert_eq!(
+            Config::load(&path).unwrap().embed_origins,
+            ["t3code://app", "http://127.0.0.1:5733"]
+        );
+        for bad in [
+            "*",
+            "null",
+            "t3code://app/",
+            "https://a.example/path",
+            "app",
+        ] {
+            let text = format!("caller = \"s\"\nrepos = [\"a\"]\nembed_origins = [\"{bad}\"]\n");
+            std::fs::write(&path, text).unwrap();
+            assert!(Config::load(&path).is_err(), "{bad} is no origin");
+        }
     }
 }

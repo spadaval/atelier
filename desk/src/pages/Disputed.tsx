@@ -13,7 +13,7 @@ function SideMark({ side, role }: { side: Side | null; role: string }) {
   if (!side) return <span className="muted">{role} unknown</span>;
   return (
     <span className="dispute-side" data-testid="side">
-      {role} {side.link ? <ThreadTitle thread={{ title: side.identity, link: side.link }} /> : <Identity id={side.identity} />}
+      {role} {side.link ? <ThreadTitle thread={{ id: side.identity, title: side.identity, link: side.link }} /> : <Identity id={side.identity} />}
       {side.model ? <span className="mono"> ({side.model})</span> : <span className="muted"> (model unknown)</span>}
     </span>
   );

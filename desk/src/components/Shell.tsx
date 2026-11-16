@@ -5,6 +5,7 @@ import type { InboxResponse } from "../api/InboxResponse";
 import type { ReposResponse } from "../api/ReposResponse";
 import { api, to } from "../lib/api";
 import { embedded } from "../lib/embed";
+import { report } from "../lib/host";
 import { useData } from "../lib/api";
 
 function Brand() {
@@ -112,6 +113,10 @@ function InboxLink() {
  * way up, and the inbox is one link away from every page.
  */
 function EmbeddedShell({ children }: { children: ReactNode }) {
+  const location = useLocation();
+  // Tells a listed host where the Desk is; the title is reported again as
+  // the page sets it (lib/host.ts).
+  useEffect(report, [location.pathname, location.search]);
   return (
     <div className="shell embedded">
       <div className="main">
