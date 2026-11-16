@@ -106,9 +106,10 @@ async function loadRepositories() {
   buildPattern(); scheduleDOM(); queueScan();
 }
 // A repository is named by its Desk page, such as http://buildbot:3780/r/atelier, since two Desks
-// may serve repositories of the same name. A bare name, as older settings hold, takes the first.
+// may serve repositories of the same name. A bare name, as older settings hold, counts only with
+// one Desk configured: with several it cannot say which Desk it meant.
 const repositoryKey = repo => `${repo.desk}${repositoryPath(repo)}`;
-const repositoryFor = value => repositories.find(repo => repositoryKey(repo) === value) ?? repositories.find(repo => repo.repo === value) ?? null;
+const repositoryFor = value => repositories.find(repo => repositoryKey(repo) === value) ?? (deskUrls.length === 1 ? repositories.find(repo => repo.repo === value) : null) ?? null;
 function mappedRepository() {
   const key = projectKey(current);
   if (Object.hasOwn(settings.mappings, key)) return repositoryFor(settings.mappings[key]);
@@ -116,7 +117,9 @@ function mappedRepository() {
 }
 function selectedRepository() {
   if (referenceOverride?.projectKey === projectKey(current)) return repositoryFor(referenceOverride.repository);
-  return settings.followProject ? mappedRepository() : repositoryFor(settings.pinnedRepo) ?? mappedRepository() ?? repositories[0] ?? null;
+  if (settings.followProject) return mappedRepository();
+  // A pinned repository that cannot be found shows as not linked; it never falls back to another.
+  return settings.pinnedRepo ? repositoryFor(settings.pinnedRepo) : mappedRepository() ?? repositories[0] ?? null;
 }
 async function saveSettings() {
   try { await api.request('save-settings', settings); } catch (error) { displayError(error); }

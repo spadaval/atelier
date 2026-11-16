@@ -165,8 +165,10 @@ under `settings`:
 
 A mapping or pinned repository names the repository by its Desk page, since two
 Desks may serve repositories of the same name; `""` means not linked. A bare
-name, as an earlier version saved, still works and means the first Desk serving
-that name. The injector refuses a save whose keys are not exactly these settings
+name, as an earlier version saved, still works while one Desk is configured;
+with several it is ignored, since it cannot say which Desk it meant. A pinned
+repository that cannot be found shows as not linked and never falls back to
+another. The injector refuses a save whose keys are not exactly these settings
 (inherited names such as `toString` included), whose toggles are not `true` or
 `false`, whose `pinnedRepo` is not a string or `null`, or whose `mappings` is not
 an object of strings; `config.json` is then left as it was and the section shows

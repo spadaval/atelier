@@ -239,7 +239,10 @@ async function daemon() {
       next.settings = settings;
       const text = JSON.stringify(next, null, 2) + '\n';
       const temporary = `${configPath}.${process.pid}.tmp`;
-      await fs.writeFile(temporary, text);
+      // The replacement keeps config.json's permissions; a new file would get the defaults.
+      const { mode } = await fs.stat(configPath);
+      await fs.writeFile(temporary, text, { mode });
+      await fs.chmod(temporary, mode);
       await fs.rename(temporary, configPath);
       savedConfig = text;
       return { saved: configPath };
@@ -308,13 +311,15 @@ async function daemon() {
   }
   async function attach(info) {
     // The binding exists in every context of the page, so a report counts only from the main world
-    // of the top frame (whose frame ID is the page target's ID), where the extension runs.
+    // of the top frame (whose frame ID is the page target's ID) while it shows T3, where the extension runs.
     const target = { id: info.id, url: info.url, ready: false, scriptId: null, topContexts: new Set() };
     targets.set(info.id, target);
     target.cdp = new CDP(info.webSocketDebuggerUrl, message => {
       if (message.method === 'Runtime.executionContextCreated') {
         const context = message.params.context;
-        if (context.auxData?.frameId === info.id && context.auxData?.isDefault) target.topContexts.add(context.id);
+        // Only while the top frame shows T3: after a navigation elsewhere, that page's context does not count.
+        const showsTarget = config.targetPrefixes.some(prefix => prefix === context.origin || prefix.startsWith(context.origin + '/'));
+        if (context.auxData?.frameId === info.id && context.auxData?.isDefault && showsTarget) target.topContexts.add(context.id);
         return;
       }
       if (message.method === 'Runtime.executionContextDestroyed') { target.topContexts.delete(message.params.executionContextId); return; }
