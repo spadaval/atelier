@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-n4g7
 title: Move the T3 Code extension into this repository with its history
-status: in_review
+status: approved
 mission: atelier-m8ye
 labels: []
 priority: medium
