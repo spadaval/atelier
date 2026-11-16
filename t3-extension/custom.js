@@ -20,6 +20,7 @@ function element(tag, attributes = {}, ...children) {
   for (const [name, value] of Object.entries(attributes)) {
     if (name === 'text') node.textContent = value;
     else if (name === 'class') node.className = value;
+    // Only for the constant icons below; anything from the Desk or T3 goes in as text.
     else if (name === 'html') node.innerHTML = value;
     else node.setAttribute(name, String(value));
   }
@@ -110,10 +111,10 @@ async function loadRepositories() {
 // one Desk configured: with several it cannot say which Desk it meant.
 const repositoryKey = repo => `${repo.desk}${repositoryPath(repo)}`;
 const repositoryFor = value => repositories.find(repo => repositoryKey(repo) === value) ?? (deskUrls.length === 1 ? repositories.find(repo => repo.repo === value) : null) ?? null;
-function mappedRepository() {
-  const key = projectKey(current);
+function mappedRepository(context = current) {
+  const key = projectKey(context);
   if (Object.hasOwn(settings.mappings, key)) return repositoryFor(settings.mappings[key]);
-  return repositories.find(repo => repo.keys.includes(current?.repositoryKey)) ?? null;
+  return repositories.find(repo => repo.keys.includes(context?.repositoryKey)) ?? null;
 }
 function selectedRepository() {
   if (referenceOverride?.projectKey === projectKey(current)) return repositoryFor(referenceOverride.repository);
@@ -128,7 +129,7 @@ async function saveSettings() {
 // references need only the conversation DOM and otherwise open Desk externally.
 const deskHooks = ['module:workspace-panel-store', 'module:atom-registry', 'module:thread-snapshot-atom', 'dom:panel', 'dom:panelContent'];
 const deskAvailable = () => Boolean(host?.panel && host?.context) && !deskHooks.some(name => hostProbes[name]?.ok === false);
-globalThis.__t3Custom.diagnostics = () => ({ probes: hostProbes, modules: hostImportedModules, context: current, repositories, mappedRepository: mappedRepository()?.repo ?? null, selectedRepository: selectedRepository()?.repo ?? null, referenceOverride, desiredOpen, deskAvailable: deskAvailable(), frame: { desk: frameDesk, path: framePath, title: deskTitle, ready: deskReady } });
+globalThis.__t3Custom.diagnostics = () => ({ probes: hostProbes, modules: hostImportedModules, context: current, repositories, mappedRepository: mappedRepository()?.repo ?? null, selectedRepository: selectedRepository()?.repo ?? null, referenceOverride, desiredOpen, deskAvailable: deskAvailable(), frame: { desk: frameDesk, path: framePath, title: deskTitle, ready: deskReady }, hostThread: threadSent && JSON.parse(threadSent), layer: layer && { ...layer, shown: !layerNode.hidden, ready: layerFrame.ready }, views: Object.fromEntries(Object.keys(views).map(name => [name, viewMissing(name)])) });
 
 function openSettings() { focusSettings = true; location.hash = '/settings/general'; scheduleDOM(); }
 
@@ -216,21 +217,37 @@ function sendTheme(always) {
   iframe.contentWindow.postMessage({ type: 'host:theme', ...theme }, deskOrigin());
 }
 disposers.push(observeHostTheme(() => sendTheme(false)));
-// host:thread tells the Desk which thread T3 shows, by T3's thread ID, whole. It is sent when the
-// Desk becomes ready and when T3 shows another thread; never twice in a row for the same thread,
-// so the page the human moved to in the Desk stays.
+// host:thread tells the Desk which thread T3 shows, by T3's thread ID, whole, with the Desk
+// repository its project maps to, the threads it started (T3's lineage) and the item and mission
+// IDs its conversation names (the reference scanner). It is sent when the Desk becomes ready, when
+// T3 shows another thread, and when the children or mentioned IDs change; never twice in a row
+// with the same content.
 // Each desk:ready is a fresh Desk that knows no thread, also when T3 re-rendered the panel slot
 // and moving the iframe reloaded it. keepThread is the thread a load whose page was asked for
 // (a reference or Refresh) shows: that thread is not sent, but a switch before the Desk is ready is.
 let threadSent = null;
 let keepThread = null;
-function tellDeskThread() {
-  if (!deskReady || !iframe.contentWindow || !current || current.threadId === threadSent) return;
-  threadSent = current.threadId;
+let mentioned = [];
+function threadMessage() {
+  const message = { type: 'host:thread', thread: current.threadId };
   // The repository lets the Desk show this project, not the system inbox, for a thread that holds nothing.
   const repository = selectedRepository()?.repo;
-  iframe.contentWindow.postMessage({ type: 'host:thread', thread: current.threadId, ...(repository ? { repository } : {}) }, deskOrigin());
+  if (repository) message.repository = repository;
+  message.children = host?.children?.(current.threadId) ?? [];
+  message.mentioned = mentioned;
+  return message;
 }
+function tellDeskThread() {
+  if (!deskReady || !iframe.contentWindow || !current) return;
+  const message = threadMessage();
+  const text = JSON.stringify(message);
+  if (text === threadSent) return;
+  threadSent = text;
+  iframe.contentWindow.postMessage(message, deskOrigin());
+}
+// Children appear when a thread starts one; the snapshot is read again every 3 seconds.
+const childrenTimer = setInterval(tellDeskThread, 3000);
+disposers.push(() => clearInterval(childrenTimer));
 function openThread(threadId) {
   if (!host?.findThread) { notify(`Cannot open thread ${threadId}: T3 hook module:environment-atoms is missing (see Customizations).`); return; }
   const environmentId = host.findThread(threadId);
@@ -242,7 +259,7 @@ listen(window, 'message', event => {
   const message = event.data;
   if (!message || typeof message !== 'object') return;
   if (message.type === 'desk:ready') {
-    deskReady = true; threadSent = keepThread; keepThread = null;
+    deskReady = true; threadSent = keepThread && keepThread === current?.threadId ? JSON.stringify(threadMessage()) : null; keepThread = null;
     sendTheme(true); tellDeskThread();
   }
   else if (message.type === 'desk:navigated' && typeof message.path === 'string' && message.path.startsWith('/')) {
@@ -331,7 +348,7 @@ settingsRoot.append(element('div', { class: 'stack' }, element('h2', { text: 'Cu
   element('div', { class: 'row' }, reloadScripts, refreshStatus, openFolder, deskAction),
   element('h3', { text: 'Desks' }), deskList,
   element('h3', { text: 'Settings' }), element('p', { class: 'muted', text: `Saved in ${api.home}${api.home.includes('\\') ? '\\' : '/'}config.json` }),
-  checkbox('enabled', 'Enable the Atelier Desk surface'), checkbox('references', 'Show Atelier reference links and hovercards'), checkbox('followProject', 'Follow the current T3 project'),
+  checkbox('enabled', 'Enable the Atelier views (Desk panel, sidebar, layer, project strip)'), checkbox('references', 'Show Atelier reference links and hovercards'), checkbox('followProject', 'Follow the current T3 project'),
   contextText, element('label', {}, document.createTextNode('Project repository'), mapping), element('label', { id: 'pinned-row' }, document.createTextNode('Pinned repository'), pinned),
   element('h3', { text: 'Manual overrides' }), overrideList,
   element('h3', { text: 'T3 hooks' }), probeList));
@@ -362,7 +379,8 @@ function syncProbes() {
   const deskMissing = deskHooks.filter(missing);
   const rows = Object.entries(hostProbes).map(([name, probe]) => element('li', { class: probe.ok === false ? 'missing' : '', text: `${probe.ok ? '✓' : probe.ok === false ? '✗' : '…'} ${name}: ${probe.detail}` }));
   rows.unshift(element('li', { class: deskMissing.length ? 'missing' : '', text: host ? `Desk panel: ${deskMissing.length ? `off, missing ${deskMissing.join(', ')}` : 'on'}` : 'Desk panel: looking for T3 hooks…' }));
-  if (host) rows.splice(1, 0, element('li', { class: host.findThread ? '' : 'missing', text: `Opening threads from the Desk: ${host.findThread ? 'on' : 'off, missing module:environment-atoms'}` }));
+  if (host) rows.splice(1, 0, element('li', { class: host.findThread ? '' : 'missing', text: `Opening threads from the Desk: ${host.findThread ? 'on' : 'off, missing module:environment-atoms'}` }),
+    ...Object.entries(views).map(([name, view]) => { const off = viewMissing(name); return element('li', { class: off.length ? 'missing' : '', text: `${view.label}: ${off.length ? `off${view.off ? ` (${view.off})` : ''}, missing ${off.join(', ')}` : 'on'}` }); }));
   probeList.replaceChildren(...rows);
 }
 const options = (select, entries) => {
@@ -427,7 +445,7 @@ async function updateContext() {
 function scheduleDOM() {
   if (domFrame || api.signal.aborted) return;
   // Electron suspends animation frames while its window is hidden.
-  domFrame = setTimeout(() => { domFrame = 0; syncPanel(); syncSettings(); }, 0);
+  domFrame = setTimeout(() => { domFrame = 0; syncPanel(); syncSettings(); syncProjectStrip(); syncProjectHome(); syncSidebar(); }, 0);
 }
 
 // Ranges and transparent keyboard links leave React's message text untouched.
@@ -570,6 +588,8 @@ function scanReferences() {
   for (const ref of previous) if (!kept.has(ref)) { if (activeReference === ref) hideCard(); ref.anchor.remove(); }
   if (CSS.highlights) CSS.highlights.set('t3-atelier-refs', new Highlight(...ranges));
   updateReferenceRects();
+  mentioned = [...new Set(references.map(ref => ref.id))].sort();
+  tellDeskThread();
 }
 function queueScan() { clearTimeout(scanTimer); scanTimer = setTimeout(scanReferences, 250); }
 const hitReference = event => references.find(ref => ref.rects.some(rect => event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom));
@@ -589,6 +609,401 @@ listen(document, 'click', event => {
 }, { capture: true });
 listen(document, 'scroll', queueRects, { capture: true }); listen(window, 'resize', queueRects);
 listen(document, 'visibilitychange', () => { scheduleDOM(); queueRects(); });
+
+// Views outside the panel: the Inbox row and Missions section in T3's sidebar, the layer over
+// T3's main area, the project strip under the new-thread composer and the project home from the
+// breadcrumb. Each needs only its own hooks; a missing one turns off that view alone.
+const views = {
+  sidebar: { label: 'Inbox and Missions in the sidebar', hooks: ['dom:sidebarSearch'] },
+  layer: { label: 'Desk layer over T3\'s main area', hooks: ['dom:mainInset'], off: 'its pages open in the browser' },
+  missionThreads: { label: 'Mission threads read from T3', hooks: ['module:atom-registry', 'module:thread-snapshot-atom', 'module:environment-atoms', 'state:thread-origin'] },
+  hiding: { label: 'Hiding mission threads from T3\'s list', hooks: ['dom:threadItem'] },
+  strip: { label: 'Project strip on the new-thread screen', hooks: ['module:composer-draft-store', 'route:draft', 'dom:composerOverlay', 'dom:composerStack'] },
+  composer: { label: 'Filling T3\'s composer from the strip', hooks: ['dom:composerEditor'] },
+  home: { label: 'Project home from the breadcrumb', hooks: ['dom:breadcrumbProject'] },
+};
+const viewMissing = name => views[name].hooks.filter(hook => hostProbes[hook]?.ok === false);
+const viewOn = name => viewMissing(name).length === 0;
+// A DOM hook expected but not yet found is checked again each second until it is found or reported missing.
+const expectTimer = setInterval(() => { if (Object.keys(hostDomExpected).length) scheduleDOM(); }, 1000);
+// An item ID as Atelier writes them: lowercase letters and digits in dash-separated parts.
+const itemIdPattern = /^[a-z0-9]+(?:-[a-z0-9]+)+$/;
+
+// The layer: one Desk frame over T3's main area, leaving the sidebar usable. It shows the inbox,
+// a mission's mission control, a project's home or an item. It speaks the host contract: themed on
+// desk:ready, desk:open-thread navigates T3 and closes it, desk:key Escape closes it. Its messages
+// count only from its own frame's window with its Desk's origin, as the panel's do.
+const layerFrame = { iframe: element('iframe', { title: 'Atelier Desk' }), desk: null, path: null, ready: false, theme: '' };
+layerFrame.iframe.style.cssText = 'display:block;width:100%;height:100%;border:0;background:var(--background)';
+function sendLayerTheme(always) {
+  if (!layerFrame.ready || !layerFrame.iframe.contentWindow) return;
+  const theme = readHostTheme(api.root); const text = JSON.stringify(theme);
+  if (!always && text === layerFrame.theme) return;
+  layerFrame.theme = text;
+  layerFrame.iframe.contentWindow.postMessage({ type: 'host:theme', ...theme }, new URL(layerFrame.desk).origin);
+}
+listen(window, 'message', event => {
+  if (!layerFrame.desk || event.source !== layerFrame.iframe.contentWindow || event.origin !== new URL(layerFrame.desk).origin) return;
+  const message = event.data;
+  if (!message || typeof message !== 'object') return;
+  if (message.type === 'desk:ready') { layerFrame.ready = true; sendLayerTheme(true); if (layer) layerFrame.iframe.focus(); }
+  else if (message.type === 'desk:open-thread' && typeof message.thread === 'string') { openThread(message.thread); closeLayer(); }
+  else if (message.type === 'desk:key' && message.key === 'Escape') closeLayer();
+});
+disposers.push(observeHostTheme(() => sendLayerTheme(false)));
+// layer: { key, desk, path }; key is 'inbox', 'mission:…', 'home:…' or 'item:…'.
+let layer = null;
+function openLayer(key, desk, path) {
+  // Without T3's main area the page opens in the browser at its normal address.
+  if (!viewOn('layer')) { window.open(desk + path, '_blank', 'noopener'); return; }
+  layer = { key, desk, path };
+  if (layerFrame.desk !== desk || layerFrame.path !== path) {
+    Object.assign(layerFrame, { desk, path, ready: false, theme: '' });
+    layerFrame.iframe.src = `${desk}/embed${path}`;
+  }
+  // The layer follows at once: a covered window delays the DOM pass's timer.
+  syncSidebar();
+}
+function closeLayer() { if (!layer) return; layer = null; syncSidebar(); }
+const toggleLayer = (key, desk, path) => layer?.key === key ? closeLayer() : openLayer(key, desk, path);
+const layerClose = element('button', { 'data-t3-layer-close': '', 'aria-label': 'Close', title: 'Close (Esc)', html: icons.close });
+const layerNode = element('div', { 'data-t3-layer': '', hidden: '' }, layerFrame.iframe, layerClose);
+listen(layerClose, 'click', closeLayer);
+listen(document, 'keydown', event => { if (event.key === 'Escape' && layer) closeLayer(); });
+// Going to a thread in the sidebar, or anywhere else in T3, closes the layer.
+listen(document, 'click', event => { if (event.target instanceof Element && event.target.closest(hostSelectors.sidebarRow)) closeLayer(); }, { capture: true });
+listen(window, 'hashchange', closeLayer);
+
+const sideIcons = {
+  inbox: icon('<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>'),
+  chevron: icon('<path d="m9 18 6-6-6-6"/>'),
+};
+// T3's own variables, so the views follow its theme: --sidebar-* in the sidebar, --card and
+// --border for the strip's cards.
+const viewStyle = element('style', { text: `
+  [data-t3-ext-sidebar] { flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; max-height: 45vh; padding: 0 var(--sidebar-content-inset, 8px) 4px; }
+  [data-t3-ext-sidebar] button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: start; -webkit-app-region: no-drag; }
+  [data-t3-side-row] { display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 10px; border-radius: 6px; cursor: pointer; font-size: 14px; color: var(--sidebar-muted-foreground); user-select: none; outline: none; -webkit-app-region: no-drag; min-width: 0; }
+  [data-t3-side-row]:hover { background: var(--sidebar-row-hover); color: var(--sidebar-foreground); }
+  [data-t3-side-row][aria-pressed="true"] { background: var(--sidebar-row-active); color: var(--sidebar-foreground); }
+  [data-t3-side-row]:focus-visible, [data-t3-ext-sidebar] button:focus-visible { box-shadow: inset 0 0 0 2px var(--ring); outline: none; }
+  [data-t3-side-icon] { display: inline-flex; flex-shrink: 0; width: 16px; height: 16px; } [data-t3-side-icon] svg { width: 16px; height: 16px; }
+  [data-t3-side-label] { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  [data-t3-inbox-count] { font-size: 12px; font-variant-numeric: tabular-nums; min-width: 20px; padding: 1px 6px; border-radius: 999px; text-align: center; background: var(--sidebar-row-active); color: var(--sidebar-foreground); }
+  [data-t3-inbox-count][data-zero] { background: transparent; color: var(--sidebar-muted-foreground); }
+  [data-t3-inbox-count][data-error] { color: var(--destructive); }
+  [data-t3-missions-head] { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 10px 10px 4px; font-size: 12px; color: var(--sidebar-muted-foreground); }
+  [data-t3-missions-head] button { font-size: 11px; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--border) !important; color: var(--sidebar-muted-foreground); flex-shrink: 0; }
+  [data-t3-missions-head] button[aria-pressed="true"] { background: var(--sidebar-row-active); color: var(--sidebar-foreground); }
+  [data-t3-missions] { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+  [data-t3-missions-list] { overflow: auto; min-height: 0; flex: 1; }
+  [data-t3-mission] [data-t3-side-row] { gap: 6px; padding-left: 4px; height: 42px; }
+  [data-t3-two-line] { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+  [data-t3-two-line] > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  [data-t3-expand] { display: inline-flex; width: 18px; height: 18px; align-items: center; justify-content: center; border-radius: 4px; flex-shrink: 0; transition: transform .1s; }
+  [data-t3-expand]:hover { background: var(--sidebar-row-hover); }
+  [data-t3-expand][aria-expanded="true"] { transform: rotate(90deg); }
+  [data-t3-meta] { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--sidebar-muted-foreground); white-space: nowrap; }
+  [data-t3-waiting] { width: 7px; height: 7px; border-radius: 50%; background: var(--warning, #f5a524); flex-shrink: 0; }
+  [data-t3-mission-body] { padding: 0 0 6px 24px; display: flex; flex-direction: column; gap: 1px; }
+  [data-t3-group] { font-size: 11px; color: var(--sidebar-muted-foreground); padding: 6px 6px 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  [data-t3-thread] { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 6px; border-radius: 6px; font-size: 13px; color: var(--sidebar-muted-foreground); min-width: 0; width: 100%; }
+  button[data-t3-thread]:hover { background: var(--sidebar-row-hover); color: var(--sidebar-foreground); }
+  [data-t3-thread][data-unknown] { opacity: .55; cursor: default; }
+  [data-t3-thread][aria-current="page"] { background: var(--sidebar-row-active); color: var(--sidebar-foreground); }
+  [data-t3-role] { font-size: 10px; text-transform: uppercase; letter-spacing: .03em; color: var(--sidebar-muted-foreground); flex-shrink: 0; }
+  [data-t3-missions-note] { font-size: 12px; color: var(--sidebar-muted-foreground); padding: 4px 10px; overflow-wrap: anywhere; }
+  [data-t3-missions-note][data-error] { color: var(--destructive); }
+  [data-t3-layer] { position: absolute; inset: 0; z-index: 60; background: var(--background); -webkit-app-region: no-drag; }
+  [data-t3-layer-close] { position: absolute; top: 8px; right: 12px; z-index: 1; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--foreground); cursor: pointer; -webkit-app-region: no-drag; }
+  [data-t3-layer-close]:hover { background: var(--accent); }
+  [data-t3-layer-open] [data-sidebar-row][aria-current] { background: transparent !important; }
+  [data-t3-strip] { position: absolute; z-index: 21; box-sizing: border-box; height: 176px; display: flex; flex-direction: column; gap: 8px; padding: 0 2px; font-size: 13px; color: var(--foreground); }
+  [data-t3-strip] button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: start; }
+  [data-t3-strip] button:disabled { cursor: default; opacity: .6; }
+  [data-t3-strip-head] { display: flex; align-items: center; justify-content: space-between; height: 24px; flex-shrink: 0; padding: 0 4px; }
+  [data-t3-strip-project] { font-size: 12px; color: var(--muted-foreground) !important; text-decoration: underline; text-decoration-color: color-mix(in oklab, currentColor 35%, transparent); text-underline-offset: 3px; }
+  [data-t3-strip-project]:hover { color: var(--foreground) !important; }
+  [data-t3-strip-plan] { font-size: 12px !important; height: 24px; padding: 0 10px !important; border: 1px solid var(--border) !important; border-radius: 8px; color: var(--foreground); }
+  [data-t3-strip-plan]:hover { background: var(--accent) !important; }
+  [data-t3-cards] { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  [data-t3-strip][data-narrow] [data-t3-cards] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  [data-t3-strip][data-narrow] [data-t3-card="motion"] { display: none; }
+  [data-t3-card] { min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 1px; padding: 8px 6px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; }
+  [data-t3-strip] [data-t3-card-head] { display: flex; align-items: center; gap: 6px; padding: 0 6px 4px; font-size: 12px; font-weight: 500; color: var(--muted-foreground) !important; flex-shrink: 0; }
+  button[data-t3-card-head]:hover { color: var(--foreground) !important; }
+  [data-t3-card-count] { font-variant-numeric: tabular-nums; font-weight: 400; }
+  [data-t3-card-row] { display: flex; flex-direction: column; justify-content: center; min-width: 0; padding: 4px 6px !important; border-radius: 6px; line-height: 1.3; }
+  [data-t3-card-row]:not(:disabled):hover { background: var(--accent) !important; }
+  [data-t3-row-line] { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+  [data-t3-strip] code { font-size: 11px; color: var(--muted-foreground); flex-shrink: 0; }
+  [data-t3-row-title] { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  [data-t3-row-meta] { flex-shrink: 0; font-size: 11px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+  [data-t3-row-faint] { font-size: 11px; color: var(--muted-foreground); opacity: .8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  [data-t3-card-empty] { padding: 4px 6px; font-size: 12px; color: var(--muted-foreground); }
+  [data-t3-strip-note] { font-size: 12px; color: var(--muted-foreground); padding: 4px; overflow-wrap: anywhere; }
+` });
+document.head.append(viewStyle);
+
+// The sidebar block under T3's search: the Inbox row, then the Missions section.
+const inboxCount = element('span', { 'data-t3-inbox-count': '', text: '…' });
+const inboxRow = element('div', { 'data-t3-side-row': '', 'data-t3-inbox-row': '', 'data-layer-key': 'inbox', role: 'button', tabindex: '0', 'aria-pressed': 'false', title: 'Atelier inbox' },
+  element('span', { 'data-t3-side-icon': '', html: sideIcons.inbox }), element('span', { 'data-t3-side-label': '', text: 'Inbox' }), inboxCount);
+const keyActivate = node => listen(node, 'keydown', event => { if (event.target === node && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); node.click(); } });
+listen(inboxRow, 'click', () => toggleLayer('inbox', deskUrls[0], '/inbox')); keyActivate(inboxRow);
+const missionsHidden = element('span', { 'data-t3-missions-hidden': '' });
+const showAllToggle = element('button', { 'data-t3-show-all': '', 'aria-pressed': 'false', title: 'Show threads that belong to a mission in T3\'s own list too', text: 'Show all threads' });
+const missionsList = element('div', { 'data-t3-missions-list': '' });
+const missionsSection = element('div', { 'data-t3-missions': '' }, element('div', { 'data-t3-missions-head': '' }, element('span', {}, document.createTextNode('Missions'), missionsHidden), showAllToggle), missionsList);
+const extSidebar = element('div', { 'data-t3-ext-sidebar': '' }, inboxRow, missionsSection);
+
+// View state in localStorage: which missions are expanded, and whether T3's list shows all threads.
+const missionViewKey = 't3-custom:atelier:missions:v1';
+let missionView;
+try { missionView = JSON.parse(localStorage.getItem(missionViewKey) ?? '{}'); } catch { missionView = {}; }
+missionView = { expanded: {}, showAll: false, ...missionView };
+const saveMissionView = () => localStorage.setItem(missionViewKey, JSON.stringify(missionView));
+listen(showAllToggle, 'click', () => { missionView.showAll = !missionView.showAll; saveMissionView(); renderMissions(); });
+
+// GET /api/sidebar from each Desk; each mission keeps the Desk that served it.
+let sidebarRepos = null; let sidebarErrors = [];
+async function readSidebar() {
+  const repos = []; const errors = [];
+  await Promise.all(deskUrls.map(async desk => {
+    try { for (const repo of (await api.request('desk-get', { desk, path: '/api/sidebar' })).repos) repos.push({ ...repo, desk }); }
+    catch (error) { errors.push(`GET ${desk}/api/sidebar: ${error.message}`); }
+  }));
+  if (api.signal.aborted) return;
+  sidebarRepos = repos; sidebarErrors = errors; renderMissions();
+}
+const threadList = () => viewOn('missionThreads') ? host?.threadList?.() ?? [] : [];
+// Each open mission with its threads; a thread T3 knows shows T3's live title and status. "Other
+// threads" are T3 threads whose creator (lineage.parentThreadId, or delegatedFrom.threadId for a
+// thread delegated from a linked environment) is one of the mission's threads.
+function missionModel(t3) {
+  return (sidebarRepos ?? []).flatMap(repo => repo.missions.map(mission => {
+    const own = new Set([...mission.threads, ...mission.items.flatMap(item => item.threads)].map(thread => thread.identity));
+    const other = t3.filter(thread => !own.has(thread.id) && (own.has(thread.parent) || own.has(thread.delegatedFrom)));
+    return { key: `${repo.desk}/${repo.repo}/${mission.id}`, repo: repo.repo, desk: repo.desk, mission, other, own };
+  }));
+}
+const hideStyle = element('style', { 'data-t3-hide-threads': '' });
+document.head.append(hideStyle);
+let missionsSignature = '';
+function renderMissions() {
+  const list = threadList();
+  const t3 = new Map(list.map(thread => [thread.id, thread]));
+  const model = missionModel(list);
+  // T3's own list items (li[data-thread-item="<environment>:<thread>"]) of mission threads are
+  // hidden with CSS, so React's nodes stay where React put them. T3's Working and Settled counts
+  // still include them; the note beside the title says how many are hidden.
+  const hidden = missionView.showAll || !viewOn('hiding') ? [] : [...new Set(model.flatMap(entry => [...entry.own, ...entry.other.map(thread => thread.id)]))].filter(id => t3.has(id));
+  const itemAttribute = hostSelectors.threadItem.slice(1, -1);
+  hideStyle.textContent = hidden.length ? `${hidden.map(id => `[${itemAttribute}$=${JSON.stringify(':' + id)}]`).join(',\n')} { display: none !important; }` : '';
+  missionsHidden.textContent = hidden.length ? ` · ${hidden.length} hidden from T3's list` : '';
+  showAllToggle.setAttribute('aria-pressed', String(missionView.showAll));
+  showAllToggle.hidden = !viewOn('hiding');
+  const signature = JSON.stringify([model.map(entry => [entry.key, entry.mission, entry.other.map(thread => thread.id)]), list.map(thread => [thread.id, thread.title, thread.status]), missionView.expanded, sidebarErrors, current?.threadId, layer?.key]);
+  if (signature === missionsSignature) return;
+  missionsSignature = signature;
+  const nodes = [];
+  for (const error of sidebarErrors) nodes.push(element('div', { 'data-t3-missions-note': '', 'data-error': '', text: error }));
+  if (!sidebarRepos && !sidebarErrors.length) nodes.push(element('div', { 'data-t3-missions-note': '', text: 'Reading missions…' }));
+  if (sidebarRepos && !model.length && !sidebarErrors.length) nodes.push(element('div', { 'data-t3-missions-note': '', text: 'No open missions.' }));
+  const threadEntry = (identity, role) => {
+    const thread = t3.get(identity);
+    if (!thread) return element('div', { 'data-t3-thread': '', 'data-unknown': '', 'data-identity': identity, title: `${identity}: not a thread of any connected T3 environment` },
+      element('span', { 'data-t3-role': '', text: role }), element('span', { 'data-t3-side-label': '', text: identity.length > 18 ? `${identity.slice(0, 8)}…${identity.slice(-6)}` : identity }));
+    const node = element('button', { 'data-t3-thread': '', 'data-identity': identity, title: `${thread.title} (${thread.status})` },
+      element('span', { 'data-t3-role': '', text: role }), element('span', { 'data-t3-side-label': '', text: thread.title }), element('span', { 'data-t3-meta': '', text: thread.status }));
+    if (current?.threadId === thread.id) node.setAttribute('aria-current', 'page');
+    node.addEventListener('click', () => host.showThread(thread.environmentId, thread.id));
+    return node;
+  };
+  for (const entry of model) {
+    const { mission } = entry;
+    const expanded = Boolean(missionView.expanded[entry.key]);
+    const expand = element('button', { 'data-t3-expand': '', 'aria-expanded': String(expanded), 'aria-label': `${expanded ? 'Collapse' : 'Expand'} ${mission.title}`, html: sideIcons.chevron });
+    const row = element('div', { 'data-t3-side-row': '', 'data-layer-key': `mission:${entry.key}`, 'data-mission': mission.id, role: 'button', tabindex: '0', 'aria-pressed': String(layer?.key === `mission:${entry.key}`), title: `${mission.id}: ${mission.title} (${mission.state}), open mission control` },
+      expand, element('span', { 'data-t3-two-line': '' }, element('span', { text: mission.title }), element('span', { 'data-t3-meta': '', text: `${entry.repo} · ${mission.done}/${mission.total} done${mission.state === 'in_progress' ? '' : ` · ${mission.state}`}` })),
+      ...(mission.waiting > 0 ? [element('span', { 'data-t3-waiting': '', title: `${mission.waiting} waiting on you` })] : []));
+    expand.addEventListener('click', event => { event.stopPropagation(); if (expanded) delete missionView.expanded[entry.key]; else missionView.expanded[entry.key] = true; saveMissionView(); renderMissions(); });
+    row.addEventListener('click', () => toggleLayer(`mission:${entry.key}`, entry.desk, `/mission/${encodeURIComponent(entry.repo)}/${encodeURIComponent(mission.id)}`));
+    keyActivate(row);
+    const block = element('div', { 'data-t3-mission': '' }, row);
+    if (expanded) {
+      const body = element('div', { 'data-t3-mission-body': '' });
+      for (const item of mission.items) {
+        if (!item.threads.length) continue;
+        body.append(element('div', { 'data-t3-group': '', title: `${item.id}: ${item.title} (${item.status})`, text: `${item.id} · ${item.title}` }), ...item.threads.map(thread => threadEntry(thread.identity, thread.role)));
+      }
+      if (mission.threads.length) body.append(element('div', { 'data-t3-group': '', text: 'Mission' }), ...mission.threads.map(thread => threadEntry(thread.identity, thread.role)));
+      if (entry.other.length) body.append(element('div', { 'data-t3-group': '', text: 'Other threads' }), ...entry.other.map(thread => threadEntry(thread.id, thread.parent ? 'child' : 'delegated')));
+      if (!body.children.length) body.append(element('div', { 'data-t3-group': '', text: 'No threads yet.' }));
+      block.append(body);
+    }
+    nodes.push(block);
+  }
+  missionsList.replaceChildren(...nodes);
+}
+// T3's titles and statuses change as threads run.
+const missionsTimer = setInterval(renderMissions, 3000);
+
+function syncSidebar() {
+  const onMain = Boolean(host) && !location.hash.includes('/settings');
+  expectHostDom('sidebarSearch', onMain, 'T3 showed a thread or new-thread screen');
+  expectHostDom('mainInset', onMain, 'T3 showed a thread or new-thread screen');
+  const t3Threads = threadList().length > 0;
+  expectHostDom('threadItem', onMain && t3Threads, 'T3 listed its threads');
+  expectHostDom('sidebarRow', onMain && t3Threads, 'T3 listed its threads');
+  const search = viewOn('sidebar') && document.querySelector(hostSelectors.sidebarSearch);
+  const group = search?.closest('[data-slot="sidebar-group"]')?.parentElement;
+  if (group && settings.enabled) { if (extSidebar.previousElementSibling !== group) group.after(extSidebar); }
+  else extSidebar.remove();
+  const main = document.querySelector(hostSelectors.mainInset);
+  const shown = Boolean(layer) && Boolean(main) && settings.enabled;
+  for (const row of extSidebar.querySelectorAll('[data-layer-key]')) row.setAttribute('aria-pressed', String(shown && row.dataset.layerKey === layer.key));
+  document.documentElement.toggleAttribute('data-t3-layer-open', shown);
+  if (shown && layerNode.parentElement !== main) main.append(layerNode);
+  // The Desk's pages take keys (mission control is keyboard-driven): its frame gets focus as the
+  // layer appears, and again on desk:ready for a page still loading.
+  const appearing = shown && layerNode.hidden;
+  layerNode.hidden = !shown;
+  if (appearing) layerFrame.iframe.focus();
+  if (!shown && document.activeElement === layerFrame.iframe) layerFrame.iframe.blur();
+}
+
+// The count: needs-human items, proposed plans and waiting threads, across repositories and Desks.
+async function readInbox() {
+  const errors = []; let count = 0;
+  await Promise.all(deskUrls.map(async desk => {
+    try {
+      for (const repo of (await api.request('desk-get', { desk, path: '/api/inbox' })).repos) {
+        count += (repo.needs_human ?? []).reduce((sum, group) => sum + group.items.length, 0) + (repo.proposed ?? []).length + (repo.threads ?? []).length;
+      }
+    } catch (error) { errors.push(`GET ${desk}/api/inbox: ${error.message}`); }
+  }));
+  if (api.signal.aborted) return;
+  inboxCount.textContent = errors.length ? '!' : String(count);
+  inboxCount.toggleAttribute('data-error', errors.length > 0);
+  inboxCount.toggleAttribute('data-zero', !errors.length && count === 0);
+  inboxRow.title = errors.length ? `Atelier inbox: ${errors.join('; ')}` : `Atelier inbox: ${count} waiting (read ${new Date().toLocaleTimeString()})`;
+}
+const readDesks = () => { void readInbox(); void readSidebar(); };
+readDesks();
+const deskTimer = setInterval(readDesks, 60000);
+
+// Project strip: under the new-thread composer of a project with a Desk repository, three cards
+// from GET /api/launch?repo=<repo>: Waiting on you, In motion, Next up. Fields the Desk does not
+// send count as empty. A Next up row puts a prompt in the composer; it is never sent.
+const strip = element('div', { 'data-t3-strip': '', hidden: '' });
+// The composer's width changes without a window resize (panels, sidebar); follow the canvas.
+const stripResize = new ResizeObserver(() => scheduleDOM());
+let launchKey = null; let launchAt = 0;
+// T3's composer is a ProseMirror (TipTap) editor: select its content and insert the text with
+// execCommand('insertText'), which fires the beforeinput/input events ProseMirror handles.
+function setComposerText(text) {
+  const editor = document.querySelector(hostSelectors.composerEditor);
+  if (!editor) { api.reportError(new Error(`Project strip: T3's composer editor (${hostSelectors.composerEditor}) is not on screen`)); return; }
+  editor.focus();
+  getSelection().selectAllChildren(editor);
+  if (!document.execCommand('insertText', false, text)) api.reportError(new Error('Project strip: the composer refused execCommand insertText'));
+}
+const age = seconds => seconds < 3600 ? `${Math.max(1, Math.round(seconds / 60))}m` : seconds < 86400 ? `${Math.round(seconds / 3600)}h` : `${Math.round(seconds / 86400)}d`;
+function stripCard(name, title, count, rows, empty, onHeader) {
+  const head = element(onHeader ? 'button' : 'div', { 'data-t3-card-head': '' }, element('span', { text: title }), element('span', { 'data-t3-card-count': '', text: String(count) }));
+  if (onHeader) head.addEventListener('click', onHeader);
+  return element('div', { 'data-t3-card': name }, head, ...(rows.length ? rows : [element('div', { 'data-t3-card-empty': '', text: empty })]));
+}
+function stripRow(onClick, title, ...children) {
+  const node = element('button', { 'data-t3-card-row': '', title }, ...children);
+  if (onClick) node.addEventListener('click', onClick); else node.disabled = true;
+  return node;
+}
+async function readLaunch(repo) {
+  const key = repositoryKey(repo);
+  let data;
+  try { data = await api.request('desk-get', { desk: repo.desk, path: `/api/launch?repo=${encodeURIComponent(repo.repo)}` }); }
+  catch (error) { if (launchKey === key) strip.replaceChildren(element('div', { 'data-t3-strip-note': '', 'data-error': '', text: `GET ${repo.desk}/api/launch?repo=${repo.repo}: ${error.message}` })); return; }
+  if (api.signal.aborted || launchKey !== key) return;
+  const ready = data.ready ?? []; const waitingItems = data.waiting_items ?? []; const inMotion = data.in_motion ?? [];
+  const waiting = data.waiting ?? waitingItems.length;
+  const t3 = new Map(threadList().map(thread => [thread.id, thread]));
+  const openInbox = () => openLayer('inbox', deskUrls[0], '/inbox');
+  const openItem = id => openLayer(`item:${repo.desk}/${repo.repo}/${id}`, repo.desk, `/r/${encodeURIComponent(repo.repo)}/item/${encodeURIComponent(id)}`);
+  const waitingRows = waitingItems.slice(0, 2).map(item => stripRow(openInbox, `${item.id}: ${item.title}`, element('span', { 'data-t3-row-title': '', text: item.title })));
+  if (waiting > waitingRows.length) waitingRows.push(stripRow(openInbox, 'Open the inbox', element('span', { 'data-t3-row-faint': '', text: waitingRows.length ? `${waiting - waitingRows.length} more` : `${waiting} waiting · open the inbox` })));
+  const motionRows = inMotion.slice(0, 3).map(item => {
+    const thread = item.holder && t3.get(item.holder.identity);
+    return stripRow(() => thread ? host.showThread(thread.environmentId, thread.id) : openItem(item.id), `${item.id}: ${item.title}${item.holder ? `, held by ${item.holder.title}` : ''}${thread ? '' : ' (opens in the Desk)'}`,
+      element('span', { 'data-t3-row-line': '' }, element('code', { text: item.id }), element('span', { 'data-t3-row-title': '', text: item.title }), element('span', { 'data-t3-row-meta': '', text: [item.stage, item.age_seconds != null && age(item.age_seconds)].filter(Boolean).join(' · ') })),
+      ...(item.holder ? [element('span', { 'data-t3-row-faint': '', text: item.holder.title })] : []));
+  });
+  // The prompt is built only from an ID of Atelier's form; any other ID is shown but cannot be used.
+  const nextRows = ready.slice(0, 3).map(item => {
+    const usable = itemIdPattern.test(item.id) && viewOn('composer');
+    return stripRow(usable && (() => setComposerText(`Start ${item.id}: run \`atelier start ${item.id}\` in a fresh checkout and follow what it prints.`)),
+      usable ? `${item.id}: ${item.title}${item.priority ? ` (${item.priority})` : ''}. Puts a start prompt in the composer` : `${item.id}: ${itemIdPattern.test(item.id) ? `T3's composer is not available (${viewMissing('composer').join(', ')})` : 'not an Atelier item ID, so no prompt is made from it'}`,
+      element('span', { 'data-t3-row-line': '' }, element('code', { text: item.id }), element('span', { 'data-t3-row-title': '', text: item.title })));
+  });
+  const project = element('button', { 'data-t3-strip-project': '', title: `Open the ${repo.repo} project home`, text: repo.repo });
+  project.addEventListener('click', () => openLayer(`home:${repositoryKey(repo)}`, repo.desk, `/home/${encodeURIComponent(repo.repo)}`));
+  const plan = element('button', { 'data-t3-strip-plan': '', title: 'Put a planning prompt in the composer', text: 'Plan a mission' });
+  plan.disabled = !viewOn('composer');
+  plan.addEventListener('click', () => setComposerText('Let\'s plan a mission for '));
+  strip.replaceChildren(element('div', { 'data-t3-strip-head': '' }, project, plan),
+    element('div', { 'data-t3-cards': '' },
+      stripCard('waiting', 'Waiting on you', waiting, waitingRows, 'Nothing waiting on you', openInbox),
+      stripCard('motion', 'In motion', inMotion.length, motionRows, 'Nothing in motion'),
+      stripCard('next', 'Next up', ready.length, nextRows, 'Nothing ready')));
+}
+function syncProjectStrip() {
+  const draft = settings.enabled ? host?.draftContext?.() : null;
+  const repo = draft && mappedRepository(draft);
+  expectHostDom('composerOverlay', Boolean(repo), 'T3 showed a new-thread screen');
+  expectHostDom('composerEditor', Boolean(draft), 'T3 showed a new-thread screen');
+  const overlay = repo && viewOn('strip') && document.querySelector(hostSelectors.composerOverlay);
+  expectHostDom('composerStack', Boolean(overlay), 'T3 showed its composer overlay');
+  const stack = overlay?.querySelector(hostSelectors.composerStack);
+  if (!stack) { strip.hidden = true; launchKey = null; return; }
+  const canvas = overlay.parentElement;
+  if (strip.parentElement !== canvas) { canvas.append(strip); stripResize.disconnect(); stripResize.observe(canvas); }
+  if (launchKey !== repositoryKey(repo) || Date.now() - launchAt > 60000) {
+    if (launchKey !== repositoryKey(repo)) strip.replaceChildren(element('div', { 'data-t3-strip-note': '', text: `Reading ${repo.repo} from the Desk…` }));
+    launchKey = repositoryKey(repo); launchAt = Date.now(); void readLaunch(repo);
+  }
+  const area = canvas.getBoundingClientRect(); const composer = stack.getBoundingClientRect();
+  // Below 700px the In motion card goes; the composer-filling Next up card stays.
+  strip.toggleAttribute('data-narrow', composer.width < 700);
+  strip.style.cssText = `top:${Math.round(composer.bottom - area.top + 12)}px;left:${Math.round(composer.left - area.left)}px;width:${Math.round(composer.width)}px`;
+  strip.hidden = false;
+}
+
+// Project home: the project's name in T3's thread breadcrumb opens /embed/home/<repo> in the
+// layer instead of starting a new thread, for a project with a Desk repository.
+function syncProjectHome() {
+  expectHostDom('breadcrumbProject', Boolean(current) && !location.hash.includes('/settings'), 'T3 showed a thread');
+}
+listen(document, 'click', event => {
+  const target = event.target instanceof Element ? event.target.closest(hostSelectors.breadcrumbProject) : null;
+  if (!target || !settings.enabled) return;
+  const repo = mappedRepository(current ?? host?.draftContext?.() ?? null);
+  if (!repo) return;
+  event.preventDefault(); event.stopPropagation();
+  toggleLayer(`home:${repositoryKey(repo)}`, repo.desk, `/home/${encodeURIComponent(repo.repo)}`);
+}, { capture: true });
+
+// A covered window throttles timers: when it is shown again, every view reads afresh.
+listen(document, 'visibilitychange', () => {
+  if (document.hidden) return;
+  readDesks(); launchAt = 0; renderMissions(); tellDeskThread(); scheduleDOM();
+});
+disposers.push(() => {
+  clearInterval(deskTimer); clearInterval(missionsTimer); clearInterval(expectTimer); stripResize.disconnect();
+  extSidebar.remove(); layerNode.remove(); strip.remove(); viewStyle.remove(); hideStyle.remove();
+  document.documentElement.removeAttribute('data-t3-layer-open');
+});
+listen(window, 'resize', scheduleDOM);
 
 const observer = new MutationObserver(records => {
   scheduleDOM();

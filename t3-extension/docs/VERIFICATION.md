@@ -1,5 +1,51 @@
 # Verification
 
+## Sidebar views, layer and project strip, Windows, November 16, 2026
+
+T3 Code Nightly `0.1.10-nightly.20261115.4749`, test instance (port 9333, own
+`APPDATA` and `T3CODE_HOME`); the daily instance was not touched. The Desk was
+the reworked one at `http://buildbot:3781` (Atelier item atelier-cdxg, under
+review), which serves `/api/sidebar`, `/api/launch`, `/embed/t`,
+`/embed/mission/...` and `/embed/home/...`; the Desk at 3780 does not serve them
+yet.
+
+- `DESK=http://buildbot:3781 node test-extension.mjs` passes (25 checks). Its
+  new checks: the whole `host:thread` (repository, children by lineage and by
+  `delegatedFrom`, mentioned, resent when a mention or child comes or goes); the
+  Inbox row and its count; the layer (cover, focus, every way it closes,
+  `desk:open-thread`, spoofed `desk:key` and `desk:open-thread` from another
+  window and from the layer window sent to another origin); the reread on
+  `visibilitychange`; Missions (rows, expand and remember across reinjection,
+  known and unknown threads, Other threads); hiding and Show all threads;
+  mission control in the layer; the breadcrumb's project; the project strip
+  (cards, a filled composer and nothing sent, a non-item ID refused, the narrow
+  layout, nothing for an unmapped project); a missing sidebar hook leaving the
+  panel and references working; the settings section naming each view.
+- Replaced on purpose: the check that the Desk opens the inbox with "This thread
+  holds no open work." for a thread holding nothing. With `repository` in
+  `host:thread` (776be61) the merged Desk opens the project instead, and the
+  Desk under test opens `/embed/t`; the check is now that the Desk opens
+  `/embed/t` and reads the thread, its child's ties and the mentioned record.
+  Open externally is checked against `/t` for the same reason.
+- `node test-contract.mjs --port 9333 --thread <atelier test thread>`: all 28
+  probes ok, including `module:composer-draft-store`, `route:draft`,
+  `state:thread-origin` and the seven new `dom:` hooks; 5 of 325 renderer
+  modules imported.
+- In the test instance: the Inbox row (72), 16 missions from the Desk, the
+  project strip on the atelier new-thread screen with real `waiting_items`,
+  `in_motion` and `ready`; a mission row opened mission control with its frame
+  focused, and a real Escape key sent into the frame closed the layer through
+  the Desk's `desk:key`, focus back in T3. Every view reported on.
+- Found by the new checks and fixed: the strip was 4 pixels wider than the
+  composer (its padding added to the width set).
+
+Not verified: mission threads hidden from the real T3's list, their live titles
+and Other threads in the real T3 (every mission thread runs on buildbot's T3,
+which the test instance is not paired with; the fixture covers them), and macOS.
+While the test window is covered, Chromium marks the page hidden and throttles
+its timers; the views reread when it is shown again, and the layer opens and
+closes without waiting for a timer.
+
 ## Review fixes, Windows, November 15, 2026
 
 Fixes for an independent review of `b50a8ab..9019ad1`; same T3 build, test

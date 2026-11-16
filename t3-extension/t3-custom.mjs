@@ -84,11 +84,19 @@ function checkSettings(settings) {
   }
   return settings;
 }
-// A Desk read: only GET of the repository list, one record, or one item or mission. The path must
-// come out of URL parsing unchanged, so no dot segment, backslash, query or fragment gets through.
-const readablePath = /^\/api\/(repos|records\/[a-z0-9-]+|repos\/[^/\\?#%]+\/(items|missions)\/[a-z0-9-]+)$/;
+// A Desk read: only GET of the repository list, the inbox, the sidebar, one repository's launch
+// data, one record, or one item or mission. The path must come out of URL parsing unchanged, so no
+// dot segment, backslash, query or fragment gets through; /api/launch takes exactly one query
+// parameter, a repository name of letters, digits, '.', '_' and '-'.
+const readablePath = /^\/api\/(repos|inbox|sidebar|records\/[a-z0-9-]+|repos\/[^/\\?#%]+\/(items|missions)\/[a-z0-9-]+)$/;
 function deskReadUrl(config, desk, requested) {
   if (!deskUrls(config).includes(desk)) throw new Error(`Desk read is not allowed: ${desk} is not in desk.urls of ${configPath}`);
+  const launch = typeof requested === 'string' && requested.match(/^\/api\/launch\?repo=([A-Za-z0-9._-]+)$/);
+  if (launch) {
+    const url = new URL(desk + requested);
+    if (url.pathname !== '/api/launch' || url.search !== `?repo=${launch[1]}` || url.hash) throw new Error(`Desk read is not allowed: ${requested} (resolves to ${url.href})`);
+    return url.href;
+  }
   if (typeof requested !== 'string' || !readablePath.test(requested)) throw new Error(`Desk read is not allowed: ${requested}`);
   const url = new URL(desk + requested);
   if (url.pathname !== requested || url.search || url.hash || !readablePath.test(url.pathname)) throw new Error(`Desk read is not allowed: ${requested} (resolves to ${url.href})`);
