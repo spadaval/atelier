@@ -98,6 +98,12 @@ In order of importance:
   needs-human items, and the plans proposed and merged lately.
 - **Agents**: T3 Code's live threads and what each holds.
 
+The Desk can also be shown inside T3 Code, in its right panel, by an
+extension that runs on his desktop app. There T3 supplies the frame: its
+tab names the Desk, so the Desk draws no sidebar, brand or theme toggle of
+its own, only the page, its breadcrumb and a link to the inbox, laid out for
+a panel 400 to 750 pixels wide.
+
 Every page that reads a repository says when the Desk last fetched its
 remote. The Desk fetches each one on a timer its configuration sets, every
 five minutes on this host, so work pushed from another clone shows within

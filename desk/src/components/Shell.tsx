@@ -4,6 +4,7 @@ import { Link, NavLink, useLocation } from "react-router";
 import type { InboxResponse } from "../api/InboxResponse";
 import type { ReposResponse } from "../api/ReposResponse";
 import { api, to } from "../lib/api";
+import { embedded } from "../lib/embed";
 import { useData } from "../lib/api";
 
 function Brand() {
@@ -93,7 +94,42 @@ function Sidebar({ open }: { open: boolean }) {
   );
 }
 
+/** The inbox, reached from the top bar where the embedded Desk has no sidebar. */
+function InboxLink() {
+  const inbox = useData<InboxResponse>(api.inbox());
+  const waiting = inbox.data?.repos.reduce((n, r) => n + inboxCount(r), 0);
+  return (
+    <NavLink to="/inbox" className="icon-btn inbox-btn" aria-label="Inbox" title="Inbox">
+      <Inbox size={16} />
+      {waiting ? <span className="count you">{waiting}</span> : null}
+    </NavLink>
+  );
+}
+
+/**
+ * The embedded Desk draws content only: its host supplies the frame, so
+ * there is no sidebar, brand, theme toggle or footer. The breadcrumb is the
+ * way up, and the inbox is one link away from every page.
+ */
+function EmbeddedShell({ children }: { children: ReactNode }) {
+  return (
+    <div className="shell embedded">
+      <div className="main">
+        <header className="top">
+          <InboxLink />
+          <nav id="crumbs" className="crumbs" aria-label="Where you are" />
+        </header>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export function Shell({ children }: { children: ReactNode }) {
+  return embedded ? <EmbeddedShell>{children}</EmbeddedShell> : <FullShell>{children}</FullShell>;
+}
+
+function FullShell({ children }: { children: ReactNode }) {
   const [menu, setMenu] = useState(false);
   const location = useLocation();
   useEffect(() => setMenu(false), [location.pathname, location.search]);

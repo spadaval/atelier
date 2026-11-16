@@ -1,3 +1,4 @@
+import { Scale, Target } from "lucide-react";
 import { Link } from "react-router";
 import type { DisputedRepo } from "../api/DisputedRepo";
 import type { DisputedResponse } from "../api/DisputedResponse";
@@ -11,7 +12,7 @@ import { api, to, useData } from "../lib/api";
 function SideMark({ side, role }: { side: Side | null; role: string }) {
   if (!side) return <span className="muted">{role} unknown</span>;
   return (
-    <span className="side" data-testid="side">
+    <span className="dispute-side" data-testid="side">
       {role} {side.link ? <ThreadTitle thread={{ title: side.identity, link: side.link }} /> : <Identity id={side.identity} />}
       {side.model ? <span className="mono"> ({side.model})</span> : <span className="muted"> (model unknown)</span>}
     </span>
@@ -41,6 +42,9 @@ function RepoDisputed({ repo, many }: { repo: DisputedRepo; many: boolean }) {
       ) : null}
       {repo.rebuttals.map((r) => (
         <div key={`${r.item}/${r.finding}`} className="qline" data-testid="rebuttal">
+          <span className="glyph">
+            <Scale size={15} aria-hidden />
+          </span>
           <span className="grow">
             <Link to={to.item(name, r.item)} className="q">
               <span className="mono">{r.item}</span>/{r.finding}: {r.title}
@@ -66,6 +70,9 @@ function RepoDisputed({ repo, many }: { repo: DisputedRepo; many: boolean }) {
       ))}
       {repo.plans.map((p) => (
         <div key={`${p.mission}/${p.round}`} className="qline" data-testid="split-round">
+          <span className="glyph">
+            <Target size={15} aria-hidden />
+          </span>
           <span className="grow">
             <Link to={to.mission(name, p.mission)} className="q">
               Plan of <span className="mono">{p.mission}</span>, round {p.round}
