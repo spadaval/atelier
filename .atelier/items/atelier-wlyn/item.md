@@ -99,4 +99,3 @@ Not proven:
 - Nothing has run against a real published release, since none exists yet.
 - The GitHub API's unauthenticated limit is 60 requests an hour per IP address. A daily check is far under it.
 - The list is read with `per_page=100` and no paging. That holds while the newest extension release is among the 100 newest releases.
-
