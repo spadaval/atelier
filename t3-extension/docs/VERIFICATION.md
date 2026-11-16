@@ -1,5 +1,38 @@
 # Verification
 
+## Review fixes, Windows, November 15, 2026
+
+Fixes for an independent review of `b50a8ab..9019ad1`; same T3 build, test
+instance (port 9333) and Desk as below. The daily instance was not touched.
+
+`node test-extension.mjs` passes (18 checks). Each new check was then run with
+only its fix undone, and failed:
+
+| Finding | Fix undone | Failure |
+| --- | --- | --- |
+| 1. Concurrent saves | Saves unserialised, `config.json` written in place (the old code) | "an older concurrent save won" (20 saves at once) |
+| 2. Validator | `key in checks`, no value checks | `{"mappings":null}` was saved |
+| 3. Switch during a reference load | Suppress whichever thread is current at `desk:ready` | host:thread for the thread switched to timed out |
+| 4. Wrong Desk | Open on the first Desk serving the name | the mission did not open on the second Desk, which answered |
+| 5. Path normalisation | Old segment pattern, no check of the parsed URL | `/api/repos/..\..\api\action?/items/x` was read |
+| 6. Binding context | Accept reports from any context | a same-site frame used the injector bridge |
+| 7a. Window check | Origin check only | the Desk origin from another window: `desk:open-thread` accepted |
+| 7b. Origin check | Window check only | the Desk window with another origin: `desk:open-thread` accepted |
+
+Removing only the serialisation (keeping the temporary file and rename) also
+failed, on two saves renaming the same temporary file.
+
+In the test instance: `test-contract.mjs` reports all 17 probes ok; the injector
+accepts the extension's reports (the top frame's default context matches the
+page target's ID in Electron too: "Customizations applied"); the Customizations
+section read the Desk's 5 repositories through the bridge; the Desk still
+follows the thread (inbox with "This thread holds no open work."), and toggling a
+setting twice left the extension and the Desk frame in place ("Settings saved;
+applied in place" twice).
+
+Not verified in the real T3: a second configured Desk, and a same-site frame
+calling the binding (T3 has none); both are covered only by the fixture.
+
 ## Following the thread and in-place settings, Windows, November 15, 2026
 
 Same T3 build and test instance (port 9333) as below; Desk at

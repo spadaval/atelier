@@ -158,13 +158,25 @@ under `settings`:
 ```json
 "settings": {
   "enabled": true, "references": true, "followProject": true,
-  "pinnedRepo": null, "mappings": { "<environmentId>:<projectId>": "atelier" }
+  "pinnedRepo": null,
+  "mappings": { "<environmentId>:<projectId>": "http://buildbot:3780/r/atelier" }
 }
 ```
 
+A mapping or pinned repository names the repository by its Desk page, since two
+Desks may serve repositories of the same name; `""` means not linked. A bare
+name, as an earlier version saved, still works and means the first Desk serving
+that name. The injector refuses a save whose keys are not exactly these settings
+(inherited names such as `toString` included), whose toggles are not `true` or
+`false`, whose `pinnedRepo` is not a string or `null`, or whose `mappings` is not
+an object of strings; `config.json` is then left as it was and the section shows
+the error.
+
 A change in the section takes effect in the page at once and is sent to the
 injector as a `save-settings` request, which checks each field and rewrites
-`config.json`. The injector recognises its own write (the file is exactly what it
+`config.json`. Saves run one at a time in the order they arrive, and each writes
+a temporary file beside `config.json` and renames it over it, so the last change
+wins and no reader sees half a file. The injector recognises its own write (the file is exactly what it
 wrote and nothing but `settings` changed) and only updates the script a reloaded
 T3 document will run: the running extension and the Desk iframe are not
 reloaded (`injector.log`: "Settings saved; applied in place"). Any other edit of
@@ -199,7 +211,8 @@ repository, kind (item or mission), title and status; with several Desks, each i
 asked in `desk.urls` order until one has it. Hover or keyboard focus opens a card
 with that title and status at once, then priority, holder, blockers, completion
 checks and a goal excerpt from the record's own item or mission route. Click
-opens the record in Desk, in its repository even from another project. Direct
+opens the record in Desk, in its repository even from another project, and on
+the Desk that answered for it. Direct
 activation needs only the one read. Requests are deduplicated and cached for 30
 seconds; Refresh/Retry bypasses the cache. API failure and not-found states are
 shown explicitly.
@@ -207,9 +220,26 @@ shown explicitly.
 Desk reads go through the background injector because Desk does not currently
 advertise cross-origin access to the T3 renderer. The bridge permits only `GET`
 of `/api/repos`, `/api/records/{id}` and `/api/repos/{repo}/items|missions/{id}`,
-and only from a Desk in `desk.urls`. It does not proxy arbitrary URLs, action
-endpoints, credentials, or shell commands. The other bridge actions are injector
-status, `save-settings`, and opening its fixed local folder.
+and only from a Desk in `desk.urls`. A repository segment may not hold `/`, `\`,
+`?`, `#` or `%`, and the URL the injector would fetch must have exactly the path
+asked for, with no query or fragment, so a dot segment, an encoded dot or a
+backslash cannot turn an allowed path into another. It does not proxy arbitrary
+URLs, action endpoints, credentials, or shell commands. The other bridge actions
+are injector status, `save-settings`, and opening its fixed local folder.
+
+**Who may use the bridge.** The extension reaches the injector through a CDP
+binding, `__t3CustomReport`, which Chromium exposes in every execution context of
+the page, child frames that share its process included. The injector therefore
+acts on a report only when it comes from the main world of the top frame: it
+tracks the page's execution contexts and accepts the default context whose frame
+is the page target's own frame; a report from any other context (a same-site
+iframe, an isolated world) is ignored and logged ("Ignored a report from outside
+the top frame"). An isolated world for the extension was not used: the extension
+must import T3's own module instances and read its atom registry, which an
+isolated world cannot share. What this does not cover: any script running in T3's
+own main world, T3's code or anything injected into it, can call the binding as
+the extension does. The bridge's limits above (reads only, fixed allow-list,
+checked settings) are the protection there.
 
 ## Edit and control
 
@@ -338,11 +368,13 @@ every T3 update.
 fixture with T3's panel DOM contract, T3's content security policy, and the real
 Desk app and data. The fixture serves modules shaped like T3's hooks, so the real
 discovery code runs, and a worker script that must never run in the window. The
-Desk is reached through a local proxy on another site that forwards to the first
-Desk in `config.json`, except that it answers `GET /api/embed` with the
+Desk is reached through two local proxies on another site that forward to the
+first Desk in `config.json`, except that they answer `GET /api/embed` with the
 fixture's origin, so the real Desk app performs the host contract with the
-fixture page; the proxy also records every path asked for. The test's own
-`config.json` has no repository table and no settings. It uses Edge on Windows
+fixture page; each proxy records every path asked for. The second proxy is a
+second Desk serving the same repositories, and the first answers 404 for the
+mission's record. The test's own `config.json` lists both and has no repository
+table and no settings. It uses Edge on Windows
 and Chrome on macOS; set `BROWSER` to use another Chromium. It checks:
 
 - discovery, docking and resizing, and that the project is matched by the
@@ -352,22 +384,30 @@ and Chrome on macOS; set `BROWSER` to use another Chromium. It checks:
 - `host:theme` on `desk:ready` (colours, font, scheme) and again after a change
   of the fixture's root class and custom properties;
 - the tab label from `desk:navigated`;
-- that messages posted by the page itself and by a frame of another origin
-  change nothing;
+- that a Desk message is ignored from the Desk's origin in another window (a
+  second frame loaded from the Desk), and from the Desk iframe's own window with
+  another origin (the frame sent to a page of the second Desk); each check
+  fails if only that half of the window-and-origin test is removed;
 - `host:thread` on `desk:ready` (the real Desk reads `/api/ties` for the
   fixture's thread and opens the inbox with "This thread holds no open work."),
   on each switch to another thread, again to a Desk reloaded because its mount
-  was moved, and never twice in a row for the same thread (Settings and back);
+  was moved, never twice in a row for the same thread (Settings and back), and
+  for a thread switched to while a reference was still loading (the first Desk
+  holds back its `/api/embed` answer to make the window wide);
 - `desk:open-thread` going to `#/env/thread-b`, and the notice for an unknown
   thread;
-- the bridge's allow-list (no action endpoints, no unconfigured Desk);
+- the bridge's allow-list (no action endpoints, no unconfigured Desk, no path
+  that URL parsing would change), refused settings that would break the
+  extension, and that a same-site frame which sees the binding cannot use it;
 - references, keyboard hovercards, click-through (the Desk stays on the
-  record) and streaming, and that a mission is resolved with one `/api/records` read and never asked for as an
-  item;
+  record) and streaming, and that a mission is resolved with `/api/records` reads
+  only, never asked for as an item, and opens on the second Desk, the one that
+  answered;
 - a manual mapping saved from Settings landing in `config.json` under
   `settings` and applying without reinjecting the extension or reloading the
-  Desk iframe, an outside edit of `config.json` reapplying it, and localStorage
-  holding only view state;
+  Desk iframe, 20 saves sent at once leaving the last one in `config.json`
+  without a reinjection, an outside edit of `config.json` reapplying the
+  extension, and localStorage holding only view state;
 - Settings reinjection, native-surface coexistence, the renamed panel slot
   fallback, and clean removal.
 
