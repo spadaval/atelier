@@ -137,7 +137,9 @@ pub fn events(log: &str) -> Vec<HistoryEvent> {
         );
         seen.insert(key)
     });
-    found.sort_by(|a, b| b.at.cmp(&a.at));
+    // Newest first by the time itself: committers' offsets differ, so the
+    // text does not sort. A time that does not read sorts last.
+    found.sort_by_key(|e| std::cmp::Reverse(DateTime::parse_from_rfc3339(&e.at).ok()));
     found
 }
 
@@ -259,7 +261,7 @@ mod tests {
     fn a_step_on_two_branches_shows_once_newest_first() {
         let log = "a\t2026-11-16T10:00:00Z\tReview x-aaaa, round 1: approved\n\
                    b\t2026-11-16T10:00:00Z\tReview x-aaaa, round 1: approved\n\
-                   c\t2026-11-16T11:00:00Z\tMerge x-aaaa: It\n\
+                   c\t2026-11-16T06:00:00-05:00\tMerge x-aaaa: It\n\
                    d\t2026-11-16T09:00:00Z\tA commit\n";
         let found = events(log);
         let seen: Vec<_> = found.iter().map(|e| (e.commit.as_str(), e.kind)).collect();

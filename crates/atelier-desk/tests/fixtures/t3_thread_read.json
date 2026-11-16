@@ -1,0 +1,59 @@
+{
+  "thread": {
+    "threadId": "thread:ended-reviewer",
+    "projectId": "mcp:6767fcba-53d7-4aaa-985c-3210ab28cece",
+    "title": "Review demo-a001",
+    "createdBy": "agent",
+    "creationSource": "mcp",
+    "status": "completed",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "parentThreadId": "c6689ff2-b6ae-4865-afe4-a3533c8cfa80",
+    "relationshipToParent": "subagent",
+    "runCount": 1,
+    "itemCount": 68,
+    "createdAt": "2026-11-16T15:32:44.498Z",
+    "updatedAt": "2026-11-16T15:35:16.317Z"
+  },
+  "recentRuns": [
+    {
+      "runId": "run:thread:ended-reviewer:ordinal:1",
+      "ordinal": 1,
+      "status": "completed",
+      "providerInstanceId": "codex",
+      "model": "gpt-6.1-sol",
+      "requestedAt": "2026-11-16T15:32:44.501Z",
+      "startedAt": "2026-11-16T15:32:44.634Z",
+      "completedAt": "2026-11-16T15:35:16.300Z"
+    }
+  ],
+  "items": [
+    {
+      "position": 65,
+      "type": "dynamic_tool",
+      "status": "completed",
+      "title": null,
+      "text": "{\n  \"toolName\": \"mcp__t3-code__t3_thread_read\",\n  \"input\": {\n    \"threadId\": \"thread:x\",\n    \"limit\": 3\n  }\n}",
+      "textTruncated": false
+    },
+    {
+      "position": 66,
+      "type": "dynamic_tool",
+      "status": "completed",
+      "title": null,
+      "text": "{\n  \"toolName\": \"Bash\",\n  \"input\": {\n    \"command\": \"cargo nextest run -p atelier-desk\",\n    \"description\": \"Run the Desk's tests\"\n  },\n  \"output\": {\n    \"stdout\": \"ok\"\n  }\n}",
+      "textTruncated": false
+    },
+    {
+      "position": 67,
+      "type": "reasoning",
+      "status": "completed",
+      "title": "Thinking",
+      "text": "Now I will approve it.",
+      "textTruncated": false
+    }
+  ],
+  "nextPosition": 67,
+  "hasMore": false,
+  "earlierPosition": 65
+}
