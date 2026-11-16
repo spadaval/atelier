@@ -6,7 +6,7 @@ const deskUrls = api.config.urls;
 const overrides = api.config.repositories;
 // The settings the Customizations section edits live in config.json; saving one rewrites it
 // through the injector, which then reapplies the extension.
-const settings = { enabled: true, references: true, followProject: true, pinnedRepo: null, mappings: {}, ...api.config.settings };
+const settings = { enabled: true, references: true, followProject: true, autoUpdate: false, pinnedRepo: null, mappings: {}, ...api.config.settings };
 // localStorage keeps only view state: which threads had the Desk open.
 const viewKey = 't3-custom:atelier:view:v1';
 let view;
@@ -332,6 +332,10 @@ settingsHost.style.cssText = 'display:block;margin:24px 0;padding:20px 0;border-
 const settingsRoot = settingsHost.attachShadow({ mode: 'open' }); addStyle(settingsRoot);
 const statusText = element('p', { class: 'muted', text: 'Reading injector status…' });
 const statusError = element('p', { class: 'error', hidden: '' });
+// The installed release and the last release check, from the injector's update.json.
+const releaseText = element('p', { id: 'release-status', class: 'muted', text: 'Reading release status…' });
+const releaseError = element('p', { id: 'release-error', class: 'error', hidden: '' });
+const updateRelease = element('button', { id: 'update-release', hidden: '' });
 const deskList = element('ul', { 'aria-label': 'Desks' });
 const contextText = element('p', { class: 'muted' });
 const overrideList = element('ul', { 'aria-label': 'Manual repository overrides' });
@@ -346,10 +350,12 @@ function checkbox(key, title) {
 }
 const reloadScripts = element('button', { id: 'reload-scripts', text: 'Reload scripts' });
 const openFolder = element('button', { text: 'Open customization folder' });
-const refreshStatus = element('button', { text: 'Refresh status' });
+const refreshStatus = element('button', { id: 'refresh-status', text: 'Refresh status' });
 const deskAction = element('button', { text: 'Open Desk' });
 settingsRoot.append(element('div', { class: 'stack' }, element('h2', { text: 'Customizations' }), statusText, statusError,
   element('div', { class: 'row' }, reloadScripts, refreshStatus, openFolder, deskAction),
+  element('h3', { text: 'Release' }), releaseText, releaseError, element('div', { class: 'row' }, updateRelease),
+  checkbox('autoUpdate', 'Install new extension releases by themselves (checked at start and daily)'),
   element('h3', { text: 'Desks' }), deskList,
   element('h3', { text: 'Settings' }), element('p', { class: 'muted', text: `Saved in ${api.home}${api.home.includes('\\') ? '\\' : '/'}config.json` }),
   checkbox('enabled', 'Enable the Atelier views (Desk panel, sidebar, layer, project strip)'), checkbox('references', 'Show Atelier reference links and hovercards'), checkbox('followProject', 'Follow the current T3 project'),
@@ -359,6 +365,11 @@ settingsRoot.append(element('div', { class: 'stack' }, element('h2', { text: 'Cu
 listen(reloadScripts, 'click', () => api.reloadScripts());
 listen(openFolder, 'click', () => void api.request('open-folder').catch(error => displayError(error)));
 listen(refreshStatus, 'click', () => { void readStatus(); void loadRepositories(); });
+// The injector installs the release and reinjects the extension, which reads the status anew.
+listen(updateRelease, 'click', () => {
+  updateRelease.disabled = true; releaseText.textContent = `Installing ${updateRelease.dataset.version}…`;
+  void api.request('update').then(() => readStatus(), error => { if (!api.signal.aborted) displayError(error); }).finally(() => { updateRelease.disabled = false; });
+});
 listen(deskAction, 'click', () => void showDesk());
 // Automatic follows the Desk's repository identity; anything else is a manual override.
 listen(mapping, 'change', () => {
@@ -376,7 +387,18 @@ async function readStatus() {
     statusText.textContent = `Injector ${status.phase} · version ${status.version} · last applied ${status.lastAppliedAt ? new Date(status.lastAppliedAt).toLocaleTimeString() : 'not yet'}`;
     statusError.hidden = !status.lastError && !hostError;
     statusError.textContent = hostError?.message ?? status.lastError ?? '';
+    showRelease(status);
   } catch (error) { if (!api.signal.aborted) displayError(error); }
+}
+function showRelease(status) {
+  const update = status.update;
+  const checked = update ? ` · checked ${new Date(update.checkedAt).toLocaleString()}` : ' · not checked yet';
+  const newest = !update || update.error ? '' : update.newer ? ` · release ${update.latest.version} is available` : update.latest ? ` · newest release ${update.latest.version}, up to date` : ' · no extension release published';
+  releaseText.textContent = `Extension ${status.release}${newest}${checked}`;
+  const problems = [update?.error && `Release check failed: ${update.error}`, status.restartNeeded && 'An update changed t3-custom.mjs: run t3-custom stop, then open T3 Custom again to load it.'].filter(Boolean);
+  releaseError.hidden = !problems.length; releaseError.textContent = problems.join(' ');
+  updateRelease.hidden = !update?.newer;
+  if (update?.newer) { updateRelease.dataset.version = update.latest.version; updateRelease.textContent = `Update to ${update.latest.version}`; }
 }
 function syncProbes() {
   const missing = name => hostProbes[name]?.ok === false;
