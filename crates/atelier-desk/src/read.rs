@@ -1067,6 +1067,7 @@ pub fn motion(repo: &mut Repo, name: &str) -> Result<Option<MotionRepo>> {
         }
     }
     missions.sort_by(|a, b| a.mission.id.cmp(&b.mission.id));
+    // The ready items that can start now, highest priority first.
     let mut startable: Vec<&Entry> = (records.entries.iter())
         .filter(|e| e.status == atelier_core::model::Status::Ready && e.startable())
         .collect();
@@ -1076,13 +1077,13 @@ pub fn motion(repo: &mut Repo, name: &str) -> Result<Option<MotionRepo>> {
         ready.push(item_row(entry, &records.items)?);
     }
     Ok(Some(MotionRepo {
-        ready,
         repo: name.to_string(),
         commit: Some(repo.base_tip.clone()),
         error: None,
         fetched: FetchMark::default(),
         items,
         missions,
+        ready,
     }))
 }
 
@@ -1172,7 +1173,8 @@ fn time(time: &Time) -> String {
     time.to_rfc3339()
 }
 
-/// Spike: the items in no mission that are not done or dropped.
+/// The items in no mission that are not done or dropped, for
+/// `/api/roadmap`.
 pub fn loose(repo: &mut Repo) -> Result<Option<Vec<ItemRow>>> {
     use atelier_core::model::Status as S;
     let records = Records::read(repo)?;

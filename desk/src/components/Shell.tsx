@@ -108,20 +108,25 @@ function InboxLink() {
 }
 
 /**
- * Spike: every `host:thread` message opens the "This thread" page, which
- * reads the thread, its children and what it mentions from the host's
- * context. Replacing, not pushing, so the host's back button does not walk
- * through the threads it showed.
+ * Opens the "This thread" page each time the host names another thread
+ * (`host:thread`). The page reads the thread, its children and what it
+ * mentions from the host's context, so a message for the same thread with
+ * other children or mentions changes that page where it is shown and leaves
+ * alone a page the human has since moved to.
  */
 function useFollowThread() {
-  const context = useHostContext();
+  const thread = useHostContext()?.thread ?? null;
+  // The navigate function changes with the location; following a thread must
+  // not run again when the human moves on, so the effect reads it here.
   const navigate = useNavigate();
   const go = useRef(navigate);
   go.current = navigate;
   useEffect(() => {
-    if (context === null) return;
+    if (thread === null) return;
+    // Replacing, not pushing: the host chose this page, and the host's own
+    // back button should not walk through the threads it showed.
     go.current("/t", { replace: true });
-  }, [context]);
+  }, [thread]);
 }
 
 /**
@@ -135,8 +140,8 @@ function EmbeddedShell({ children }: { children: ReactNode }) {
   // the page sets it (lib/host.ts).
   useEffect(report, [location.pathname, location.search]);
   useFollowThread();
-  // The project home sits under T3's composer and brings no chrome of its own.
-  // Mission control draws its own top bar, as Factory's does.
+  // Mission control draws its own top bar, as Factory's does, and is sized
+  // to the frame; the host is told its height.
   const bare = location.pathname.startsWith("/mission/");
   const main = useRef<HTMLDivElement>(null);
   const hosted = useConnected();

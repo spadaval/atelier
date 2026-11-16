@@ -12,11 +12,10 @@ import type { TiesResponse } from "../api/TiesResponse";
 import { LiveThreadRow } from "../components/Agents";
 import { Crumbs } from "../components/Crumbs";
 import { ScopeBar, Skeleton, StatusGlyph } from "../components/ui";
-import { api, to, useAll, useData } from "../lib/api";
+import { api, to, useAll, useData, useThreads } from "../lib/api";
 import { openThread, useHostContext, type HostContext } from "../lib/host";
 import { countsLine, finished, roleWords, statusName, statusTitle, total } from "../lib/words";
-import { Block, ProjectGlance, Row, since, who } from "./Home";
-import { useThreads } from "./MissionControl";
+import { Block, ProjectGlance, Row, since, who } from "../components/Glance";
 
 /** T3 Code's statuses for a thread whose work has ended. */
 const ENDED = new Set(["completed", "cancelled", "failed", "interrupted", "rolled_back"]);
@@ -279,7 +278,7 @@ function ThreadView({ context }: { context: HostContext }) {
   const work = useAll<MissionPage>(workTies.map((t) => api.mission(t.repo, t.id)));
   const workAgents = work.data.flatMap((p) => (p?.threads ?? []).filter((a) => a.item !== null).map((a) => a.identity));
   const workInfos = useThreads(workAgents);
-  const childInfo = useAll<ThreadInfo>(context.children.map(api.thread));
+  const childInfo = useAll<ThreadInfo>(context.children.map((id) => api.thread(id)));
   const childTies = useAll<TiesResponse>(context.children.map(api.ties));
   const named = useAll<RecordName>(context.mentioned.map(api.record));
   const now = Date.now();

@@ -10,8 +10,10 @@
 //! the `atelier` binary.
 
 pub mod api;
+mod bounded;
 pub mod config;
 pub mod fetch;
+mod history;
 pub mod news;
 mod read;
 pub mod server;

@@ -11,6 +11,9 @@ pub struct ReposResponse {
     pub repos: Vec<RepoSummary>,
     /// The commit the server was built from (`crate::BUILT_FROM`).
     pub built_from: String,
+    /// The name the human acts under (the configuration's `caller`), so a
+    /// page can tell the steps the human recorded.
+    pub caller: String,
 }
 
 /// `GET /api/embed`: what the app needs to talk to a page that frames it.
@@ -328,7 +331,8 @@ pub struct ItemPage {
     pub threads: Vec<Agent>,
     pub t3: T3State,
     pub fetched: FetchMark,
-    /// Spike: the pull request of its branch.
+    /// The pull request of its branch, where the forge's last list has
+    /// one; `null` for an item with no branch or none found.
     pub pull_request: Option<PrMark>,
 }
 
@@ -444,21 +448,243 @@ pub struct T3State {
     pub error: Option<String>,
 }
 
-/// Spike: `GET /api/thread?id=<identity>`, any thread T3 Code knows, live
-/// or ended.
+/// `GET /api/thread?id=<identity>`: any thread T3 Code knows, live or
+/// ended.
 #[derive(Debug, Clone, Serialize, TS)]
 pub struct ThreadInfo {
     pub id: String,
     pub title: String,
+    /// T3 Code's status for it, such as `running`, `waiting` or `completed`.
     pub status: String,
     pub updated_at: String,
+    /// The thread that started it.
     pub parent: Option<String>,
     pub model: Option<String>,
+    /// Whether T3 Code's last poll listed it as live.
     pub live: bool,
-    /// Spike, with `full`: when its latest run started.
+    /// With `full=1`: when its latest run started, else when it was made.
     pub started_at: Option<String>,
-    /// Spike, with `full`: its latest tool call or message, in one line.
+    /// With `full=1`: its latest tool call or message, in one line of at
+    /// most 160 characters.
     pub last_line: Option<String>,
+}
+
+/// `GET /api/sidebar`: every open mission in every repository, with the
+/// threads at work on each, for a host's sidebar.
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct SidebarResponse {
+    pub repos: Vec<SideRepo>,
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct SideRepo {
+    pub repo: String,
+    pub missions: Vec<SideMission>,
+    /// Why the repository could not be read; absent when it could.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct SideMission {
+    pub id: String,
+    pub title: String,
+    pub state: SideState,
+    /// Its items that are done, and all of them.
+    pub done: usize,
+    pub total: usize,
+    /// What waits on the human in it: its waiting items, and the threads
+    /// at work on it that T3 Code shows waiting.
+    pub waiting: usize,
+    /// The threads on the mission itself: its lead, planners and plan
+    /// reviewers.
+    pub threads: Vec<SideThread>,
+    pub items: Vec<SideItem>,
+}
+
+/// Where a mission in the sidebar stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum SideState {
+    /// Agreed, with an item started.
+    InProgress,
+    /// Agreed, with nothing started.
+    Agreed,
+    /// Its plan is on its branch, not yet agreed.
+    Proposed,
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct SideItem {
+    pub id: String,
+    pub title: String,
+    pub status: Status,
+    /// Its implementers and reviewers.
+    pub threads: Vec<SideThread>,
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct SideThread {
+    pub identity: String,
+    pub role: Role,
+}
+
+/// `GET /api/launch?repo=`: what can start now in one repository, what
+/// waits on the human there, and what is in motion, for a host's project
+/// strip.
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct LaunchResponse {
+    /// Up to five ready items that can start now and need no human.
+    pub ready: Vec<LaunchReady>,
+    /// How many things wait on the human: needs-human items, proposed
+    /// plans and waiting threads.
+    pub waiting: usize,
+    /// The live threads that hold work here and wait on a person.
+    pub threads_waiting: Vec<WaitingThread>,
+    /// The top three things waiting on the human: proposed plans first,
+    /// then needs-human items by priority.
+    pub waiting_items: Vec<WaitingRecord>,
+    /// Every started item, those with a live thread first, then the most
+    /// recently moved.
+    pub in_motion: Vec<InMotion>,
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct LaunchReady {
+    pub id: String,
+    pub title: String,
+    pub priority: Priority,
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct WaitingThread {
+    pub identity: String,
+    pub title: String,
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct WaitingRecord {
+    pub id: String,
+    pub title: String,
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct InMotion {
+    pub id: String,
+    pub title: String,
+    /// `building`, `in review <round>`, `changes requested` or `approved`.
+    /// The round counts the item's submits in the last 60 days of commit
+    /// subjects.
+    pub stage: String,
+    /// Seconds since its latest step in the commit subjects, else since its
+    /// branch's last commit.
+    pub age_seconds: Option<i64>,
+    /// Its reviewer while it is in review, else its implementer.
+    pub holder: Option<MotionHolder>,
+    /// Whether its holder is a live thread in T3 Code.
+    pub live: bool,
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct MotionHolder {
+    pub identity: String,
+    /// Its title in T3 Code, live or ended; `null` where T3 Code does not
+    /// know it.
+    pub title: Option<String>,
+}
+
+/// `GET /api/history?repo=&days=&ids=`: the records' steps, read from
+/// commit subjects, newest first.
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct HistoryResponse {
+    pub repo: String,
+    pub events: Vec<HistoryEvent>,
+}
+
+/// One step in the records' history, as a commit's subject names it.
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct HistoryEvent {
+    pub commit: String,
+    /// The commit's committer time, as RFC 3339.
+    pub at: String,
+    pub kind: EventKind,
+    pub id: String,
+    /// Whether the repository holds the ID as an item or a mission; `null`
+    /// where it holds neither.
+    pub record: Option<HoldKind>,
+    /// The record's title, where the repository holds the ID.
+    pub title: Option<String>,
+    /// A review's round, for `plan_review` and `review`.
+    pub round: Option<u32>,
+    /// A review's verdict as the subject words it, such as `approved` or
+    /// `changes requested`.
+    pub verdict: Option<String>,
+    pub subject: String,
+}
+
+/// What a commit subject says happened.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum EventKind {
+    /// `Plan mission <id>`.
+    Planned,
+    /// `Review the plan of <id>, round <n>: <verdict>`.
+    PlanReview,
+    /// `Start <id>`.
+    Started,
+    /// `Submit <id> for review`.
+    Submitted,
+    /// `Review <id>, round <n>: <verdict>`.
+    Review,
+    /// `Merge <id>: ...`, or `Merge <remote>/<id>`.
+    Merged,
+    /// `Ready <id>, ...`: one per ID named.
+    Readied,
+    /// `Close <id>...`.
+    Closed,
+    /// `Drop <id>`.
+    Dropped,
+    /// `Lead <id>`.
+    Led,
+}
+
+/// `GET /api/checks?repo=&pr=`: CI on a pull request, as the forge gives it.
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct ChecksResponse {
+    pub state: ChecksState,
+    pub checks: Vec<CheckRun>,
+}
+
+/// CI on a pull request, in a word.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ChecksState {
+    /// Every check succeeded, was skipped or was neutral.
+    Passing,
+    /// A check failed, errored, was cancelled, timed out or needs action.
+    Failing,
+    /// A check has not finished.
+    Pending,
+    /// The pull request has no checks.
+    None,
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct CheckRun {
+    pub name: String,
+    /// Its conclusion as GitHub words it, such as `SUCCESS`, `FAILURE` or
+    /// `SKIPPED`, or its status while it runs.
+    pub state: String,
+}
+
+/// `GET /api/roadmap?repo=`: the items in no mission, for the project
+/// home's Now, Next and Later.
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct RoadmapResponse {
+    pub repo: String,
+    /// Every item in no mission that is not done or dropped.
+    pub loose: Vec<ItemRow>,
 }
 
 /// `GET /api/threads`.
@@ -686,7 +912,7 @@ pub struct MotionRepo {
     pub items: Vec<MotionItem>,
     /// Each agreed mission with a started item.
     pub missions: Vec<MotionMission>,
-    /// Spike: the ready items that can start now, highest priority first.
+    /// Up to five ready items that can start now, highest priority first.
     pub ready: Vec<ItemRow>,
 }
 
@@ -703,7 +929,7 @@ pub struct MotionItem {
     pub holder: Option<Agent>,
     /// Who holds its review, while it is in review.
     pub reviewer: Option<Agent>,
-    /// Spike: when its branch last had a commit.
+    /// When its branch last had a commit, as RFC 3339.
     pub changed_at: Option<String>,
 }
 
@@ -874,6 +1100,12 @@ pub fn export_types(dir: &std::path::Path) -> Result<(), ts_rs::ExportError> {
     ThreadsResponse::export_all(&config)?;
     RecordName::export_all(&config)?;
     TiesResponse::export_all(&config)?;
+    ThreadInfo::export_all(&config)?;
+    SidebarResponse::export_all(&config)?;
+    LaunchResponse::export_all(&config)?;
+    HistoryResponse::export_all(&config)?;
+    ChecksResponse::export_all(&config)?;
+    RoadmapResponse::export_all(&config)?;
     ProposedResponse::export_all(&config)?;
     MotionResponse::export_all(&config)?;
     DisputedResponse::export_all(&config)?;

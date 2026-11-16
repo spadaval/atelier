@@ -5,13 +5,14 @@ import type { ItemRow } from "../api/ItemRow";
 import type { MissionPage } from "../api/MissionPage";
 import type { MissionRow } from "../api/MissionRow";
 import type { MissionsResponse } from "../api/MissionsResponse";
-import type { History, HistoryEvent, Roadmap } from "../api/spike";
+import type { HistoryEvent } from "../api/HistoryEvent";
+import type { HistoryResponse } from "../api/HistoryResponse";
+import type { RoadmapResponse } from "../api/RoadmapResponse";
 import { Crumbs } from "../components/Crumbs";
+import { sinceAgo, who } from "../components/Glance";
 import { ErrorBanner, Priority, ScopeBar, Skeleton, StatusGlyph } from "../components/ui";
-import { api, to, useData } from "../lib/api";
+import { api, to, useData, useThreads } from "../lib/api";
 import { statusName } from "../lib/words";
-import { since, who } from "./Home";
-import { useThreads } from "./MissionControl";
 
 const STARTED = new Set(["building", "in_review", "changes_requested", "approved"]);
 
@@ -216,12 +217,12 @@ function ThisWeek({ repo, events }: { repo: string; events: HistoryEvent[] }) {
   );
 }
 
-/** `/home/:repo`: the project as a roadmap without dates: now, next, later, and what happened this week. */
-export function RoadmapPage() {
+/** `/home/:repo`: the project home, a roadmap without dates: now, next, later, and what happened this week. */
+export function ProjectHomePage() {
   const { repo = "" } = useParams();
   const missions = useData<MissionsResponse>(api.missions(repo));
-  const roadmap = useData<Roadmap>(api.roadmap(repo));
-  const week = useData<History>(api.history(repo, { days: 7 }));
+  const roadmap = useData<RoadmapResponse>(api.roadmap(repo));
+  const week = useData<HistoryResponse>(api.history(repo, { days: 7 }));
   const rows = missions.data?.missions ?? [];
   const loose = roadmap.data?.loose ?? [];
   // A mission with any item started or done is under way.
@@ -261,7 +262,7 @@ export function RoadmapPage() {
             </Lane>
           </div>
           {week.data ? <ThisWeek repo={repo} events={week.data.events} /> : null}
-          <p className="glance-foot">{missions.data.fetched.at ? `Fetched ${since(missions.data.fetched.at)} ago.` : null}</p>
+          <p className="glance-foot">{missions.data.fetched.at ? `Fetched ${sinceAgo(missions.data.fetched.at)}.` : null}</p>
         </>
       )}
     </div>

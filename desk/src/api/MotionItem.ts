@@ -17,6 +17,6 @@ holder: Agent | null,
  */
 reviewer: Agent | null,
 /**
- * Spike: when its branch last had a commit.
+ * When its branch last had a commit, as RFC 3339.
  */
-changed_at?: string | null, };
+changed_at: string | null, };

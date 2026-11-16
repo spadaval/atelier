@@ -21,16 +21,15 @@ export type DeskMessage =
   | { type: "desk:resized"; height: number }
   | { type: "desk:key"; key: "Escape" };
 
-/** Where the contract stands: the listed origins, and the parent's once it is known to be one of them. */
-/** Spike: everything a `host:thread` message says about the host's thread. */
+/**
+ * Everything the last `host:thread` message said of the host's thread: its
+ * identity; the Desk repository its project maps to, or null; the threads
+ * it started; and the record IDs its conversation names, each once.
+ */
 export type HostContext = { thread: string; repository: string | null; children: string[]; mentioned: string[] };
 
-const state: { origins: string[]; parent: string | null; thread: string | null; context: HostContext | null } = {
-  origins: [],
-  parent: null,
-  thread: null,
-  context: null,
-};
+/** Where the contract stands: the listed origins, the parent's once it is known to be one of them, and the host's thread. */
+const state: { origins: string[]; parent: string | null; context: HostContext | null } = { origins: [], parent: null, context: null };
 const listeners = new Set<() => void>();
 let theme: HostTheme = { colours: {} };
 let lastReport = "";
@@ -57,19 +56,10 @@ export function useConnected(): boolean {
 }
 
 /**
- * The identity of the thread the host last said it shows (`host:thread`), or
- * null before it says one. It changes only when the host names another
- * thread, so a message for the same thread changes nothing.
+ * What the host last said of the thread it shows (`host:thread`), or null
+ * before it names one. It changes when a message says anything new: another
+ * thread, or the same thread with other children or mentions.
  */
-export function useHostThread(): string | null {
-  return useSyncExternalStore(
-    subscribe,
-    () => state.thread,
-    () => null,
-  );
-}
-
-/** Spike: the host's thread with its project, children and mentioned records, or null before the host names one. */
 export function useHostContext(): HostContext | null {
   return useSyncExternalStore(
     subscribe,
@@ -78,6 +68,7 @@ export function useHostContext(): HostContext | null {
   );
 }
 
+/** The non-empty strings in `value`, where it is a list. */
 const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((v): v is string => typeof v === "string" && v !== "") : []);
 
 function send(message: DeskMessage) {
@@ -118,14 +109,15 @@ function receive(event: MessageEvent) {
     theme = merge(theme, message);
     apply(theme);
   } else if (message.type === "host:thread") {
-    // An identity is only ever looked up (`GET /api/ties`), never followed.
+    // Identities and IDs are only ever looked up (`GET /api/ties`,
+    // `/api/thread`, `/api/records`), never followed; a repository name is
+    // only compared with those the Desk serves.
     const thread = message.thread;
     if (typeof thread !== "string" || thread === "") return;
     const repository = typeof message.repository === "string" && message.repository !== "" ? message.repository : null;
     const context: HostContext = { thread, repository, children: strings(message.children), mentioned: [...new Set(strings(message.mentioned))] };
     if (JSON.stringify(context) === JSON.stringify(state.context)) return;
     state.context = context;
-    state.thread = thread;
     changed();
   }
 }
@@ -145,7 +137,7 @@ export function report() {
   send({ type: "desk:navigated", path, title });
 }
 
-/** Spike: tells the host how tall the page's content is, so it can size the frame to it. */
+/** Tells the host how tall the page's content is, so it can size its frame to it. */
 export function reportHeight(height: number) {
   send({ type: "desk:resized", height: Math.ceil(height) });
 }

@@ -2444,7 +2444,7 @@ a.q:hover {
   color: var(--you-text);
 }
 
-/* ------------------------------------------------- spike: glance pages */
+/* ------------------------------------------------- views a host shows: this thread, the project glance */
 /* The project home under T3's composer: no top bar, no claim on the height. */
 .shell.embedded.bare {
   min-height: 0;
@@ -2452,9 +2452,6 @@ a.q:hover {
 .page.glance-page {
   max-width: none;
   padding: 14px 16px 24px;
-}
-.shell.embedded.bare .page.glance-page {
-  padding: 8px 12px 12px;
 }
 .glance {
   display: grid;
@@ -2710,25 +2707,6 @@ a.q:hover {
 .child-row.stale {
   box-shadow: inset 2px 0 0 var(--bad);
 }
-.fold-done summary {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 7px 12px;
-  font-size: 12px;
-  color: var(--ink-3);
-  cursor: pointer;
-  list-style: none;
-}
-.fold-done summary::-webkit-details-marker {
-  display: none;
-}
-.fold-done[open] summary svg {
-  transform: rotate(90deg);
-}
-.fold-done > .glance-row {
-  border-top: 1px solid var(--line);
-}
 @media (max-width: 600px) {
   .glance-row {
     grid-template-columns: 18px minmax(0, 1fr) auto;
@@ -2773,7 +2751,7 @@ a.q:hover {
   }
 }
 
-/* Spike: the inbox shown large over T3's main area. Past one comfortable
+/* The inbox shown large over a host's main area. Past one comfortable
    column it flows its sections into columns instead of stretching rows. */
 .shell.embedded .page.inbox-page {
   max-width: 1360px;
@@ -2788,8 +2766,6 @@ a.q:hover {
   display: inline-block;
   width: 100%;
   break-inside: avoid;
-}
-.shell.embedded .inbox-flow .inbox-repo {
   margin-bottom: 24px;
 }
 .shell.embedded .inbox-flow .repo-title {
@@ -2801,8 +2777,7 @@ a.q:hover {
   }
 }
 
-
-/* ------------------------------------------------- spike round 2 */
+/* ------------------------------------------------- this thread's work */
 /* "This thread": work under it, thread chips, and the done records. */
 .work-card .hold-items {
   margin-bottom: 8px;
@@ -2855,183 +2830,6 @@ a.q:hover {
   opacity: 0.72;
 }
 
-/* Mission control, for the main area at 900 to 1500 pixels. */
-.page.mc-page,
-.page.rm-page {
-  max-width: 1500px;
-  margin: 0 auto;
-  padding: 18px 24px 40px;
-}
-.mc-head {
-  display: flex;
-  align-items: flex-start;
-  gap: 20px;
-  padding-bottom: 16px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid var(--line);
-}
-.mc-head .grow {
-  flex: 1;
-  min-width: 0;
-}
-.mc-kicker {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 12px;
-  font-size: 12.5px;
-  color: var(--ink-3);
-  margin-bottom: 6px;
-}
-.pill-state {
-  padding: 1px 8px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  border: 1px solid var(--line-strong);
-  color: var(--ink-2);
-}
-.pill-state.run {
-  color: var(--run);
-  border-color: color-mix(in srgb, var(--run) 50%, transparent);
-  background: var(--run-wash);
-}
-.pill-state.ok {
-  color: var(--ok);
-  border-color: color-mix(in srgb, var(--ok) 50%, transparent);
-}
-.mc-progress {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 10px;
-  max-width: 640px;
-}
-.mc-progress .seg {
-  flex: 1;
-}
-.mc-progress .num {
-  font: 12.5px var(--mono);
-  color: var(--ink-2);
-  white-space: nowrap;
-}
-.mc-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  font-size: 12.5px;
-  color: var(--ink-3);
-  white-space: nowrap;
-}
-.mc-link:hover {
-  color: var(--ink);
-}
-.mc-talk {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 14px;
-  border-radius: 9px;
-  background: var(--you);
-  color: var(--you-ink);
-  font-weight: 600;
-  text-align: left;
-  max-width: 300px;
-}
-.mc-talk small {
-  display: block;
-  font-size: 11.5px;
-  font-weight: 500;
-  opacity: 0.75;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 240px;
-}
-.mc-talk:hover {
-  filter: brightness(1.06);
-}
-.mc-grid {
-  display: grid;
-  grid-template-columns: minmax(300px, 0.9fr) minmax(0, 1.2fr);
-  gap: 20px;
-  align-items: start;
-}
-.mc-grid .mc-log {
-  grid-column: 1 / -1;
-}
-@media (min-width: 1240px) {
-  .mc-grid {
-    grid-template-columns: minmax(320px, 0.95fr) minmax(0, 1.25fr) minmax(280px, 0.8fr);
-  }
-  .mc-grid .mc-log {
-    grid-column: auto;
-  }
-}
-.mc-h,
-.mc-log h3,
-.mc-block h3 {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-  margin: 0 2px 8px;
-}
-.mc-item {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: start;
-  width: 100%;
-  padding: 9px 12px;
-  text-align: left;
-}
-.mc-item:hover {
-  background: var(--hover);
-}
-.mc-item.on {
-  background: var(--raised);
-  box-shadow: inset 2px 0 0 var(--you);
-}
-.mc-item.stuck {
-  box-shadow: inset 2px 0 0 var(--bad);
-}
-.mc-item.on.stuck {
-  box-shadow: inset 2px 0 0 var(--bad), inset 4px 0 0 var(--you);
-}
-.mc-item .glyph {
-  margin-top: 2px;
-}
-.mc-item .t {
-  display: block;
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.mc-item .t .id {
-  font: 11.5px var(--mono);
-  color: var(--ink-3);
-  margin-right: 4px;
-}
-.mc-item .s {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px 10px;
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--ink-3);
-}
-.mc-item .grow {
-  min-width: 0;
-}
-.mc-item .age {
-  font: 11.5px var(--mono);
-  color: var(--ink-3);
-  white-space: nowrap;
-}
 .stage-word.building {
   color: var(--run);
 }
@@ -3045,170 +2843,12 @@ a.q:hover {
 .stage-word.done {
   color: var(--ok);
 }
-.mc-spec {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--panel);
-  padding: 14px 16px;
+/* The project home: Now, Next and Later, and the week. */
+.page.rm-page {
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 18px 24px 40px;
 }
-.mc-spec > header {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
-  gap: 10px;
-  margin-bottom: 12px;
-}
-.mc-spec h2 {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--ink);
-  line-height: 1.3;
-}
-.mc-spec h2 a:hover {
-  color: var(--you-text);
-}
-.mc-sub {
-  margin-top: 2px;
-  font-size: 12.5px;
-  color: var(--ink-3);
-}
-.mc-block {
-  margin-top: 14px;
-}
-.mc-block .ticks {
-  margin-left: 0;
-}
-.mc-pr {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 14px;
-  font-size: 13px;
-}
-.mc-pr a {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-.mc-pr a:hover {
-  color: var(--you-text);
-}
-.ci {
-  font-size: 12px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  color: var(--ink-3);
-}
-.ci.passing {
-  color: var(--ok);
-  border-color: color-mix(in srgb, var(--ok) 45%, transparent);
-}
-.ci.failing {
-  color: var(--bad);
-  border-color: color-mix(in srgb, var(--bad) 45%, transparent);
-}
-.ci.pending {
-  color: var(--run);
-}
-.mc-muted {
-  margin: 4px 0 0;
-  font-size: 12.5px;
-  color: var(--ink-3);
-}
-.mc-thread {
-  display: grid;
-  grid-template-columns: 10px minmax(0, 1fr) 14px;
-  gap: 10px;
-  align-items: start;
-  width: 100%;
-  padding: 8px 12px;
-  text-align: left;
-  color: var(--ink);
-}
-.mc-thread:hover {
-  background: var(--hover);
-}
-.mc-thread > svg {
-  color: var(--ink-3);
-  margin-top: 2px;
-}
-.mc-thread .t {
-  display: block;
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.mc-thread .s {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px 10px;
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--ink-3);
-}
-.mc-thread .grow {
-  min-width: 0;
-}
-.mc-log ol {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  border-left: 1px solid var(--line);
-  margin-left: 9px;
-}
-.mc-day {
-  margin: 10px 0 4px -9px;
-  padding-left: 18px;
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--ink-3);
-  background: var(--bg);
-}
-.mc-log li:first-child .mc-day {
-  margin-top: 0;
-}
-.mc-entry {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
-  gap: 8px;
-  align-items: start;
-  width: 100%;
-  margin-left: -9px;
-  padding: 4px 6px 4px 0;
-  text-align: left;
-  font-size: 12.5px;
-  color: var(--ink-2);
-  border-radius: 6px;
-}
-.mc-entry:hover {
-  background: var(--hover);
-}
-.mc-entry .glyph {
-  width: 18px;
-  height: 18px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--bg);
-}
-.mc-entry .txt {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-  line-height: 1.45;
-}
-.mc-entry time {
-  font: 11px var(--mono);
-  color: var(--ink-3);
-  padding-top: 2px;
-}
-.mc-log li.waited .mc-entry {
-  color: var(--ink);
-}
-
-/* The roadmap. */
 .rm-lanes {
   display: grid;
   gap: 22px;
@@ -3403,7 +3043,7 @@ a.q:hover {
   font-size: 11.5px;
 }
 
-/* ------------------------------------------------- spike round 3: mission control */
+/* ------------------------------------------------- mission control */
 /* One terminal-style screen after Factory's Mission Control: bordered panes
    that scroll inside themselves, monospace and dense, no page scroll. */
 .shell.embedded.bare .main:has(.mcx) {
@@ -3434,6 +3074,9 @@ a.q:hover {
   gap: 14px;
   min-width: 0;
   white-space: nowrap;
+  /* With the frame's own 12 pixels, 44 clear at the top right, where the
+     host draws its close button over the frame. */
+  padding-right: 32px;
 }
 .mcx-top b {
   color: var(--ink);
@@ -3772,7 +3415,9 @@ a.q:hover {
   color: var(--ink-3);
 }
 /* Below 1000 pixels the panes stack and the page scrolls. */
-@media (max-width: 999px) {
+/* The four panes hold down to 860 pixels, about a host's main area beside
+   its sidebar; below that they stack and the page scrolls. */
+@media (max-width: 859px) {
   .shell.embedded.bare .main:has(.mcx) {
     height: auto;
   }
@@ -3809,8 +3454,5 @@ a.q:hover {
   }
 }
 .mcx .ci {
-  border: 0;
-  padding: 0;
-  border-radius: 0;
-  font-size: inherit;
+  color: var(--ink-3);
 }

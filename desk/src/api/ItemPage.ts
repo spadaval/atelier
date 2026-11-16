@@ -28,5 +28,8 @@ unsettled: Array<string>,
  * its answers.
  */
 threads: Array<Agent>, t3: T3State, fetched: FetchMark,
-/** Spike: its branch's pull request. */
-pull_request?: PrMark | null, };
+/**
+ * The pull request of its branch, where the forge's last list has
+ * one; `null` for an item with no branch or none found.
+ */
+pull_request: PrMark | null, };

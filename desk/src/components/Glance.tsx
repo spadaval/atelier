@@ -1,17 +1,19 @@
+/**
+ * The pieces of the views a host shows beside a thread: rows, blocks, short
+ * times, and the project at a glance.
+ */
 import { GitPullRequestArrow, Target } from "lucide-react";
 import type { ReactNode } from "react";
-import { Link, useParams } from "react-router";
+import { Link } from "react-router";
 import type { Agent } from "../api/Agent";
 import type { InboxResponse } from "../api/InboxResponse";
 import type { MissionsResponse } from "../api/MissionsResponse";
 import type { MotionResponse } from "../api/MotionResponse";
 import type { ItemRow } from "../api/ItemRow";
 import type { MotionItem } from "../api/MotionItem";
-import { LiveThreadRow } from "../components/Agents";
-import { Crumbs } from "../components/Crumbs";
-import { Priority, ScopeBar, Skeleton, StatusGlyph } from "../components/ui";
-import type { ThreadInfo } from "../api/ThreadInfo";
-import { api, to, useAll, useData } from "../lib/api";
+import { LiveThreadRow } from "./Agents";
+import { Priority, ScopeBar, Skeleton, StatusGlyph } from "./ui";
+import { api, to, useData, useThreads } from "../lib/api";
 import { ago, countsLine, finished, statusName, total } from "../lib/words";
 
 /** A thread as a short name: its live title, else the end of its identity. */
@@ -23,7 +25,7 @@ export function who(agent: Agent | null | undefined, identity?: string | null): 
   return `thread …${tail.slice(-6)}`;
 }
 
-/** `12m`, `3h`, `2d`: how long ago, short. */
+/** `12m`, `3h`, `2d`, or `now` within a minute: how long ago, short. */
 export function since(iso: string | null | undefined, now = Date.now()): string | null {
   if (!iso) return null;
   const at = Date.parse(iso);
@@ -35,6 +37,13 @@ export function since(iso: string | null | undefined, now = Date.now()): string 
   return `${Math.round(s / 86_400)}d`;
 }
 
+/** `12m ago`, or `now`: how long ago, as a phrase; empty without a time. */
+export function sinceAgo(iso: string | null | undefined, now = Date.now()): string {
+  const s = since(iso, now);
+  return s === null ? "" : s === "now" ? "now" : `${s} ago`;
+}
+
+/** A titled block of rows, with a tally and a link to more. */
 export function Block({ title, tally, more, children }: { title: string; tally?: ReactNode; more?: ReactNode; children: ReactNode }) {
   return (
     <section className="glance-block">
@@ -89,23 +98,15 @@ function MotionRow({ repo, item, names }: { repo: string; item: MotionItem; name
   );
 }
 
-/** Titles for the threads T3 Code no longer lists as live, read one by one. */
-function useThreadNames(ids: string[]): Map<string, string> {
-  const read = useAll<ThreadInfo>(ids.map(api.thread), 120_000);
-  const names = new Map<string, string>();
-  read.data.forEach((info, at) => info && names.set(ids[at], info.title));
-  return names;
-}
-
 function ReadyRow({ repo, row }: { repo: string; row: ItemRow }) {
   return <Row repo={repo} id={row.id} title={row.title} status={row.status} extra={<Priority priority={row.priority} />} />;
 }
 
 /**
- * The project at a glance, for a host that shows it under its new-thread
- * composer: missions in progress, items in motion, what waits on the human
- * and what can start next. No heading of its own, and no claim on the
- * window's height.
+ * The project at a glance, for "This thread" when the thread holds, started
+ * and names nothing: what waits on the human, missions agreed and open,
+ * items in motion and what can start next. No heading of its own, and no
+ * claim on the window's height.
  */
 export function ProjectGlance({ repo }: { repo: string }) {
   const missions = useData<MissionsResponse>(api.missions(repo));
@@ -115,7 +116,8 @@ export function ProjectGlance({ repo }: { repo: string }) {
   const waiting = inbox.data?.repos.find((r) => r.repo === repo);
   const moved = moving?.items ?? [];
   const quiet = [...new Set(moved.flatMap((i) => [i.holder, i.reviewer]).filter((a): a is Agent => !!a && !a.thread).map((a) => a.identity))];
-  const names = useThreadNames(quiet);
+  const infos = useThreads(quiet);
+  const names = new Map([...infos].map(([id, info]) => [id, info.title]));
   if (missions.status === 404) return <p className="glance-empty">The Desk does not serve a repository named {repo}.</p>;
   if (!missions.data || !motion.data || !inbox.data) return <Skeleton rows={4} />;
 
@@ -185,17 +187,6 @@ export function ProjectGlance({ repo }: { repo: string }) {
         ))}
       </Block>
       <p className="glance-foot">{moving?.fetched.at ? `${repo}, fetched ${ago((Date.now() - Date.parse(moving.fetched.at)) / 1000)}` : repo}</p>
-    </div>
-  );
-}
-
-/** `/home/:repo`: the project home under T3 Code's new-thread composer. */
-export function HomePage() {
-  const { repo = "" } = useParams();
-  return (
-    <div className="page glance-page">
-      <Crumbs trail={[{ label: repo }]} />
-      <ProjectGlance repo={repo} />
     </div>
   );
 }

@@ -13,5 +13,7 @@ items: Array<MotionItem>,
  * Each agreed mission with a started item.
  */
 missions: Array<MotionMission>,
-/** Spike: ready items that can start now. */
-ready?: Array<ItemRow>, };
+/**
+ * Up to five ready items that can start now, highest priority first.
+ */
+ready: Array<ItemRow>, };

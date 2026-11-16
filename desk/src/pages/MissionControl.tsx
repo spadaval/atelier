@@ -9,67 +9,23 @@ import { useNavigate, useParams, useSearchParams } from "react-router";
 import type { Agent } from "../api/Agent";
 import type { ItemPage } from "../api/ItemPage";
 import type { ItemRow } from "../api/ItemRow";
+import type { ChecksResponse } from "../api/ChecksResponse";
+import type { HistoryEvent } from "../api/HistoryEvent";
+import type { HistoryResponse } from "../api/HistoryResponse";
 import type { MissionPage } from "../api/MissionPage";
-import type { Checks, History, HistoryEvent } from "../api/spike";
+import type { ReposResponse } from "../api/ReposResponse";
 import type { ThreadInfo } from "../api/ThreadInfo";
 import { Crumbs } from "../components/Crumbs";
-import { api, to, useAll, useData } from "../lib/api";
+import { since, sinceAgo as ago, who } from "../components/Glance";
+import { api, to, useAll, useData, useThreads } from "../lib/api";
 import { openThread } from "../lib/host";
+import { logEntries, span, stage, stageAt } from "../lib/mission";
 import { roleWords } from "../lib/words";
-import { since, who } from "./Home";
 
 const STALE_MS = 30 * 60 * 1000;
 /** Stages that should move on their own; sitting in one is worth a look. */
 const MOVING = new Set(["building", "in_review", "changes_requested", "approved"]);
 const LIVE = new Set(["preparing", "queued", "starting", "running", "waiting"]);
-
-/** Every identity's thread as T3 Code knows it, live or ended. */
-export function useThreads(ids: string[], full = false): Map<string, ThreadInfo> {
-  const unique = [...new Set(ids)];
-  const read = useAll<ThreadInfo>(
-    unique.map((id) => api.thread(id) + (full ? "&full=1" : "")),
-    full ? 15_000 : 60_000,
-  );
-  const map = new Map<string, ThreadInfo>();
-  read.data.forEach((info, at) => info && map.set(unique[at], info));
-  return map;
-}
-
-/** An item's stage in a word or two, with its review round. */
-export function stage(row: ItemRow, events: HistoryEvent[]): string {
-  const submits = events.filter((e) => e.id === row.id && e.kind === "submitted").length;
-  switch (row.status) {
-    case "in_review":
-      return `in review ${Math.max(1, submits)}`;
-    case "changes_requested":
-      return "changes req";
-    case "done":
-      return events.some((e) => e.id === row.id && e.kind === "merged") ? "merged" : "done";
-    default:
-      return row.status.replaceAll("_", " ");
-  }
-}
-
-/** When an item entered its stage: its latest recorded step, else when it was readied. */
-function stageAt(id: string, events: HistoryEvent[], page: ItemPage | null | undefined): string | null {
-  return events.find((e) => e.id === id)?.at ?? page?.ready?.at ?? null;
-}
-
-const ago = (iso: string | null | undefined) => {
-  const s = since(iso);
-  return s === null ? "" : s === "now" ? "now" : `${s} ago`;
-};
-
-/** `2h 14m`, `36m`, `48s`: a duration, short. */
-function span(ms: number): string {
-  const s = Math.max(0, Math.round(ms / 1000));
-  if (s < 60) return `${s}s`;
-  const m = Math.round(s / 60);
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  if (h < 48) return `${h}h ${m % 60}m`;
-  return `${Math.round(h / 24)}d`;
-}
 
 function Pane({ title, right, className, children, bodyRef }: { title: ReactNode; right?: ReactNode; className?: string; children: ReactNode; bodyRef?: React.Ref<HTMLDivElement> }) {
   return (
@@ -89,7 +45,7 @@ function ActiveItem({ repo, row, page, events, holder }: { repo: string; row: It
   const [all, setAll] = useState(false);
   useEffect(() => setAll(false), [row.id]);
   const pr = page?.pull_request ?? null;
-  const checks = useData<Checks>(pr ? api.checks(repo, pr.number) : null, 60_000);
+  const checks = useData<ChecksResponse>(pr ? api.checks(repo, pr.number) : null, 60_000);
   const blockers = row.blockers.filter((b) => b.status !== "done");
   const doneWhen = page?.done_when ?? [];
   const shown = all ? doneWhen : doneWhen.slice(0, 6);
@@ -178,65 +134,6 @@ function ActiveItem({ repo, row, page, events, holder }: { repo: string; row: It
   );
 }
 
-type Entry = { at: string; text: string; id: string; waited: boolean; tone: string };
-
-function logEntries(missionId: string, items: ItemRow[], events: HistoryEvent[], pages: Map<string, ItemPage>, caller: string): Entry[] {
-  const needsYou = new Set(items.filter((i) => i.needs_human).map((i) => i.id));
-  const recorded = new Set([...pages].filter(([, p]) => p.ready?.by.toLowerCase().startsWith(caller)).map(([id]) => id));
-  const entries: Entry[] = [];
-  for (const e of events) {
-    if (e.kind === "readied" && recorded.has(e.id)) continue;
-    const plan = e.id === missionId;
-    const waited = needsYou.has(e.id);
-    const one = (text: string, tone: string) => entries.push({ at: e.at, text, id: e.id, waited, tone });
-    switch (e.kind) {
-      case "planned":
-        one("Mission planned", "plain");
-        break;
-      case "plan_review":
-        one(`Plan review ${e.round}: ${e.verdict}`, e.verdict === "approved" ? "ok" : "bad");
-        break;
-      case "started":
-        one(`Started ${e.id}`, "run");
-        break;
-      case "submitted":
-        one(`Submitted ${e.id} for review`, "review");
-        break;
-      case "review":
-        one(`Review ${e.round} of ${e.id}: ${e.verdict}`, e.verdict === "approved" ? "ok" : "bad");
-        break;
-      case "merged":
-        one(plan ? "Plan merged: mission agreed" : `Merged ${e.id}`, "ok");
-        break;
-      case "closed":
-        one(plan ? "Mission closed with its result" : `Closed ${e.id}`, "ok");
-        break;
-      case "dropped":
-        one(plan ? "Mission dropped" : `Dropped ${e.id}`, "dim");
-        break;
-      case "readied":
-        one(`Readied ${plan ? "the plan" : e.id}`, "plain");
-        break;
-      case "led":
-        one("Lead took the mission", "plain");
-        break;
-    }
-  }
-  const readied = new Map<string, { by: string; at: string; ids: string[] }>();
-  for (const [id, page] of pages) {
-    if (!page.ready || !page.ready.by.toLowerCase().startsWith(caller)) continue;
-    const key = `${page.ready.by}\n${page.ready.at.slice(0, 16)}`;
-    const group = readied.get(key) ?? { by: page.ready.by, at: page.ready.at, ids: [] };
-    group.ids.push(id);
-    readied.set(key, group);
-  }
-  for (const g of readied.values()) {
-    const said = g.by.includes(":") ? `: "${g.by.split(":").slice(1).join(":").trim()}"` : "";
-    entries.push({ at: g.at, text: `Sumeet readied ${g.ids.length === 1 ? g.ids[0] : `${g.ids.length} items`}${said}`, id: g.ids[0], waited: true, tone: "you" });
-  }
-  return entries.sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
-}
-
 /** How many one-line rows fit in an element, kept current as it resizes. */
 function useRows(ref: React.RefObject<HTMLDivElement | null>, ready: boolean, line = 20): number {
   const [rows, setRows] = useState(12);
@@ -281,7 +178,7 @@ export function MissionControlPage() {
   const loaded = useData<MissionPage>(api.mission(repo, id), 15_000);
   const mission = loaded.data;
   const items = useMemo(() => mission?.items ?? [], [mission]);
-  const history = useData<History>(mission ? api.history(repo, { ids: [id, ...items.map((i) => i.id)] }) : null, 30_000);
+  const history = useData<HistoryResponse>(mission ? api.history(repo, { ids: [id, ...items.map((i) => i.id)] }) : null, 30_000);
   const pagesRead = useAll<ItemPage>(items.map((i) => api.item(repo, i.id)), 30_000);
   const pages = useMemo(() => {
     const map = new Map<string, ItemPage>();
@@ -348,7 +245,8 @@ export function MissionControlPage() {
   const logRef = useRef<HTMLDivElement>(null);
   const rows = useRows(logRef, !!mission);
   const [page, setPage] = useState(0);
-  const entries = mission ? logEntries(id, items, events, pages, "sumeet") : [];
+  const caller = useData<ReposResponse>(api.repos()).data?.caller ?? null;
+  const entries = mission ? logEntries(id, items, events, pages, caller ?? "") : [];
   const pagesCount = Math.max(1, Math.ceil(entries.length / rows));
   const pageAt = Math.min(page, pagesCount - 1);
   const shownLog = entries.slice(pageAt * rows, pageAt * rows + rows);

@@ -1,5 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { ApiError } from "../api/ApiError";
+import type { ThreadInfo } from "../api/ThreadInfo";
 
 export type Loaded<T> = { data?: T; error?: string; status?: number; loading: boolean };
 
@@ -113,21 +114,20 @@ export const api = {
   missions: (repo: string) => `/api/repos/${seg(repo)}/missions`,
   mission: (repo: string, id: string) => `/api/repos/${seg(repo)}/missions/${seg(id)}`,
   item: (repo: string, id: string) => `/api/repos/${seg(repo)}/items/${seg(id)}`,
-  sidebar: () => "/api/sidebar",
-  launch: (repo: string) => `/api/launch?repo=${seg(repo)}`,
   history: (repo: string, opts: { days?: number; ids?: string[] } = {}) =>
     `/api/history?repo=${seg(repo)}${opts.days ? `&days=${opts.days}` : ""}${opts.ids ? `&ids=${seg(opts.ids.join(","))}` : ""}`,
   checks: (repo: string, pr: number) => `/api/checks?repo=${seg(repo)}&pr=${pr}`,
   roadmap: (repo: string) => `/api/roadmap?repo=${seg(repo)}`,
-  thread: (id: string) => `/api/thread?id=${seg(id)}`,
+  thread: (id: string, full = false) => `/api/thread?id=${seg(id)}${full ? "&full=1" : ""}`,
   record: (id: string) => `/api/records/${seg(id)}`,
   ties: (thread: string) => `/api/ties?thread=${seg(thread)}`,
   doc: (repo: string, path: string, at?: string | null) => `/api/repos/${seg(repo)}/doc?path=${seg(path)}${at ? `&at=${seg(at)}` : ""}`,
 };
 
 /**
- * Spike: several paths read together, again every `interval` ms. Each
- * answer is the body, or null where the read failed.
+ * Several paths read together, and again every `interval` ms while the page
+ * is visible. Each answer is the body, or null where its read failed, so one
+ * failed read leaves the rest drawn.
  */
 export function useAll<T>(paths: string[], interval = 30_000): { data: (T | null)[]; loading: boolean } {
   const key = paths.join("\n");
@@ -158,6 +158,22 @@ export function useAll<T>(paths: string[], interval = 30_000): { data: (T | null
     };
   }, [key, interval]);
   return value.key === key ? { data: value.data, loading: false } : { data: paths.map(() => null), loading: paths.length > 0 };
+}
+
+/**
+ * Each identity's thread as T3 Code knows it, live or ended, read with
+ * `GET /api/thread`; with `full`, its latest run and line, read more often.
+ * An identity T3 Code does not know is left out.
+ */
+export function useThreads(ids: string[], full = false): Map<string, ThreadInfo> {
+  const unique = [...new Set(ids)];
+  const read = useAll<ThreadInfo>(
+    unique.map((id) => api.thread(id, full)),
+    full ? 15_000 : 60_000,
+  );
+  const map = new Map<string, ThreadInfo>();
+  read.data.forEach((info, at) => info && map.set(unique[at], info));
+  return map;
 }
 
 /** The app's own routes. */
