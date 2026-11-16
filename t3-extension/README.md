@@ -110,9 +110,11 @@ system inbox; `children` lists the threads this one started that T3 knows, in
 any connected environment, by `lineage.parentThreadId` (a `delegate_task`
 subagent) or `delegatedFrom.threadId` (work a linked environment's agent started
 here); `mentioned` lists the item and mission IDs the reference scanner finds in
-the conversation. It is sent after each `desk:ready`, when T3's route changes to
-another thread, and when `children` or `mentioned` change (T3's thread list is
-read again every 3 seconds; the conversation on each rescan). The same message
+that thread's own conversation (none while reference links are off). It is sent
+after each `desk:ready`, when T3's route changes to another thread (once that
+thread's conversation has been scanned, so it never carries the previous
+thread's references), and when `children` or `mentioned` change (T3's thread
+list is read again every 3 seconds; the conversation on each rescan). The same message
 is never sent twice in a row to the same Desk, so a page the human moves to in
 the Desk stays until something changes. Every `desk:ready` is a fresh Desk that
 knows no thread, so it is told again, including when T3 re-renders its panel slot

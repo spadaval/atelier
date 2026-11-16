@@ -227,18 +227,23 @@ disposers.push(observeHostTheme(() => sendTheme(false)));
 // (a reference or Refresh) shows: that thread is not sent, but a switch before the Desk is ready is.
 let threadSent = null;
 let keepThread = null;
-let mentioned = [];
+// The IDs a conversation names belong to the thread it was scanned for: another thread's message
+// carries none of them, and waits for its own conversation's scan when one is queued.
+let mentions = { thread: null, ids: [] };
+let scanPending = false;
+function noteMentions(ids) { mentions = { thread: threadKey(current), ids }; tellDeskThread(); }
 function threadMessage() {
   const message = { type: 'host:thread', thread: current.threadId };
   // The repository lets the Desk show this project, not the system inbox, for a thread that holds nothing.
   const repository = selectedRepository()?.repo;
   if (repository) message.repository = repository;
   message.children = host?.children?.(current.threadId) ?? [];
-  message.mentioned = mentioned;
+  message.mentioned = mentions.thread === threadKey(current) ? mentions.ids : [];
   return message;
 }
 function tellDeskThread() {
   if (!deskReady || !iframe.contentWindow || !current) return;
+  if (scanPending && mentions.thread !== threadKey(current)) return;
   const message = threadMessage();
   const text = JSON.stringify(message);
   if (text === threadSent) return;
@@ -438,8 +443,9 @@ async function updateContext() {
     if (key !== lastProject) { referenceOverride = null; lastProject = key; }
     desiredOpen = Boolean(view.openThreads[threadKey(current)]);
     nativeActiveId = current && (host.panel?.state(current)?.activeSurfaceId ?? null);
-    tellDeskThread();
-    scheduleDOM(); queueScan();
+    // The new thread is sent once its own conversation has been scanned.
+    queueScan(); tellDeskThread();
+    scheduleDOM();
   } catch (error) { if (!api.signal.aborted && generation === contextGeneration) { hostError = error; displayError(error); api.reportError(error); } }
 }
 function scheduleDOM() {
@@ -557,9 +563,15 @@ function updateReferenceRects() {
 function queueRects() { if (!rectFrame) rectFrame = requestAnimationFrame(() => { rectFrame = 0; updateReferenceRects(); }); }
 function scanReferences() {
   if (api.signal.aborted) return;
+  scanPending = false;
   const previous = references; references = []; CSS.highlights?.delete('t3-atelier-refs');
   const conversation = document.querySelector(hostSelectors.conversation);
-  if (!settings.references || !pattern || !conversation) { hideCard(); referenceLayer.replaceChildren(); return; }
+  if (!settings.references || !pattern || !conversation) {
+    hideCard(); referenceLayer.replaceChildren();
+    // With references off nothing is scanned, so no thread is said to mention anything.
+    if (!settings.references) noteMentions([]); else tellDeskThread();
+    return;
+  }
   const existing = new Map();
   for (const ref of previous) {
     if (!existing.has(ref.node)) existing.set(ref.node, new Map());
@@ -588,10 +600,9 @@ function scanReferences() {
   for (const ref of previous) if (!kept.has(ref)) { if (activeReference === ref) hideCard(); ref.anchor.remove(); }
   if (CSS.highlights) CSS.highlights.set('t3-atelier-refs', new Highlight(...ranges));
   updateReferenceRects();
-  mentioned = [...new Set(references.map(ref => ref.id))].sort();
-  tellDeskThread();
+  noteMentions([...new Set(references.map(ref => ref.id))].sort());
 }
-function queueScan() { clearTimeout(scanTimer); scanTimer = setTimeout(scanReferences, 250); }
+function queueScan() { clearTimeout(scanTimer); scanPending = true; scanTimer = setTimeout(scanReferences, 250); }
 const hitReference = event => references.find(ref => ref.rects.some(rect => event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom));
 let pointerReference = null;
 listen(document, 'pointermove', event => {
