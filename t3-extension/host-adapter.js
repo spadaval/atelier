@@ -24,6 +24,10 @@ const hostSelectors = {
   composerEditor: '[data-testid="composer-editor"]',
   // The thread breadcrumb's project button, which opens the project home instead.
   breadcrumbProject: 'nav[aria-label="Thread breadcrumb"] li:first-child button',
+  // Which thread the rendered conversation is: T3 wraps each assistant message in an element naming
+  // its environment and thread (AssistantCitationSource); every row has a timeline row ID.
+  conversationThread: '[data-assistant-citation-thread]',
+  timelineRow: '[data-timeline-row-id]',
 };
 // ok: true (found), false (missing), null (DOM hook not on screen yet).
 const hostProbes = Object.fromEntries(Object.keys(hostSelectors).map(name => [`dom:${name}`, { ok: null, detail: `${hostSelectors[name]} not seen yet` }]));
@@ -154,6 +158,29 @@ async function createHostAdapter(api) {
     const project = registry.get(threads.snapshotAtom(draft.environmentId))?.projects.find(project => project.id === draft.projectId);
     return { draftId, environmentId: draft.environmentId, projectId: draft.projectId, projectName: project?.title ?? null, repositoryKey: project?.repositoryIdentity?.canonicalKey ?? draft.logicalProjectKey ?? null };
   }
+  // Puts text in the composer of new-thread draft draftId and resolves to null, or to the reason it
+  // did not. T3 must show that draft, and the write must change that draft's prompt in T3's draft
+  // store to the text and no other draft's: the composer on the page can still be another
+  // thread's while T3 renders. A write that reached another draft is undone in that draft.
+  async function fillComposer(draftId, text) {
+    if (draftContext()?.draftId !== draftId) return `T3 does not show draft ${draftId} (route ${location.hash})`;
+    const editor = document.querySelector(hostSelectors.composerEditor);
+    if (!editor) return `T3's composer editor (${hostSelectors.composerEditor}) is not on screen`;
+    const prompts = () => Object.fromEntries(Object.entries(drafts.getState().draftsByThreadKey).map(([key, draft]) => [key, draft?.prompt ?? '']));
+    const before = prompts();
+    if (!writeHostComposer(editor, text)) return `T3's composer refused execCommand ${text ? 'insertText' : 'delete'}`;
+    // T3 records the editor's text in its draft store a few microtasks later.
+    let after = prompts();
+    const changed = () => Object.keys({ ...before, ...after }).filter(key => (after[key] ?? '') !== (before[key] ?? ''));
+    for (let turn = 0; turn < 20 && changed().length === 0 && (before[draftId] ?? '') !== text; turn++) { await Promise.resolve(); after = prompts(); }
+    const others = changed().filter(key => key !== draftId);
+    if (others.length) {
+      writeHostComposer(editor, before[others[0]] ?? '');
+      return `the composer on the page was draft ${others.join(', ')}'s, not ${draftId}'s; its prompt was put back`;
+    }
+    if ((after[draftId] ?? '') !== text) return `T3's draft store did not record the text for draft ${draftId} (it holds ${JSON.stringify(after[draftId] ?? null)})`;
+    return null;
+  }
   // Every thread of the connected environments, with who started it: lineage.parentThreadId for a
   // local subagent (delegate_task), delegatedFrom.threadId for a thread a linked environment's
   // agent delegated or launched here (the creator's thread ID in that other environment).
@@ -179,6 +206,13 @@ async function createHostAdapter(api) {
     draftIds: drafts ? () => Object.entries(drafts.getState().draftThreadsByThreadKey).filter(([, draft]) => draft.projectId).map(([id]) => id) : null,
     // The prompt T3's draft store holds for a new-thread draft, for the contract test.
     draftPrompt: drafts ? draftId => drafts.getState().draftsByThreadKey[draftId]?.prompt ?? null : null,
+    fillComposer: drafts ? fillComposer : null,
+    // The environment:thread of the conversation T3 has rendered, from its assistant messages, or
+    // null when it has none.
+    conversationThread: conversation => {
+      const marked = conversation.querySelector(hostSelectors.conversationThread);
+      return marked ? `${marked.getAttribute('data-assistant-citation-environment')}:${marked.getAttribute('data-assistant-citation-thread')}` : null;
+    },
     children: registry && threads && environments ? children : null,
     threadList: registry && threads && environments ? threadList : null,
     // null means the surfaces that need this hook are off; hostProbes says why.
@@ -204,14 +238,12 @@ async function createHostAdapter(api) {
 }
 
 // T3's composer is a ProseMirror (TipTap) editor: its content is selected and replaced with
-// execCommand('insertText'), which fires the beforeinput/input events ProseMirror handles, so T3's
-// draft keeps the text (test-contract.mjs checks the draft store). Empty text clears it.
-function fillHostComposer(text) {
-  const editor = document.querySelector(hostSelectors.composerEditor);
-  if (!editor) throw new Error(`T3's composer editor (${hostSelectors.composerEditor}) is not on screen`);
+// execCommand('insertText'), which fires the beforeinput/input events ProseMirror handles. Empty
+// text clears it.
+function writeHostComposer(editor, text) {
   editor.focus();
   getSelection().selectAllChildren(editor);
-  if (!document.execCommand(text ? 'insertText' : 'delete', false, text)) throw new Error(`T3's composer refused execCommand ${text ? 'insertText' : 'delete'}`);
+  return document.execCommand(text ? 'insertText' : 'delete', false, text);
 }
 
 // T3's theme, from its own CSS custom properties, in the form of the Desk's host:theme message.

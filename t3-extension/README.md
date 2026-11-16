@@ -111,10 +111,22 @@ any connected environment, by `lineage.parentThreadId` (a `delegate_task`
 subagent) or `delegatedFrom.threadId` (work a linked environment's agent started
 here); `mentioned` lists the item and mission IDs the reference scanner finds in
 that thread's own conversation (none while reference links are off). It is sent
-after each `desk:ready`, when T3's route changes to another thread (once that
-thread's conversation has been scanned, so it never carries the previous
-thread's references), and when `children` or `mentioned` change (T3's thread
-list is read again every 3 seconds; the conversation on each rescan). The same message
+after each `desk:ready`; at once when T3's route changes to another thread, with
+the mentions last scanned for that thread (none if it was never scanned); and
+when `children` or `mentioned` change (T3's thread list is read again every 3
+seconds). The conversation is scanned 250 ms after it stops changing, and at
+least once a second while it keeps changing, so a thread that streams is
+scanned too.
+
+A scan is credited only to the thread whose conversation it read, since T3 can
+show the previous thread's conversation for a while after a switch. T3 wraps each
+assistant message in an element naming its environment and thread
+(`data-assistant-citation-environment` and `data-assistant-citation-thread`):
+when the conversation has one, a scan counts only if it names the current
+thread. A conversation with no assistant message is taken as the previous
+thread's while its root node and first row node (`data-timeline-row-id`) are the
+ones the last credited scan read, and as the current thread's once either has
+changed. The same message
 is never sent twice in a row to the same Desk, so a page the human moves to in
 the Desk stays until something changes. Every `desk:ready` is a fresh Desk that
 knows no thread, so it is told again, including when T3 re-renders its panel slot
@@ -190,7 +202,12 @@ when the window is shown again. Fields the Desk does not send count as empty.
 
 The composer is T3's ProseMirror editor: the text goes in with
 `execCommand('insertText')` over a selection of its content, which fires the
-input events the editor handles, so T3's draft keeps it. When the composer is
+input events the editor handles, so T3's draft keeps it. It goes only into the
+composer of the draft the strip was drawn for: T3 must show that draft, and
+afterwards T3's draft store must hold the text for that draft and no other
+draft's prompt may have changed. While T3 renders, the editor on the page can
+still be another thread's; a write that reached another draft is undone there,
+and the click is reported as an error naming both drafts. When the composer is
 narrower than 700 pixels the In motion card is dropped and the other two share
 the width. A project with no Desk repository gets no strip.
 
@@ -420,7 +437,11 @@ network-facing debugging listener is enabled.
   (`[data-sidebar-row]`) when T3 lists threads; `dom:composerOverlay`,
   `dom:composerStack` and `dom:composerEditor` on a project's new-thread screen;
   `dom:breadcrumbProject` (the first button of `nav[aria-label="Thread
-  breadcrumb"]`) on a thread.
+  breadcrumb"]`) on a thread. `dom:conversationThread`
+  (`[data-assistant-citation-thread]`) and `dom:timelineRow`
+  (`[data-timeline-row-id]`) tell which thread a rendered conversation belongs
+  to (see Following the thread); without the first only the node rule applies,
+  and without the second only the conversation's root node counts.
 
 A missing hook is reported by name in Customizations, in `t3-custom status`, and
 in `injector.log`, and turns off only the surface that needs it: the Desk panel
@@ -498,8 +519,11 @@ broken hook, or if discovery imported a script that is not a declared renderer
 module (such as a worker). It also reads the theme (`css:theme`), finds the
 thread among the connected environments (`state:find-thread`), reads who
 started each thread (`state:thread-origin`), and on the new-thread screen fills
-T3's composer as the project strip does and checks that T3's own draft store
-holds the text (`state:composer-prompt`), then puts the draft's prompt back. Run
+T3's composer with the same checked write the project strip uses and checks that
+T3's own draft store holds the text for that draft alone
+(`state:composer-prompt`), then puts the draft's prompt back. If T3 does not
+render the draft's own editor within 10 seconds it reports that and writes
+nothing. Run
 it after every T3 update.
 
 `node test-extension.mjs` tests the extension logic in an isolated browser

@@ -227,23 +227,22 @@ disposers.push(observeHostTheme(() => sendTheme(false)));
 // (a reference or Refresh) shows: that thread is not sent, but a switch before the Desk is ready is.
 let threadSent = null;
 let keepThread = null;
-// The IDs a conversation names belong to the thread it was scanned for: another thread's message
-// carries none of them, and waits for its own conversation's scan when one is queued.
-let mentions = { thread: null, ids: [] };
-let scanPending = false;
-function noteMentions(ids) { mentions = { thread: threadKey(current), ids }; tellDeskThread(); }
+// The IDs each thread's conversation names, as last scanned for that thread. A thread is sent at
+// once with what is known for it (nothing if it was never scanned); its scan sends the rest.
+const mentionsByThread = new Map();
+function noteMentions(key, ids) { mentionsByThread.set(key, ids); tellDeskThread(); }
 function threadMessage() {
   const message = { type: 'host:thread', thread: current.threadId };
   // The repository lets the Desk show this project, not the system inbox, for a thread that holds nothing.
   const repository = selectedRepository()?.repo;
   if (repository) message.repository = repository;
   message.children = host?.children?.(current.threadId) ?? [];
-  message.mentioned = mentions.thread === threadKey(current) ? mentions.ids : [];
+  // With reference links off nothing is scanned, so no thread is said to mention anything.
+  message.mentioned = settings.references ? mentionsByThread.get(threadKey(current)) ?? [] : [];
   return message;
 }
 function tellDeskThread() {
   if (!deskReady || !iframe.contentWindow || !current) return;
-  if (scanPending && mentions.thread !== threadKey(current)) return;
   const message = threadMessage();
   const text = JSON.stringify(message);
   if (text === threadSent) return;
@@ -443,8 +442,8 @@ async function updateContext() {
     if (key !== lastProject) { referenceOverride = null; lastProject = key; }
     desiredOpen = Boolean(view.openThreads[threadKey(current)]);
     nativeActiveId = current && (host.panel?.state(current)?.activeSurfaceId ?? null);
-    // The new thread is sent once its own conversation has been scanned.
-    queueScan(); tellDeskThread();
+    // The thread is sent at once; its conversation's scan sends its mentions as an update.
+    tellDeskThread(); queueScan();
     scheduleDOM();
   } catch (error) { if (!api.signal.aborted && generation === contextGeneration) { hostError = error; displayError(error); api.reportError(error); } }
 }
@@ -563,13 +562,11 @@ function updateReferenceRects() {
 function queueRects() { if (!rectFrame) rectFrame = requestAnimationFrame(() => { rectFrame = 0; updateReferenceRects(); }); }
 function scanReferences() {
   if (api.signal.aborted) return;
-  scanPending = false;
   const previous = references; references = []; CSS.highlights?.delete('t3-atelier-refs');
   const conversation = document.querySelector(hostSelectors.conversation);
   if (!settings.references || !pattern || !conversation) {
     hideCard(); referenceLayer.replaceChildren();
-    // With references off nothing is scanned, so no thread is said to mention anything.
-    if (!settings.references) noteMentions([]); else tellDeskThread();
+    tellDeskThread();
     return;
   }
   const existing = new Map();
@@ -600,9 +597,34 @@ function scanReferences() {
   for (const ref of previous) if (!kept.has(ref)) { if (activeReference === ref) hideCard(); ref.anchor.remove(); }
   if (CSS.highlights) CSS.highlights.set('t3-atelier-refs', new Highlight(...ranges));
   updateReferenceRects();
-  noteMentions([...new Set(references.map(ref => ref.id))].sort());
+  // The IDs are credited only to the thread whose conversation was read: after a switch T3 may
+  // still show the previous thread's conversation for a while.
+  const owner = conversationOwner(conversation);
+  if (current && owner === threadKey(current)) {
+    scannedConversation = { thread: owner, root: conversation, firstRow: conversation.querySelector(hostSelectors.timelineRow) };
+    noteMentions(owner, [...new Set(references.map(ref => ref.id))].sort());
+  }
 }
-function queueScan() { clearTimeout(scanTimer); scanPending = true; scanTimer = setTimeout(scanReferences, 250); }
+// The thread whose conversation T3 has rendered. T3 marks each assistant message with its
+// environment and thread; a conversation with none is still the thread's last scanned while its
+// root and first row nodes are the ones that scan read, and the current thread's once either changed.
+let scannedConversation = null;
+function conversationOwner(conversation) {
+  const marked = host?.conversationThread?.(conversation);
+  if (marked) return marked;
+  const firstRow = conversation.querySelector(hostSelectors.timelineRow);
+  if (scannedConversation && scannedConversation.root === conversation && scannedConversation.firstRow === firstRow) return scannedConversation.thread;
+  return threadKey(current);
+}
+// A scan runs 250 ms after the conversation stops changing, and at least once a second while it
+// keeps changing, so a streaming thread is scanned too.
+let scanDue = 0;
+function queueScan() {
+  clearTimeout(scanTimer);
+  const now = Date.now();
+  if (!scanDue) scanDue = now + 1000;
+  scanTimer = setTimeout(() => { scanDue = 0; scanReferences(); }, Math.max(0, Math.min(250, scanDue - now)));
+}
 const hitReference = event => references.find(ref => ref.rects.some(rect => event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom));
 let pointerReference = null;
 listen(document, 'pointermove', event => {
@@ -924,8 +946,11 @@ const strip = element('div', { 'data-t3-strip': '', hidden: '' });
 // The composer's width changes without a window resize (panels, sidebar); follow the canvas.
 const stripResize = new ResizeObserver(() => scheduleDOM());
 let launchKey = null; let launchAt = 0;
-function setComposerText(text) {
-  try { fillHostComposer(text); } catch (error) { api.reportError(new Error(`Project strip: ${error.message}`)); }
+// Only into the composer of the draft the strip was drawn for: a click never fills another thread's.
+async function setComposerText(text) {
+  const draft = host?.draftContext?.();
+  const reason = draft && host.fillComposer ? await host.fillComposer(draft.draftId, text) : 'T3 does not show a new-thread screen';
+  if (reason) api.reportError(new Error(`Project strip: the composer was not filled: ${reason}`));
 }
 const age = seconds => seconds < 3600 ? `${Math.max(1, Math.round(seconds / 60))}m` : seconds < 86400 ? `${Math.round(seconds / 3600)}h` : `${Math.round(seconds / 86400)}d`;
 function stripCard(name, title, count, rows, empty, onHeader) {

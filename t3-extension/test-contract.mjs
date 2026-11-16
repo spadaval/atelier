@@ -15,7 +15,8 @@ const adapter = await fs.readFile(new URL('./host-adapter.js', import.meta.url),
 const page = await connectPage(port);
 const { probes, imported, declared } = await page.evaluate(`(async api => {
   ${adapter}
-  const wait = async (check, ms = 10000) => { const end = Date.now() + ms; while (!check() && Date.now() < end) await new Promise(r => setTimeout(r, 100)); observeHostDom(); };
+  // Resolves to whether check() came true within ms.
+  const wait = async (check, ms = 10000) => { const end = Date.now() + ms; while (!check() && Date.now() < end) await new Promise(r => setTimeout(r, 100)); observeHostDom(); return Boolean(check()); };
   const original = location.hash;
   const host = await createHostAdapter(api);
   try {
@@ -47,23 +48,22 @@ const { probes, imported, declared } = await page.evaluate(`(async api => {
       // in it would go to that thread's draft.
       const threadEditor = document.querySelector(hostSelectors.composerEditor);
       location.hash = '/draft/' + encodeURIComponent(draftId);
-      await wait(() => ['composerOverlay', 'composerStack', 'composerEditor'].every(name => document.querySelector(hostSelectors[name])) && document.querySelector(hostSelectors.composerEditor) !== threadEditor);
+      const draftShown = await wait(() => ['composerOverlay', 'composerStack', 'composerEditor'].every(name => document.querySelector(hostSelectors[name])) && document.querySelector(hostSelectors.composerEditor) !== threadEditor);
       if (!host.draftContext?.()) hostProbes['route:draft'] ??= { ok: false, detail: '#/draft/' + draftId + ' named no project' };
       // The strip's Next up fills the composer as the extension does; T3's own draft must keep the
-      // text, not just the editor's DOM. The draft's prompt is put back afterwards.
-      if (host.draftPrompt && document.querySelector(hostSelectors.composerEditor)) {
+      // text, not just the editor's DOM. fillComposer writes only into this draft's composer and
+      // refuses otherwise; the draft's prompt is put back afterwards. Nothing is written unless T3
+      // rendered the draft's own editor.
+      if (!draftShown) hostProbes['state:composer-prompt'] = { ok: false, detail: 'T3 did not render the editor of draft ' + draftId + ' within 10 seconds; nothing was written' };
+      else if (!host.fillComposer) hostProbes['state:composer-prompt'] = { ok: false, detail: 'module:composer-draft-store is missing' };
+      else {
         const before = host.draftPrompt(draftId) ?? '';
         const text = 'Atelier contract check: this text is removed again.';
-        try {
-          fillHostComposer(text);
-          await wait(() => host.draftPrompt(draftId) === text, 3000);
-          const kept = host.draftPrompt(draftId);
-          hostProbes['state:composer-prompt'] = kept === text ? { ok: true, detail: "text inserted into the composer reached T3's draft store (draftsByThreadKey[<draft>].prompt)" } : { ok: false, detail: "T3's draft store held " + JSON.stringify(kept) + ' after inserting text into the composer' };
-        } catch (error) { hostProbes['state:composer-prompt'] = { ok: false, detail: error.message }; }
-        finally {
-          fillHostComposer(before);
-          await wait(() => (host.draftPrompt(draftId) ?? '') === before, 3000);
-          if ((host.draftPrompt(draftId) ?? '') !== before) hostProbes['state:composer-prompt'] = { ok: false, detail: 'the draft prompt was not restored: ' + JSON.stringify(host.draftPrompt(draftId)) };
+        const refused = await host.fillComposer(draftId, text);
+        hostProbes['state:composer-prompt'] = refused ? { ok: false, detail: refused } : { ok: true, detail: "text put in the composer reached T3's draft store for that draft alone (draftsByThreadKey[<draft>].prompt)" };
+        if (!refused) {
+          const restored = await host.fillComposer(draftId, before);
+          if (restored) hostProbes['state:composer-prompt'] = { ok: false, detail: 'the draft prompt was not put back: ' + restored };
         }
       }
     } else hostProbes['route:draft'] = { ok: false, detail: host.draftIds ? 'T3 holds no new-thread draft with a project; open a new thread in a project, or pass --draft <id>' : 'module:composer-draft-store is missing' };

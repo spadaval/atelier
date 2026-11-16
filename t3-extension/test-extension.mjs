@@ -14,8 +14,10 @@ let deskBase, realDesk;
 // The Desk's identity for the atelier repository, as GET /api/repos reports it.
 const fixtureRepositoryKey = 'github.com/spadaval/atelier';
 const referenceId = 'atelier-plr9';
-// Named only in thread-b's conversation.
+// Named only in thread-b's, thread-child's and other:thread-a's conversations.
 const threadBReference = 'atelier-tb01';
+const childReference = 'atelier-ch01';
+const otherReference = 'atelier-oa01';
 const missionId = 'atelier-g961';
 // A Chromium browser for the isolated fixture page; set BROWSER to override.
 const browserPath = process.env.BROWSER ?? (process.platform === 'win32' ? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe' : '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
@@ -71,21 +73,30 @@ export const s = { getState: () => state, subscribe: listener => { listeners.add
   'shell-fixture.js': `let reads = 0; const snapshot = globalThis.fixtureSnapshot = ${JSON.stringify(shell)};
 export const c = { familyAtom() {}, mountRows() {}, snapshotAtom: environmentId => environmentId === 'env-empty' ? { projects: [], threads: [] } : reads++ ? snapshot : { ...snapshot, threads: [] } };`,
   'environment-fixture.js': `export const e = { environmentIdsAtom: ['env', 'env-empty'], connectedEnvironmentIdsAtom: ['env', 'env-empty'] };`,
-  'drafts-fixture.js': `export const d = { getState: () => ({ draftThreadsByThreadKey: ${JSON.stringify(drafts)} }) };`,
+  'drafts-fixture.js': `const state = globalThis.fixtureDraftState = { draftThreadsByThreadKey: ${JSON.stringify(drafts)}, draftsByThreadKey: {} };
+export const d = { getState: () => state };`,
   'index-fixture.js': `import './panel-fixture.js'; import './registry-fixture.js'; import './shell-fixture.js'; import './environment-fixture.js'; import './drafts-fixture.js';
 new Worker('/assets/imageDecode.worker-fixture.js');`,
   // Like T3's image decoder worker: its top-level code must never run in the window.
   'imageDecode.worker-fixture.js': `if (typeof window !== 'undefined') globalThis.workerScriptRanInWindow = true;`,
 };
 const listItems = shell.threads.map(thread => `<li data-thread-item="env:${thread.id}"><div data-sidebar-row="env:${thread.id}" data-route="/env/${thread.id}">${thread.title}</div></li>`).join('');
-const html = `<!doctype html><html class="dark"><head><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; connect-src 'self' blob: http: https: ws: wss:; style-src 'self' 'unsafe-inline'; frame-src 'self' blob: http: https:; worker-src 'self' blob:"><title>Atelier extension fixture</title><script type="module" src="/assets/index-fixture.js"></script>${Object.keys(chunks).filter(name => !name.includes('worker')).map(name => `<link rel="modulepreload" href="/assets/${name}">`).join('')}<style>html{--background:#202124;--foreground:#eeeeee;--card:#2a2b2e;--border:#555555;--muted-foreground:#a0a0a8;--secondary:#353639;--primary:#9bbcff}body{margin:0;background:var(--background);color:var(--foreground);font:14px Georgia, serif}#app{height:100vh;display:flex}[data-workspace-area=sidebar]{width:260px;flex-shrink:0;display:flex;flex-direction:column;border-right:1px solid #555}#thread-list{margin:0;padding:8px;list-style:none;overflow:auto}[data-sidebar-row]{padding:8px;cursor:pointer}main[data-slot=sidebar-inset]{position:relative;flex:1;min-width:0;display:flex;flex-direction:column}header{padding:12px;border-bottom:1px solid #555;display:flex;gap:12px}nav ol{display:flex;gap:8px;margin:0;padding:0;list-style:none}#workspace{display:flex;flex:1;min-height:0}[data-workspace-area=conversation]{flex:1;padding:20px;min-width:0;overflow:auto}[data-workspace-area=panel]{width:750px;display:flex;flex-direction:column;min-width:0}[data-right-panel-tabbar]{height:52px;display:flex;align-items:center}[data-right-panel-tabbar]>div{display:flex;align-items:center}[data-right-panel-surface-content]{position:relative;flex:1;min-height:0}#native-content{padding:20px}#settings{overflow:auto;padding:24px;max-width:850px}#composer{margin-top:30px;border:1px solid #555;padding:12px}#draft{flex:1;min-height:0}[data-chat-canvas]{position:relative;height:100%}[data-chat-composer-overlay]{position:absolute;inset:0;display:flex;align-items:center;pointer-events:none}[data-chat-composer-stack]{width:760px;max-width:calc(100% - 40px);margin:0 auto;pointer-events:auto}[data-testid=composer-editor]{min-height:60px;border:1px solid #555;padding:12px}</style></head><body><div id="app"><div data-workspace-area="sidebar"><div id="search-wrap"><div data-slot="sidebar-group"><input type="search" aria-label="Search threads"></div></div><ul id="thread-list">${listItems}</ul></div><main data-slot="sidebar-inset"><header><nav aria-label="Thread breadcrumb"><ol><li><button id="crumb-project">atelier</button></li><li>/</li><li>Thread</li></ol></nav><span data-panel-layout-controls>Workspace controls</span></header><div id="workspace"><div data-workspace-area="conversation"><h1>Conversation</h1><p id="reference-prose">Investigate ${referenceId}, then <code>${referenceId}</code>. Ignore other-xabc and not-${referenceId}-extra.</p><pre>${referenceId}</pre><div id="composer" contenteditable="true">${referenceId}</div><p id="stream"></p><p id="thread-prose"></p></div><div data-workspace-area="panel"><div data-right-panel-tabbar><div data-right-panel-tab-list><div data-active-tab="true"><button id="native-tab">Files</button></div><button aria-label="Add panel surface">+</button></div></div><div data-right-panel-surface-content><div id="native-content"><button id="native-control">Native file viewer</button></div></div></div></div><div id="draft" hidden><div data-chat-canvas><div data-workspace-area="composer" data-chat-composer-overlay><div data-chat-composer-stack><div data-testid="composer-editor" contenteditable="true" aria-label="Message"></div></div></div></div></div><div id="settings" hidden><div data-settings-page-scroll><div><h1>General</h1><p>T3 settings fixture</p></div></div></div></main></div><script>
-const threadProse={'#/env/thread-b':'Thread B works on ${threadBReference}.'};
-const show=()=>{const route=location.hash;document.querySelector('#thread-prose').textContent=threadProse[route]??'';const settings=route.includes('/settings');const draft=route.startsWith('#/draft/');document.querySelector('#settings').hidden=!settings;document.querySelector('#draft').hidden=!draft;document.querySelector('#workspace').style.display=settings||draft?'none':'flex'};
+const html = `<!doctype html><html class="dark"><head><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; connect-src 'self' blob: http: https: ws: wss:; style-src 'self' 'unsafe-inline'; frame-src 'self' blob: http: https:; worker-src 'self' blob:"><title>Atelier extension fixture</title><script type="module" src="/assets/index-fixture.js"></script>${Object.keys(chunks).filter(name => !name.includes('worker')).map(name => `<link rel="modulepreload" href="/assets/${name}">`).join('')}<style>html{--background:#202124;--foreground:#eeeeee;--card:#2a2b2e;--border:#555555;--muted-foreground:#a0a0a8;--secondary:#353639;--primary:#9bbcff}body{margin:0;background:var(--background);color:var(--foreground);font:14px Georgia, serif}#app{height:100vh;display:flex}[data-workspace-area=sidebar]{width:260px;flex-shrink:0;display:flex;flex-direction:column;border-right:1px solid #555}#thread-list{margin:0;padding:8px;list-style:none;overflow:auto}[data-sidebar-row]{padding:8px;cursor:pointer}main[data-slot=sidebar-inset]{position:relative;flex:1;min-width:0;display:flex;flex-direction:column}header{padding:12px;border-bottom:1px solid #555;display:flex;gap:12px}nav ol{display:flex;gap:8px;margin:0;padding:0;list-style:none}#workspace{display:flex;flex:1;min-height:0}[data-workspace-area=conversation]{flex:1;padding:20px;min-width:0;overflow:auto}[data-workspace-area=panel]{width:750px;display:flex;flex-direction:column;min-width:0}[data-right-panel-tabbar]{height:52px;display:flex;align-items:center}[data-right-panel-tabbar]>div{display:flex;align-items:center}[data-right-panel-surface-content]{position:relative;flex:1;min-height:0}#native-content{padding:20px}#settings{overflow:auto;padding:24px;max-width:850px}#composer{margin-top:30px;border:1px solid #555;padding:12px}#draft{flex:1;min-height:0}[data-chat-canvas]{position:relative;height:100%}[data-chat-composer-overlay]{position:absolute;inset:0;display:flex;align-items:center;pointer-events:none}[data-chat-composer-stack]{width:760px;max-width:calc(100% - 40px);margin:0 auto;pointer-events:auto}[data-testid=composer-editor]{min-height:60px;border:1px solid #555;padding:12px}</style></head><body><div id="app"><div data-workspace-area="sidebar"><div id="search-wrap"><div data-slot="sidebar-group"><input type="search" aria-label="Search threads"></div></div><ul id="thread-list">${listItems}</ul></div><main data-slot="sidebar-inset"><header><nav aria-label="Thread breadcrumb"><ol><li><button id="crumb-project">atelier</button></li><li>/</li><li>Thread</li></ol></nav><span data-panel-layout-controls>Workspace controls</span></header><div id="workspace"><div data-workspace-area="conversation"><h1>Conversation</h1><p id="reference-prose">Investigate ${referenceId}, then <code>${referenceId}</code>. Ignore other-xabc and not-${referenceId}-extra.</p><pre>${referenceId}</pre><div id="composer" contenteditable="true">${referenceId}</div><p id="stream"></p><div id="thread-row"></div></div><div data-workspace-area="panel"><div data-right-panel-tabbar><div data-right-panel-tab-list><div data-active-tab="true"><button id="native-tab">Files</button></div><button aria-label="Add panel surface">+</button></div></div><div data-right-panel-surface-content><div id="native-content"><button id="native-control">Native file viewer</button></div></div></div></div><div id="draft" hidden><div data-chat-canvas><div data-workspace-area="composer" data-chat-composer-overlay><div data-chat-composer-stack><div data-testid="composer-editor" contenteditable="true" aria-label="Message"></div></div></div></div></div><div id="settings" hidden><div data-settings-page-scroll><div><h1>General</h1><p>T3 settings fixture</p></div></div></div></main></div><script>
+const threadRows={'#/env/thread-a':{marked:'thread-a',text:''},'#/env/thread-b':{marked:'thread-b',text:'Thread B works on ${threadBReference}.'},'#/env/thread-child':{marked:'thread-child',text:'The child names ${childReference}.'},'#/env/other:thread-a':{text:'Other A names ${otherReference}.'}};
+let rendered=0;
+// Like T3, a thread's conversation is rendered as new row nodes, and each assistant message names its
+// environment and thread; fixtureRenderDelay holds the previous conversation in the page that long.
+const renderRows=route=>{const spec=threadRows[route]??{text:''};const row=document.createElement('div');row.id='thread-row';row.dataset.timelineRowId='row-'+(++rendered);const body=document.createElement('p');body.id='thread-prose';body.textContent=spec.text;if(spec.marked){const message=document.createElement('div');message.dataset.assistantCitationSource='message-'+rendered;message.dataset.assistantCitationEnvironment='env';message.dataset.assistantCitationThread=spec.marked;message.append(body);row.append(message)}else row.append(body);document.querySelector('#thread-row').replaceWith(row)};
+const show=()=>{const route=location.hash;if(route.startsWith('#/env/')){const wait=globalThis.fixtureRenderDelay??0;if(wait)setTimeout(()=>renderRows(route),wait);else renderRows(route)}const settings=route.includes('/settings');const draft=route.startsWith('#/draft/');document.querySelector('#settings').hidden=!settings;document.querySelector('#draft').hidden=!draft;document.querySelector('#workspace').style.display=settings||draft?'none':'flex'};
 addEventListener('hashchange',show);show();
 // T3 starts a new thread from the breadcrumb's project, opens a thread from its row, and sends the composer on Enter.
 document.querySelector('#crumb-project').addEventListener('click',()=>{globalThis.crumbStartedThread=true});
 document.querySelector('#thread-list').addEventListener('click',event=>{const row=event.target.closest('[data-route]');if(row)location.hash=row.dataset.route});
-document.querySelector('[data-testid=composer-editor]').addEventListener('keydown',event=>{if(event.key==='Enter')globalThis.fixtureSent=event.target.textContent});
+const editor=document.querySelector('[data-testid=composer-editor]');
+editor.addEventListener('keydown',event=>{if(event.key==='Enter')globalThis.fixtureSent=event.target.textContent});
+// Like T3, the editor's text reaches the draft store a microtask later, under the draft the editor
+// belongs to: the one shown, or fixtureEditorDraft for an editor T3 has not replaced yet.
+editor.addEventListener('input',()=>{const draft=globalThis.fixtureEditorDraft??decodeURIComponent((location.hash.match(new RegExp('^#/draft/([^/]+)'))||[])[1]||'');if(draft)queueMicrotask(()=>{fixtureDraftState.draftsByThreadKey[draft]={prompt:editor.textContent.replaceAll(String.fromCharCode(160),' ')}})});
 </script></body></html>`;
 const server = http.createServer((request, response) => {
   const url = new URL(request.url, 'http://fixture');
@@ -245,26 +256,31 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   assert.equal(await evaluate('location.hash'), hashBefore);
   await post({ type: 'desk:open-thread', thread: 'thread-b' });
   await until(async () => (await evaluate('location.hash')) === '#/env/thread-b', 'desk:open-thread navigation');
-  // A thread is sent once its own conversation has been scanned, so it is shown that long here.
-  await until(() => inFrame('hostThreads.includes("thread-b")'), 'host:thread for thread-b');
   await evaluate('location.hash = "/env/thread-a"');
   await until(() => evaluate('!document.querySelector("[data-t3-desk-mount]").hidden'), 'Desk back on thread-a');
   console.log('PASS: desk:open-thread opens the fixture route #/env/thread-b; an unknown thread is reported in the panel');
-  // host:thread on each switch to another thread, and never twice in a row for the same one.
-  await until(async () => JSON.stringify(await inFrame('hostThreads')) === '["thread-b","thread-a"]', 'host:thread on thread switches');
+  // host:thread on each switch to another thread; a thread's mentions may follow as an update.
+  const switches = () => inFrame('hostThreads.filter((thread, n, all) => thread !== all[n - 1])');
+  await until(async () => JSON.stringify(await switches()) === '["thread-b","thread-a"]', 'host:thread on thread switches');
   assert(deskRequests.includes('/api/ties?thread=thread-b'));
+  await delay(1000);
+  const sentBeforeSettings = await inFrame('hostMessages.length');
   await evaluate('location.hash = "/settings/general"');
   await until(() => evaluate('Boolean(document.querySelector("#t3-custom-settings"))'), 'Settings between threads');
   await evaluate('location.hash = "/env/thread-a"');
   await until(() => evaluate('!document.querySelector("[data-t3-desk-mount]").hidden && __t3Custom.diagnostics().context?.threadId === "thread-a"'), 'Back on thread-a from Settings');
   await delay(1000);
-  assert.deepEqual(await inFrame('hostThreads'), ['thread-b', 'thread-a'], 'the same thread was sent again');
+  assert.equal(await inFrame('hostMessages.length'), sentBeforeSettings, 'the same message was sent again after Settings and back');
   // host:thread names the project's repository, the threads this one started in T3 (lineage.parentThreadId
   // for thread-a's subagent, delegatedFrom for the thread a linked environment started from thread-b) and
   // the IDs its conversation names, and is sent again when either list changes.
   // Each thread's message names only what its own conversation names: thread-b's never carries
   // thread-a's list, and thread-a's never carries thread-b's.
-  assert.deepEqual(await inFrame('hostMessages.filter(message => message.thread === "thread-b")'), [{ type: 'host:thread', thread: 'thread-b', repository: 'atelier', children: ['thread-delegated'], mentioned: [referenceId, threadBReference] }]);
+  // thread-b, never scanned before, is sent at once with no mentions; any later message carries its
+  // own (it was shown only briefly here), never thread-a's.
+  const threadBMessages = await inFrame('hostMessages.filter(message => message.thread === "thread-b")');
+  assert.deepEqual(threadBMessages[0], { type: 'host:thread', thread: 'thread-b', repository: 'atelier', children: ['thread-delegated'], mentioned: [] });
+  assert(threadBMessages.every(message => message.mentioned.length === 0 || JSON.stringify(message.mentioned) === JSON.stringify([referenceId, threadBReference])), JSON.stringify(threadBMessages));
   assert.deepEqual(await inFrame('hostMessages.filter(message => message.thread === "thread-a").map(message => message.mentioned)'), [[referenceId]]);
   const lastMessage = () => inFrame('hostMessages.at(-1)');
   assert.deepEqual(await lastMessage(), { type: 'host:thread', thread: 'thread-a', repository: 'atelier', children: ['thread-child'], mentioned: [referenceId] });
@@ -292,6 +308,33 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   await evaluate('location.hash = "/env/thread-a"');
   await until(async () => { const last = await lastMessage(); return last.thread === 'thread-a' && JSON.stringify(last.mentioned) === JSON.stringify([referenceId]); }, 'Mentions back with references on');
   console.log('PASS: host:thread carries the repository, children by lineage and by delegatedFrom, and the mentioned IDs of its own conversation only (none with references off), and is sent again when they change');
+  // T3 can show the previous thread's conversation for a while after a switch; a scan of it is not
+  // credited to the new thread. First by the thread its assistant messages name (thread-b, then thread-a)...
+  const messagesSince = async (count, thread) => (await inFrame(`hostMessages.slice(${count})`)).filter(message => message.thread === thread);
+  await evaluate('location.hash = "/env/thread-b"');
+  await until(async () => { const last = await lastMessage(); return last.thread === 'thread-b' && last.mentioned.includes(threadBReference); }, 'thread-b scanned');
+  let sentSoFar = await inFrame('hostMessages.length');
+  await evaluate('globalThis.fixtureRenderDelay = 1200; location.hash = "/env/thread-a"');
+  await delay(2500);
+  assert.deepEqual((await messagesSince(sentSoFar, 'thread-a')).map(message => message.mentioned), [[referenceId]], 'thread-b\'s conversation was credited to thread-a');
+  // ...then, with no assistant message, while its root and first row are the nodes last scanned for
+  // the previous thread (thread-c, then other:thread-a).
+  await evaluate('globalThis.fixtureRenderDelay = 0; location.hash = "/env/thread-c"');
+  await until(async () => { const last = await lastMessage(); return last.thread === 'thread-c' && JSON.stringify(last.mentioned) === JSON.stringify([referenceId]); }, 'thread-c scanned');
+  sentSoFar = await inFrame('hostMessages.length');
+  await evaluate('globalThis.fixtureRenderDelay = 1200; location.hash = "/env/other:thread-a"');
+  await until(async () => (await messagesSince(sentSoFar, 'other:thread-a')).some(message => message.mentioned.includes(otherReference)), 'other:thread-a scanned once T3 rendered it', 8000);
+  assert.deepEqual((await messagesSince(sentSoFar, 'other:thread-a')).map(message => message.mentioned), [[], [otherReference, referenceId].sort()], 'thread-c\'s conversation was credited to other:thread-a');
+  // A thread that streams is announced at once, and its mentions follow while it still streams.
+  await evaluate('globalThis.fixtureRenderDelay = 0; globalThis.streamer = setInterval(() => document.querySelector("#stream").append(document.createTextNode(" more")), 100)');
+  sentSoFar = await inFrame('hostMessages.length');
+  await evaluate('location.hash = "/env/thread-child"');
+  await until(async () => (await messagesSince(sentSoFar, 'thread-child')).length > 0, 'host:thread for a thread that streams', 2000);
+  await until(async () => (await messagesSince(sentSoFar, 'thread-child')).some(message => message.mentioned.includes(childReference)), 'Mentions of a thread while it streams', 4000);
+  assert(await evaluate('Boolean(globalThis.streamer)'), 'the stream stopped before the check');
+  await evaluate('clearInterval(globalThis.streamer); globalThis.streamer = null; document.querySelector("#stream").textContent = ""; location.hash = "/env/thread-a"');
+  await until(async () => (await lastMessage()).thread === 'thread-a', 'Back on thread-a');
+  console.log('PASS: a scan of the previous thread\'s conversation is not credited to the next, by the thread its messages name or by its nodes; a streaming thread is sent at once and its mentions follow while it streams');
   // When T3 re-renders its panel slot the mount moves and the iframe reloads: the fresh Desk is told the thread again.
   const tiesBefore = deskRequests.filter(url => url === '/api/ties?thread=thread-a').length;
   await evaluate('document.querySelector("[data-t3-desk-mount]").remove()');
@@ -539,6 +582,16 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   const composerText = async () => (await evaluate('document.querySelector("[data-testid=composer-editor]").textContent')).replace(/ /g, ' ');
   await evaluate(`${nextRow(0)}.click()`);
   assert.equal(await composerText(), 'Start atelier-r1: run `atelier start atelier-r1` in a fresh checkout and follow what it prints.');
+  assert.equal(await evaluate('fixtureDraftState.draftsByThreadKey["draft-a"]?.prompt'), 'Start atelier-r1: run `atelier start atelier-r1` in a fresh checkout and follow what it prints.', 'T3\'s draft store did not get the prompt');
+  // While the editor on the page is still another draft's, a click fills nothing: that draft's
+  // prompt is put back, draft-a's is untouched, and the reason is reported.
+  await evaluate('fixtureDraftState.draftsByThreadKey["draft-c"] = { prompt: "Draft C text" }; globalThis.fixtureEditorDraft = "draft-c"; __t3Custom.error = null');
+  await evaluate(`${nextRow(1)}.click()`);
+  await until(() => evaluate('Boolean(__t3Custom.error)'), 'The refusal reported');
+  assert.match(await evaluate('__t3Custom.error'), /the composer on the page was draft draft-c's, not draft-a's/);
+  assert.equal(await evaluate('fixtureDraftState.draftsByThreadKey["draft-c"].prompt'), 'Draft C text', 'another draft\'s prompt was overwritten');
+  assert.equal(await evaluate('fixtureDraftState.draftsByThreadKey["draft-a"]?.prompt'), 'Start atelier-r1: run `atelier start atelier-r1` in a fresh checkout and follow what it prints.');
+  await evaluate('globalThis.fixtureEditorDraft = undefined; __t3Custom.error = null; document.querySelector("[data-testid=composer-editor]").textContent = "Start atelier-r1: run `atelier start atelier-r1` in a fresh checkout and follow what it prints."');
   assert.equal(await evaluate(`${nextRow(2)}.disabled`), true, 'a prompt can be made from an ID that is not an item ID');
   await evaluate(`${strip}.querySelector('[data-t3-strip-plan]').click()`);
   assert.equal(await composerText(), 'Let\'s plan a mission for ');
