@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-prx5
 title: Tell an embedding host which repository, record and thread it is looking at
-status: changes_requested
+status: in_review
 mission: atelier-61gh
 labels: []
 priority: medium
