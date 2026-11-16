@@ -3,12 +3,13 @@ schema: atelier.item
 schema_version: 3
 id: atelier-prx5
 title: Tell an embedding host which repository, record and thread it is looking at
-status: ready
+status: building
 mission: atelier-61gh
 labels: []
 priority: medium
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3Abedbfab3-88f2-4387-b923-ba6bd0a0f9b1%3Adelegate-task%3A197fd59b-2928-4d71-aa4d-94382300d50d
 ready:
   by: 'sumeet, in conversation on 2026-11-15: get that mission going'
   at: 2026-11-16T02:21:33.165230332Z
