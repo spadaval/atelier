@@ -208,7 +208,7 @@ async fn the_sidebar_lists_each_open_mission_with_its_threads() {
     let alpha = &repo["missions"][0];
     assert_eq!(alpha["state"], "in_progress", "{alpha}");
     assert_eq!(
-        (&alpha["done"], &alpha["total"]),
+        (&alpha["done"], &alpha["count"]),
         (&Value::from(1), &Value::from(4))
     );
     assert_eq!(alpha["waiting"], 1, "its needs-human item");

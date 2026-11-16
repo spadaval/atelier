@@ -493,6 +493,7 @@ pub struct SideMission {
     pub state: SideState,
     /// Its items that are done, and all of them.
     pub done: usize,
+    #[serde(rename = "count")]
     pub total: usize,
     /// What waits on the human in it: its waiting items, and the threads
     /// at work on it that T3 Code shows waiting.

@@ -7,7 +7,7 @@ export type SideMission = { id: string, title: string, state: SideState,
 /**
  * Its items that are done, and all of them.
  */
-done: number, total: number,
+done: number, count: number,
 /**
  * What waits on the human in it: its waiting items, and the threads
  * at work on it that T3 Code shows waiting.
