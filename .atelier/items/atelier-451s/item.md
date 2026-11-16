@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-451s
 title: Release the extension as a bundle on its own tags, apart from the atelier release
-status: building
+status: in_review
 mission: atelier-m8ye
 labels: []
 priority: medium
