@@ -99,10 +99,6 @@ quick case back.
 since they expect a backlog branch. I ran them with `ATELIER_SKIP`, because
 the brief asks for both fields and the record merges with this item.
 
-## Responses
+### Responses
 
-- 1-lzz6.1 (the 20-repeat and shifted-clock runs failed): fixed. The
-  failures were the pre-existing keyboard race. The test now waits for
-  each key (round 1 fix above), and the product race is atelier-zc0o. On
-  the new head: 1,600 of 1,600 on the repeat run, and 134 of 134 at each of
-  the three libfaketime instants, 2027-03-01 00:00:59 UTC included.
+1-lzz6.1: fixed in 3acfad032: the failures were the keyboard race, now atelier-zc0o; the test waits for each key, and on the new head the repeat run passed 1,600 of 1,600 and each libfaketime instant 134 of 134.
