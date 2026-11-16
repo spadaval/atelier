@@ -1,0 +1,20 @@
+{
+  "appPath": "/Applications/T3 Code (Nightly).app",
+  "debugPort": 9222,
+  "targetPrefixes": [
+    "t3code://app/"
+  ],
+  "desk": {
+    "urls": [
+      "http://127.0.0.1:3780"
+    ],
+    "repositories": []
+  },
+  "settings": {
+    "enabled": true,
+    "references": true,
+    "followProject": true,
+    "pinnedRepo": null,
+    "mappings": {}
+  }
+}
