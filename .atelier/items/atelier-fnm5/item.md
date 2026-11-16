@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-fnm5
 title: Let a host theme the embedded Desk and open threads for it
-status: changes_requested
+status: in_review
 mission: atelier-61gh
 labels: []
 priority: medium
