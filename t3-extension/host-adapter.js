@@ -4,6 +4,7 @@ const hostSelectors = {
   panel: '[data-workspace-area="panel"]',
   panelContent: '[data-right-panel-surface-content]',
   panelTabbar: '[data-right-panel-tabbar]',
+  panelTabList: '[data-right-panel-tab-list]',
   panelAddButton: 'button[aria-label="Add panel surface"]',
   panelTab: '[data-active-tab]',
   layoutControls: '[data-panel-layout-controls]',
@@ -37,7 +38,7 @@ async function createHostAdapter(api) {
     'environment-atoms': value => ['environmentIdsAtom', 'connectedEnvironmentIdsAtom'].every(key => key in value),
   };
   // Last seen chunk names only decide the search order, so a renamed chunk costs time, not a hook.
-  const likelyChunks = /\/(terminalFocus|session|utils)-[^/]*\.js$/;
+  const likelyChunks = /\/(terminalFocus|session|utils|toast)-[^/]*\.js$/;
   const found = {};
   const searched = new Set();
   const complete = () => Object.keys(found).length === Object.keys(shapes).length;

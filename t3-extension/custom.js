@@ -55,12 +55,12 @@ const addStyle = root => root.append(element('style', { text: css }));
 addStyle(api.root);
 // The Desk tab and its controls copy T3's own panel tab and icon-button metrics and colours.
 const globalStyle = element('style', { text: `
-  [data-t3-desk-tab] { display: flex; align-items: center; gap: 2px; height: 24px; max-width: 12rem; flex-shrink: 0; padding: 0 8px 0 6px; border-radius: 6px; font-size: 12px; color: var(--muted-foreground); -webkit-app-region: no-drag; }
+  [data-t3-desk-tab] { display: flex; align-items: center; gap: 2px; height: 24px; max-width: 9rem; flex-shrink: 0; padding: 0 8px 0 6px; border-radius: 6px; font-size: 12px; color: var(--muted-foreground); -webkit-app-region: no-drag; }
   [data-t3-desk-tab][data-selected] { background: var(--accent); color: var(--foreground); }
   [data-t3-desk-tab] > [data-t3-desk-label] { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: none; border: 0; padding: 0; color: inherit; font: inherit; cursor: pointer; }
   [data-t3-desk-icon], [data-t3-desk-launch] { display: inline-flex; align-items: center; justify-content: center; gap: 4px; flex-shrink: 0; min-width: 24px; height: 24px; padding: 0 4px; border: 0; border-radius: 6px; background: transparent; color: var(--muted-foreground); font: inherit; font-size: 12px; cursor: pointer; text-decoration: none; -webkit-app-region: no-drag; }
   [data-t3-desk-tab] > [data-t3-desk-icon] { min-width: 16px; height: 16px; padding: 0; }
-  [data-t3-desk-launch] { height: 28px; padding: 0 6px; color: var(--foreground); }
+  [data-t3-desk-launch] { width: 28px; height: 28px; padding: 0; color: var(--foreground); }
   [data-t3-desk-icon]:hover, [data-t3-desk-launch]:hover { background: var(--accent); color: var(--foreground); }
   [data-t3-desk-controls] { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
   :is([data-t3-desk-tab], [data-t3-desk-controls]) :focus-visible, [data-t3-desk-launch]:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
@@ -240,7 +240,7 @@ const refreshDesk = element('button', { 'data-t3-desk-icon': '', 'aria-label': '
 const externalDesk = element('a', { 'data-t3-desk-icon': '', 'data-t3-desk-external': '', 'aria-label': 'Open Desk externally', title: 'Open externally', target: '_blank', rel: 'noopener noreferrer', html: icons.external });
 const settingsDesk = element('button', { 'data-t3-desk-icon': '', 'aria-label': 'Atelier customizations', title: 'Customizations', html: icons.settings });
 const controls = element('div', { 'data-t3-desk-controls': '', hidden: '' }, refreshDesk, externalDesk, settingsDesk);
-const launch = element('button', { 'data-t3-desk-launch': '', 'aria-label': 'Open Atelier Desk', title: 'Atelier Desk', html: `${icons.desk}<span>Desk</span>` });
+const launch = element('button', { 'data-t3-desk-launch': '', 'aria-label': 'Open Atelier Desk', title: 'Atelier Desk', html: icons.desk });
 listen(tabLabel, 'click', () => desiredOpen ? hideDesk() : void showDesk());
 listen(closeDesk, 'click', hideDesk);
 listen(refreshDesk, 'click', () => { if (frameDesk) loadFrame(frameDesk, framePath); });
@@ -256,7 +256,10 @@ function syncPanel() {
   const content = area?.querySelector(hostSelectors.panelContent);
   const tabbar = area?.querySelector(hostSelectors.panelTabbar);
   const add = tabbar?.querySelector(hostSelectors.panelAddButton);
-  if (add && tab.parentElement !== add.parentElement) add.before(tab, controls);
+  if (add && tab.parentElement !== add.parentElement) add.before(tab);
+  // The controls go after T3's scrolling tab list, so a narrow panel never clips them.
+  const tabList = tabbar?.querySelector(hostSelectors.panelTabList);
+  if (tabList && controls.previousElementSibling !== tabList) tabList.after(controls);
   const toolbar = [...document.querySelectorAll(hostSelectors.layoutControls)].find(node => node.getBoundingClientRect().width > 0);
   if (toolbar && launch.parentElement !== toolbar) toolbar.prepend(launch);
   const allowed = settings.enabled && deskAvailable() && Boolean(current) && !location.hash.includes('/settings');
