@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-cdxg
 title: 'Bring the T3 views into the Desk: this thread, mission control, the project home, and the reads for the sidebar and the project strip'
-status: building
+status: in_review
 mission: null
 labels: []
 priority: medium
