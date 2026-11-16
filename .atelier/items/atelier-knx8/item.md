@@ -28,10 +28,10 @@ item an implementer's thread is working on himself.
 ## Done when
 
 - [ ] The contract gains one message from the host: the identity of the thread it is showing. `docs/architecture/desk.md` documents it with the rest.
-- [ ] On that message the embedded Desk shows the item's page where the thread implements or reviews an item, the mission's page where it leads or plans a mission, and the inbox where it holds nothing. Where it holds several, the page is the started item first, then the open review, then the mission.
+- [ ] On that message the embedded Desk chooses from the thread's current ties only, as atelier-prx5's read marks them: the item's page where the thread implements an item or reviews one, the mission's page where it leads, plans or reviews the plan of a mission, and the inbox where it has no current tie, including a thread tied only to finished work. With several current ties the order is the item it implements, then the item it reviews, then the mission.
 - [ ] The page names the thread's part in one line, such as "This thread implements this item".
 - [ ] A new message for another thread changes the page. A message for the same thread leaves the page the user has since navigated to alone.
-- [ ] The interface test in the fixture host page covers an implementer, a lead, a thread that holds nothing, and the two rules above.
+- [ ] The interface test in the fixture host page covers an implementer, a lead, a thread with no tie, a thread with a past tie to a done item and a current review (it shows the review's item), a thread with only past ties (the inbox), and the two rules above.
 - [ ] `pnpm test` and `pnpm e2e` pass.
 
 ## Scope

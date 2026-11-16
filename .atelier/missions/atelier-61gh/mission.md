@@ -29,7 +29,8 @@ Three things make it look that way.
   to 750 pixels wide.
 - **It does not know what he is looking at.** Opening the panel in an
   implementer's thread shows the repository page, not that thread's item. A
-  thread link on a Desk page opens a `t3code:` link instead of asking the
+  thread link on a Desk page opens T3 Code's web address in a new tab
+  (`ThreadTitle` in `desk/src/components/Agents.tsx`) instead of asking the
   T3 window it is already inside.
 
 The extension also carries knowledge that belongs to the Desk. A table in its
@@ -51,11 +52,14 @@ for a thread that holds nothing.
 The host and the Desk talk through one small, documented message contract
 over `postMessage`. The host sends the thread it is showing and its theme.
 The Desk sends its page title and asks the host to open a thread. The
-contract names no T3 internals, so any page that frames the Desk can use it.
+contract names no T3 internals. The Desk's configuration lists the origins
+that may frame it this way, and the list is empty until someone fills it: the
+Desk posts to and reads from those origins only.
 
 The Desk's API tells a host what it serves: each repository's Git identity,
-which repository and kind an ID names, and what a thread holds. With these
-the extension needs no hand-made table.
+which repository and kind an ID names, and what a thread holds now as
+distinct from what it once held. With these the extension needs no hand-made
+table.
 
 Outside the embedded mode the Desk looks and works as it does today.
 
@@ -67,13 +71,19 @@ Outside the embedded mode the Desk looks and works as it does today.
 - follows-the-thread: an interface test frames the Desk in a fixture host
   page and sends a thread identity. The Desk shows the item's page for a
   thread that implements one, the mission's page for a thread that leads one,
-  and the inbox for a thread that holds nothing.
+  and the inbox for a thread that holds nothing. A thread that implemented an
+  item now done and reviews another gets the review's item, and a thread
+  whose only ties are to finished work gets the inbox.
 - themed-by-the-host: in that fixture, after the host sends light colours and
   then dark ones, the Desk's background and text colours equal the ones sent
   each time.
 - asks-the-host: in that fixture, clicking a thread link sends the host one
-  message naming the thread and does not navigate the frame or open a
-  `t3code:` link.
+  message naming the thread, opens no new tab or popup, and does not navigate
+  the frame.
+- only-listed-origins: framed by a page whose origin the configuration does
+  not list, the Desk posts nothing to it and ignores what it sends, in an
+  interface test. With an empty list the embedded mode still draws, and
+  sends and reads nothing.
 - one-read-lookups: `GET /api/repos` gives `github.com/spadaval/atelier` as
   the identity of this repository on this host, and one request answers which
   repository and kind `atelier-g961` names. `docs/architecture/desk.md`
@@ -84,7 +94,8 @@ Outside the embedded mode the Desk looks and works as it does today.
 ## Scope
 
 In: `desk/`, `crates/atelier-desk`, `docs/product/desk.md` and
-`docs/architecture/desk.md`.
+`docs/architecture/desk.md`, and the installed service's configuration on
+this host, for the origins that may frame the Desk.
 
 Out:
 
@@ -106,7 +117,8 @@ messages and their fields, the query parameter or route that turns the
 embedded mode on, the CSS, and the routes of the new reads.
 
 An implementer asks the thread that started it before: adding a write or an
-action; loosening the `Host` check or adding CORS headers; letting a message
+action; loosening the `Host` check or adding CORS headers; posting to or
+reading from an origin the configuration does not list; letting a message
 from the host change anything but what the Desk displays; or changing a page
 outside the embedded mode in a way a user would see.
 

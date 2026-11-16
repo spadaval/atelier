@@ -28,7 +28,9 @@ to find out which one an ID names.
 
 - [ ] `GET /api/repos` gives each repository an `identity`: its `origin` remote as `host/path`, lower case, with no scheme, user, port or `.git`, which is the form T3 Code uses for a project's repository (`github.com/spadaval/atelier`). It is `null` where there is no `origin`. A unit test covers HTTPS, `git@host:path` and `ssh://` remotes.
 - [ ] One read answers what an ID names, across every repository served: the repository's name, whether it is an item or a mission, and its title and status. An ID that validates and names nothing is `404`.
-- [ ] One read answers what a thread identity holds, from the same map `/api/threads` uses, whether or not T3 Code lists the thread as live. The identity travels in a query parameter, never in the path. A thread that holds nothing gets an empty list, not `404`.
+- [ ] One read answers what a thread identity is tied to, whether or not T3 Code lists the thread as live. The identity travels in a query parameter, never in the path. A thread tied to nothing gets an empty list, not `404`.
+- [ ] Each tie in that read carries the record's status and `current`. `current` is true for the last implementer of an item that is started, in review or approved; for a reviewer of an item's or a plan's open round; and for the lead or a planner of an open mission. It is false for a replaced implementer, a reviewer of a closed round, and any tie to a done or dropped record. `/api/threads` and the pages that use its map answer as they do on the base.
+- [ ] A test covers one thread that implemented an item now done and reviews another item's open round (the first tie is not current, the second is), and a replaced implementer (not current).
 - [ ] The three are typed for the app with `ts-rs`, covered by tests in `crates/atelier-desk`, and documented field by field in `docs/architecture/desk.md`.
 - [ ] `cargo nextest run -p atelier-desk`, `cargo clippy --all-targets -- -D warnings` and `pnpm test` pass.
 
@@ -40,4 +42,4 @@ Out: any page that uses these reads (atelier-knx8 does); CORS headers and the `H
 
 ## Context
 
-`docs/architecture/desk.md`, "Tying a thread to an item", describes the map from identity to what it holds. T3 Code derives its key in `repositoryKeyFromRemote`; match its output for the remotes above, do not import it.
+`docs/architecture/desk.md`, "Tying a thread to an item", describes the map from identity to what it holds. That map (`holds` in `crates/atelier-desk/src/read.rs`) collects every implementer an item ever had and every round's reviewers, so it cannot say what is current; `Entry::holder` and `Entry::reviewer` can. T3 Code derives its key in `repositoryKeyFromRemote`; match its output for the remotes above, do not import it.
