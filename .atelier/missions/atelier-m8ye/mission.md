@@ -3,7 +3,7 @@ schema: atelier.mission
 schema_version: 3
 id: atelier-m8ye
 title: Bring the T3 Code extension into this repository, test it in CI, and release it on its own tags
-status: open
+status: done
 labels: []
 lead: null
 planners:
@@ -134,3 +134,38 @@ pushing imported history in which the scan found anything but the authors'
 Git identities.
 
 ## Result
+
+The extension is in this repository under `t3-extension/`, tested in CI, and
+released on its own tags. All four items merged on 2026-11-16, each after an
+independent review: atelier-n4g7 (#181), atelier-7tg6 (#184), atelier-451s
+(#185) and atelier-wlyn (#186). `t3-extension-v0.1.1` is published, and
+`v0.7.0` is still the repository's latest release.
+
+Against the criteria:
+
+- same-tree and nothing-private: the last imported commit's tree equals
+  `a242410`'s. The import dropped `artifacts/` from every commit. Its scan
+  also found another project's name in older commits and a personal sentence
+  in one commit message; the planner's thread had both rewritten before
+  anything was pushed, and accepted the host name `buildbot` and the user
+  name `supadava`, which this repository already publishes.
+- contract-in-ci and quiet-for-others: CI has an `extension` job, shown
+  failing on a branch that renamed a field of `GET /api/sidebar`.
+- own-release: the hand-started run on `master` built a bundle and published
+  nothing. The first tag was pushed while CI on its commit was still running
+  and was refused for that; the same run published once CI had passed. The
+  `atelier` release did not start for the tag.
+- installs-from-bundle: Sumeet's Windows machine runs 0.1.1 installed from
+  the bundle with no clone, checksum verified, and `t3-custom update --check`
+  there reports 0.1.1 as newest. From the bundle on Windows,
+  `test-extension.mjs` passed against the fixture Desk and
+  `test-contract.mjs` passed against a real T3 Code.
+
+Not shown: applying an update on Windows, since `test-update.mjs` does not
+run there (atelier-m3hw); and anything on macOS. Two findings the reviewers
+deferred are filed as atelier-8r3i and atelier-uwqy.
+
+The extension's fixture test no longer runs against a live Desk: it needs
+one serving the fixture repository. `spadaval/t3-code-atelier` is archived
+with a pointer here. Two probe branches of atelier-7tg6 remain on the remote
+for Sumeet to delete.
