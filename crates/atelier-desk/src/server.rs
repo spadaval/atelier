@@ -33,6 +33,8 @@ use std::sync::{Arc, Mutex};
 use tower::ServiceExt;
 use tower_http::services::{ServeDir, ServeFile};
 
+mod views;
+
 /// The header the Desk's app sends with an action or a session, with the
 /// value `1`. A page of another site cannot send it without the browser
 /// asking this server first, which it does not answer.
@@ -364,6 +366,12 @@ pub fn router_for(desk: Arc<Desk>) -> Router {
         .route("/api/records/{id}", get(record))
         .route("/api/ties", get(ties))
         .route("/api/threads", get(threads))
+        .route("/api/thread", get(views::thread))
+        .route("/api/sidebar", get(views::sidebar))
+        .route("/api/launch", get(views::launch))
+        .route("/api/history", get(views::history))
+        .route("/api/checks", get(views::checks))
+        .route("/api/roadmap", get(views::roadmap))
         .route("/api/proposed", get(proposed))
         .route("/api/motion", get(motion))
         .route("/api/disputed", get(disputed))
@@ -499,6 +507,7 @@ async fn repos(State(desk): State<Arc<Desk>>) -> Response {
         Ok(ReposResponse {
             repos,
             built_from: crate::BUILT_FROM.into(),
+            caller: desk.config.caller.clone(),
         })
     })
     .await
@@ -582,7 +591,10 @@ async fn item(
         let snapshot = desk.threads.snapshot();
         snapshot.join(&mut page.threads);
         page.t3 = snapshot.state;
-        page.fetched = desk.fetched(&repo, &desk.served(&repo)?);
+        let dir = desk.served(&repo)?;
+        page.fetched = desk.fetched(&repo, &dir);
+        page.pull_request =
+            (page.row.branch.as_ref()).and_then(|b| desk.pull_request(&repo, &dir, &b.name));
         Ok(page)
     })
     .await
@@ -712,9 +724,11 @@ async fn motion(State(desk): State<Arc<Desk>>) -> Response {
                 ..MotionRepo::default()
             },
             |name, dir, motion| {
+                let times = desk.branch_times(name, dir);
                 for item in &mut motion.items {
                     let agents = item.holder.iter_mut().chain(item.reviewer.iter_mut());
                     agents.for_each(|agent| snapshot.join(std::slice::from_mut(agent)));
+                    item.changed_at = item.branch.as_ref().and_then(|b| times.get(b)).cloned();
                 }
                 for mission in &mut motion.missions {
                     (mission.lead.iter_mut()).for_each(|a| snapshot.join(std::slice::from_mut(a)));

@@ -8,4 +8,9 @@ export type ReposResponse = { repos: Array<RepoSummary>,
 /**
  * The commit the server was built from (`crate::BUILT_FROM`).
  */
-built_from: string, };
+built_from: string,
+/**
+ * The name the human acts under (the configuration's `caller`), so a
+ * page can tell the steps the human recorded.
+ */
+caller: string, };

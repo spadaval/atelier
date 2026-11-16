@@ -15,4 +15,8 @@ holder: Agent | null,
 /**
  * Who holds its review, while it is in review.
  */
-reviewer: Agent | null, };
+reviewer: Agent | null,
+/**
+ * When its branch last had a commit, as RFC 3339.
+ */
+changed_at: string | null, };

@@ -278,8 +278,11 @@ Its routes are `/` (repositories), `/inbox`, `/proposed`, `/motion`,
 Work and Documents tabs as `?tab=`, and a document as `?doc=<path>`),
 `/r/{repo}/item/{id}`, and `/agents` and `/r/{repo}/agents` (T3 Code's live
 threads from `GET /api/threads`; the second shows only the threads, and the
-holds, of that repository). Where it reads the API differently from what
-the tables below suggest:
+holds, of that repository). Three more are views a host shows beside its
+threads, described under [Views a host shows](#views-a-host-shows): `/t`
+(this thread), `/mission/{repo}/{id}` (mission control) and `/home/{repo}`
+(the project home). Where it reads the API differently from what the tables
+below suggest:
 
 - A document is listed under its file name, with its first heading
   beneath, since the converted `design.md` files begin with `# Sizing`. Its
@@ -334,7 +337,8 @@ gains a link to the inbox with its count of what waits on the human. Pages
 take their narrow layouts from the width media queries, since the panel is
 the browser's viewport; `desk/e2e/embedded.spec.ts` checks the inbox,
 repositories, mission, item, proposed, in motion and disputed pages at 420
-and 720 pixels.
+and 720 pixels, and `desk/e2e/views.spec.ts` and `desk/e2e/host.spec.ts`
+the views a host shows at the widths it shows them.
 
 ### The host contract
 
@@ -362,6 +366,8 @@ unframed.
 | `desk:ready` | `version`: `1` | Once, when it has a listed parent |
 | `desk:navigated` | `path`: the Desk's route without `/embed`, with its query, such as `/r/atelier/item/atelier-fnm5`; `title`: the page's title, as the browser tab would show it | After `desk:ready`, and whenever the path or the title changes, so a page whose title arrives with its data is told twice |
 | `desk:open-thread` | `thread`: the thread's identity as the records hold it (`Agent.identity`, `LiveThread.id`, a dispute's `Side.identity`, a started session's `thread_id`) | When the human follows a thread link |
+| `desk:resized` | `height`: the page's content height in CSS pixels, rounded up | On mission control, whenever its content's height changes, so the host can size its frame to it |
+| `desk:key` | `key`: `Escape` | When Escape is pressed and nothing in the Desk handled it, so the host can close its panel or overlay. A Desk control that uses Escape calls `preventDefault`, and then the host is not told |
 
 With a listed parent a thread link is a button that sends `desk:open-thread`
 and opens no tab, popup or page; the host decides how to show the thread.
@@ -372,7 +378,7 @@ Without one it links to T3 Code's web address in a new tab, as before.
 | `type` | Fields | What the Desk does |
 | --- | --- | --- |
 | `host:theme` | `colors`: any of `background`, `foreground`, `surface`, `border`, `muted` (secondary text) and `accent`, each a CSS colour; `font`: a CSS font family list; `scheme`: `light` or `dark` | Sets its tokens from them, without a reload |
-| `host:thread` | `thread`: the identity of the thread the host is showing, as the records hold it (the form `desk:open-thread` sends); `repository`, optional: the name of the Desk repository the host's project maps to, as `GET /api/repos` names it | Opens the page for what that thread holds now (below), when it names another thread than the last `host:thread` did |
+| `host:thread` | `thread`: the identity of the thread the host is showing, as the records hold it (the form `desk:open-thread` sends); `repository`, optional: the name of the Desk repository the host's project maps to, as `GET /api/repos` names it; `children`, optional: the identities of the threads it started; `mentioned`, optional: the record IDs its conversation names | Opens "This thread" (`/t`, below) when it names another thread than the last `host:thread` did; otherwise shows what is new on that page where it is open |
 
 The theme maps onto the tokens at the top of `desk/src/styles.css`:
 `background` to `--bg`, `foreground` to `--ink`, `surface` to `--panel`,
@@ -392,36 +398,126 @@ that refers outside itself (`var()`, `env()`, `url()`, `inherit`, or
 `currentColor` anywhere in it), is
 dropped and its token keeps its value.
 
-**Following the thread** (item atelier-knx8; `desk/src/lib/follow.ts`).
-On `host:thread` the Desk reads `GET /api/ties?thread=<identity>` and opens
-one page from the ties whose `current` is true, the first of: the item the
-thread implements, the item it reviews, the mission it leads, the mission it
-plans, the mission whose plan it reviews. With no current tie, as for a
-thread tied to nothing or only to done or dropped work, it opens the page of
-the message's `repository` (`/r/{repo}`) when `GET /api/repos` lists that
-repository and can read it, since a panel beside one thread should show
-nothing wider than that thread's project (item atelier-jzaw). It opens the
-inbox when the message names no repository, names one the Desk does not
-serve or cannot read, or the list cannot be read. The host sends the
-repository because only it knows which project a thread belongs to; a
-thread with no ties tells the Desk nothing. A thread with a current tie
-opens that tie's page, whatever `repository` says.
-It replaces the frame's history entry rather than adding one, so the host's
-back button does not walk through the threads it showed. Above that page one
-line names the thread's part, such as "This thread implements this item",
-on a repository's page "This thread holds no open work in this project", or,
-on the inbox, "This thread holds no open work"; the line goes once the
-human leaves the page. A `host:thread` that names the thread the last one
-named changes nothing, even with another `repository`, so the page the
-human has moved to stays; one that
-names another thread opens that thread's page. If the read fails the page
-stays where it is, with no line, since the last thread's line no longer
-applies.
+**Following the thread** (item atelier-cdxg; `useFollowThread` in
+`desk/src/components/Shell.tsx`). On a `host:thread` that names another
+thread than the last one did, the Desk opens "This thread" (`/t`), which
+reads the thread, its ties, its children and the records it names from the
+message ([Views a host shows](#views-a-host-shows)). It replaces the frame's
+history entry rather than adding one, so the host's back button does not
+walk through the threads it showed. A `host:thread` that names the thread
+the last one named opens nothing, so a page the human has moved to stays;
+when it says something new of that thread, such as another child or
+another record named, "This thread" shows it where that page is open.
+`children` and `mentioned` keep only their non-empty strings, and
+`mentioned` each ID once; a field that is not a list counts as none.
+
+Until atelier-cdxg the Desk chose one page from the thread's current ties
+instead: the item it implements or reviews, the mission it leads, plans or
+reviews the plan of, else its project's page or the inbox. "This thread"
+shows all of those at once, with the threads it started and the records it
+names, which one page could not.
 
 What a host sends is only displayed. No message makes the Desk write or
 act, fetch from another origin, or go outside its own routes: a theme sets
-tokens, and a thread identity is only looked up, to choose which of the
-Desk's pages to show.
+tokens, and a thread identity or a record ID is only looked up, through
+`GET /api/ties`, `GET /api/thread` and `GET /api/records/{id}`, each
+percent-encoded in a query or a path segment.
+
+### Views a host shows
+
+A host such as T3 Code shows three views of the Desk beside its threads,
+and the inbox laid out for a wide frame (atelier-cdxg, from a spike Sumeet
+settled on 2026-11-16). Each is an ordinary route under `/embed`; nothing in
+them writes or acts.
+
+**This thread** (`/t`, `desk/src/pages/ThisThread.tsx`), in the host's
+panel beside a thread, 400 to 750 pixels wide. Before the host names a
+thread it says it is waiting for one. Then, from the host's `host:thread`:
+
+- The thread's title, from `GET /api/thread`, and, when it holds nothing
+  now, what it did before ("Earlier it implemented ...").
+- *Waiting on you*: the needs-human items, proposed plans and waiting
+  threads, from `GET /api/inbox`, among the records this page is about:
+  what the thread and its children hold now, the items of missions it
+  holds or planned or leads, and the records it names.
+- *Holds*: each item it implements or reviews now, with its Done when
+  lines, its pull request and its reviewer; and each mission it leads,
+  plans or reviews the plan of, with its open items.
+- *Work under this thread*: each mission it planned or leads, open or done,
+  with every item and a chip for each implementer and reviewer thread,
+  which opens that thread in the host. Its title opens mission control.
+- *Other threads it started*: the `children` no record names, each with its
+  status, model and age from `GET /api/thread`, marked quiet when it has
+  not changed in 30 minutes while it says it runs.
+- *Mentioned*: each record in `mentioned` that it does not hold, read with
+  `GET /api/records/{id}`, the done and dropped ones folded after four.
+- With none of these, the project at a glance for the message's
+  `repository` (what waits on him, open missions, items in motion, what
+  can start next), or, with no repository, one line saying the thread
+  holds nothing.
+
+A read that fails leaves its part out and the page still draws: ties that
+cannot be read are named in a banner, and the page then does not claim the
+thread holds nothing.
+
+**Mission control** (`/mission/{repo}/{id}`,
+`desk/src/pages/MissionControl.tsx`), over the host's main area. One screen
+of bordered panes after Factory's Mission Control: a top bar (the
+repository and mission, when the plan merged, how many items are live and
+how many quiet) and a state line (`RUNNING`, `AGREED`, `PROPOSED` or
+`DONE`) with a bar of the items done; *Active Item*, the item selected, with
+its stage and how long it has been in it, its holder and reviewer, its
+blockers, Done when, goal, pull request and CI (`GET /api/checks`);
+*Items*, every item with its stage, marked when it has sat in a moving stage
+for 30 minutes; *Progress Log*, the mission's steps newest first, paged to
+the rows its pane holds; *Active Threads*, the live threads on the mission,
+else the last three on the selected item, each with its role, item, model,
+time and latest line (`GET /api/thread` with `full=1`); and a footer of
+working keys:
+
+| Key | Does |
+| --- | --- |
+| `↓` or `j`, `↑` or `k` | Selects the next or previous item, kept in `?item=` |
+| `Enter` | Asks the host to open the selected item's thread: its reviewer while it is in review, else its holder, else the last thread on it |
+| `L` | Asks the host to open the mission's lead, else its planner |
+| `I` | Opens the selected item's page |
+| `]` or `PageDown`, `[` or `PageUp` | Pages the log |
+| `Esc` | Not handled, so the host is told (`desk:key`) and closes the view |
+
+The keys are ignored with a modifier held or in a text field. The panes hold
+down to 860 pixels wide, about a host's main area beside its sidebar, and
+the page does not scroll; below 860 they stack and the page scrolls. The top
+bar leaves 44 pixels clear at its right, where T3 Code draws a close button
+over the frame. Mission control draws its own top bar, so the embedded
+shell shows no breadcrumb or inbox link on it, and it tells the host its
+height (`desk:resized`).
+
+What is approximate there:
+
+- The progress log, the stages' ages and an item's review round come from
+  commit subjects (`GET /api/history`), not from the records: a step
+  committed under another subject is missed, and a subject that only looks
+  like a step is counted. An item with no step in the history is dated from
+  when it was readied.
+- "Waited on you" marks only two things: the steps on items labelled
+  `needs-human`, and the ready marks the human recorded, those whose `by`
+  starts with the Desk's `caller` (from `GET /api/repos`), shown as one line
+  per batch readied together. It knows of nothing else that waited on him.
+
+**The project home** (`/home/{repo}`, `desk/src/pages/ProjectHome.tsx`),
+over the host's main area: the project as a roadmap without dates. *Now*
+holds each agreed mission with any item started or done, and started items
+in no mission; *Next*, agreed missions with nothing started, and ready
+items in no mission; *Later*, proposed plans and draft items in no mission
+(`GET /api/roadmap` gives the items in no mission). A mission folds open to
+its items with their holders; its title opens mission control. *This week*
+is a strip of the last seven days, each listing the items started and
+merged, plans agreed and missions closed that day, from
+`GET /api/history?days=7`, so it is as approximate as the progress log.
+
+**The inbox**, embedded in a frame wider than one comfortable column, flows
+its repositories into columns of at least 560 pixels, up to three, each
+kept whole.
 
 ## Routes
 
@@ -448,6 +544,12 @@ identity never appears in a path: it can hold `/`, `:` and `%`, as
 | `GET /api/threads` | Live threads | T3 Code's live threads, each with what it holds in the records |
 | `GET /api/records/{id}` | A host that frames the Desk | What an ID names, in whichever repository served holds it |
 | `GET /api/ties?thread=<identity>` | A host that frames the Desk | Every record that names a thread identity, live or not, and whether each tie is current |
+| `GET /api/thread?id=<identity>&full=1` | This thread, mission control | Any thread T3 Code knows, live or ended; with `full`, its latest run and line |
+| `GET /api/sidebar` | A host's sidebar | Every open mission in every repository, with the threads on it and on its items |
+| `GET /api/launch?repo=<repo>` | A host's project strip | What can start, what waits on the human and what moves, in one repository |
+| `GET /api/history?repo=<repo>&days=<n>&ids=<id,...>` | Mission control, the project home | The records' steps, read from commit subjects |
+| `GET /api/checks?repo=<repo>&pr=<number>` | Mission control | CI on a pull request |
+| `GET /api/roadmap?repo=<repo>` | The project home | The open items in no mission |
 | `GET /api/proposed` | Proposed | Proposed plans and record changes on branches, in every repository |
 | `GET /api/motion` | In motion | Started items and missions in progress, with their threads |
 | `GET /api/disputed` | Disputed | What `atelier list --disputed` gives, with each side's model |
@@ -456,6 +558,15 @@ identity never appears in a path: it can hold `/`, `:` and `%`, as
 
 `?done=true` on `/missions` lists done and dropped missions, as
 `Filter::done` does for `list` (master).
+
+The reads added for a host's views (atelier-cdxg) take the repository as the
+query parameter `repo`, by the name `/api/repos` gives it. Those that run a
+command (`git log`, `git for-each-ref`, `gh pr view`) or call T3 Code
+(`t3_thread_read`) give it a deadline, keep its answer a while, and never
+put a value from the request on a command line unchecked: `repo` is looked
+up among the repositories served, a pull request is a number, and a thread
+identity is sent to T3 Code as JSON. The pages leave out what such a read
+cannot give and still draw.
 
 The route for `/history` is not served yet (M5): it answers `404`.
 
@@ -491,6 +602,8 @@ cached, and so are pull requests and T3 Code's threads.
 Beside `repos`, `built_from` is the commit the server was built from
 (`atelier_desk::BUILT_FROM`), or `unknown`. The app shows its first nine
 characters in the sidebar's footer, with the whole ID in its title.
+`caller` is the configuration's `caller`, the name the human acts under,
+by which mission control tells the ready marks he recorded.
 
 ### `GET /api/repos/{repo}/missions`
 
@@ -586,6 +699,7 @@ app resolves them against `path`, as the spike's `DocReader` does.
 | `unsettled[]` | The names of `actions::unsettled`, for a done item | master |
 | `threads[]` | One agent per identity and role the record names: its implementers, the reviewers of its reviews and the deciders of its answers, each with `item: null` | Desk, T3 Code |
 | `t3` | As on `/api/threads` | Desk |
+| `pull_request {number, url, state}` | The pull request of its branch, where the forge's last list has one (Fetching); `null` for an item with no branch or none found | Desk, the forge |
 
 An **agent**, in `threads[]` of a mission or an item: `identity`, whole as
 the record holds it; `role`, one of `planner`, `implementer`, `reviewer`, `lead` or
@@ -693,6 +807,100 @@ is `400`; an identity no record names gets `ties: []`, not `404`.
 `/api/threads` and its `holds` are unchanged: they list every tie, current
 or not, with no title or status.
 
+### `GET /api/thread?id=<identity>`
+
+Any thread T3 Code knows, live or ended, for a page that names a thread
+whose title the records do not hold. A live thread is answered from the
+last poll, with no call. Any other is read with the MCP tool
+`t3_thread_read` (`limit: 1`) and kept a minute, a thread T3 Code does not
+know as long, so it is not asked for on every request. With `full=1` it is
+read with `view: "activity"`, its last four items (`beforePosition` past
+its end, since without a position T3 Code gives a client with no thread of
+its own a thread's first items), and kept 20 seconds.
+The Desk keeps at most 500 threads read this way. The identity goes to T3
+Code as a value in a JSON request, never on a command line; one that is
+empty, longer than 512 characters or holds a control character is `400`.
+A thread T3 Code does not know, or any thread while T3 Code is not
+configured or cannot be read, is `404`.
+
+| Field | Given by |
+| --- | --- |
+| `id`, `title`, `status`, `updated_at`, `parent`, `model` | T3 Code: `threadId`, `title`, `status`, `updatedAt`, `parentThreadId`, `model` |
+| `live` | Whether the last poll listed it |
+| `started_at` | With `full=1`: the `startedAt` of its newest run (`recentRuns`), else its `createdAt`; otherwise `null` |
+| `last_line` | With `full=1`: its newest assistant message or tool call in one line of at most 160 characters, a tool call as `<tool>: <description, command, path, pattern, query, prompt or URL>`; reasoning and messages sent to it are passed over. Otherwise `null` |
+
+### `GET /api/sidebar`
+
+Every open mission in every repository, for a host's sidebar, in the
+configuration's order. `repos[]`, each with `repo`, `missions[]`, and
+`error` only when the repository does not read (then `missions` is empty).
+A mission is listed when it is proposed or agreed and open.
+
+| Field | Given by |
+| --- | --- |
+| `missions[].id`, `title` | The mission |
+| `missions[].state` | `in_progress` (agreed, with an item started), `agreed` or `proposed` |
+| `missions[].done`, `total` | Its items done, and all its items |
+| `missions[].waiting` | Its items waiting on the human (`MissionRow::waiting`), and the threads on it or its items that T3 Code's last poll shows `waiting` |
+| `missions[].threads[] {identity, role}` | The agents on the mission itself: its lead, planners and plan reviewers |
+| `missions[].items[] {id, title, status, threads[]}` | Each item, with its implementers and reviewers as `{identity, role}` |
+
+### `GET /api/launch?repo=<repo>`
+
+One repository for a host's project strip: what can start now, what waits
+on the human there, and what is in motion. An unknown repository is `404`.
+
+| Field | Given by |
+| --- | --- |
+| `ready[] {id, title, priority}` | `/api/motion`'s `ready` without the needs-human items |
+| `waiting` | The needs-human items, the proposed plans and `threads_waiting`, counted |
+| `threads_waiting[] {identity, title}` | Live threads that hold work here and that T3 Code shows `waiting` |
+| `waiting_items[] {id, title}` | The first three things waiting on him: proposed plans, then needs-human items by priority |
+| `in_motion[] {id, title, stage, age_seconds, holder, live}` | Each started item, those whose holder is live first, then the most recently moved. `stage` is `building`, `in review <round>`, `changes requested` or `approved`, the round counting its submits in the last 60 days of history; `age_seconds` is since its latest step in that history, else since its branch's last commit; `holder` is its reviewer while it is in review, else its implementer, as `{identity, title}`, the title from `/api/thread` or `null`; `live` is whether that thread is live |
+
+The history is read as `/api/history` reads it, and the page still gets an
+answer when it cannot be: the ages then come from the branches.
+
+### `GET /api/history?repo=<repo>&days=<n>&ids=<id,...>`
+
+The records' steps, newest first, read from the subjects of the newest
+20,000 commits on the local branches and the fetched remote's. Only the
+subjects Atelier's commands write count, so the history is approximate:
+a step committed under another subject is missed, and a subject that only
+looks like a step is counted. A step recorded on two branches before a
+merge is listed once. The list is read with one `git log`, given 15 seconds,
+and kept until the repository's commits change. `days` keeps the last
+`days` days; `ids`, a comma-separated list, keeps the steps on those IDs. An
+unknown repository is `404`, a `days` that is not a number `400`, and a
+`git log` that fails `500`.
+
+| Field | Given by |
+| --- | --- |
+| `events[].commit`, `at`, `subject` | The commit, its committer time, and its subject |
+| `events[].kind`, `id` | From the subject: `planned` (`Plan mission <id>`), `plan_review` (`Review the plan of <id>, round <n>: <verdict>`), `started` (`Start <id>`), `submitted` (`Submit <id> ...`), `review` (`Review <id>, round <n>: <verdict>`), `merged` (`Merge <id>: ...` or `Merge <remote>/<id> ...`), `readied` (`Ready <id>, <id> ...`, one for each ID), `closed` (`Close <id> ...`), `dropped` (`Drop <id>`) and `led` (`Lead <id>`) |
+| `events[].round`, `verdict` | A review's round and its verdict as the subject words it, such as `changes requested`; otherwise `null` |
+| `events[].record`, `title` | `item` or `mission` and the record's title, where the repository holds the ID; otherwise `null` |
+
+### `GET /api/checks?repo=<repo>&pr=<number>`
+
+CI on a pull request, read with `gh pr view <number> --json
+statusCheckRollup` in the repository's directory, given 15 seconds, and kept
+a minute. `pr` is parsed as a number before it reaches the command line; one
+that is not is `400`. An unknown repository is `404`, and a `gh` that fails,
+such as for a pull request it cannot find, `500`.
+
+| Field | Given by |
+| --- | --- |
+| `checks[] {name, state}` | Each check's name, or its context, and its conclusion as GitHub words it (`SUCCESS`, `FAILURE`, `SKIPPED`, ...), or its status while it runs |
+| `state` | `none` with no check; `failing` when one failed, errored, was cancelled, timed out or needs action; `passing` when every one succeeded, was skipped or was neutral; otherwise `pending` |
+
+### `GET /api/roadmap?repo=<repo>`
+
+`repo`, and `loose[]`: every item in no mission that is not done or
+dropped, as item rows, for the project home's Now, Next and Later. An
+unknown repository is `404`.
+
 ### `GET /api/proposed`
 
 `repos[]`, each with `repo`, `commit`, `error`, `fetched` and:
@@ -709,7 +917,9 @@ or not, with no title or status.
 | Field | Given by |
 | --- | --- |
 | `items[] {id, title, status, mission, branch, holder, reviewer}` | Each entry in a started status (`actions::STARTED`), its status from the record that counts, which for a started item is its branch's, local or fetched; `branch` is the ref read; `holder` and `reviewer` are agents (`Entry::holder`, `Entry::reviewer`) |
+| `items[].changed_at` | When `branch` last had a commit, from one `git for-each-ref` over the local and fetched branches, given 10 seconds; `null` where it cannot be read |
 | `missions[] {mission, lead}` | Each agreed mission with a started item (`in_progress`), and its lead as an agent |
+| `ready[]` | Up to five ready items that can start now, needs-human ones included, as item rows, highest priority first, then by ID |
 
 An agent's `thread` is T3 Code's live thread with that identity, or `null`.
 Whether T3 Code says the thread is alive is that: a thread T3 Code lists as

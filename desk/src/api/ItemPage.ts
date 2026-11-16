@@ -3,6 +3,7 @@ import type { Agent } from "./Agent";
 import type { DoneWhen } from "./DoneWhen";
 import type { FetchMark } from "./FetchMark";
 import type { ItemRow } from "./ItemRow";
+import type { PrMark } from "./PrMark";
 import type { Question } from "./Question";
 import type { ReadFrom } from "./ReadFrom";
 import type { ReadyMark } from "./ReadyMark";
@@ -26,4 +27,9 @@ unsettled: Array<string>,
  * Its implementers, the reviewers of its reviews and the deciders of
  * its answers.
  */
-threads: Array<Agent>, t3: T3State, fetched: FetchMark, };
+threads: Array<Agent>, t3: T3State, fetched: FetchMark,
+/**
+ * The pull request of its branch, where the forge's last list has
+ * one; `null` for an item with no branch or none found.
+ */
+pull_request: PrMark | null, };

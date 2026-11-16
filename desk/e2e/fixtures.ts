@@ -6,9 +6,12 @@
 import type { ActionRequest } from "../src/api/ActionRequest";
 import type { ActionResponse } from "../src/api/ActionResponse";
 import type { Agent } from "../src/api/Agent";
+import type { ChecksResponse } from "../src/api/ChecksResponse";
 import type { DisputedResponse } from "../src/api/DisputedResponse";
 import type { DocResponse } from "../src/api/DocResponse";
 import type { FetchMark } from "../src/api/FetchMark";
+import type { HistoryEvent } from "../src/api/HistoryEvent";
+import type { HistoryResponse } from "../src/api/HistoryResponse";
 import type { InboxResponse } from "../src/api/InboxResponse";
 import type { ItemPage } from "../src/api/ItemPage";
 import type { ItemRow } from "../src/api/ItemRow";
@@ -18,15 +21,19 @@ import type { MissionsResponse } from "../src/api/MissionsResponse";
 import type { LiveThread } from "../src/api/LiveThread";
 import type { MotionResponse } from "../src/api/MotionResponse";
 import type { ProposedResponse } from "../src/api/ProposedResponse";
+import type { RecordName } from "../src/api/RecordName";
 import type { ReposResponse } from "../src/api/ReposResponse";
 import type { SessionRequest } from "../src/api/SessionRequest";
 import type { SessionResponse } from "../src/api/SessionResponse";
 import type { StatusCount } from "../src/api/StatusCount";
 import type { T3State } from "../src/api/T3State";
+import type { ThreadInfo } from "../src/api/ThreadInfo";
 import type { ThreadsResponse } from "../src/api/ThreadsResponse";
 import type { Tie } from "../src/api/Tie";
 
 const commit = "2116defdde63afdadad2dddead0945cb50c21c42";
+/** The time `seconds` before the fixtures were loaded, as RFC 3339. */
+const ago = (seconds: number) => new Date(Date.now() - seconds * 1000).toISOString();
 const at = "2026-11-11T03:50:46+00:00";
 /** T3 Code read 4 seconds ago. */
 const t3: T3State = { reachable: true, age_seconds: 4, error: null };
@@ -322,6 +329,7 @@ export const repos: ReposResponse = {
     },
   ],
   built_from: "5e1f0c2d9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d",
+  caller: "sumeet",
 };
 
 function itemPage(r: ItemRow, more: Partial<ItemPage>): ItemPage {
@@ -348,6 +356,7 @@ function itemPage(r: ItemRow, more: Partial<ItemPage>): ItemPage {
     threads: [],
     t3,
     fetched,
+    pull_request: null,
     ...more,
   };
 }
@@ -456,6 +465,7 @@ export const items: Record<string, ItemPage> = {
   }),
   "atelier-uwxy": itemPage(building(), {
     read_from: "branch",
+    pull_request: { number: 131, url: "https://github.com/spadaval/atelier/pull/131", state: "OPEN" },
     implementers: [thread],
     threads: [
       { identity: thread, role: "implementer", item: null, thread: mark(live.uwxy) },
@@ -574,6 +584,7 @@ export const motion: MotionResponse = {
           branch: "origin/atelier-uwxy",
           holder: { identity: thread, role: "implementer", item: "atelier-uwxy", thread: mark(live.uwxy) },
           reviewer: null,
+          changed_at: ago(25 * 60),
         },
         {
           id: "atelier-u1ko",
@@ -583,9 +594,11 @@ export const motion: MotionResponse = {
           branch: "atelier-u1ko",
           holder: { identity: "thread:gone", role: "implementer", item: "atelier-u1ko", thread: null },
           reviewer: { identity: codexChild, role: "reviewer", item: "atelier-u1ko", thread: null },
+          changed_at: ago(3 * 3600),
         },
       ],
       missions: [{ mission: z4cr.mission, lead: { identity: live.lor.id, role: "lead", item: null, thread: mark(live.lor) } }],
+      ready: [row("atelier-wd1i", "Run the cutover on this host", "ready", { startable: true, priority: "medium" })],
     },
   ],
   t3,
@@ -708,6 +721,14 @@ export class World {
     return known ? itemPage(known, {}) : undefined;
   }
 
+  /** What `/api/records/<id>` names: an item or mission of atelier. */
+  record(id: string): RecordName | null {
+    const mission = this.missionPages[id];
+    if (mission) return { repo: "atelier", kind: "mission", id, title: mission.mission.title, status: mission.mission.status };
+    const item = this.item(id);
+    return item ? { repo: "atelier", kind: "item", id, title: item.row.title, status: item.row.status } : null;
+  }
+
   /** The response for one API request, as atelier-desk would give it. */
   respond(method: string, url: URL, header: string | undefined, body: string | null): { status: number; body: unknown } {
     const path = url.pathname;
@@ -760,6 +781,21 @@ export class World {
       return { status: 200, body: { thread: identity, ties: ties[identity] ?? [] } };
     }
     if (path === "/api/inbox") return { status: 200, body: this.inbox };
+    if (path === "/api/thread") {
+      const found = threadInfo(url.searchParams.get("id") ?? "", url.searchParams.has("full"));
+      return found ? { status: 200, body: found } : missing("thread");
+    }
+    const record = /^\/api\/records\/([^/]+)$/.exec(path);
+    if (record) {
+      const found = this.record(decodeURIComponent(record[1]));
+      return found ? { status: 200, body: found } : missing(`record ${record[1]}`);
+    }
+    if (path === "/api/history" || path === "/api/roadmap" || path === "/api/checks") {
+      if (url.searchParams.get("repo") !== "atelier") return missing(`repository ${url.searchParams.get("repo")}`);
+      if (path === "/api/roadmap") return { status: 200, body: { repo: "atelier", loose } };
+      if (path === "/api/checks") return { status: 200, body: checks };
+      return { status: 200, body: history(url.searchParams.get("days"), url.searchParams.get("ids")) };
+    }
     if (path === "/api/threads") return { status: 200, body: this.threads };
     if (path === "/api/proposed") return { status: 200, body: proposed };
     if (path === "/api/motion") return { status: 200, body: motion };
@@ -783,4 +819,64 @@ export class World {
     }
     return missing("route");
   }
+}
+
+/** Threads T3 Code knows that are no longer live, for `/api/thread`. */
+export const ended: Record<string, ThreadInfo> = {
+  "thread:gone": { id: "thread:gone", title: "Implement atelier-u1ko", status: "completed", updated_at: ago(5 * 3600), parent: "thread:orchestrator", model: "claude-opus-5-5", live: false, started_at: null, last_line: null },
+  "planner-thread": { id: "planner-thread", title: "Plan the Desk", status: "completed", updated_at: ago(30 * 3600), parent: null, model: "claude-fable-5-2", live: false, started_at: null, last_line: null },
+  "thread:child-quiet": { id: "thread:child-quiet", title: "Look into the flaky e2e test", status: "running", updated_at: ago(2 * 3600), parent: thread, model: "gpt-6.1-sol", live: false, started_at: null, last_line: null },
+};
+
+/** `/api/thread`: a live thread from the list, else one that has ended; in full, with its latest run and line. */
+export function threadInfo(id: string, full: boolean): ThreadInfo | null {
+  const listed = Object.values(live).find((t) => t.id === id);
+  const found: ThreadInfo | null = listed
+    ? { id, title: listed.title, status: listed.status, updated_at: listed.updated_at, parent: listed.parent, model: listed.model, live: true, started_at: null, last_line: null }
+    : (ended[id] ?? null);
+  if (!found || !full) return found;
+  return { ...found, started_at: ago(40 * 60), last_line: found.live ? "Bash: cargo nextest run -p atelier-desk" : "Merged and pushed." };
+}
+
+/** The items in no mission, for `/api/roadmap`. */
+export const loose: ItemRow[] = [
+  row("atelier-c1z3", "Ready the scorecard scripts and rubric for the rerun", "ready", { startable: true }),
+  row("atelier-7w9s", "Convert the work host with the cutover runbook", "ready", {
+    labels: ["needs-human"],
+    needs_human: true,
+    blockers: [{ id: "atelier-52g7", status: "draft" }],
+    waiting_on: ["atelier-52g7"],
+  }),
+  row("atelier-52g7", "Make the cutover find the docs that name removed commands", "draft", { priority: "medium" }),
+  row("atelier-0019", "Garden atelier, 2026-11-11", "approved", { holder: "thread:gone" }),
+];
+
+/** CI on a pull request, for `/api/checks`. */
+export const checks: ChecksResponse = { state: "passing", checks: [{ name: "rust", state: "SUCCESS" }, { name: "desk", state: "SUCCESS" }, { name: "docs", state: "SKIPPED" }] };
+
+function event(hoursAgo: number, kind: HistoryEvent["kind"], id: string, more: Partial<HistoryEvent> = {}): HistoryEvent {
+  const known = id === z4cr.mission.id ? { record: "mission" as const, title: z4cr.mission.title } : { record: "item" as const, title: z4crItems.find((i) => i.id === id)?.title ?? id };
+  return { commit: `${hoursAgo}`.padEnd(40, "0"), at: ago(hoursAgo * 3600), kind, id, round: null, verdict: null, subject: `${kind} ${id}`, ...known, ...more };
+}
+
+/** The records' steps, newest first, for `/api/history`. */
+export const events: HistoryEvent[] = [
+  event(0.4, "started", "atelier-uwxy"),
+  event(2, "merged", "atelier-1ie1"),
+  event(3, "review", "atelier-1ie1", { round: 2, verdict: "approved" }),
+  event(4, "submitted", "atelier-1ie1"),
+  event(5, "review", "atelier-1ie1", { round: 1, verdict: "changes requested" }),
+  event(6, "submitted", "atelier-1ie1"),
+  event(8, "started", "atelier-1ie1"),
+  event(30, "merged", "atelier-z4cr"),
+  event(32, "plan_review", "atelier-z4cr", { round: 2, verdict: "approved" }),
+  event(40, "planned", "atelier-z4cr"),
+  event(24 * 9, "merged", "atelier-old1", { record: null, title: null }),
+];
+
+/** `/api/history` with its `days` and `ids` filters. */
+export function history(days: string | null, ids: string | null): HistoryResponse {
+  const wanted = ids ? new Set(ids.split(",")) : null;
+  const since = days ? Date.now() - Number(days) * 86_400_000 : -Infinity;
+  return { repo: "atelier", events: events.filter((e) => Date.parse(e.at) >= since && (!wanted || wanted.has(e.id))) };
 }

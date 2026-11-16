@@ -2,7 +2,7 @@
 //! and joined to the identities the records hold by comparing whole
 //! strings (docs/architecture/desk.md, Tying a thread to an item).
 
-use crate::api::{Agent, Hold, LiveThread, PullRequest, Side, T3State, ThreadMark};
+use crate::api::{Agent, Hold, LiveThread, PullRequest, Side, T3State, ThreadInfo, ThreadMark};
 use crate::config::T3Config;
 use crate::t3::{self, Client, T3Project, T3Thread};
 use anyhow::{bail, Result};
@@ -26,7 +26,21 @@ pub struct Threads {
     /// not, by ID: its provider, model and link.
     known: RwLock<HashMap<String, Known>>,
     polls: AtomicUsize,
+    /// Threads read one by one (`/api/thread`), by identity and whether
+    /// read in full: what T3 Code said, or `None` where it knew none, and
+    /// when.
+    read: Mutex<HashMap<(String, bool), Kept>>,
 }
+
+/// A thread read one by one, or `None` where T3 Code knew none, and when.
+type Kept = (Instant, Option<ThreadInfo>);
+
+/// How long a thread read one by one is kept: its title and status, and,
+/// read in full, its latest run and line.
+pub const INFO_KEPT: Duration = Duration::from_secs(60);
+pub const FULL_KEPT: Duration = Duration::from_secs(20);
+/// The most threads kept read one by one.
+pub const INFO_HELD: usize = 500;
 
 #[derive(Clone)]
 struct Known {
@@ -61,6 +75,7 @@ impl Threads {
             polled: RwLock::default(),
             known: RwLock::default(),
             polls: AtomicUsize::new(0),
+            read: Mutex::default(),
         }
     }
 
@@ -122,6 +137,63 @@ impl Threads {
                 side.model = Some(found.model.clone());
             }
         }
+    }
+
+    /// The thread `id` as T3 Code knows it, live or ended: from the last
+    /// poll when it is live, else read from T3 Code and kept `INFO_KEPT`.
+    /// `None` where T3 Code knows no such thread or cannot be read.
+    pub fn info(&self, id: &str) -> Option<ThreadInfo> {
+        if let Some(t) = self.snapshot().find(id) {
+            return Some(ThreadInfo {
+                id: t.thread_id.clone(),
+                title: t.title.clone(),
+                status: t.status.clone(),
+                updated_at: t.updated_at.clone(),
+                parent: t.parent_thread_id.clone(),
+                model: Some(t.model.clone()),
+                live: true,
+                started_at: None,
+                last_line: None,
+            });
+        }
+        self.read_thread(id, false)
+    }
+
+    /// The thread `id` read from T3 Code with the start of its latest run
+    /// and its latest output in one line, kept `FULL_KEPT`.
+    pub fn info_full(&self, id: &str) -> Option<ThreadInfo> {
+        self.read_thread(id, true)
+    }
+
+    /// `t3_thread_read` of `id`, from the cache while it is fresh. A read
+    /// that fails is kept as `None` as long, so a thread T3 Code does not
+    /// know is not asked for on every request.
+    fn read_thread(&self, id: &str, full: bool) -> Option<ThreadInfo> {
+        let key = (id.to_string(), full);
+        let kept = if full { FULL_KEPT } else { INFO_KEPT };
+        if let Some((at, info)) = self.read.lock().unwrap().get(&key) {
+            if at.elapsed() < kept {
+                return info.clone();
+            }
+        }
+        let client = self.client.as_ref()?;
+        let arguments = if full {
+            // Without a position T3 Code gives a thread's first items to a
+            // client with no thread of its own; before the end gives its last.
+            let newest = i32::MAX;
+            serde_json::json!({"threadId": id, "limit": 4, "maxCharsPerItem": 400, "view": "activity", "beforePosition": newest})
+        } else {
+            serde_json::json!({"threadId": id, "limit": 1, "maxCharsPerItem": 1})
+        };
+        let read = client.lock().unwrap().call("t3_thread_read", arguments);
+        let live = self.snapshot().find(id).is_some();
+        let info = read.ok().and_then(|v| thread_info(id, &v, live, full));
+        let mut cache = self.read.lock().unwrap();
+        cache.retain(|(_, full), (at, _)| at.elapsed() < if *full { FULL_KEPT } else { INFO_KEPT });
+        if cache.len() < INFO_HELD {
+            cache.insert(key, (Instant::now(), info.clone()));
+        }
+        info
     }
 
     pub fn snapshot(&self) -> Snapshot {
@@ -231,4 +303,82 @@ impl Snapshot {
         });
         threads.collect()
     }
+}
+
+/// A thread as `t3_thread_read` gives it, `read`; with `full`, the start
+/// of its latest run and its newest output, an assistant message or a tool
+/// call, in one line.
+fn thread_info(id: &str, read: &serde_json::Value, live: bool, full: bool) -> Option<ThreadInfo> {
+    let thread = read.get("thread")?;
+    let text = |key: &str| thread.get(key).and_then(|x| x.as_str()).map(str::to_string);
+    let (started_at, last_line) = if full {
+        let runs = read.get("recentRuns").and_then(|r| r.as_array());
+        let started = (runs.into_iter().flatten())
+            .find_map(|r| {
+                r.get("startedAt")
+                    .and_then(|x| x.as_str())
+                    .map(str::to_string)
+            })
+            .or_else(|| text("createdAt"));
+        let items = read.get("items").and_then(|i| i.as_array());
+        let newest = (items.into_iter().flatten().rev()).find(|i| {
+            let kind = i.get("type").and_then(|t| t.as_str()).unwrap_or("");
+            kind == "assistant_message" || kind.contains("tool") || kind.contains("command")
+        });
+        (started, newest.and_then(one_line))
+    } else {
+        (None, None)
+    };
+    Some(ThreadInfo {
+        id: id.to_string(),
+        title: text("title")?,
+        status: text("status").unwrap_or_default(),
+        updated_at: text("updatedAt").unwrap_or_default(),
+        parent: text("parentThreadId"),
+        model: text("model"),
+        live,
+        started_at,
+        last_line,
+    })
+}
+
+/// A thread item as one line: a tool call as its tool and first argument,
+/// a message as its first line. The item's text may be cut short, so a
+/// tool call's JSON is read with string matching, not parsed.
+fn one_line(item: &serde_json::Value) -> Option<String> {
+    let text = item.get("text")?.as_str()?;
+    let kind = item.get("type").and_then(|t| t.as_str()).unwrap_or("");
+    let field = |name: &str| -> Option<String> {
+        let key = format!("\"{name}\": \"");
+        let start = text.find(&key)? + key.len();
+        let rest = &text[start..];
+        let end = rest.find('"').unwrap_or(rest.len());
+        Some(rest[..end].replace("\\n", " "))
+    };
+    let line = if kind.contains("tool") {
+        let tool = field("toolName").unwrap_or_else(|| kind.to_string());
+        let tool = tool.rsplit("__").next().unwrap_or(&tool).to_string();
+        let arg = [
+            "description",
+            "command",
+            "file_path",
+            "pattern",
+            "query",
+            "prompt",
+            "url",
+        ]
+        .iter()
+        .find_map(|k| field(k));
+        match arg {
+            Some(arg) => format!("{tool}: {arg}"),
+            None => tool,
+        }
+    } else {
+        text.lines()
+            .find(|l| !l.trim().is_empty())?
+            .trim()
+            .to_string()
+    };
+    let line: String = line.chars().take(160).collect();
+    Some(line)
 }

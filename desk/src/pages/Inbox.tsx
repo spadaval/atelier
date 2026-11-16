@@ -124,7 +124,7 @@ export function InboxPage() {
   const repos = loaded.data?.repos ?? [];
   const count = repos.reduce((n, r) => n + inboxCount(r), 0);
   return (
-    <div className="page narrow">
+    <div className="page narrow inbox-page">
       <Crumbs trail={[{ label: "Inbox" }]} />
       <div className="page-head">
         <div>
@@ -138,10 +138,12 @@ export function InboxPage() {
       <ErrorBanner loaded={loaded} />
       {loaded.data ? <T3Notice t3={loaded.data.t3} /> : null}
       {!loaded.data && loaded.loading ? <Skeleton rows={8} /> : null}
-      {repos.map((r) => (
-        <RepoInbox key={r.repo} repo={r} many={repos.length > 1} />
-      ))}
-      {loaded.data ? <News news={loaded.data.news} /> : null}
+      <div className="inbox-flow">
+        {repos.map((r) => (
+          <RepoInbox key={r.repo} repo={r} many={repos.length > 1} />
+        ))}
+        {loaded.data ? <News news={loaded.data.news} /> : null}
+      </div>
     </div>
   );
 }

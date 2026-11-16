@@ -111,6 +111,8 @@ fi
 #[derive(Default)]
 struct StandIn {
     threads: Mutex<Vec<Value>>,
+    /// What `t3_thread_read` gives, by thread ID; any other is unknown.
+    reads: Mutex<std::collections::HashMap<String, Value>>,
     refused: Mutex<Vec<String>>,
     requests: Mutex<Vec<(String, Value)>>,
 }
@@ -148,6 +150,18 @@ async fn mcp(
             let error = json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32600,
                 "message": "MCP-Session-Id header is required; send initialize to start a session"}});
             (StatusCode::BAD_REQUEST, Json(error)).into_response()
+        }
+        "tools/call" if request["params"]["name"] == "t3_thread_read" => {
+            let thread = request["params"]["arguments"]["threadId"].as_str().unwrap();
+            let result = match standin.reads.lock().unwrap().get(thread) {
+                Some(read) => json!({"content": [{"type": "text", "text": read.to_string()}],
+                    "structuredContent": read, "isError": false}),
+                None => {
+                    json!({"content": [{"type": "text", "text": format!("Unknown thread {thread}.")}],
+                    "isError": true})
+                }
+            };
+            Json(json!({"jsonrpc": "2.0", "id": id, "result": result})).into_response()
         }
         "tools/call" => {
             assert_eq!(request["params"]["name"], "t3_thread_list");
@@ -548,4 +562,86 @@ async fn a_refused_or_expired_token_is_replaced_and_revoked() {
     assert_eq!(body["t3"]["reachable"], false);
     let error = body["t3"]["error"].as_str().unwrap();
     assert!(error.contains("refused the Desk's token"), "{error}");
+}
+
+/// The calls the stand-in was sent to read one thread.
+fn reads(world: &World) -> Vec<Value> {
+    let requests = world.standin.requests.lock().unwrap();
+    let reads = requests
+        .iter()
+        .filter(|(_, r)| r["params"]["name"] == "t3_thread_read");
+    reads
+        .map(|(_, r)| r["params"]["arguments"].clone())
+        .collect()
+}
+
+#[tokio::test]
+async fn any_thread_is_read_by_its_identity_live_or_ended() {
+    let world = World::new(None, true).await;
+    world.list(four());
+    world.poll().await;
+    let read: Value = serde_json::from_str(include_str!("fixtures/t3_thread_read.json")).unwrap();
+    let ended = "thread:ended-reviewer";
+    world
+        .standin
+        .reads
+        .lock()
+        .unwrap()
+        .insert(ended.into(), read);
+
+    // A live thread comes from the last poll, with no call.
+    let query = |id: &str| {
+        format!(
+            "/api/thread?id={}",
+            id.replace('%', "%25").replace('/', "%2F")
+        )
+    };
+    let live = world.get(&query(ODD)).await;
+    assert_eq!(
+        (&live["id"], &live["title"], &live["live"]),
+        (&json!(ODD), &json!("Implement demo-a001"), &json!(true))
+    );
+    assert_eq!(live["status"], "running");
+    assert!(reads(&world).is_empty());
+
+    // An ended one is read from T3 Code once, then kept.
+    let info = world.get(&query(ended)).await;
+    assert_eq!(
+        info,
+        json!({"id": ended, "title": "Review demo-a001", "status": "completed",
+            "updated_at": "2026-11-16T15:35:16.317Z", "parent": "c6689ff2-b6ae-4865-afe4-a3533c8cfa80",
+            "model": "gpt-6.1-sol", "live": false, "started_at": null, "last_line": null})
+    );
+    world.get(&query(ended)).await;
+    assert_eq!(reads(&world).len(), 1);
+
+    // In full, its latest run's start and its newest output in one line;
+    // its reasoning is not output.
+    let full = world.get(&format!("{}&full=1", query(ended))).await;
+    assert_eq!(full["started_at"], "2026-11-16T15:32:44.634Z");
+    assert_eq!(full["last_line"], "Bash: Run the Desk's tests");
+    let asked = reads(&world);
+    assert_eq!(asked.len(), 2);
+    assert_eq!(
+        asked[1],
+        json!({"threadId": ended, "limit": 4, "maxCharsPerItem": 400, "view": "activity", "beforePosition": i32::MAX})
+    );
+
+    // A thread T3 Code does not know is not found, and asked for once a minute.
+    let request = Request::get(query("thread:nobody")).header("host", "localhost");
+    let response = world
+        .app
+        .clone()
+        .oneshot(request.body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let request = Request::get(query("thread:nobody")).header("host", "localhost");
+    world
+        .app
+        .clone()
+        .oneshot(request.body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(reads(&world).len(), 3);
 }

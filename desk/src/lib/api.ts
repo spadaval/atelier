@@ -1,5 +1,6 @@
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type { ApiError } from "../api/ApiError";
+import type { ThreadInfo } from "../api/ThreadInfo";
 
 export type Loaded<T> = { data?: T; error?: string; status?: number; loading: boolean };
 
@@ -71,6 +72,9 @@ export async function reloadAll(): Promise<void> {
 
 const IDLE: Loaded<unknown> = { loading: false };
 
+/** Whether a read has its answer: its data, or the error that kept it. A page leaves out what failed and draws the rest. */
+export const settled = (read: Loaded<unknown>) => read.data !== undefined || read.error !== undefined;
+
 /** `GET path`, kept fresh: shown from cache at once, fetched again every `interval` ms while the page is visible. */
 export function useData<T>(path: string | null, interval = 30_000): Loaded<T> {
   const value = useSyncExternalStore(
@@ -113,13 +117,73 @@ export const api = {
   missions: (repo: string) => `/api/repos/${seg(repo)}/missions`,
   mission: (repo: string, id: string) => `/api/repos/${seg(repo)}/missions/${seg(id)}`,
   item: (repo: string, id: string) => `/api/repos/${seg(repo)}/items/${seg(id)}`,
+  history: (repo: string, opts: { days?: number; ids?: string[] } = {}) =>
+    `/api/history?repo=${seg(repo)}${opts.days ? `&days=${opts.days}` : ""}${opts.ids ? `&ids=${seg(opts.ids.join(","))}` : ""}`,
+  checks: (repo: string, pr: number) => `/api/checks?repo=${seg(repo)}&pr=${pr}`,
+  roadmap: (repo: string) => `/api/roadmap?repo=${seg(repo)}`,
+  thread: (id: string, full = false) => `/api/thread?id=${seg(id)}${full ? "&full=1" : ""}`,
+  record: (id: string) => `/api/records/${seg(id)}`,
   ties: (thread: string) => `/api/ties?thread=${seg(thread)}`,
   doc: (repo: string, path: string, at?: string | null) => `/api/repos/${seg(repo)}/doc?path=${seg(path)}${at ? `&at=${seg(at)}` : ""}`,
 };
 
+/**
+ * Several paths read together, and again every `interval` ms while the page
+ * is visible. Each answer is the body, or null where its read failed, so one
+ * failed read leaves the rest drawn.
+ */
+export function useAll<T>(paths: string[], interval = 30_000): { data: (T | null)[]; loading: boolean } {
+  const key = paths.join("\n");
+  const [value, setValue] = useState<{ key: string; data: (T | null)[] }>({ key: "", data: [] });
+  useEffect(() => {
+    let stale = false;
+    const list = key === "" ? [] : key.split("\n");
+    const read = async () => {
+      const data = await Promise.all(
+        list.map(async (path) => {
+          try {
+            const response = await fetch(path, { headers: { accept: "application/json" } });
+            return response.ok ? ((await response.json()) as T) : null;
+          } catch {
+            return null;
+          }
+        }),
+      );
+      if (!stale) setValue((old) => (old.key === key && JSON.stringify(old.data) === JSON.stringify(data) ? old : { key, data }));
+    };
+    void read();
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") void read();
+    }, interval);
+    return () => {
+      stale = true;
+      clearInterval(timer);
+    };
+  }, [key, interval]);
+  return value.key === key ? { data: value.data, loading: false } : { data: paths.map(() => null), loading: paths.length > 0 };
+}
+
+/**
+ * Each identity's thread as T3 Code knows it, live or ended, read with
+ * `GET /api/thread`; with `full`, its latest run and line, read more often.
+ * An identity T3 Code does not know is left out.
+ */
+export function useThreads(ids: string[], full = false): Map<string, ThreadInfo> {
+  const unique = [...new Set(ids)];
+  const read = useAll<ThreadInfo>(
+    unique.map((id) => api.thread(id, full)),
+    full ? 15_000 : 60_000,
+  );
+  const map = new Map<string, ThreadInfo>();
+  read.data.forEach((info, at) => info && map.set(unique[at], info));
+  return map;
+}
+
 /** The app's own routes. */
 export const to = {
   repo: (repo: string) => `/r/${seg(repo)}`,
+  home: (repo: string) => `/home/${seg(repo)}`,
+  control: (repo: string, id: string) => `/mission/${seg(repo)}/${seg(id)}`,
   agents: (repo?: string) => (repo === undefined ? "/agents" : `/r/${seg(repo)}/agents`),
   proposed: () => "/proposed",
   motion: () => "/motion",
