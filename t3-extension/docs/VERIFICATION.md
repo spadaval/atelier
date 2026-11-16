@@ -1,5 +1,29 @@
 # Verification
 
+## Re-review fixes, against the merged Desk, Windows, November 16, 2026
+
+The Desk work has merged: these runs used the real Desk at
+`http://buildbot:3780`, which now serves every route, and the test instance
+(port 9333) points at it again. Same T3 build; the daily instance was not
+touched.
+
+`DESK=http://buildbot:3780 node test-extension.mjs` passes, and
+`node test-contract.mjs --port 9333 --thread <atelier test thread>` passes with
+every probe ok, including `dom:conversationThread`, `dom:timelineRow` and
+`state:composer-prompt` through the checked write. Each new check was then run
+with only its fix undone, and failed:
+
+| Finding | Fix undone | Failure |
+| --- | --- | --- |
+| 1. A streaming thread is never announced | The send waits for the thread's first scan, and the scan timer restarts on every change | "host:thread on thread switches" timed out |
+| 1. (the scan alone) | Only the scan timer restarting on every change | "Mentions of a thread while it streams" timed out |
+| 2. The previous conversation credited to the new thread | Every scan credited to the current thread | "thread-b's conversation was credited to thread-a" |
+| 3. The composer of another draft filled | `fillComposer` writing without its checks | "The refusal reported" timed out |
+
+In the real T3, the strip's Plan a mission put "Let's plan a mission for " in
+the draft store exactly, with no error, through the checked write.
+
+
 ## Review fixes for the sidebar views, Windows, November 16, 2026
 
 Fixes for an independent review of `776be61..4bb7348`; same T3 build, test
