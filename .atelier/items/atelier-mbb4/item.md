@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-mbb4
 title: 'Release 0.7.0: the Desk inside T3 Code, and what has merged since 0.6.0'
-status: in_review
+status: approved
 mission: null
 labels: []
 priority: medium
