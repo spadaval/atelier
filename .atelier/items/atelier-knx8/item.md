@@ -3,14 +3,15 @@ schema: atelier.item
 schema_version: 3
 id: atelier-knx8
 title: Open the page for what a thread holds
-status: ready
+status: building
 mission: atelier-61gh
 labels: []
 priority: medium
 blocked_by:
 - atelier-prx5
 - atelier-fnm5
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3Abedbfab3-88f2-4387-b923-ba6bd0a0f9b1%3Adelegate-task%3A9e810a46-c60e-44f1-8c75-1fb7fed292e8
 ready:
   by: 'sumeet, in conversation on 2026-11-15: get that mission going'
   at: 2026-11-16T02:21:33.165230332Z
