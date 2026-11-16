@@ -1,0 +1,91 @@
+# Releases the T3 Code extension (t3-extension/) on its own tags,
+# t3-extension-v<major>.<minor>.<patch>, apart from atelier's release
+# (v-release.yml, which dist generates and runs only for v* tags).
+#
+# It builds no Rust and runs no test of its own. On a tag it first refuses a
+# commit that is not on master, and one whose tested commit, the last at or
+# before it that changed what CI's extension job tests, did not pass CI with
+# that job run (scripts/t3-extension-release.sh check). It then builds one
+# bundle, the extension's files and installer plus VERSION, checks it, and
+# publishes it with its SHA-256 checksum as a release that is never the
+# repository's latest. On a pull request and when started by hand it builds
+# and checks the bundle as the run's artifact and publishes nothing.
+name: T3 extension release
+
+on:
+  push:
+    tags:
+      - 't3-extension-v[0-9]+.[0-9]+.[0-9]+'
+  pull_request:
+    paths:
+      - .github/workflows/t3-extension-release.yml
+      - scripts/t3-extension-release.sh
+      - t3-extension/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    env:
+      PUBLISHING: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+      REF_NAME: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: version
+        name: Version
+        run: |
+          if [ "$PUBLISHING" = true ]; then
+            [[ $REF_NAME =~ ^t3-extension-v([0-9]+\.[0-9]+\.[0-9]+)$ ]] ||
+              { echo "::error::$REF_NAME is not t3-extension-v<major>.<minor>.<patch>."; exit 1; }
+            echo "version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=0.0.0-dev.$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Check the tag is on master and CI passed with the extension's job
+        if: env.PUBLISHING == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/t3-extension-release.sh check HEAD origin/master
+      - id: bundle
+        name: Bundle
+        run: echo "zip=$(scripts/t3-extension-release.sh bundle "${{ steps.version.outputs.version }}" dist)" >> "$GITHUB_OUTPUT"
+      - name: Check the bundle's files and install it into an empty home
+        run: scripts/t3-extension-release.sh verify "${{ steps.bundle.outputs.zip }}" "${{ steps.version.outputs.version }}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: t3-extension-${{ steps.version.outputs.version }}
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    needs: bundle
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+      VERSION: ${{ needs.bundle.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8
+        with:
+          name: t3-extension-${{ needs.bundle.outputs.version }}
+          path: dist
+      - run: scripts/t3-extension-release.sh notes "$TAG" > notes.md
+      - run: >-
+          gh release create "$TAG" dist/* --verify-tag --latest=false
+          --title "T3 Code extension $VERSION" --notes-file notes.md

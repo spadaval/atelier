@@ -60,6 +60,9 @@ const appEnvironment = config => {
 };
 const configPath = path.join(home, 'config.json');
 const loadConfig = async () => JSON.parse(await fs.readFile(configPath, 'utf8'));
+// The release this home was installed from: install.py copies a bundle's VERSION
+// file here. An install from a checkout has none.
+const readRelease = async () => (await fs.readFile(path.join(home, 'VERSION'), 'utf8').catch(() => 'development')).trim();
 // desk.urls lists the Desks; the older form has a single desk.baseUrl.
 const deskUrls = config => (config.desk?.urls ?? [config.desk?.baseUrl ?? 'http://127.0.0.1:3780']).map(url => url.replace(/\/$/, ''));
 // What the client sees of config.json: the Desks, manual repository overrides and the settings
@@ -229,7 +232,7 @@ async function buildBundle(config) {
 async function daemon() {
   let config = await loadConfig();
   const targets = new Map();
-  const state = { pid: process.pid, startedAt: new Date().toISOString(), port: config.debugPort, phase: 'waiting', version: null, lastAppliedAt: null, lastError: null, probes: null, targets: [], home };
+  const state = { pid: process.pid, startedAt: new Date().toISOString(), release: await readRelease(), port: config.debugPort, phase: 'waiting', version: null, lastAppliedAt: null, lastError: null, probes: null, targets: [], home };
   let bundle;
   let stopping = false;
   let watcher;
@@ -467,7 +470,7 @@ try {
   else if (command === 'launch') await launch();
   else if (command === 'prepare') console.log(JSON.stringify(await startDaemon(), null, 2));
   else if (['status', 'stop', 'reload'].includes(command)) console.log(JSON.stringify(await control(command), null, 2));
-  else if (command === 'check') console.log(JSON.stringify({ version: (await buildBundle(await loadConfig())).version, valid: true }));
+  else if (command === 'check') console.log(JSON.stringify({ release: await readRelease(), version: (await buildBundle(await loadConfig())).version, valid: true }));
   else throw new Error(`Unknown command ${command}. Use launch, prepare, status, reload, stop, or check.`);
 } catch (error) {
   console.error(`T3 Custom ${command} failed: ${error.stack ?? error}`);

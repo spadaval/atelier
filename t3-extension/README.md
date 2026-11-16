@@ -67,6 +67,15 @@ modified `custom.js` as `custom.js.previous`. It keeps `custom.css` and
 the new `custom.js` and adapter at once; restart it (`stop`, then the launcher)
 after a change to `t3-custom.mjs`.
 
+`--app <path>` names T3 Code's app and overrides `appPath`; on macOS (and on
+Linux, where only tests run it) the path is an app bundle whose
+`Contents/Info.plist` names its executable in `Contents/MacOS`. The release
+workflow's check installs into an empty home on a Linux runner this way, with a
+stand-in bundle whose executable runs Node. An install from a release bundle
+copies its `VERSION` file into the install folder, and `t3-custom check` and
+`status` report it as `release`; an install from a checkout reports
+`development`.
+
 ## Use
 
 Open the launcher. It starts the official T3 Code Nightly with debugging on
@@ -511,6 +520,30 @@ instance's `t3` command to your user PATH (its Settings can remove it again).
 To see the daily server's threads in it, mint a pairing code with `t3 pair`
 (for example `--scope orchestration:read`) and add `http://127.0.0.1:3773` under
 Settings → Environments → Add environment.
+
+## Releases
+
+The extension is released on its own tags, apart from `atelier`. To release
+the newest `master`, push a tag naming the next version:
+
+```sh
+git fetch origin && git push origin origin/master:refs/tags/t3-extension-v0.1.1
+```
+
+The tag starts `.github/workflows/t3-extension-release.yml`. It builds no
+Rust and runs no test of its own. It refuses a tag on a commit that is not a
+merge on `master`, and one where CI did not pass, with the `extension` job run
+in it, on the last merge at or before the tag that changed something that job
+tests (`scripts/t3-extension-release.sh check`, which reads the rule from
+`scripts/ci-jobs.sh`). A tag on a later merge that changed only records is
+accepted on the strength of that one. If CI is still running, re-run the
+workflow once it passes. The release holds `t3-extension-<version>.zip`, every
+file of `t3-extension/` at the tag plus `VERSION`, and its `.sha256`. It is
+never marked the repository's latest release, which stays the newest `atelier`
+one, and its notes list the items merged since the previous extension tag that
+changed `t3-extension/`. On a pull request that changes the extension or the
+workflow, and when started by hand, it builds and checks the bundle as the
+run's artifact and publishes nothing.
 
 ## Development and verification
 

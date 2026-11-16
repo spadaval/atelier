@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
-"""Install or upgrade T3 Custom without changing the official T3 application."""
+"""Install or upgrade T3 Custom without changing the official T3 application.
+
+Options:
+  --home DIR   install a separate copy into DIR (for example a test instance),
+               without a launcher.
+  --app PATH   use the T3 Code app at PATH instead of the one in config.json or
+               the default location. On macOS and Linux PATH is an app bundle
+               (Contents/Info.plist names its executable in Contents/MacOS);
+               a test passes a stand-in bundle whose executable runs Node.
+"""
 import json
 import os
 import shlex
@@ -23,6 +32,12 @@ for name in ['t3-custom.mjs', 'host-adapter.js', 'custom.js', 'README.md']:
         shutil.copy2(target, support / 'custom.js.previous')
         print(f'Replaced a modified {target}; the old copy is custom.js.previous')
     shutil.copy2(source / name, target)
+# A release bundle carries its version in VERSION, which the loader reports;
+# an install from a checkout has none, so a stale one is removed.
+if (source / 'VERSION').exists():
+    shutil.copy2(source / 'VERSION', support / 'VERSION')
+else:
+    (support / 'VERSION').unlink(missing_ok=True)
 if not (support / 'custom.css').exists():
     shutil.copy2(source / 'custom.css', support / 'custom.css')
 
@@ -33,6 +48,8 @@ if not source_config.exists():
 config = json.loads(config_path.read_text()) if config_path.exists() else {}
 for key, value in json.loads(source_config.read_text()).items():
     config.setdefault(key, value)
+if '--app' in sys.argv:
+    config['appPath'] = str(Path(sys.argv[sys.argv.index('--app') + 1]).resolve())
 if not Path(config['appPath']).exists():
     found = sorted((Path(os.environ['LOCALAPPDATA']) / 'Programs/t3code').glob('T3 Code*.exe')) if windows else \
         [Path('/Applications/T3 Code (Nightly).app')]

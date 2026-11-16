@@ -74,7 +74,7 @@ expect true false false nested-cargo-toml crates/a/Cargo.toml
 expect true false true workspace-cargo-toml Cargo.toml
 expect true false true ci-jobs-script scripts/ci-jobs.sh
 expect true false false ci-jobs-test scripts/ci-jobs.test.sh
-expect true false false other-workflow .github/workflows/release.yml
+expect true false false other-workflow .github/workflows/v-release.yml
 expect false false true t3-extension-test t3-extension/test-extension.mjs
 
 # Moving a fixture out of crates/ changes crates/.

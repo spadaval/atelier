@@ -35,6 +35,7 @@ jobs:
         with:
           fetch-depth: 0
       - run: scripts/ci-jobs.test.sh
+      - run: scripts/t3-extension-release.test.sh
       - id: jobs
         run: scripts/ci-jobs.sh "$BASE" HEAD >> "$GITHUB_OUTPUT"
       - name: git diff --check
