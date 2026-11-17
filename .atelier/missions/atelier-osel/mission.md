@@ -74,7 +74,7 @@ The mission page replaces mission control. For a running mission it says in
 one sentence how the mission stands, lists what needs the human with the
 button that deals with each, shows the threads at work with their latest
 line, and folds everything else. For a finished mission it shows the result,
-a lane for each item over time, and the merged pull requests with the most
+a lane for each item over time, and the merged items with the most
 reviewed first. It has no progress log.
 
 ## Success criteria
@@ -96,8 +96,9 @@ reviewed first. It has no progress log.
   thread; its drafts and merged items are each one folded line; and it has
   no list of the mission's steps.
 - retro: for a fixture mission that is done, the page shows its Result, one
-  lane per item with its building and review spans, and its merged pull
-  requests ordered by review rounds.
+  lane per item with its building and review spans, and its merged items
+  ordered by review rounds, each opening its pull request where the Desk
+  gives one and its Desk page where it gives none.
 - no-frame: the mission page, This thread and the project home are drawn
   without an `iframe`, and the Desk answers its `/embed` routes for mission
   control, This thread and the project home as it answers an unknown page.
@@ -129,6 +130,8 @@ Out:
   ask for; the page shows the Result as it is written.
 - Any new write or action from a page. A button opens a thread, an item's
   page or a pull request.
+- Finding a merged item's pull request once its branch is deleted or it has
+  left the forge's recent list. The retro links the ones the Desk gives.
 - T3 Code on a phone, where the extension does not run.
 
 ## Authority
