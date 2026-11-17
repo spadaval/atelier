@@ -113,22 +113,32 @@ settled on in a spike on 2026-11-16:
   started, the records its conversation names, and what of all that waits
   on them. A thread that holds, started and names nothing shows its project
   at a glance instead. It follows them from thread to thread.
-- **Mission control**, over T3 Code's main area, for one mission: one
-  screen of panes, after Factory's Mission Control, with the active item,
-  every item and its stage, a progress log of the mission's steps, and the
-  threads at work, with keys to move between items and open their threads.
-  It stays one screen down to the width of T3 Code's main area beside its
-  sidebar.
+- **The mission page**, over T3 Code's main area, for one agreed or done
+  mission. The T3 extension draws it itself, in React with T3 Code's own
+  components, from the Desk's reads; it replaces mission control, which the
+  extension no longer opens. While the mission runs it answers whether it
+  needs them and whether it is getting there: one sentence on how many
+  items are being built, in review and merging and what waits on them;
+  *Needs you*, each item labelled needs-human and each thread waiting on a
+  person or quiet for 30 minutes, with the button that deals with it; *At
+  work*, each other live thread with its latest line; and the items not
+  started, the merged ones and the Outcome, each folded to a line. Once
+  done it shows the Result as written, a lane per item over time from the
+  plan's merge to the close, and the merged items with the most review
+  rounds first, each opening its pull request. It has no log of the
+  mission's steps. A proposed plan's title opens its record page instead.
+  The Desk's own mission control page stays until the release that draws
+  the mission page natively is installed (atelier-yy4j).
 - **The project home**, over T3 Code's main area, for one repository:
   what is under way now, what comes next and what later, and a strip of
   what started and merged each day this week.
 
 The inbox opened over the main area spreads into columns. T3 Code's own
 sidebar and project strip read their missions, threads and what can start
-from the Desk too, and draw them themselves. The progress log and the
-week's strip are read from commit subjects, so they can miss a step, and
-"waited on you" marks only the items they readied and those labelled
-needs-human.
+from the Desk too, and draw them themselves. The mission page's lanes and
+merge times, mission control's progress log and the week's strip are read
+from commit subjects, so they can miss a step, and "waited on you" marks
+only the items they readied and those labelled needs-human.
 
 Every page that reads a repository says when the Desk last fetched its
 remote. The Desk fetches each one on a timer its configuration sets, every

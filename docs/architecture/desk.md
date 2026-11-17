@@ -460,8 +460,63 @@ A read that fails leaves its part out and the page still draws: ties that
 cannot be read are named in a banner, and the page then does not claim the
 thread holds nothing.
 
+**The mission page** is drawn by the T3 extension, not the Desk
+(`t3-extension/src/mission/`), over T3 Code's main area, in React with T3
+Code's own components and no frame. The extension no longer opens the Desk's
+mission control below; that page stays until atelier-yy4j removes it. A
+mission's title in T3's sidebar opens the mission page when the mission is
+agreed or running; a proposed plan's title opens its record page
+(`/embed/r/{repo}/mission/{id}`) framed. The page reads, through the
+injector's gate, `GET /api/repos/{repo}/missions/{id}` every 15 seconds,
+`GET /api/history?repo=&ids=` for the mission and its items every 30, and,
+while it runs, `GET /api/thread?id=&full=1` for each thread T3 Code lists;
+once done, the page of each merged item every 60, for its pull request.
+Its model is `t3-extension/src/mission/model.ts`.
+
+- Running (an open mission in progress or with an item started; else
+  *Agreed*): the title, a state badge, items merged of total and a
+  **Lead** button with its key, `L`, which opens the lead's thread, else
+  the planner's. One sentence: how many items are being built (building or
+  changes requested), in review and merging (approved), then what waits on
+  the human and how many threads are quiet, or "Nothing needs you".
+  *Needs you*: a row for each open item labelled `needs-human`, then each
+  live thread waiting on a person or quiet, each with a button that opens
+  the item's Desk page, framed, or the thread. A thread is live when T3
+  Code lists it, says it is live and its status is not an ended one; it is
+  waiting when T3 Code says `waiting`, listed at once whatever its age, and
+  quiet when its `updated_at` is 30 minutes old, This thread's rule, so a
+  long stage with a thread still changing is not quiet. A thread both
+  waiting and quiet is one row. With none, there is no *Needs you*. *At
+  work*: each other live thread, with its item, latest line and how long
+  its latest run has gone. *Not started*, *Merged* and *Outcome and
+  success criteria* are each one folded line that opens in place; an item
+  in them opens its Desk page, framed.
+- Done (or dropped): the state and when it closed, and how long after the
+  plan merged; the Result as written; a lane per item from the plan's merge
+  to the close, with its building, review and merging spans, a legend, and
+  its review rounds and time from start to merge at its end; and the
+  merged items, most review rounds first, each opening its pull request on
+  the forge where the item's page gives one (`pull_request`). One whose
+  branch is deleted, or whose pull request has left the forge's recent
+  list, has none: it says its pull request is not known and opens its Desk
+  page, framed.
+- The lanes and the merge times come from commit subjects, as the progress
+  log below does, and say so. The page has no log of steps.
+- `L` opens the lead's thread, `Enter` presses the focused row's button and
+  `Esc` closes the page; each key is shown on the button it presses. A Desk
+  page opened from it is framed with a **Back** button to it.
+- It holds at 728 pixels wide and stacks below 560 (a row's button goes
+  under its text and a thread's latest line is hidden); from 1,100 *Needs
+  you* and *At work* sit side by side, the lanes take the full width, and
+  no line of text is wider than 75 characters. Widths are of the page, by
+  container queries, not of the window.
+- Records' sections are drawn from their Markdown by a small reader of
+  paragraphs, lists, headings, inline code, emphasis and links (as text),
+  since the extension does not take on `react-markdown`.
+
 **Mission control** (`/mission/{repo}/{id}`,
-`desk/src/pages/MissionControl.tsx`), over the host's main area. One screen
+`desk/src/pages/MissionControl.tsx`), over the host's main area, until
+atelier-yy4j; the T3 extension no longer opens it. One screen
 of bordered panes after Factory's Mission Control: a top bar (the
 repository and mission, when the plan merged, how many items are live and
 how many quiet) and a state line (`RUNNING`, `AGREED`, `PROPOSED` or
@@ -544,10 +599,10 @@ identity never appears in a path: it can hold `/`, `:` and `%`, as
 | `GET /api/threads` | Live threads | T3 Code's live threads, each with what it holds in the records |
 | `GET /api/records/{id}` | A host that frames the Desk | What an ID names, in whichever repository served holds it |
 | `GET /api/ties?thread=<identity>` | A host that frames the Desk | Every record that names a thread identity, live or not, and whether each tie is current |
-| `GET /api/thread?id=<identity>&full=1` | This thread, mission control | Any thread T3 Code knows, live or ended; with `full`, its latest run and line |
+| `GET /api/thread?id=<identity>&full=1` | This thread, mission control, the extension's mission page | Any thread T3 Code knows, live or ended; with `full`, its latest run and line |
 | `GET /api/sidebar` | A host's sidebar | Every open mission in every repository, with the threads on it and on its items |
 | `GET /api/launch?repo=<repo>` | A host's project strip | What can start, what waits on the human and what moves, in one repository |
-| `GET /api/history?repo=<repo>&days=<n>&ids=<id,...>` | Mission control, the project home | The records' steps, read from commit subjects |
+| `GET /api/history?repo=<repo>&days=<n>&ids=<id,...>` | Mission control, the project home, the extension's mission page | The records' steps, read from commit subjects |
 | `GET /api/checks?repo=<repo>&pr=<number>` | Mission control | CI on a pull request |
 | `GET /api/roadmap?repo=<repo>` | The project home | The open items in no mission |
 | `GET /api/proposed` | Proposed | Proposed plans and record changes on branches, in every repository |

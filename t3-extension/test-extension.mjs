@@ -163,6 +163,12 @@ function deskProxyServer(requests, options) {
       inbox.repos.push({ repo: 'unreadable', commit: null, error: 'git: not a repository', needs_human: [], proposed: [], threads: [] });
       response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(inbox)); return;
     }
+    // proposed marks a mission of the real Desk's sidebar as a proposed plan.
+    if (request.url === '/api/sidebar' && options.proposed) {
+      const sidebar = await (await fetch(realDesk + request.url)).json();
+      for (const repo of sidebar.repos) for (const mission of repo.missions ?? []) if (mission.id === options.proposed) mission.state = 'proposed';
+      response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(sidebar)); return;
+    }
     if (request.url === '/api/sidebar' && options.sidebar) { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(options.sidebar ?? { repos: [] })); return; }
     if (request.url === '/api/launch?repo=atelier' && options.launch) { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(options.launch)); return; }
     if (options.missing?.includes(request.url)) { response.writeHead(404, { 'content-type': 'application/json' }); response.end(JSON.stringify({ error: 'not here' })); return; }
@@ -648,15 +654,42 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   await evaluate('location.hash = "/env/thread-b"');
   await until(() => evaluate('__t3Custom.diagnostics().context?.threadId === "thread-b"'), 'Back on thread-b');
   console.log('PASS: with the boring sidebar off, or the views off, T3\'s list keeps its order with none of the extension\'s rows; the first shows a note naming the setting');
-  // A mission's title opens mission control in the layer, selected, with focus; again, it closes it.
+  // A mission's title opens the mission page in the layer, drawn by the extension with no frame,
+  // selected, with focus; again, it closes it.
+  const nativePage = 'document.querySelector("[data-t3-layer-native]")?.shadowRoot?.querySelector("[data-mission-page]")';
   await evaluate(`${missionRow}.querySelector('[data-t3-mission-title]').click()`);
-  await until(async () => (await layerState())?.key === `mission:${missionKey}` && (await layerState()).shown, 'Mission control in the layer');
-  assert.equal(await layerSrc(), `${deskBase}/embed/mission/${fixture.repo}/${mission.id}`);
+  await until(async () => (await layerState())?.key === `mission:${missionKey}` && (await layerState()).shown, 'The mission page in the layer');
+  await until(() => evaluate(`${nativePage}?.querySelector('h1')?.textContent === ${JSON.stringify(mission.title)} && ${nativePage}.dataset.missionPage === 'running'`), 'The mission page drawn from the Desk\'s reads');
+  assert.equal(await evaluate('document.querySelectorAll("[data-t3-layer] iframe").length'), 0, 'the mission page opened a frame');
+  assert(deskRequests.includes(`/api/repos/${fixture.repo}/missions/${mission.id}`), 'the mission page did not read the mission through the injector');
+  assert(!deskRequests.some(url => url.startsWith('/embed/mission')), 'the Desk\'s mission control was asked for');
   assert.equal(await evaluate(`${missionRow}.getAttribute('aria-pressed')`), 'true');
   assert.equal(await evaluate('document.querySelector("[data-t3-inbox-row]").getAttribute("aria-pressed")'), 'false');
-  await until(() => evaluate('__t3Custom.diagnostics().layer?.ready && document.activeElement === document.querySelector("[data-t3-layer] iframe")'), 'Mission control has focus');
+  await until(() => evaluate('document.activeElement === document.querySelector("[data-t3-layer-native]")'), 'The mission page has focus');
+  // An item of it opens its Desk page framed, with Back to the mission page.
+  await evaluate(`(${nativePage}.querySelector('[data-fold="Merged"] button').click(), true)`);
+  await until(() => evaluate(`Boolean(${nativePage}.querySelector('[data-fold="Merged"] [data-row]'))`), 'The Merged fold opened');
+  const mergedItem = await evaluate(`${nativePage}.querySelector('[data-fold="Merged"] [data-row]').dataset.row.slice(5)`);
+  await evaluate(`${nativePage}.querySelector('[data-fold="Merged"] [data-row]').click()`);
+  await until(async () => (await layerState())?.key === `item:${deskBase}/${fixture.repo}/${mergedItem}`, 'An item framed from the mission page');
+  assert.equal(await layerSrc(), `${deskBase}/embed/r/${fixture.repo}/item/${mergedItem}`);
+  await evaluate('document.querySelector("[data-t3-layer-back]").click()');
+  await until(async () => (await layerState())?.key === `mission:${missionKey}` && await evaluate(`Boolean(${nativePage}) && document.querySelectorAll("[data-t3-layer] iframe").length === 0`), 'Back to the mission page');
   await evaluate(`${missionRow}.querySelector('[data-t3-mission-title]').click()`);
-  await until(async () => !(await layerState()), 'The mission title again closes mission control');
+  await until(async () => !(await layerState()), 'The mission title again closes the mission page');
+  // A proposed plan's title opens its record page, framed, not the mission page.
+  firstDesk.proposed = mission.id;
+  await evaluate('document.dispatchEvent(new Event("visibilitychange"))');
+  await until(() => evaluate(`${missionRow}.querySelector('[data-t3-mission-title]').title.endsWith('Open its plan')`), 'The mission read again as proposed');
+  await evaluate(`${missionRow}.querySelector('[data-t3-mission-title]').click()`);
+  await until(async () => (await layerState())?.shown, 'A proposed plan in the layer');
+  assert.equal(await layerSrc(), `${deskBase}/embed/r/${fixture.repo}/mission/${mission.id}`);
+  assert.equal(await evaluate(`Boolean(${nativePage})`), false, 'a proposed plan drew the mission page');
+  await evaluate(`${missionRow}.querySelector('[data-t3-mission-title]').click()`);
+  await until(async () => !(await layerState()), 'The proposed plan closed');
+  delete firstDesk.proposed;
+  await evaluate('document.dispatchEvent(new Event("visibilitychange"))');
+  await until(() => evaluate(`${missionRow}.querySelector('[data-t3-mission-title]').title.endsWith('Open the mission page')`), 'The mission read again as agreed');
   // "N more missions" opens the project home.
   await evaluate('document.querySelector("[data-t3-more-row] button").click()');
   await until(async () => (await layerState())?.key === `home:${deskBase}/r/atelier` && (await layerState()).shown, 'Project home from N more missions');
@@ -670,7 +703,7 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   assert.equal(await layerSrc(), `${deskBase}/embed/home/atelier`);
   assert.equal(await evaluate('globalThis.crumbStartedThread ?? false'), false, 'T3 started a new thread as well');
   await evaluate('document.querySelector("[data-t3-layer-close]").click()');
-  console.log('PASS: a mission\'s title opens mission control in the layer, selected and focused; "N more missions" and the breadcrumb\'s project open the project home and T3 starts no thread');
+  console.log('PASS: a mission\'s title opens the mission page in the layer with no frame, selected and focused, its items framed with Back to it, and a proposed plan\'s title its record page framed; "N more missions" and the breadcrumb\'s project open the project home and T3 starts no thread');
 
   // The project strip under the new-thread composer, from /api/launch.
   await evaluate('location.hash = "/draft/draft-a"');
