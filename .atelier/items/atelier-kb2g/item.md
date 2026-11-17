@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-kb2g
 title: Stop naming one person in the code, the skill and the docs
-status: building
+status: in_review
 mission: null
 labels: []
 priority: medium
