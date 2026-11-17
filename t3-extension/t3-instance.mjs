@@ -10,9 +10,11 @@
 //   node t3-instance.mjs stop
 //   node t3-instance.mjs isolation [--model …]  # start, thread, stop; checks nothing of the human's changed
 //
-// Everything lives under T3_TEST_ROOT, else ~/.cache/atelier-t3-test: apps/<tag>/ holds the unpacked
-// T3 Code, fetched once; instance/ holds one instance, made afresh by each start, with state.json
-// naming every process it started.
+// Everything lives under T3_TEST_ROOT, else /var/tmp/atelier-t3-test-<user>: apps/<tag>/ holds the
+// unpacked T3 Code, fetched once; instance/ holds one instance, made afresh by each start, with
+// state.json naming every process it started. The root must not be inside the human's home: OpenCode
+// looks for configuration and skills (.opencode, .claude/skills, .agents/skills) in every folder above
+// the one it runs in, so an instance under ~ would read the human's.
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import net from 'node:net';
@@ -28,7 +30,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 // The T3 Code this instance runs. A newer nightly is a change to this line and a contract run.
 const release = 'v0.1.11-nightly.20261117.4851';
 const appImage = 'T3-Code-Nightly-x86_64.AppImage';
-const root = path.resolve(process.env.T3_TEST_ROOT ?? path.join(os.homedir(), '.cache', 'atelier-t3-test'));
+const root = path.resolve(process.env.T3_TEST_ROOT ?? path.join('/var/tmp', `atelier-t3-test-${os.userInfo().username}`));
+const insideHome = folder => folder === os.homedir() || folder.startsWith(os.homedir() + '/');
 const appDir = path.join(root, 'apps', release, 'squashfs-root');
 const dir = path.join(root, 'instance');
 const statePath = path.join(dir, 'state.json');
@@ -181,13 +184,14 @@ async function seedHome(model) {
 }
 
 // The models the instance's OpenCode lists with no credential: OpenCode Zen's free ones. --standalone
-// keeps it from leaving a background service behind.
+// keeps it from leaving a background service behind. It runs in the instance's home, so it reads no
+// opencode.json or skills of the caller's working folder or of any folder above it.
 function freeModels() {
-  const output = execFileSync('opencode', ['models', '--standalone'], { env: instanceEnvironment(), encoding: 'utf8', timeout: 120000 });
+  const output = execFileSync('opencode', ['models', '--standalone'], { cwd: home, env: instanceEnvironment(), encoding: 'utf8', timeout: 120000 });
   return output.split('\n').map(line => line.trim()).filter(line => /^[\w.-]+\/[\w.:-]+$/.test(line));
 }
 function credentials() {
-  return execFileSync('opencode', ['auth', 'list', '--standalone'], { env: instanceEnvironment(), encoding: 'utf8', timeout: 60000 }).trim();
+  return execFileSync('opencode', ['auth', 'list', '--standalone'], { cwd: home, env: instanceEnvironment(), encoding: 'utf8', timeout: 60000 }).trim();
 }
 
 // The project T3 opens: a Git repository whose origin gives it the fixture's identity, so the
@@ -263,7 +267,29 @@ function describe(state) {
   return lines.join('\n');
 }
 
-async function start({ quiet = false } = {}) {
+// One start at a time. The lock is a file linked into place whole, naming its owner by PID and start
+// time; a second start waits for the first and then finds its instance running. A lock whose owner
+// has exited is removed.
+async function start(options) {
+  if (insideHome(root)) throw new Error(`The test instance's root ${root} is inside ${os.homedir()}; OpenCode would read the configuration and skills in the folders above it. Set T3_TEST_ROOT to a folder outside it.`);
+  await fs.mkdir(root, { recursive: true, mode: 0o700 });
+  const lock = path.join(root, 'start.lock');
+  const mine = path.join(root, `start.lock.${process.pid}`);
+  await fs.writeFile(mine, JSON.stringify(processRecord(process.pid)));
+  try {
+    for (let waiting = false; ;) {
+      try { await fs.link(mine, lock); break; } catch (error) { if (error.code !== 'EEXIST') throw error; }
+      const owner = JSON.parse(await fs.readFile(lock, 'utf8').catch(() => 'null'));
+      if (owner && alive(owner)) {
+        if (!waiting) { log(`Another start (PID ${owner.pid}) is making the instance; waiting for it`); waiting = true; }
+        await delay(1000);
+      } else await fs.rm(lock, { force: true });
+    }
+  } finally { await fs.rm(mine, { force: true }); }
+  try { return await startLocked(options); } finally { await fs.rm(lock, { force: true }); }
+}
+
+async function startLocked({ quiet = false } = {}) {
   const model = option('--model', 'opencode/beam-free');
   const port = Number(option('--port', 9333));
   const backendPort = Number(option('--backend-port', 47331));
@@ -485,13 +511,20 @@ async function isolation() {
     if (inName) problems.push(`${file} names the instance (${inName})`);
   }
   for (const file of changed) { const found = containsAny(file, marks); if (found) problems.push(`${file} holds the instance's ${found}`); }
+  // OpenCode logs each folder it watches or boots in (path=, directory=); none may be in the human's home.
+  const logs = path.join(home, '.local', 'share', 'opencode', 'log');
+  const read = new Set();
+  for (const name of await fs.readdir(logs).catch(() => [])) {
+    for (const match of (await fs.readFile(path.join(logs, name), 'utf8')).matchAll(/\b(?:path|directory)=(\S+)/g)) if (insideHome(match[1])) read.add(match[1]);
+  }
+  for (const folder of read) problems.push(`The instance's OpenCode used ${folder} (${logs})`);
   const held = credentials();
   if (held !== 'No authenticated integrations') problems.push(`The instance's OpenCode holds credentials: ${held}`);
   console.log(`After the start, a thread and the stop, ${changed.length} entries under the guarded folders were changed or added and ${removed.length} removed; the instance's thread ${state.thread.threadId} and environment ${state.thread.environmentId} were looked for in each name and file.`);
   if (changed.length || removed.length) console.log(`Changed while the check ran, by the host's own T3 server unless named below:\n${[...changed, ...removed].slice(0, 15).map(file => `  ${file}`).join('\n')}${changed.length + removed.length > 15 ? `\n  … and ${changed.length + removed.length - 15} more` : ''}`);
   console.log(`The instance's OpenCode, asked for its credentials (opencode auth list): ${held}`);
   if (problems.length) { console.error(`Isolation broken:\n${problems.map(problem => `  ${problem}`).join('\n')}`); process.exitCode = 1; }
-  else console.log('Isolation holds: no instance process opened a guarded folder, and nothing changed in them names or holds the instance.');
+  else console.log('Isolation holds: no instance process opened a guarded folder, nothing changed in them names or holds the instance, and OpenCode used no folder in the human's home.');
 }
 
 const commands = { start, stop, status, shot, isolation };

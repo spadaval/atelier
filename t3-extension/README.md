@@ -663,10 +663,14 @@ node t3-instance.mjs stop
 
 It runs T3 Code Nightly `v0.1.11-nightly.20261117.4851` (named at the top of
 `t3-instance.mjs`), fetched once from `pingdotgg/t3code`'s releases and
-unpacked into `~/.cache/atelier-t3-test/apps/` (`T3_TEST_ROOT` moves it). It
-needs Node.js 22, `opencode` on `PATH`, `Xvnc` or `Xvfb`, the built extension
-(`pnpm build`), `atelier-desk` and the Desk's app (as for the tests below).
-Each start makes a fresh instance in `~/.cache/atelier-t3-test/instance/`:
+unpacked into `/var/tmp/atelier-t3-test-<user>/apps/` (`T3_TEST_ROOT` moves
+it). It needs Node.js 22, `opencode` on `PATH`, `Xvnc` or `Xvfb`, the built
+extension (`pnpm build`), `atelier-desk` and the Desk's app (as for the tests
+below). Each start makes a fresh instance in `instance/` beside it. The root
+must be outside your home folder, and `start` refuses one inside it: OpenCode
+looks for configuration and skills (`.opencode`, `.claude/skills`,
+`.agents/skills`, `opencode.json`) in every folder above the one it runs in, so
+an instance under `~` would read yours. The instance has:
 
 - a virtual display of its own (`Xvnc`, which also serves VNC on
   `127.0.0.1:59<display>` to watch it, else `Xvfb`);
@@ -678,8 +682,9 @@ Each start makes a fresh instance in `~/.cache/atelier-t3-test/instance/`:
   environment, so no API key and no `T3CODE_*` variable of the host's T3 (one
   of which turns on Tailscale serve) reach it;
 - only OpenCode enabled, on a free model (`opencode/beam-free`, `--model`).
-  OpenCode runs from the instance's home with nothing of the human's linked or
-  copied in, so it holds no credential and can reach only OpenCode Zen's free
+  OpenCode runs from the instance's home and project, with nothing of the
+  human's linked or copied in and none of their folders above it, so it holds
+  no credential and can reach only OpenCode Zen's free
   models. A model the instance's OpenCode does not list without a credential
   is refused by name;
 - a project made through T3's palette, a Git repository whose origin gives it
@@ -693,7 +698,8 @@ Each start makes a fresh instance in `~/.cache/atelier-t3-test/instance/`:
 
 So `node test-contract.mjs --port 9333 --thread <…> --draft <…>`, with the
 values `start` prints, runs every hook against it. Starting while one runs
-prints the running one and starts nothing. `stop` stops each process the
+prints the running one and starts nothing; a start while another is still
+starting waits for it (`start.lock` in the root). `stop` stops each process the
 instance started, by process ID checked against its start time, never by a
 name pattern: those `state.json` names, their descendants, and any process
 whose `HOME` is the instance's (OpenCode's background service detaches
@@ -710,7 +716,8 @@ runs, no instance process may have a file under `~/.t3`,
 `~/.config/opencode` or `~/.local/share/opencode` open, and each must run
 with the instance's `HOME`, `T3CODE_HOME` and `XDG_*` folders. Afterwards it
 lists what changed in those folders since it began, and fails if any changed
-path names, or any changed file holds, the instance's thread or environment ID.
+path names, or any changed file holds, the instance's thread or environment ID,
+and if OpenCode's log names any folder in your home it watched or ran in.
 The host's own T3 server writes under `~/.t3` every few seconds, so those
 folders are never unchanged; the check names what changed. It then asks the
 instance's OpenCode for its credentials (`opencode auth list`) and fails if
