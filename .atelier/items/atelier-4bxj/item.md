@@ -49,7 +49,7 @@ wait for it was 20 seconds, and a hosted runner's first start of Chrome
 sometimes takes longer. The wait is now 90 seconds, and the test prints
 `Browser started in <n>s`.
 
-What the logs show, from the 18 runs of the `extension` job on 2026-11-16
+What the logs show, from the 19 runs of the `extension` job on 2026-11-16
 and 17 that reached the browser:
 
 - In both failures (runs 43987730356 and 44123741376) Chrome wrote its first
@@ -57,9 +57,9 @@ and 17 that reached the browser:
   writing lines 0.9 and 1.1 seconds before the test gave up. It never
   printed a DevTools error, such as a port in use. `fetch failed` is the
   test's own poll finding the debugging port not open yet.
-- In the 16 passing runs, the time from the test's start to its first
-  `PASS` line, which is mostly the browser's start, was 1.4, 1.8, 2.0, 2.4,
-  3.6, 3.9, 7.4, 8.6, 9.3, 9.5, 9.8, 12.5, 12.6, 13.9, 19.0 and 19.5
+- In the other 17 runs, the time from the test's start to its first
+  `PASS` line, which is mostly the browser's start, was 1.4, 1.6, 1.8, 2.0,
+  2.4, 3.6, 3.9, 7.4, 8.6, 9.3, 9.5, 9.8, 12.5, 12.6, 13.9, 19.0 and 19.5
   seconds. The two failures are the end of that spread, cut off at 20, not
   a second kind of run.
 - On this host, with Chrome already in the page cache, the browser starts

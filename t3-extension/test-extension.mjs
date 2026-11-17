@@ -211,7 +211,7 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE; delete env.NODE_OPTIONS;
   browser = spawn(browserPath, ['--headless=new', '--no-first-run', '--no-default-browser-check', '--disable-background-networking', `--user-data-dir=${path.join(temp, 'profile')}`, `--remote-debugging-port=${debugPort}`, '--remote-debugging-address=127.0.0.1', '--window-size=1600,1000', base + '/#/env/thread-a'], { env, stdio: ['ignore', browserLog.fd, browserLog.fd] });
   await browserLog.close();
-  // A hosted runner's first start of Chrome took from under 2 to over 20 seconds in the 18 CI runs
+  // A hosted runner's first start of Chrome took from under 2 to over 20 seconds in the 19 CI runs
   // of 2026-11-16 and 17 (atelier-4bxj), so this wait is longer than the others, and the time is
   // printed for the next reader of a slow run's log.
   const browserStarted = Date.now();
