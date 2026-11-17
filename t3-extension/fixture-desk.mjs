@@ -64,9 +64,10 @@ async function write(root, file, text) {
 
 // The repository at `root`: on master, the mission open with its three items (one ready, one ready
 // and needs-human, one done), the quiet mission open with one needs-human item, the closed mission
-// and the reference item; on branch atelier-fi01, its item building, held by thread-a.
-export async function writeFixtureRepository(root) {
-  const { mission: open, quietMission, closedMission, items, threads } = fixture;
+// and the reference item; on branch atelier-fi01, its item building, held by the implementer.
+// `threads` names the lead and the implementer; the test instance passes its own thread for both.
+export async function writeFixtureRepository(root, threads = fixture.threads) {
+  const { mission: open, quietMission, closedMission, items } = fixture;
   const git = (...args) => execFileSync('git', ['-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid', ...args], { cwd: root, stdio: 'pipe' });
   await fs.mkdir(root, { recursive: true });
   git('init', '-q', '-b', 'master');
@@ -94,20 +95,34 @@ export function servingUrl(text) {
   return text.match(/serving on (http:\/\/\S+)\r?\n/)?.[1] ?? null;
 }
 
-// Builds the fixture repository under a new temporary directory and serves it with atelier-desk on
-// a free loopback port. `stop()` ends the Desk and removes the directory; `log()` is its output.
-export async function startFixtureDesk() {
+// The Desk's binary and app, or an error naming the one that is missing and how to build it.
+export async function deskBuild() {
   const binary = process.env.ATELIER_DESK ?? path.join(checkout, 'target', 'debug', process.platform === 'win32' ? 'atelier-desk.exe' : 'atelier-desk');
   const app = process.env.DESK_APP ?? path.join(checkout, 'desk', 'dist');
   for (const [what, file, how] of [['atelier-desk', binary, 'cargo build -p atelier-desk, or set ATELIER_DESK'], ["the Desk's app", path.join(app, 'index.html'), 'pnpm --dir desk install && pnpm --dir desk build, or set DESK_APP']]) {
     await fs.access(file).catch(() => { throw new Error(`No ${what} at ${file}: run ${how}.`); });
   }
-  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'atelier-fixture-desk-'));
-  await writeFixtureRepository(path.join(temp, 'repos', fixture.repo));
-  const config = path.join(temp, 'desk.toml');
+  return { binary, app };
+}
+
+// Writes the fixture repository and a Desk configuration serving it on a free loopback port under
+// `dir`, and returns the command that serves it: run `binary` with `args`, and read the address from
+// its "serving on" line (`servingUrl`).
+export async function writeFixtureDesk(dir, threads = fixture.threads) {
+  const { binary, app } = await deskBuild();
+  await writeFixtureRepository(path.join(dir, 'repos', fixture.repo), threads);
+  const config = path.join(dir, 'desk.toml');
   const toml = value => JSON.stringify(value);
-  await fs.writeFile(config, [`caller = "fixture"`, `roots = [${toml(path.join(temp, 'repos'))}]`, `state = ${toml(path.join(temp, 'state'))}`, `app = ${toml(app)}`, 'fetch_seconds = 0', `listen = ["127.0.0.1:0"]`, ''].join('\n'));
-  const desk = spawn(binary, ['--config', config], { stdio: ['ignore', 'pipe', 'pipe'] });
+  await fs.writeFile(config, [`caller = "fixture"`, `roots = [${toml(path.join(dir, 'repos'))}]`, `state = ${toml(path.join(dir, 'state'))}`, `app = ${toml(app)}`, 'fetch_seconds = 0', `listen = ["127.0.0.1:0"]`, ''].join('\n'));
+  return { binary, args: ['--config', config] };
+}
+
+// Builds the fixture repository under a new temporary directory and serves it with atelier-desk on
+// a free loopback port. `stop()` ends the Desk and removes the directory; `log()` is its output.
+export async function startFixtureDesk() {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'atelier-fixture-desk-'));
+  const { binary, args } = await writeFixtureDesk(temp).catch(async error => { await fs.rm(temp, { recursive: true, force: true }); throw error; });
+  const desk = spawn(binary, args, { stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '';
   const url = await new Promise((resolve, reject) => {
     // Each stream on its own: a chunk can end mid-line, and the two streams' chunks interleave.
