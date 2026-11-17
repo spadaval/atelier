@@ -32,7 +32,7 @@ describe("an item's stage", () => {
 
   it("dates it from its latest step, else from when it was readied", () => {
     expect(stageAt("a-0001", events, null)).toBe("2026-11-16T10:00:00Z");
-    expect(stageAt("a-0009", events, page({ by: "sumeet", at: "2026-11-15T00:00:00Z" }))).toBe("2026-11-15T00:00:00Z");
+    expect(stageAt("a-0009", events, page({ by: "ada", at: "2026-11-15T00:00:00Z" }))).toBe("2026-11-15T00:00:00Z");
     expect(stageAt("a-0009", events, null)).toBeNull();
   });
 
@@ -53,16 +53,16 @@ describe("the progress log", () => {
     event("2026-11-16T08:00:00Z", "merged", "m-0001", { record: "mission" }),
   ];
   const pages = new Map([
-    ["a-0001", page({ by: "sumeet, in conversation on 2026-11-16: go", at: "2026-11-16T09:00:00Z" })],
-    ["a-0003", page({ by: "sumeet, in conversation on 2026-11-16: go", at: "2026-11-16T09:00:20Z" })],
+    ["a-0001", page({ by: "ada, in conversation on 2026-11-16: go", at: "2026-11-16T09:00:00Z" })],
+    ["a-0003", page({ by: "ada, in conversation on 2026-11-16: go", at: "2026-11-16T09:00:20Z" })],
     ["a-0002", page({ by: "conversion", at: "2026-11-16T07:00:00Z" })],
   ]);
 
   it("names the steps newest first, and marks what waited on the human", () => {
-    const log = logEntries("m-0001", items, events, pages, "Sumeet");
+    const log = logEntries("m-0001", items, events, pages, "Ada");
     expect(log.map((e) => [e.text, e.waited])).toEqual([
       ["Started a-0001", false],
-      ['Sumeet readied 2 items: "go"', true],
+      ['Ada readied 2 items: "go"', true],
       ["Review 1 of a-0002: changes requested", true],
       ["Plan merged: mission agreed", false],
     ]);

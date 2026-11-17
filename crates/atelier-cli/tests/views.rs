@@ -9,7 +9,7 @@ use common::*;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const READY_BY: &str = "\n  by: sumeet\n  at: 2026-11-10T09:00:00Z";
+const READY_BY: &str = "\n  by: ada\n  at: 2026-11-10T09:00:00Z";
 
 fn write(root: &Path, path: &str, text: &str) {
     let path = root.join(path);
@@ -400,7 +400,7 @@ fn show_prints_a_started_item_from_its_branch_wherever_it_runs_and_a_done_one() 
         format!(
             "Item demo-d4dd: Wave\nRead from: demo-d4dd\nStatus: building, held by t1\nMission: demo-m1ss (ready)\n\
              Labels: ui\nPriority: medium\nBlocked by: none\n\
-             Made ready by sumeet at 2026-11-10 09:00:00 +00:00\n\n\
+             Made ready by ada at 2026-11-10 09:00:00 +00:00\n\n\
              ## Goal\n\nDo it.\n\n## Done when\n\n- [{done_when}] It is done.\n\n\
              ## Decisions\n\n### 2026-11-10: Should waving be animated?\n\nReviews: none yet.\n"
         )

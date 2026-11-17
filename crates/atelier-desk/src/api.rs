@@ -386,7 +386,7 @@ pub struct InboxRepo {
     pub error: Option<String>,
     /// As `list --needs-human` groups them: by mission, then those in none.
     pub needs_human: Vec<NeedsHuman>,
-    /// Plans under review, which he may stop.
+    /// Plans under review, which they may stop.
     pub proposed: Vec<MissionRow>,
     pub fetched: FetchMark,
     /// T3 Code's live threads waiting on a person that hold something in

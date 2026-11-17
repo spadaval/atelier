@@ -133,7 +133,7 @@ fn serve() -> (TempDir, Router) {
     let dir = TempDir::new().unwrap();
     demo(&dir.path().join("repos/demo"));
     bare(&dir.path().join("repos/bare"));
-    let mut config: Config = toml::from_str("caller = \"sumeet\"\nroots = []\n").unwrap();
+    let mut config: Config = toml::from_str("caller = \"ada\"\nroots = []\n").unwrap();
     config.roots = vec![dir.path().join("repos")];
     config.fetch_seconds = 0;
     (dir, router_for(Desk::new(config)))

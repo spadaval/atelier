@@ -76,7 +76,7 @@ function Confirm({ label, children, yes, onYes, onNo }: { label: string; childre
 
 /**
  * Stop a mission. A proposed plan is stopped here: the Desk writes the
- * drop with his reason, commits it, pushes the plan's branch and closes its
+ * drop with their reason, commits it, pushes the plan's branch and closes its
  * pull request, and every page is read again. An open mission's stop is
  * published by a record-only branch that merges, which the Desk does not
  * make yet (atelier-yclc), so its page gives the commands; a stop someone

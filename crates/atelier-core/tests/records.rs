@@ -27,7 +27,7 @@ implementers:
 - t3-implementer-1
 - t3-implementer-2
 ready:
-  by: sumeet
+  by: ada
   at: 2026-11-09T19:56:00-05:00
 trivial: null
 caused_by: atelier-x1y2
@@ -93,7 +93,7 @@ labels:
 - review
 lead: t3-lead
 ready:
-  by: sumeet
+  by: ada
   at: 2026-11-09T19:56:00-05:00
 created_at: 2026-11-09T18:00:00Z
 ---
@@ -239,7 +239,7 @@ fn each_record_kind_reads_and_writes_back_the_same_file() {
     assert_eq!(render_item(&parse_item(path, BLOCKER).unwrap()), BLOCKER);
     // A mission as this tool writes it: open, with its planners.
     let mission = MISSION.replace("status: ready", "status: open").replace(
-        "ready:\n  by: sumeet\n  at: 2026-11-09T19:56:00-05:00\n",
+        "ready:\n  by: ada\n  at: 2026-11-09T19:56:00-05:00\n",
         "planners:\n- p1\n- p2\n",
     );
     assert_eq!(
@@ -380,7 +380,7 @@ fn a_mission_reads_its_fields_and_keeps_its_body() {
     assert_eq!(mission.status, MissionStatus::Open);
     assert_eq!(mission.labels, ["review"]);
     assert_eq!(mission.lead, Some(Thread("t3-lead".into())));
-    assert_eq!(mission.ready.as_ref().unwrap().by, "sumeet");
+    assert_eq!(mission.ready.as_ref().unwrap().by, "ada");
     assert!(mission.planners.0.is_empty());
     assert_eq!(
         mission.body,
@@ -408,10 +408,7 @@ fn a_mission_is_written_open_with_its_planners_and_no_go_ahead_and_reads_the_old
     assert_eq!(read.status, MissionStatus::Draft);
     // A record with neither `ready` nor `planners`, as `start --mission`
     // never writes one, reads too.
-    let bare = MISSION.replace(
-        "ready:\n  by: sumeet\n  at: 2026-11-09T19:56:00-05:00\n",
-        "",
-    );
+    let bare = MISSION.replace("ready:\n  by: ada\n  at: 2026-11-09T19:56:00-05:00\n", "");
     let read = parse_mission(Path::new("x"), &bare).unwrap();
     assert_eq!((read.ready, read.planners.0.len()), (None, 0));
 }

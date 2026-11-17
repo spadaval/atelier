@@ -9,10 +9,10 @@ record](../design.md#decisions).
 
 Atelier has two kinds of user. Agents do the work, and they use the `atelier`
 command and its records. One human decides what is worth doing, keeps the
-ground such that agents can do it, and judges the result. He has no tool of
-his own. The old tool's site mirrored the tracker: it listed
+ground such that agents can do it, and judges the result. They have no tool of
+their own. The old tool's site mirrored the tracker: it listed
 records, and every problem with it came from that. The human does not need
-to see records. He needs to make a small number of decisions well.
+to see records. They need to make a small number of decisions well.
 
 The Desk is that tool. The tracker is where agents work, and the Desk is
 where the human plans, tends and reads results.
@@ -26,23 +26,23 @@ at a desktop for planning and on a phone for checking in and answering.
 
 In order of importance:
 
-1. **See and stop.** Nothing asks for his go-ahead: a mission starts from a
-   conversation with him, its plan merges once two reviewers approve it, and
-   its items start after that. So the Desk shows him what is proposed and
-   what is in motion and who is doing it, across every repository, tells him
-   when a plan is proposed and when it merges, and lets him stop a mission
-   with his reason. A mission's why, outcome, design and documents are on one
+1. **See and stop.** Nothing asks for their go-ahead: a mission starts from a
+   conversation with them, its plan merges once two reviewers approve it, and
+   its items start after that. So the Desk shows them what is proposed and
+   what is in motion and who is doing it, across every repository, tells them
+   when a plan is proposed and when it merges, and lets them stop a mission
+   with their reason. A mission's why, outcome, design and documents are on one
    page, with a planning session started from there.
 2. **Tend.** Keep each repository easy to navigate, change and validate:
    numbers against the last period, the worst spots, and at most three
    proposals, each a root cause with its trips as evidence. The same for the
    backlog: what to do next and what not to do.
-3. **Read results.** A finished mission's debrief, what was decided on his
-   behalf, and what changed since he last looked.
-4. **Answer.** The short queue of things only he can do: items labelled
+3. **Read results.** A finished mission's debrief, what was decided on their
+   behalf, and what changed since they last looked.
+4. **Answer.** The short queue of things only they can do: items labelled
    needs-human, and threads waiting on a person. A question an agent has
-   goes to the thread that started it, not to him; where two models
-   disagreed, the Desk shows it, and nothing waits on him for it.
+   goes to the thread that started it, not to them; where two models
+   disagreed, the Desk shows it, and nothing waits on them for it.
 5. **Watch.** Which agents are running, on what, and whether one is stuck.
    This supports the other four. The Desk is not a monitoring tool.
 
@@ -77,7 +77,7 @@ In order of importance:
 ## Its pages
 
 - **Repositories**: each repository with its missions, what is in progress,
-  how many plans are proposed and how many items need him, and when its
+  how many plans are proposed and how many items need them, and when its
   remote was last fetched.
 - **A mission**: its sections, documents, items and plan reviews, read from
   its branch while it is proposed, with the branch, its pull request and the
@@ -94,25 +94,25 @@ In order of importance:
   and what the next round made of it, and each plan-review round whose
   reviewers disagreed, with each side's model where the review or T3 Code
   names it.
-- **Inbox**: proposed plans he may stop, threads waiting on a person,
+- **Inbox**: proposed plans they may stop, threads waiting on a person,
   needs-human items, and the plans proposed and merged lately.
 - **Agents**: T3 Code's live threads and what each holds.
 
 The Desk can also be shown inside T3 Code, in its right panel, by an
-extension that runs on his desktop app. There T3 supplies the frame: its
+extension that runs on their desktop app. There T3 supplies the frame: its
 tab names the Desk, so the Desk draws no sidebar, brand or theme toggle of
 its own, only the page, its breadcrumb and a link to the inbox, laid out for
 a panel 400 to 750 pixels wide.
 
-Inside T3 Code the Desk also gives three views made for it, which Sumeet
+Inside T3 Code the Desk also gives three views made for it, which the human
 settled on in a spike on 2026-11-16:
 
-- **This thread**, in the right panel beside whichever thread he is
+- **This thread**, in the right panel beside whichever thread they are
   reading. It shows what that thread holds, the missions it planned or
   leads with every item and the threads on each, the other threads it
   started, the records its conversation names, and what of all that waits
-  on him. A thread that holds, started and names nothing shows its project
-  at a glance instead. It follows him from thread to thread.
+  on them. A thread that holds, started and names nothing shows its project
+  at a glance instead. It follows them from thread to thread.
 - **Mission control**, over T3 Code's main area, for one mission: one
   screen of panes, after Factory's Mission Control, with the active item,
   every item and its stage, a progress log of the mission's steps, and the
@@ -127,7 +127,7 @@ The inbox opened over the main area spreads into columns. T3 Code's own
 sidebar and project strip read their missions, threads and what can start
 from the Desk too, and draw them themselves. The progress log and the
 week's strip are read from commit subjects, so they can miss a step, and
-"waited on you" marks only the items he readied and those labelled
+"waited on you" marks only the items they readied and those labelled
 needs-human.
 
 Every page that reads a repository says when the Desk last fetched its
@@ -137,7 +137,7 @@ that time.
 
 ## Stopping a mission
 
-A stop drops the mission with his reason, as `atelier drop` does, and counts
+A stop drops the mission with their reason, as `atelier drop` does, and counts
 once it is published (docs/design.md, Where each command writes):
 
 - **A proposed plan**: the Desk stops it itself. It writes the drop in a
@@ -155,8 +155,8 @@ once it is published (docs/design.md, Where each command writes):
 
 ## Being told
 
-He is told when a plan is proposed and when it merges, so the veto the
-missing go-ahead leaves him is real (settled 2026-11-13 by the mission's
+They are told when a plan is proposed and when it merges, so the veto the
+missing go-ahead leaves them is real (settled 2026-11-13 by the mission's
 lead):
 
 - The Desk notices both on its fetch timer, by comparing each repository's
@@ -165,9 +165,9 @@ lead):
   repository tells nothing.
 - It runs the command its configuration names, with a title, a line of text
   and a link to the plan's page. On this host that is `notify-mail`, which
-  mails him from his own Gmail account to itself through `gog`. Mail from
-  his account on a timer is his to switch on, so the installed configuration
-  leaves it off until he does; the inbox lists the news either way.
+  mails them from their own Gmail account to itself through `gog`. Mail from
+  their account on a timer is theirs to switch on, so the installed configuration
+  leaves it off until they do; the inbox lists the news either way.
 - T3 Code's Browser panel was turned down for this: it lags off the LAN. An
   agent that proposes a plan may also show its page in its own thread
   (atelier-plr9).
@@ -184,7 +184,7 @@ lead):
 | A host-wide SQLite database | Trends, findings, and what the human last saw. Nothing a record holds. |
 
 The Desk writes no record itself. It calls the core's own functions for
-the human's actions, the ones the `atelier` command calls, under his name, and
+the human's actions, the ones the `atelier` command calls, under their name, and
 writes only in a clone of its own, never in a served repository's checkout. The tracker can be rebuilt without the Desk changing its
 purpose, and no agent, check or merge depends on the Desk.
 

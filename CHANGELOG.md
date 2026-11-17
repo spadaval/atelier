@@ -42,7 +42,7 @@ are. No migration and no new `atelier setup` are needed.
   the refusal `check` and the pre-commit hook print for a status change.
   Nothing else a command prints changed.
 - The planner's role in the Agent Factory skill says when to build a rough
-  spike with Sumeet before planning (when nobody can say what is wanted
+  spike with the human before planning (when nobody can say what is wanted
   until it is seen), on a `spike/<slug>` branch that never merges, and what
   the plan records of it.
 

@@ -156,7 +156,7 @@ fn serve(gh: Option<PathBuf>) -> Served {
     let dir = TempDir::new().unwrap();
     let root = dir.path().join("repos/demo");
     scratch(&root);
-    let mut config: Config = toml::from_str("caller = \"sumeet\"\nroots = []\n").unwrap();
+    let mut config: Config = toml::from_str("caller = \"ada\"\nroots = []\n").unwrap();
     config.roots = vec![dir.path().join("repos")];
     if let Some(gh) = gh {
         config.gh = gh;

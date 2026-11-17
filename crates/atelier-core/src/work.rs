@@ -8,7 +8,7 @@ use crate::view::Entry;
 use std::collections::BTreeMap;
 
 /// The label of an item that waits on the human, such as a question for
-/// him.
+/// them.
 pub const NEEDS_HUMAN: &str = "needs-human";
 
 /// The statuses in the order of the lifecycle, which views group items by.

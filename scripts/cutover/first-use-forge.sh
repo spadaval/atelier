@@ -40,7 +40,7 @@ git config --global user.name first-use; git config --global user.email first-us
 git config --global advice.detachedHead false
 
 C=$W/atelier
-git clone -q -b master /home/supadava/projects/atelier "$C"
+git clone -q -b master "$(git -C "$KIT" rev-parse --show-toplevel)" "$C"
 git init -q --bare "$W/push.git"
 git -C "$C" remote set-url origin https://github.com/spadaval/atelier.git
 git -C "$C" remote set-url --push origin "$W/push.git"

@@ -90,7 +90,7 @@ app = "~/.local/share/atelier-desk/app"
 embed_origins = ["t3code://app"]
 
 # Mail when a plan is proposed or merges, from the human's own account to
-# itself. Off until he turns it on; the inbox lists the news either way.
+# itself. Off until they turn it on; the inbox lists the news either way.
 # [notify]
 # command = ["~/.local/share/atelier-desk/notify-mail", "personal"]
 

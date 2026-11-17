@@ -164,7 +164,7 @@ full_item() {
   sed -i -e '/^## Goal$/a Say in the README that this clone rehearsed the cutover.' \
     -e '/^## Done when$/a - [ ] README.md ends with a line saying so.' \
     -e '/^## Scope$/a README.md.' "$f"
-  T3CODE_THREAD_ID=$P atelier ready "$id" --by sumeet
+  T3CODE_THREAD_ID=$P atelier ready "$id" --by ada
   git push -q origin "$base"
   T3CODE_THREAD_ID=$I atelier start "$id"
   echo "This clone rehearsed the Atelier cutover." >> README.md
@@ -201,7 +201,7 @@ start_30() {
   note "30 items started"
 }
 
-S=/home/supadava/projects
+S=${REHEARSE_PROJECTS:-$HOME/projects}
 t_all=$(date +%s%N)
 for spec in atelier:master astromech:main demiurge:master life-on-rails:main cosplay-studio:main; do
   repo=${spec%%:*} base=${spec#*:} src=$S/$repo C=$W/$repo log=$W/$repo.log

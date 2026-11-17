@@ -59,7 +59,7 @@ describe("fixedInReview", () => {
   });
 
   it("names a deferred finding's settlement", () => {
-    const reviews = [round(1, [finding("1-aaaa.1", { recommendation: "defer", deferred: true, settlement: { kind: "taken", item: "atelier-e05n", by: "sumeet" } })])];
+    const reviews = [round(1, [finding("1-aaaa.1", { recommendation: "defer", deferred: true, settlement: { kind: "taken", item: "atelier-e05n", by: "ada" } })])];
     expect(fate(reviews, "1-aaaa.1")).toBe("Deferred, taken as atelier-e05n");
     expect(fixed(reviews)).toEqual([]);
   });

@@ -236,11 +236,7 @@ mod tests {
     fn a_configuration_listens_on_loopback_unless_told_otherwise() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("desk.toml");
-        std::fs::write(
-            &path,
-            "caller = \"sumeet\"\nroots = [\"repos\", \"/srv\"]\n",
-        )
-        .unwrap();
+        std::fs::write(&path, "caller = \"ada\"\nroots = [\"repos\", \"/srv\"]\n").unwrap();
         let config = Config::load(&path).unwrap();
         assert_eq!(
             config.listen,

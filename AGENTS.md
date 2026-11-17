@@ -27,7 +27,7 @@ item in `items/<id>/item.md` with its reviews beside it, and the rules in
 - Only `start`, `submit` and `merge` act on Git. `new`, `set`, `ready`,
   `drop`, `close`, `lead`, `review` and `verdict` write files and commit
   nothing; commit and push them with Git.
-- A mission starts from Sumeet's direction: `atelier start --mission
+- A mission starts from the human's direction: `atelier start --mission
   "<title>"`, write the plan and its items, `atelier submit`, and two
   reviewers who did not plan it each run `atelier review <mission>` and push
   their verdict to the branch. It merges once both approve, with no go-ahead

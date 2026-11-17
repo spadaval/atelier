@@ -246,16 +246,12 @@ fn a_commit_of_an_invalid_record_or_of_a_status_no_action_sets_is_refused_and_a_
         };
         assert!(run.stderr.ends_with(&end), "{}", run.stderr);
         assert_eq!(git(&root, &["rev-parse", "HEAD"]), head);
-        let run = git_skipping(
-            &root,
-            Some("  Sumeet\n said so "),
-            &["commit", "-qm", message],
-        );
+        let run = git_skipping(&root, Some("  Ada\n said so "), &["commit", "-qm", message]);
         match rule {
             Some(rule) => {
                 assert_eq!(run.code, 0, "{}", run.stderr);
                 // Git shows a hook's output on its own stderr.
-                let said = format!("Skipped with ATELIER_SKIP: {rule}: Sumeet said so\n");
+                let said = format!("Skipped with ATELIER_SKIP: {rule}: Ada said so\n");
                 assert_eq!(run.stderr, said);
                 // A hook writes nothing: the message is Git's.
                 assert_eq!(git(&root, &["log", "-1", "--format=%B"]), message);

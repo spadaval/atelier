@@ -164,7 +164,7 @@ mod tests {
 
     #[test]
     fn a_branch_name_reads_back_into_what_it_names_with_and_without_a_prefix() {
-        for prefix in [None, Some("x/"), Some("team/sumeet/")] {
+        for prefix in [None, Some("x/"), Some("team/ada/")] {
             let config = config(prefix);
             let p = prefix.unwrap_or("");
             for named in [
@@ -206,7 +206,7 @@ mod tests {
 
     #[test]
     fn a_prefix_is_ref_components_each_ended_by_a_slash() {
-        for good in ["x/", "team/sumeet/", "a.b_c-d/"] {
+        for good in ["x/", "team/ada/", "a.b_c-d/"] {
             assert_eq!(validate_prefix(good), Ok(()), "{good}");
         }
         for bad in [

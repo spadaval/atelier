@@ -111,7 +111,7 @@ struct Served {
 }
 
 fn config(roots: Vec<PathBuf>, app: Option<PathBuf>) -> Config {
-    let text = "caller = \"sumeet\"\nroots = []\n";
+    let text = "caller = \"ada\"\nroots = []\n";
     let mut config: Config = toml::from_str(text).unwrap();
     config.roots = roots;
     config.app = app;
@@ -175,7 +175,7 @@ fn ids(items: &Value) -> Vec<String> {
 async fn each_mission_agrees_with_show_and_the_inbox_with_list() {
     let served = serve();
     let skip = Skip::new(None);
-    let mut repo = Repo::open_committed(&served.root, Thread("sumeet".into()), &skip).unwrap();
+    let mut repo = Repo::open_committed(&served.root, Thread("ada".into()), &skip).unwrap();
     for id in [ALPHA, BETA] {
         let page = ok(&served.app, &format!("/api/repos/demo/missions/{id}")).await;
         let view = mission_view(&mut repo, id).unwrap().unwrap();

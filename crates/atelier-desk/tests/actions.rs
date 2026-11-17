@@ -20,7 +20,7 @@ use std::sync::Arc;
 use tempfile::TempDir;
 use tower::ServiceExt;
 
-const CALLER: &str = "sumeet";
+const CALLER: &str = "ada";
 /// An agreed mission, open on the base.
 const OPEN: &str = "demo-aaaa";
 /// A proposed plan, on its own branch.
@@ -44,7 +44,7 @@ fn mission(root: &Path, id: &str) {
     let text = format!(
         "---\nschema: atelier.mission\nschema_version: 3\nid: {id}\ntitle: Mission {id}\n\
          status: open\nlabels: []\nlead: null\nplanners:\n- p1\n\
-         created_at: 2026-11-10T09:00:00Z\n---\n## Why\n\nSumeet asked for it.\n\n\
+         created_at: 2026-11-10T09:00:00Z\n---\n## Why\n\nAda asked for it.\n\n\
          ## Outcome\n\nIt works.\n\n## Result\n"
     );
     write(root, &format!(".atelier/missions/{id}/mission.md"), &text);
@@ -590,7 +590,7 @@ async fn an_agreed_missions_amendment_on_its_own_branch_is_proposed_with_its_oth
         .join(format!(".atelier/missions/{OPEN}/mission.md"));
     let text = fs::read_to_string(&path)
         .unwrap()
-        .replace("Sumeet asked for it.", "Sumeet asked for more.");
+        .replace("Ada asked for it.", "Ada asked for more.");
     fs::write(&path, text).unwrap();
     let item = format!(
         "---\nschema: atelier.item\nschema_version: 3\nid: demo-i001\ntitle: A new item\n\
@@ -735,7 +735,7 @@ async fn an_amendment_and_a_stop_on_another_branch_are_each_shown_as_they_are() 
         .join(format!(".atelier/missions/{OPEN}/mission.md"));
     let text = fs::read_to_string(&path)
         .unwrap()
-        .replace("Sumeet asked for it.", "Sumeet asked for more.");
+        .replace("Ada asked for it.", "Ada asked for more.");
     fs::write(&path, text).unwrap();
     git(&world.planner, &["commit", "-qam", "Amend the plan"]);
     git(&world.planner, &["push", "-q", "origin", OPEN]);

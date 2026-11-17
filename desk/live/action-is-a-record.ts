@@ -19,7 +19,7 @@
 //
 // <repository> must name a forge in its `.atelier/config.toml`, since a
 // plan's stop is published by a push. --by names who stops it (default
-// sumeet): the Desk's caller, and the CLI's thread. --differ gives the
+// ada): the Desk's caller, and the CLI's thread. --differ gives the
 // CLI's drop another reason, so the two must differ and the command must
 // fail: it shows the comparison can fail. The binaries default to this
 // checkout's builds (target/debug/atelier, target/release/atelier-desk or
@@ -46,7 +46,7 @@ function parseArgs(argv: string[]) {
   const built = (...candidates: string[]) => candidates.map((c) => path.join(top, c)).find(existsSync);
   const o = {
     clone: "",
-    by: "sumeet",
+    by: "ada",
     atelier: built("target/debug/atelier"),
     desk: built("target/release/atelier-desk", "target/debug/atelier-desk"),
     app: path.join(top, "desk/dist"),
@@ -102,7 +102,7 @@ function ghStandIn(dir: string, branch: string): { gh: string; log: string } {
 
 /** A proposed mission's record, open, with every section of a plan written. */
 function missionRecord(id: string): string {
-  const sections = ["Why", "Outcome", "Success criteria", "Scope", "Authority"].map((h) => `## ${h}\n\nWritten by action-is-a-record, in a scratch copy, as Sumeet asked.\n`).join("\n");
+  const sections = ["Why", "Outcome", "Success criteria", "Scope", "Authority"].map((h) => `## ${h}\n\nWritten by action-is-a-record, in a scratch copy, as Ada asked.\n`).join("\n");
   return `---\nschema: atelier.mission\nschema_version: 3\nid: ${id}\ntitle: Check that a stop from the Desk is a record\nstatus: open\nlabels: []\nlead: null\nplanners:\n- action-is-a-record\ncreated_at: 2026-11-13T00:00:00Z\n---\n\n${sections}\n## Result\n`;
 }
 

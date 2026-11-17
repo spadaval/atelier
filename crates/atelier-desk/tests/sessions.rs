@@ -164,7 +164,7 @@ async fn world(url: Option<&str>, configured: bool) -> World {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     tokio::spawn(async move { axum::serve(listener, mcp).await.unwrap() });
-    let mut config: Config = toml::from_str("caller = \"sumeet\"\nroots = []\n").unwrap();
+    let mut config: Config = toml::from_str("caller = \"ada\"\nroots = []\n").unwrap();
     config.roots = vec![dir.path().join("repos")];
     config.t3 = configured.then(|| T3Config {
         command,

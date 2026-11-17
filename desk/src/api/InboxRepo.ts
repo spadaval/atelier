@@ -10,7 +10,7 @@ export type InboxRepo = { repo: string, commit: string | null, error: string | n
  */
 needs_human: Array<NeedsHuman>,
 /**
- * Plans under review, which he may stop.
+ * Plans under review, which they may stop.
  */
 proposed: Array<MissionRow>, fetched: FetchMark,
 /**

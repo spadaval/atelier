@@ -111,7 +111,7 @@ const z4crAgents: Agent[] = [
   { identity: thread, role: "implementer", item: "atelier-uwxy", thread: mark(live.uwxy) },
   { identity: live.asking.id, role: "implementer", item: "atelier-aab1", thread: mark(live.asking) },
   { identity: codexChild, role: "reviewer", item: "atelier-1ie1", thread: null },
-  { identity: "sumeet", role: "decider", item: "atelier-1ie1", thread: null },
+  { identity: "ada", role: "decider", item: "atelier-1ie1", thread: null },
   { identity: "planner-thread", role: "planner", item: null, thread: null },
 ];
 
@@ -167,7 +167,7 @@ export const z4crItems: ItemRow[] = [
     waiting_on: ["atelier-uwxy"],
   }),
   row("atelier-e05n", "Show the agents working on a mission and its items", "draft", { priority: "medium" }),
-  row("atelier-h3hl", "Let Sumeet start a planning session from a page", "draft", { priority: "medium" }),
+  row("atelier-h3hl", "Let the human start a planning session from a page", "draft", { priority: "medium" }),
   row("atelier-va99", "Install the Desk as a service on this host, on converted clones", "draft", { priority: "medium" }),
   row("atelier-qxmr", "Point the Desk at the live repositories after this host's cutover", "draft", { priority: "low" }),
   row("atelier-psjw", "Move the actions and repository access into atelier-core", "ready", {
@@ -193,7 +193,7 @@ export const z4cr: MissionPage = {
     {
       heading: "Why",
       markdown:
-        "Sumeet has no tool of his own. A page that lists records asks him to read records.\n[ADR 0032](../../../docs/adr/0032-the-desk-is-the-humans-product.md) makes the human's tool a product of its own, and [its intent](../../../docs/product/desk.md) says what it is for.",
+        "The human has no tool of their own. A page that lists records asks them to read records.\n[ADR 0032](../../../docs/adr/0032-the-desk-is-the-humans-product.md) makes the human's tool a product of its own, and [its intent](../../../docs/product/desk.md) says what it is for.",
     },
     { heading: "Outcome", markdown: "On this host, a service reached over the tailnet shows Atelier repositories on the redesigned records." },
     { heading: "Success criteria", markdown: "- desk-matches-cli: every open mission has a page that shows what `atelier show` prints.\n- action-is-a-record: a stop leaves the commit `atelier drop` leaves." },
@@ -336,7 +336,7 @@ export const repos: ReposResponse = {
     },
   ],
   built_from: "5e1f0c2d9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d",
-  caller: "sumeet",
+  caller: "ada",
 };
 
 function itemPage(r: ItemRow, more: Partial<ItemPage>): ItemPage {
@@ -346,7 +346,7 @@ function itemPage(r: ItemRow, more: Partial<ItemPage>): ItemPage {
     mission: "atelier-z4cr",
     blocked_by: r.blockers.map((b) => b.id),
     implementers: [],
-    ready: { by: "sumeet", at },
+    ready: { by: "ada", at },
     trivial: null,
     caused_by: null,
     created_at: at,
@@ -423,7 +423,7 @@ export const items: Record<string, ItemPage> = {
             was: null,
             now: null,
             decided: null,
-            settlement: { kind: "taken", item: "atelier-e05n", by: "sumeet" },
+            settlement: { kind: "taken", item: "atelier-e05n", by: "ada" },
             text: null,
             open: false,
             deferred: true,
@@ -484,7 +484,7 @@ export const items: Record<string, ItemPage> = {
       { ticked: true, text: "`GET /api/repos` answers." },
       { ticked: false, text: "`GET /api/inbox` answers." },
     ],
-    decisions: [{ item: "atelier-uwxy", question: "Should the cache key include the checkout's HEAD?", finding: "1-cccc.2", answer: { by: "sumeet", text: "No." }, outcome: null }],
+    decisions: [{ item: "atelier-uwxy", question: "Should the cache key include the checkout's HEAD?", finding: "1-cccc.2", answer: { by: "ada", text: "No." }, outcome: null }],
   }),
 };
 
@@ -500,7 +500,7 @@ export const docs: Record<string, DocResponse> = {
     commit,
     path: ".atelier/missions/atelier-z4cr/design.md",
     markdown:
-      '---\nstatus: draft\nlast_changed: "2026-11-11: amended at Sumeet\'s direction"\n---\n\n# Sizing\n\n- Complexity: high.\n\nThe notes are in [notes](notes.md), and the product intent in [the intent](../../../docs/product/desk.md#why-it-exists). The server is [api.rs](../../../crates/atelier-desk/src/api.rs).\n\n# Risks and Unknowns\n\n- The view gap is large.\n',
+      '---\nstatus: draft\nlast_changed: "2026-11-11: amended at Ada\'s direction"\n---\n\n# Sizing\n\n- Complexity: high.\n\nThe notes are in [notes](notes.md), and the product intent in [the intent](../../../docs/product/desk.md#why-it-exists). The server is [api.rs](../../../crates/atelier-desk/src/api.rs).\n\n# Risks and Unknowns\n\n- The view gap is large.\n',
   },
   ".atelier/missions/atelier-z4cr/notes.md": {
     commit,

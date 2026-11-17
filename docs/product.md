@@ -2,12 +2,12 @@
 
 This page says what Atelier is for and what it does. How it is built is in
 the [design record](design.md), which also lists what was tried and removed.
-Sumeet set the direction in conversation on 2026-11-09 after an assessment
+The human set the direction in conversation on 2026-11-09 after an assessment
 of the project (`/var/tmp/atelier-assessment/reports/`). The tool was
 rewritten to this page, and every repository on this host moved onto it on
 2026-11-11.
 
-On 2026-11-13 Sumeet set a second direction, the branch model of mission
+On 2026-11-13 the human set a second direction, the branch model of mission
 atelier-to83: only a merge writes the base, and every change, code or
 records, is made on a branch. This page describes that model before the
 binary has it. The mission's items bring the binary to this page, and until
@@ -19,7 +19,7 @@ The assessment found that independent review catches real bugs (39 of 100
 sampled fix-now findings in four product repositories) and that the machinery
 around it cost more than it returned. 75% of commits touched only tracker
 records. 38 of 50 sampled refusals were an agent tripping over the tool, not
-the tool stopping a mistake. Sumeet asked "where are we?" 31 times in a month.
+the tool stopping a mistake. The human asked "where are we?" 31 times in a month.
 About 85% of the items finished since the October rebuild were Atelier working
 on itself.
 
@@ -29,7 +29,7 @@ by running a command and reading the refusal.
 
 ## Who it is for
 
-Sumeet, on two Linux hosts that both run T3 Code:
+The human, on two Linux hosts that both run T3 Code:
 
 - **Home:** Claude, Codex and Grok agents; GitHub with Actions.
 - **Work:** Codex agents only; GitHub without Actions or any other CI.
@@ -42,8 +42,8 @@ once.
 
 1. **Purpose.** Agents produce correct, high-quality code with as little
    overhead as possible. Nothing else is sacred.
-2. **The human at the boundaries.** Sumeet sets a mission's direction in
-   conversation and reads its result. In between he is hands-off, never has
+2. **The human at the boundaries.** The human sets a mission's direction in
+   conversation and reads its result. In between they are hands-off, never have
    to ask where things stand, and can stop a mission at any time.
 3. **The tool owns order and flow.** The lifecycle is in the binary. Each
    command says who may run it, and `status` tells each thread what it holds
@@ -73,7 +73,7 @@ Each word has one meaning in the CLI, its help, the docs and the skill.
 
 | Word | Meaning |
 | --- | --- |
-| Mission | A batch of related work Sumeet hands to agents to run unattended. It has an outcome, limits on what agents may decide, and an end. A theme with no end is a label. |
+| Mission | A batch of related work the human hands to agents to run unattended. It has an outcome, limits on what agents may decide, and an end. A theme with no end is a label. |
 | Plan | What a mission's two plan reviews approve: the Why, Outcome, Success criteria, Scope and Authority sections of `mission.md`, the documents beside it other than `notes.md` and its reviews, and, until the plan has merged, the mission's items. Nothing called a plan is stored. |
 | Proposed | A mission whose record says `open` and is read from a branch that has not merged. It is shown, never stored. |
 | Agreed | A mission whose record is on the base. Its plan merged after two approving plan reviews. |
@@ -86,7 +86,7 @@ Each word has one meaning in the CLI, its help, the docs and the skill.
 | Ready | Someone with authority said this item should start now. Ready is about intent, and only an item has it. It says nothing about review. |
 | Thread | The T3 Code thread that holds a role. Records store its ID. |
 | Role | Lead, implementer, reviewer or planner. A thread gets a role from the command it enters with; `start --mission` makes it a planner of the mission. |
-| Gardener | Whoever keeps a repository easy to navigate, easy to change and easy to validate, and brings Sumeet the redesigns that need his taste. A run looks at one focus area, which Sumeet may name at the start, through agents' threads and the code itself. In the tool a gardener is the implementer of an item labelled `garden`: that item is its run, and the item's Report is the one page Sumeet reads. No command is reserved for it. |
+| Gardener | Whoever keeps a repository easy to navigate, easy to change and easy to validate, and brings the human the redesigns that need their taste. A run looks at one focus area, which the human may name at the start, through agents' threads and the code itself. In the tool a gardener is the implementer of an item labelled `garden`: that item is its run, and the item's Report is the one page the human reads. No command is reserved for it. |
 | Status | A stored field on a mission or item, set only by the command that performs the action. |
 | Done | The end state of merged work, of a closed item, and of a closed mission. |
 | Record-only change | A branch every one of whose changed paths is under `.atelier/` other than `config.toml`, and which adds no mission and changes no plan. It merges once `atelier check` passes on the merged tree. |
@@ -95,7 +95,7 @@ Each word has one meaning in the CLI, its help, the docs and the skill.
 
 "Approve" means only a reviewer's verdict. "Ready" is said of an item only.
 A mission has no go-ahead: its direction is given when it starts, in a
-conversation with Sumeet or a proposal he agreed, and its Why says which.
+conversation with the human or a proposal they agreed, and its Why says which.
 
 ## Branches
 
@@ -269,7 +269,7 @@ in the checkout that has the base out, it writes nothing and names the
 
 | Command | Behaviour |
 | --- | --- |
-| `status` | Who this thread is, what it holds, what each thing needs, and the next command. On the base with nothing held: the ready items `start` would accept now, one line counting the other ready items by what stops them, missions in progress and what waits on Sumeet, which is not listed as ready. For a mission's lead, its mission, what each item needs, and what is disputed in it. |
+| `status` | Who this thread is, what it holds, what each thing needs, and the next command. On the base with nothing held: the ready items `start` would accept now, one line counting the other ready items by what stops them, missions in progress and what waits on the human, which is not listed as ready. For a mission's lead, its mission, what each item needs, and what is disputed in it. |
 | `show <id>` | An item in full, with a summary of each review: its round, reviewer, model, the commit it reviewed and its verdict, and each finding's name, recommendation, state and title. A finding's text is in its review file. For a mission, the whole mission on one page: whether it is proposed, agreed, done or dropped, its outcome and criteria, its items grouped by status with who holds each and what blocks each, what is disputed in it as `list --disputed` gives it, and its reviews by round. Either says which ref the record was read from, and, for a fetched ref, how long ago the remote was fetched. |
 | `list` | With no flags, all open work on the base, grouped by mission and then by label, and apart from it what is proposed: missions on unmerged branches and record changes waiting to merge, each with its branch. Narrowed by `--ready`, `--blocked`, `--needs-human`, `--proposed`, `--mission <id>`, `--label <l>`, `--mine` and `--deferred`; `--done` shows finished missions and items instead. `--disputed` lists instead, across open and done items, each finding whose Response is `rebutted` with what the next round made of it (kept, withdrawn, fixed, kept at defer or no action, or not yet reviewed), and each plan-review round whose reviewers gave different verdicts; `--mission <id>` narrows it. Nothing refuses or warns on any of them. |
 | `log` | The history of actions, read from Git, one line each and oldest first: when, the commit, which item or mission, the action, the thread where the record holds one, what changed, and any rule its commit skipped. For everything, one item, or one mission with its plan reviews and its items, and only actions `--since` a time. It adds nothing up. |
@@ -302,7 +302,7 @@ matter; `set` and the status commands write it.
 
 | Command | Behaviour |
 | --- | --- |
-| `start <id>` | On a ready item: creates branch `<id>` from the base, sets `building`, binds this thread as implementer, and pushes the branch where a remote is configured, which is the claim. On a started item: switches to its branch and takes it over. `start --new "<title>"` creates an item on a new branch already `building`, for work Sumeet asked for directly. In the checkout that has the base out, `start` makes the branch without switching and prints the Git command that adds a worktree for it. |
+| `start <id>` | On a ready item: creates branch `<id>` from the base, sets `building`, binds this thread as implementer, and pushes the branch where a remote is configured, which is the claim. On a started item: switches to its branch and takes it over. `start --new "<title>"` creates an item on a new branch already `building`, for work the human asked for directly. In the checkout that has the base out, `start` makes the branch without switching and prints the Git command that adds a worktree for it. |
 | `submit` | Checks every Done when line is ticked, the Report is written, and each open fix-now finding has a response; sets `in_review` and commits the item's directory; opens a new round; prints the reviewer's handoff line. Where a forge is configured it then pushes the branch and opens its pull request, so CI runs while the review does; a push or pull request that fails is a warning, and `merge` does it later. |
 | `merge` | Runs the checks below and merges the branch. With a forge, the forge merges the pull request, as a merge commit; without one, `merge` makes the merge commit and moves the base locally. If CI has not finished it waits for it, up to 9 minutes, then says "not yet" and is run again later. Its only flag is `--trivial "<why>"`, which skips review for a change whose correctness is evident from the diff and records the claim. |
 
@@ -397,7 +397,7 @@ with the harness's own tool, using a line the tool prints:
 
 | File | Front matter | Sections | Written by |
 | --- | --- | --- | --- |
-| `mission.md` | status (`open`, `done` or `dropped`), labels, lead thread, planner threads | Why, Outcome, Success criteria (optional), Scope, Authority, Result | Sumeet's direction, recorded by the planner, whose Why says whose direction it is; the lead writes Result |
+| `mission.md` | status (`open`, `done` or `dropped`), labels, lead thread, planner threads | Why, Outcome, Success criteria (optional), Scope, Authority, Result | The human's direction, recorded by the planner, whose Why says whose direction it is; the lead writes Result |
 | `design.md` and other documents | none required | Shape, Design, Sizing, Derisking, Risks and unknowns | Agents |
 | `notes.md` | none | Free text | The lead |
 | `item.md` | status, mission, labels, priority, blocked-by, caused-by, implementer threads, ready, trivial | Goal, Done when, Scope, Report (with Validation and Responses) | The planner writes the definition; the implementer writes the Report |
@@ -412,7 +412,7 @@ Rules:
 - An item's branch is named for its ID, and a mission's for its. No field
   records either.
 - Membership is stored once, as `mission:` on the item.
-- A mission's plan changes only at Sumeet's direction, and a change to it
+- A mission's plan changes only at the human's direction, and a change to it
   needs two approving plan reviews again before it merges. The other
   documents in a mission's directory are the agents', and they may change
   them during the run inside the limits Authority sets; a change to one of
@@ -424,12 +424,12 @@ Rules:
   other document.
 - Where a mission builds something whose goal is not clear until it is seen,
   it is derisked by a spike: a rough build of the whole thing, made with
-  Sumeet before the plan is written, on a `spike/<slug>` branch that never
+  the human before the plan is written, on a `spike/<slug>` branch that never
   merges. Derisking says what the spike showed and whether the items rework
   its code or write fresh with it as reference. Its code reaches the base
   only through those items and their reviews. Any other mission's Derisking
   names its riskiest assumption and how that is settled.
-- A question for Sumeet is an item labelled `needs-human`. He answers, and an
+- A question for the human is an item labelled `needs-human`. They answer, and an
   agent closes it with the answer.
 
 ### Where records change
@@ -482,7 +482,7 @@ record is committed on the base.
   the thread that started it, or an advisor, as a working model asks a
   stronger one at a decision point and carries on. Nothing records the
   question or waits on it; the Report says what the answer changed. Anything
-  that touches product direction goes to Sumeet as a `needs-human` item.
+  that touches product direction goes to the human as a `needs-human` item.
 - **A disagreement is found, not enforced.** The records already hold one: a
   `rebutted` Response with the next round's judgment of it, and a plan-review
   round whose reviewers differ. `list --disputed` prints them, `show
@@ -599,7 +599,7 @@ check` and says what it found in the output of the Git command it guards.
 Every rule a hook or a command applies can be skipped on purpose:
 
 ```text
-ATELIER_SKIP="the reviewer is down and Sumeet said to merge" atelier merge
+ATELIER_SKIP="the reviewer is down and the human said to merge" atelier merge
 ```
 
 - The reason is required; an empty one is refused.
@@ -632,7 +632,7 @@ drives down, and exchange rates decide what to cut.
 | Group | Measure | Before |
 | --- | --- | --- |
 | Outcome | Defects found after merge, traced to the item that caused them | 15 of 277 merged items in atelier (5.4 per 100), a floor; 18 of 361 in astromech; the other three filed almost no bugs |
-| Outcome | Sumeet's interventions per mission, by kind: status question, unsticking a stall, correcting direction | 0 to 17 per started mission, median 2.5; 39 of 60 correcting direction |
+| Outcome | The human's interventions per mission, by kind: status question, unsticking a stall, correcting direction | 0 to 17 per started mission, median 2.5; 39 of 60 correcting direction |
 | Cost | Process share: an item's tool calls and tokens not spent reading, editing or testing product code | atelier 28.0% of shell commands and 21.6% of token cost; 7.6% to 20.3% of commands elsewhere |
 | Cost | Confusion: refused or errored calls, help lookups, commands run by the wrong role | atelier 25.2 per 100 `atelier` calls, about half help lookups; 16.39 to 24.27 elsewhere; wrong role not measured |
 | Cost | Tokens per merged item | Median $3.06 in atelier, $3.22 to $13.81 elsewhere, at list price, orchestrator threads left out |

@@ -1,10 +1,10 @@
 # Garden
 
 Gardening keeps a repository easy to navigate, change and validate as agents
-work in it, and finds the redesigns that need Sumeet's taste. A run looks
+work in it, and finds the redesigns that need the human's taste. A run looks
 hard at one area of one repository, through the threads of agents who worked
-there and the code itself. It brings Sumeet one page with at most three
-proposals, each one cause with counted evidence, and settles them with him
+there and the code itself. It brings the human one page with at most three
+proposals, each one cause with counted evidence, and settles them with the human
 in a session. It changes only upkeep and signs, on its own branch. A run is
 not a linter: a checklist line not met is a line of the page, not a
 proposal. It is not a firefighter: something broken today is filed as a bug
@@ -18,7 +18,7 @@ and left. It is not the backlog pass: it says when one looks due.
 4. **Features and code nobody uses:** commands, flags and paths no test, doc or thread reaches.
 5. **How work flows:** step 2's numbers from `atelier log`, and the threads behind the worst.
 6. **The host and the agents' setup:** worktrees, hooks, skills, `AGENTS.md`, memory files.
-7. **Sumeet's time:** how often and how long work waited on him: `needs-human` and sessions.
+7. **The human's time:** how often and how long work waited on them: `needs-human` and sessions.
 8. **Cost:** tokens and tool calls per merged item, and the process share.
 
 ## 1. Open the Run
@@ -29,7 +29,7 @@ Report has the template's `Window:` line. Read each that `atelier list
 reads a started item from its branch, where a waiting run's Report is. A labelled
 item with no such line, such as the old digest atelier-j86z, is not a run.
 
-**The focus** is the area Sumeet names; else the first area in the list's
+**The focus** is the area the human names; else the first area in the list's
 order that no earlier run's `Focus:` line records (a page with no such line
 records none); else the area whose newest such line is oldest.
 
@@ -131,7 +131,7 @@ when a thread or a number shows what the gap cost. A proposal the last page
 left open is brought once more, marked carried, and then left out. Leave out
 a trip that fits no cause and happened once. Something broken today you file
 as a draft on a backlog branch, with `atelier set <id> --labels bug --caused-by
-<item or commit>`; the session makes it ready or drops it on Sumeet's word.
+<item or commit>`; the session makes it ready or drops it on the human's word.
 
 ## 5. Fix What the Run May Fix
 
@@ -158,7 +158,7 @@ nothing merged says "0 items merged" and "none merged" in its rows; a first
 run's Last run column says "first run". No line asks for an answer per trip.
 
 ```markdown
-Focus: <area>, <named by Sumeet | never a focus | last a focus on <date>>.
+Focus: <area>, <named by the human | never a focus | last a focus on <date>>.
 Window: <start> to <end> UTC, <n> items merged. Workings: `artifacts/numbers.md`.
 
 | Measure | This run | Last run | Baseline |
@@ -190,9 +190,9 @@ Moves: <the number>. Change: <what to do; for structure, which files>. Considere
 ## 7. Submit and Hold the Session
 
 Run `atelier submit` and start the reviewer it prints. Once approved, the run
-waits for the session with Sumeet, though `atelier status` offers `atelier
-merge`. The session is in whichever thread he talks to; a new thread takes the
+waits for the session with the human, though `atelier status` offers `atelier
+merge`. The session is in whichever thread they talk to; a new thread takes the
 run over with `atelier start <id>`. Under Session write, for each proposal,
-what he agreed, changed or declined; file each agreed one as an item on a
+what they agreed, changed or declined; file each agreed one as an item on a
 backlog branch, and merge it. Editing the Report keeps the approval; any other
 change needs `atelier submit` again. Then run `atelier merge`.

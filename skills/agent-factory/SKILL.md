@@ -27,13 +27,13 @@ to start an item makes you its implementer, and one to lead a mission its
 lead. A garden or audit task also reads
 [procedures/garden.md](procedures/garden.md).
 
-## Who Works With Sumeet
+## Who Works With the Human
 
-The planner works with Sumeet in conversation, and builds a spike with him
+The planner works with the human in conversation, and builds a spike with them
 when the plan needs one. A gardener takes its focus
-from him when he names one at the start, and settles its run's page with him
+from them when they name one at the start, and settles its run's page with them
 in a session once the run is approved. Every other role
-runs unattended: it never waits on him, and takes a question to the thread
+runs unattended: it never waits on them, and takes a question to the thread
 that started it or to an item labelled `needs-human`, as its role file says.
 
 ## Independent Review
