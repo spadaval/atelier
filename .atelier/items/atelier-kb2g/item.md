@@ -49,7 +49,6 @@ two questions put to them):
 - The GitHub account in real URLs (`Cargo.toml`, `README.md`, `AGENTS.md`,
   the cutover kit, `.gitattributes`) and in fixtures that copy such URLs.
   They work only with that name until the repository moves.
-- ADRs under `docs/adr/`, which were not changed.
 
 ## Report
 
