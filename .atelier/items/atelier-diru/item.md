@@ -130,7 +130,7 @@ anything starts); `stop` with nothing running.
 so). The spike's `~/t3-linux-spike` (1.2 GB) is the planner's and is left in
 place; it can be deleted.
 
-### Responses, round 1
+### Round 1 fixes
 
 Both findings held, and both are fixed.
 
@@ -162,3 +162,8 @@ Both findings held, and both are fixed.
 
 `test-extension.mjs` failing for the reviewer on port 19222 was another
 browser holding that port, not this change; it passed here before round 1.
+
+### Responses
+
+1-d4r6.1: fixed in 538d83e04: the instance moved to /var/tmp outside the home folder, probes run in its home, and isolation reads OpenCode's log.
+1-d4r6.2: fixed in 538d83e04: start takes start.lock before reading state or clearing the folder; a second start waits and reuses.
