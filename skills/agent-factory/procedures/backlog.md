@@ -2,9 +2,9 @@
 
 The planner's pass over a repository's whole backlog, or one area of it (a
 mission, a label or a set of items, with the items that could duplicate,
-block or belong with it). Run it when Sumeet asks, when a mission closes, and
+block or belong with it). Run it when the human asks, when a mission closes, and
 on an area before planning a mission there. You drop what you can prove is
-stale and bring him the calls that are his.
+stale and bring them the calls that are theirs.
 
 ## Reading
 
@@ -29,7 +29,7 @@ left to do:
 A search that finds nothing the item names shows only that its wording is
 old. Trace what replaced that code and test the outcome there. If the work is
 still wanted, rewrite the item against today's code; if part is done, keep
-the rest; if you cannot tell, it is a call for Sumeet.
+the rest; if you cannot tell, it is a call for the human.
 
 You may also make record fixes evident from the records alone, such as a
 missing label, a link both items' text already states, or a format fix
@@ -38,10 +38,10 @@ names a dropped item. A pass's drops and fixes go on one branch, `atelier
 start --backlog <slug>`: commit them there, then `atelier submit` and
 `atelier merge`, which merges records alone on `atelier check`.
 
-## Never Without Sumeet
+## Never Without the Human
 
-- An item he asked for or set aside himself, even with complete proof: its
-  `ready.by` names him, or its body says he asked for it or gives his
+- An item they asked for or set aside themselves, even with complete proof: its
+  `ready.by` names them, or its body says they asked for it or gives their
   condition for picking it up.
 - Real work we could do but may not want.
 - A change of priority, or of order between missions.
@@ -52,12 +52,12 @@ their owners; tell them what you found.
 
 ## The Calls
 
-Put the calls to Sumeet in the conversation as one numbered list of at most
-seven, each a sentence of evidence he can check in a minute (a commit, a path
+Put the calls to the human in the conversation as one numbered list of at most
+seven, each a sentence of evidence they can check in a minute (a commit, a path
 and line, an item ID) and your recommendation. Further calls wait for the
 next pass. Apply each answer with `atelier set`, `atelier drop` or an edit to
 the body; a new item body is planning, reviewed as
-[roles/planner.md](../roles/planner.md) says. Only when he is not in the
+[roles/planner.md](../roles/planner.md) says. Only when they are not in the
 conversation, file the list as one item labelled `needs-human`, and close it
 with `atelier close` once every call is answered and applied.
 

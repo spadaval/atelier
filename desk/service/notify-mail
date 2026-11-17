@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The Desk's [notify] command on this host: mails the human, from his own
+# The Desk's [notify] command on this host: mails the human, from their own
 # Gmail account to itself, through gog.
 #
 #   notify-mail <gog account alias> <title> <text> <link>

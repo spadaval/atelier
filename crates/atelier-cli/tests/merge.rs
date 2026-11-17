@@ -2060,7 +2060,7 @@ fn an_ignored_file_in_the_base_checkout_is_not_overwritten() {
     assert_eq!(head(&base, "HEAD"), tip);
 }
 
-const REASON: &str = "Sumeet said to";
+const REASON: &str = "Ada said to";
 
 /// `atelier merge` as t1 with `ATELIER_SKIP` set, its waiting check
 /// released from the start.

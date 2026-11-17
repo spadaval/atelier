@@ -28,7 +28,7 @@ W=$(cd "$1" && pwd) NEW=$(cd "$(dirname "$2")" && pwd)/$(basename "$2")
 shift 2
 KIT=$(cd "$(dirname "$0")" && pwd)
 TREE=$(git -C "$KIT" rev-parse --show-toplevel)
-REAL=${TRIAL_REAL_PROJECTS:-/home/supadava/projects}
+REAL=${TRIAL_REAL_PROJECTS:-$HOME/projects}
 REAL_SKILL=$REAL/atelier-skill
 SPECS="atelier:master astromech:main demiurge:master life-on-rails:main cosplay-studio:main"
 FALLBACK_URL=https://github.com/spadaval/atelier/releases/download/v0.4.0/atelier-cli-x86_64-unknown-linux-gnu.tar.xz

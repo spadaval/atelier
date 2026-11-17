@@ -64,7 +64,7 @@ fn item(root: &Path, id: &str, mission: &str, implementer: &str, body: &str) {
 
 /// A repository whose mission `MISSION` has no lead and two items held by
 /// different threads, the second also reviewed by `REVIEWER` and with a
-/// question answered by `sumeet`; and whose mission `LED` has `LEAD`.
+/// question answered by `ada`; and whose mission `LED` has `LEAD`.
 fn scratch(root: &Path) {
     fs::create_dir_all(root).unwrap();
     git(root, &["init", "-q", "-b", "main"]);
@@ -75,7 +75,7 @@ fn scratch(root: &Path) {
     mission(root, MISSION, "null");
     mission(root, LED, LEAD);
     item(root, FIRST, MISSION, ODD, "");
-    let answered = "\n## Decisions\n\n### 2026-11-10: Which way?\n\nAnswer by sumeet: This way.\n";
+    let answered = "\n## Decisions\n\n### 2026-11-10: Which way?\n\nAnswer by ada: This way.\n";
     item(root, SECOND, MISSION, SECOND_IMPLEMENTER, answered);
     let review = format!(
         "---\nschema: atelier.review\nschema_version: 3\nround: 1\ncommit: 0123abc\n\
@@ -223,7 +223,7 @@ impl World {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move { axum::serve(listener, mcp).await.unwrap() });
-        let text = "caller = \"sumeet\"\nroots = []\n";
+        let text = "caller = \"ada\"\nroots = []\n";
         let mut config: Config = toml::from_str(text).unwrap();
         config.roots = vec![dir.path().join("repos")];
         config.t3 = configured.then(|| T3Config {
@@ -398,7 +398,7 @@ async fn a_mission_and_its_items_show_their_agents() {
             {"identity": SECOND_IMPLEMENTER, "role": "implementer", "item": SECOND,
              "thread": mark("Implement demo-a002", "waiting", SECOND_IMPLEMENTER)},
             {"identity": REVIEWER, "role": "reviewer", "item": SECOND, "thread": null},
-            {"identity": "sumeet", "role": "decider", "item": SECOND, "thread": null},
+            {"identity": "ada", "role": "decider", "item": SECOND, "thread": null},
         ])
     );
     let led = world.get(&format!("/api/repos/demo/missions/{LED}")).await;

@@ -75,10 +75,8 @@ fn ready_returns_what_it_wrote_without_committing_or_its_refusal() {
     let skip = Skip::new(None);
 
     // In the base's own checkout nothing is written.
-    let mut repo = Repo::open(&root, Thread("sumeet".into()), &skip).unwrap();
-    let refused = ready(&mut repo, &[ID.into()], "sumeet")
-        .unwrap()
-        .unwrap_err();
+    let mut repo = Repo::open(&root, Thread("ada".into()), &skip).unwrap();
+    let refused = ready(&mut repo, &[ID.into()], "ada").unwrap().unwrap_err();
     assert_eq!(
         refused.rules,
         ["Nothing is written in the checkout of the base branch main"]
@@ -92,21 +90,19 @@ fn ready_returns_what_it_wrote_without_committing_or_its_refusal() {
 
     git(&root, &["switch", "-q", "-c", "backlog/go"]);
     let head = git(&root, &["rev-parse", "HEAD"]);
-    let mut repo = Repo::open(&root, Thread("sumeet".into()), &skip).unwrap();
-    let done = ready(&mut repo, &[ID.into()], "sumeet").unwrap().unwrap();
+    let mut repo = Repo::open(&root, Thread("ada".into()), &skip).unwrap();
+    let done = ready(&mut repo, &[ID.into()], "ada").unwrap().unwrap();
     assert_eq!(done.paths, [item_path(ID)]);
     assert_eq!(done.commit, None);
     assert!(done
         .text
-        .starts_with(&format!("Made ready, as sumeet said: {ID}.\n")));
+        .starts_with(&format!("Made ready, as ada said: {ID}.\n")));
     assert_eq!(git(&root, &["rev-parse", "HEAD"]), head);
     assert_eq!(git(&root, &["diff", "--name-only"]), item_path(ID));
 
     // Again: it is no draft now, and nothing is written.
     let written = fs::read_to_string(root.join(item_path(ID))).unwrap();
-    let refused = ready(&mut repo, &[ID.into()], "sumeet")
-        .unwrap()
-        .unwrap_err();
+    let refused = ready(&mut repo, &[ID.into()], "ada").unwrap().unwrap_err();
     assert_eq!(refused.rules, [format!("{ID} is draft (it is ready)")]);
     assert_eq!(
         refused.text,
@@ -140,7 +136,7 @@ fn asked() -> (TempDir, PathBuf) {
 fn a_caller_the_records_cannot_name_and_read_back_is_refused_before_anything_is_written() {
     let (_dir, root) = asked();
     let skip = Skip::new(None);
-    for name in ["Sumeet: the owner", "two\nlines"] {
+    for name in ["Ada: the owner", "two\nlines"] {
         let opened = Repo::open(&root, Thread(name.into()), &skip);
         let error = opened.err().expect("refused").to_string();
         assert!(
@@ -159,11 +155,11 @@ fn a_skip_reaches_its_own_actions_commit_and_result_and_no_other_actions() {
     // One action with a reason: `ready` on an item that is no draft passes.
     let (_first_dir, first) = scratch("ready");
     git(&first, &["switch", "-q", "--detach"]);
-    let skip = Skip::new(Some("  Sumeet\n said to "));
+    let skip = Skip::new(Some("  Ada\n said to "));
     let mut repo = Repo::open(&first, Thread("p1".into()), &skip).unwrap();
-    let done = ready(&mut repo, &[ID.into()], "sumeet").unwrap().unwrap();
+    let done = ready(&mut repo, &[ID.into()], "ada").unwrap().unwrap();
     let rule = format!("{ID} is draft (it is ready)");
-    assert_eq!(skip.passed(), [format!("{rule}: Sumeet said to")]);
+    assert_eq!(skip.passed(), [format!("{rule}: Ada said to")]);
     // `ready` makes no commit, so the skip is in its result alone.
     assert!(done.commit.is_none());
     assert!(
@@ -178,13 +174,11 @@ fn a_skip_reaches_its_own_actions_commit_and_result_and_no_other_actions() {
     git(&second, &["switch", "-q", "--detach"]);
     let skip = Skip::new(None);
     let mut repo = Repo::open(&second, Thread("p1".into()), &skip).unwrap();
-    let done = ready(&mut repo, &[ID.into()], "sumeet").unwrap().unwrap();
+    let done = ready(&mut repo, &[ID.into()], "ada").unwrap().unwrap();
     assert!(skip.passed().is_empty());
-    assert!(!done.text.contains("Sumeet said to"), "{}", done.text);
+    assert!(!done.text.contains("Ada said to"), "{}", done.text);
     // And its refusal of the same rule is refused, offering no pass.
-    let refused = ready(&mut repo, &[ID.into()], "sumeet")
-        .unwrap()
-        .unwrap_err();
+    let refused = ready(&mut repo, &[ID.into()], "ada").unwrap().unwrap_err();
     assert_eq!(refused.rules, [rule]);
 }
 
@@ -200,7 +194,7 @@ fn ready_given_no_id_refuses_and_commits_nothing() {
     );
     let skip = Skip::new(None);
     let mut repo = Repo::open(&root, Thread("p1".into()), &skip).unwrap();
-    let refused = ready(&mut repo, &[], "sumeet").unwrap().unwrap_err();
+    let refused = ready(&mut repo, &[], "ada").unwrap().unwrap_err();
     assert!(refused.rules.is_empty());
     assert_eq!(
         refused.next.as_deref(),
@@ -219,8 +213,8 @@ fn history_returns_the_actions_as_data_to_a_repository_opened_as_the_desk_opens_
     outside(&root);
     let skip = Skip::new(None);
     git(&root, &["switch", "-q", "-c", "backlog/go"]);
-    let mut repo = Repo::open(&root, Thread("sumeet".into()), &skip).unwrap();
-    ready(&mut repo, &[ID.into()], "sumeet").unwrap().unwrap();
+    let mut repo = Repo::open(&root, Thread("ada".into()), &skip).unwrap();
+    ready(&mut repo, &[ID.into()], "ada").unwrap().unwrap();
     git(&root, &["commit", "-qam", "Ready"]);
     // Its backlog branch merged, as a fast-forward here.
     git(&root, &["branch", "-f", "main", "HEAD"]);
@@ -237,7 +231,7 @@ fn history_returns_the_actions_as_data_to_a_repository_opened_as_the_desk_opens_
     assert_eq!(
         logged.action,
         Happened::Ready {
-            by: Some("sumeet".into()),
+            by: Some("ada".into()),
             status: Move {
                 from: Some(Status::Draft),
                 to: Status::Ready,

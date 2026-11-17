@@ -177,7 +177,7 @@ def mission_items(repo, commit):
 
 
 def draw_interventions(db, missions):
-    """Every typed message of Sumeet's in a closed mission's threads, in seeded order."""
+    """Every typed message of the human's in a closed mission's threads, in seeded order."""
     threads = project_threads(db)
     parent = {tid: (json.loads(p).get("lineage") or {}).get("parentThreadId")
               for tid, p in db.execute("select thread_id, payload_json from orchestration_v2_projection_threads")}

@@ -8,7 +8,7 @@
   record-only branch: `atelier start --backlog <slug>`, write the change
   (`atelier new --in <mission>` and `atelier ready`, or an edit to
   `notes.md`), commit, `atelier submit` and `atelier merge`, which merges on
-  `atelier check` alone. A change to the plan is Sumeet's to direct.
+  `atelier check` alone. A change to the plan is the human's to direct.
 - **You step in on a dispute** that `atelier show <mission>` lists. The
   finding is not yours to settle; a fresh reviewer settles it. The plan is
   yours: where the argument is whether the work belongs in this item, change

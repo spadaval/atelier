@@ -282,7 +282,7 @@ fn led() -> Scratch {
     fs::write(
         root.join(format!("{dir}/mission.md")),
         "---\nschema: atelier.mission\nschema_version: 3\nid: demo-m1ss\ntitle: Greet\n\
-         status: ready\nlabels: []\nlead: lead1\nready:\n  by: sumeet\n  at: 2026-11-10T09:00:00Z\n\
+         status: ready\nlabels: []\nlead: lead1\nready:\n  by: ada\n  at: 2026-11-10T09:00:00Z\n\
          created_at: 2026-11-10T09:00:00Z\n---\n\n## Outcome\n\nGreetings.\n",
     )
     .unwrap();

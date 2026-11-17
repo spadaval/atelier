@@ -43,7 +43,7 @@ one blocking task:
 
 1. Open the repository for reading with the human's identity as caller:
    `atelier_core::Repo::open_committed(dir, caller, &skip)` (M1).
-   The caller is the name the Desk is configured with, such as `sumeet`,
+   The caller is the name the Desk is configured with, such as `ada`,
    never a value from the request.
 2. `Repo::everything()` gives a `Located` for every item on the base, on
    the branch named for it, local or the forge's remote-tracking one, and on
@@ -101,7 +101,7 @@ TOML:
 
 ```toml
 # The name the human acts under; every view is computed for it.
-caller = "sumeet"
+caller = "ada"
 # Repositories served, each under its directory name, first. One that does
 # not open, or holds a record that does not read, is listed by /api/repos
 # with its error.
@@ -230,7 +230,7 @@ the new version with no step of ours. `~/.local/share/atelier-desk/t3
 Once, from a clean checkout of the branch to install:
 
 ```console
-$ desk/service/install.sh --caller sumeet
+$ desk/service/install.sh --caller ada
 ```
 
 `install.sh` builds `atelier-desk` (release, `-j
@@ -302,7 +302,7 @@ below suggest:
 - An identity is shown whole, cut short on screen only, with the whole
   value in its text and title. No link holds one.
 - "Stop this plan" and Start a planning session are the app's only action
-  controls. The stop asks for his reason, on one line, before it sends; a
+  controls. The stop asks for their reason, on one line, before it sends; a
   session asks once. A stop that was pushed and whose pull request did not
   close stays on the page as the server gave it, with the error and the `gh
   pr close` that finishes it, under the note that the stop is not
@@ -426,7 +426,7 @@ percent-encoded in a query or a path segment.
 ### Views a host shows
 
 A host such as T3 Code shows three views of the Desk beside its threads,
-and the inbox laid out for a wide frame (atelier-cdxg, from a spike Sumeet
+and the inbox laid out for a wide frame (atelier-cdxg, from a spike the human
 settled on 2026-11-16). Each is an ordinary route under `/embed`; nothing in
 them writes or acts.
 
@@ -452,7 +452,7 @@ thread it says it is waiting for one. Then, from the host's `host:thread`:
 - *Mentioned*: each record in `mentioned` that it does not hold, read with
   `GET /api/records/{id}`, the done and dropped ones folded after four.
 - With none of these, the project at a glance for the message's
-  `repository` (what waits on him, open missions, items in motion, what
+  `repository` (what waits on them, open missions, items in motion, what
   can start next), or, with no repository, one line saying the thread
   holds nothing.
 
@@ -502,7 +502,7 @@ What is approximate there:
 - "Waited on you" marks only two things: the steps on items labelled
   `needs-human`, and the ready marks the human recorded, those whose `by`
   starts with the Desk's `caller` (from `GET /api/repos`), shown as one line
-  per batch readied together. It knows of nothing else that waited on him.
+  per batch readied together. It knows of nothing else that waited on them.
 
 **The project home** (`/home/{repo}`, `desk/src/pages/ProjectHome.tsx`),
 over the host's main area: the project as a roadmap without dates. *Now*
@@ -603,7 +603,7 @@ Beside `repos`, `built_from` is the commit the server was built from
 (`atelier_desk::BUILT_FROM`), or `unknown`. The app shows its first nine
 characters in the sidebar's footer, with the whole ID in its title.
 `caller` is the configuration's `caller`, the name the human acts under,
-by which mission control tells the ready marks he recorded.
+by which mission control tells the ready marks they recorded.
 
 ### `GET /api/repos/{repo}/missions`
 
@@ -726,7 +726,7 @@ plans proposed and merged lately, newest first, the last 50 the Desk saw
 | `threads[]` | Live threads whose status is `waiting`, which T3 Code gives a thread that waits on a person, and that hold something in this repository's records; each as on `/api/threads`, with only this repository's `holds` | Desk, T3 Code |
 
 `needs_human` lists the same items as `atelier list --needs-human`, which
-`desk-matches-cli` checks. `proposed` is in addition: a plan he may stop.
+`desk-matches-cli` checks. `proposed` is in addition: a plan they may stop.
 
 ### `GET /api/threads`
 
@@ -856,7 +856,7 @@ on the human there, and what is in motion. An unknown repository is `404`.
 | `ready[] {id, title, priority}` | `/api/motion`'s `ready` without the needs-human items |
 | `waiting` | The needs-human items, the proposed plans and `threads_waiting`, counted |
 | `threads_waiting[] {identity, title}` | Live threads that hold work here and that T3 Code shows `waiting` |
-| `waiting_items[] {id, title}` | The first three things waiting on him: proposed plans, then needs-human items by priority |
+| `waiting_items[] {id, title}` | The first three things waiting on them: proposed plans, then needs-human items by priority |
 | `in_motion[] {id, title, stage, age_seconds, holder, live}` | Each started item, those whose holder is live first, then the most recently moved. `stage` is `building`, `in review <round>`, `changes requested` or `approved`, the round counting its submits in the last 60 days of history; `age_seconds` is since its latest step in that history, else since its branch's last commit; `holder` is its reviewer while it is in review, else its implementer, as `{identity, title}`, the title from `/api/thread` or `null`; `live` is whether that thread is live |
 
 The history is read as `/api/history` reads it, and the page still gets an
@@ -1165,7 +1165,7 @@ On this host the command is `notify-mail personal`, which mails the human
 from the Gmail account `gog` knows by that alias to the same address. The
 address is looked up in `gog`'s keyring, so no address is in the
 configuration. The installed configuration leaves `[notify]` commented out
-until he turns it on.
+until they turn it on.
 
 ## Action functions
 
@@ -1266,7 +1266,7 @@ A live thread that no record names is tied to no repository: on
 `/api/threads` it is listed with empty `holds`, and it is in no
 repository's inbox. The Desk does not guess from where the thread runs.
 A T3 project's workspace root names one checkout, such as
-`/home/supadava/projects/atelier` for the project `atelier`, while its
+`~/projects/atelier` for the project `atelier`, while its
 threads work in worktrees elsewhere. A thread that holds nothing in the
 records is doing no tracked work, so tying it to a repository would show
 it beside work it is not doing.
@@ -1326,7 +1326,7 @@ The spike's activity feed (`Feed.tsx`, `/r/:repo/activity`), built from
   planning documents have no required shape (`redesign-architecture.md`,
   Records), so lifting out sections would be a rule only the Desk had.
 - The inbox adds proposed plans to the needs-human list, because a plan
-  goes ahead unless he stops it.
+  goes ahead unless they stop it.
 - The Desk writes a stop in a clone of its own rather than a worktree of
   the served repository, so it adds no worktree, branch or ref to a
   repository a person or a thread works in; the served repository is only

@@ -107,7 +107,7 @@ if not windows and make_launcher:
     shutil.copy2(official / 'Contents/Resources/icon.icns', contents / 'Resources/icon.icns')
     with (contents / 'Info.plist').open('wb') as file:
         plistlib.dump({
-            'CFBundleIdentifier': 'local.supadava.t3-custom',
+            'CFBundleIdentifier': 'local.t3-custom',
             'CFBundleName': 'T3 Custom',
             'CFBundleDisplayName': 'T3 Custom',
             'CFBundleExecutable': 'T3 Custom',

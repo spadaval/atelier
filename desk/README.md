@@ -1,7 +1,7 @@
 # The Desk's app
 
 The web app of the Desk, the human's tool for seeing what is proposed and in
-motion across his repositories, stopping a mission, and reading results
+motion across their repositories, stopping a mission, and reading results
 ([product intent](../docs/product/desk.md)). It shows the repositories,
 each mission's page, each item's page, what is proposed, what is in motion,
 what is disputed, the inbox and T3 Code's live threads. It reads everything

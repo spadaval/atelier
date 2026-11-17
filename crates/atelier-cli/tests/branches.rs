@@ -435,7 +435,7 @@ fn a_backlog_branch_merges_its_record_changes_once_check_passes_with_no_review()
     assert_eq!(run.code, 0, "{}", run.stderr);
     // No commit: the branch is the base's tip.
     assert_eq!(head(&root), git(&root, &["rev-parse", "main"]));
-    let ready = atelier(&root, "p1", &["ready", ID, "--by", "sumeet"]);
+    let ready = atelier(&root, "p1", &["ready", ID, "--by", "ada"]);
     assert_eq!(ready.code, 0, "{}", ready.stderr);
 
     // Submit refuses while a record it changes is not committed.
@@ -731,7 +731,7 @@ fn every_record_command_writes_its_files_prints_them_and_makes_no_commit_branch_
             ".atelier/items/demo-ab12/item.md",
         ),
         (
-            &["ready", ID, "--by", "sumeet"],
+            &["ready", ID, "--by", "ada"],
             ".atelier/items/demo-ab12/item.md",
         ),
         (
@@ -973,13 +973,13 @@ fn a_record_write_says_how_its_change_reaches_the_base_for_its_branch() {
         atelier(&root, "p1", &["start", "--backlog", "plan"]).code,
         0
     );
-    let run = atelier(&root, "p1", &["ready", ID, "--by", "sumeet"]);
+    let run = atelier(&root, "p1", &["ready", ID, "--by", "ada"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     let path = item_path(ID);
     assert_eq!(
         run.stdout,
         format!(
-            "Made ready, as sumeet said: {ID}.\nWrote, and did not commit:\n  {path}\nIt counts once it is committed and its branch is merged: commit it, then run `atelier submit` and `atelier merge` on that branch.\nThen: git add -- {path} && git commit -m \"Ready {ID}\" -- {path}\n"
+            "Made ready, as ada said: {ID}.\nWrote, and did not commit:\n  {path}\nIt counts once it is committed and its branch is merged: commit it, then run `atelier submit` and `atelier merge` on that branch.\nThen: git add -- {path} && git commit -m \"Ready {ID}\" -- {path}\n"
         )
     );
 

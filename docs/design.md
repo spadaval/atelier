@@ -139,7 +139,7 @@ labels: [review]
 priority: high          # critical high medium low
 blocked_by: []          # each names an item in the checkout
 implementers: [<thread>]  # start appends unless the thread already holds it; the last entry holds the item
-ready: {by: sumeet, at: <time>}
+ready: {by: ada, at: <time>}
 trivial: null           # or the reason given to merge --trivial
 caused_by: null         # on a bug: an item ID, or a commit hash of 7 to 64 hex digits
 created_at: <time>
@@ -579,7 +579,7 @@ for its lead (the first real item under the new tool, mission atelier-qr5s).
 That rule is the command's. A program that links `atelier-core`, such as the
 Desk, names the caller itself when it opens a repository (`Repo::open`),
 and that name is the identity the records get: an action it makes for
-`sumeet` records `sumeet`, where the command run by a person with
+`ada` records `ada`, where the command run by a person with
 no harness variable set is `human`. `ready`'s `by`, the person who said go,
 is a parameter of the function, which `ready --by` fills. A name the records
 cannot write and read back as it is, one with a line break or a `: `, is
@@ -1477,7 +1477,7 @@ The installed binary is one per host and the installed skill is one per
 host, so the process changes for every repository on a host at once. The
 move to this tool is one step per host.
 
-**On this host, on 2026-11-11.** At the time Sumeet named, the switch
+**On this host, on 2026-11-11.** At the time the human named, the switch
 (atelier-u1ko) merged: it deleted the old workspace and moved `next/` to the
 root as version 0.5.0. Within four minutes one run of
 `scripts/cutover/cutover.sh` converted atelier, astromech, demiurge,
@@ -1612,7 +1612,7 @@ of its plan before any was built (2026-11-12 and 2026-11-13):
 | A mission integration branch: items merge into the mission's branch, which merges once at close | It fixes additions mid-mission and gives one human gate per mission, but it is the long-lived feature branch: late conflicts, late delivery and a large final merge. Raised and dropped several times, last as atelier-w0su. Items merge to the base one at a time, and a change that cannot land in pieces is hidden in the code by its mission's plan, as the 0.5 rewrite was in `next/` |
 | Records in a database, with the Desk as the service | Consistent with itself, not with the code, which is still on branches. Every checkout, sandbox, eval clone and host would need to reach it, a pull request could no longer carry its record, and mission documents would stay in Git anyway, leaving both |
 | A branch per running mission as the lead's claim | It solved an exclusion nobody needs: nothing that reads `lead` needs it to be a lock |
-| Approval read from GitHub's reviews | GitHub cannot tell Sumeet from an agent on one account, and a second account is against its terms. Dropped on 2026-11-10 for this reason, with the whole idea of plans as pull requests, which did not depend on it |
+| Approval read from GitHub's reviews | GitHub cannot tell the human from an agent on one account, and a second account is against its terms. Dropped on 2026-11-10 for this reason, with the whole idea of plans as pull requests, which did not depend on it |
 | Small record changes direct on the base, plans through pull requests | The base would still need direct pushes, so it fails "only a merge writes the base" |
 | A branch per plan verdict, which the tool gathered onto the mission's branch | It enforced by machinery what the order of the steps already gives: each reviewer forms its view at the submitted commit before it publishes |
 | `verdict` committing and pushing the plan review itself, retrying the push | The same, and it put Git back into a command; the reviewer commits and pushes with Git |
@@ -1654,8 +1654,8 @@ became `show`, `list` and `status`:
 
 ## Decisions
 
-Sumeet made each of these in conversation on 2026-11-09, except those dated
-otherwise. Those dated 2026-11-13 are mission atelier-to83's, made with him
+The human made each of these in conversation on 2026-11-09, except those dated
+otherwise. Those dated 2026-11-13 are mission atelier-to83's, made with them
 on 2026-11-12 and 2026-11-13; its `design.md` gives the longer reasoning. A
 line that names an ADR is a decision of that ADR that still governs,
 carried here when the ADRs were deleted on 2026-11-11; Git keeps the ADR.
@@ -1674,15 +1674,15 @@ carried here when the ADRs were deleted on 2026-11-11; Git keeps the ADR.
 | The line count is an indication, not a limit | See Tried and removed |
 | The ADRs are replaced by one design record | They carry history that agents read as current |
 | The tool is rewritten in full, in a fresh workspace | A gradual rewrite has no benefit once the record layout changes under every command |
-| A view of what changed since his go-ahead is the Desk's to derive | It is a derived view; this work supplies the actions with their commits and records readable at any commit |
+| A view of what changed since the human's go-ahead is the Desk's to derive | It is a derived view; this work supplies the actions with their commits and records readable at any commit |
 | Hooks guard, commands act | A rule in a command applies only when the agent remembers the command |
 | The tool gives facts and the skill does the arithmetic: `log` and `list`, and no scorecard command | A fixed report in the binary would change every time the measures do, as the debrief did |
 | The gardener is a role, and its needs shape the records now | A bug's cause and a deferred finding's settlement are cheap in the first format and costly to add later |
 | Every rule can be skipped on purpose, with a reason | Atelier's rules are not hard blockers, and a bypass should be intended and leave a trace |
 | `submit` pushes the branch and opens its pull request where a forge is configured (2026-11-10) | CI then runs during the review; it was nearly all of the wait between approval and merge, a median of 5.5 minutes on 25 items |
 | `merge` waits for CI, for up to 9 minutes, with no flag (2026-11-10, reversing "`merge` never waits") | The thread that runs `merge` is almost always a delegated child, which T3 neither lets watch a pull request nor wakes reliably, so "not yet, run me again" left approved items with nobody driving them |
-| His go-ahead on an item stays `ready --by`; a mission has none since 2026-11-13 | A machine account for agents would let GitHub carry it, and his employer's sign-on rules make one too hard to get |
-| The tracker is for agents and the Desk is for the human: two products sharing a vocabulary and the core, which reads records, computes views and performs actions for both. `atelier` has no site. The Desk is its own binary, `atelier-desk`, and web app, `desk/`, one service per host, outside the `atelier` release (ADR 0032, 2026-11-11) | A page that mirrors the tracker's records asks the human to read records; he needs to make a few decisions well, across every repository, at a desk or on a phone |
+| The human's go-ahead on an item stays `ready --by`; a mission has none since 2026-11-13 | A machine account for agents would let GitHub carry it, and their employer's sign-on rules make one too hard to get |
+| The tracker is for agents and the Desk is for the human: two products sharing a vocabulary and the core, which reads records, computes views and performs actions for both. `atelier` has no site. The Desk is its own binary, `atelier-desk`, and web app, `desk/`, one service per host, outside the `atelier` release (ADR 0032, 2026-11-11) | A page that mirrors the tracker's records asks the human to read records; they need to make a few decisions well, across every repository, at a desk or on a phone |
 | The Desk acts only through the core: it calls the same function the command calls, naming the person acting, and gets the result as data. It runs no `atelier` binary, reads no command output and writes no record itself. What it needs that the core lacks is added to the core (ADR 0032) | A server outside the core spent most of its code re-deriving what the core knows, by parsing output and grepping records |
 | Records in Git are the only source of truth for work. No check, merge or hook consults the Desk, its database or T3 Code; the guards decide from Git and the records, and from CI for a commit where a forge is configured. Dependence runs one way: `atelier-desk` on the core, never the reverse (ADR 0030, 2026-11-08; ADR 0032) | Records with the code are the reason the tool exists, and a guard that read anything else could disagree with them |
 | One SQLite database per host holds only what Git never held, and each kind has one writer: `atelier` writes which thread, model and role ran each command, each command its own row from the environment its session gave it, never through an MCP server; a feed that runs daily, unattended, writes measurements and findings about how work went; the Desk writes what the human has seen. It holds no copy of a record, and agents read it through a command, never from the file (ADR 0030, decision 7; ADR 0032, decision 6) | Nothing else records who ran each command, so models cannot be compared by role; a copy of a record would be a second truth |
@@ -1691,22 +1691,22 @@ carried here when the ADRs were deleted on 2026-11-11; Git keeps the ADR.
 | Output is dense Markdown for every reader, with no JSON or YAML mode for agents. An agent piping a command's output through `head`, `grep` or `sed` shows a missing view, which is filed rather than met with a machine format (ADR 0022, 2026-10-17) | Agents read Markdown, labels and symbols fluently; a second format is a second interface to keep true |
 | Repository instructions live in `AGENTS.md`, which a harness loads, and Claude Code repositories import it with `@AGENTS.md` in `CLAUDE.md`. Commands print state and the next command, not instructions an agent has already loaded (ADR 0022) | A `CLAUDE.md` without the import once kept `AGENTS.md` from loading, and static text in output is read on every call |
 | Agent Factory's one copy is `skills/agent-factory` in this repository, with its evals in `evals/agent-factory`, installed with `npx skills add spadaval/atelier --skill agent-factory -g`. Nothing under `crates/` reads the skill's files, and a command change that makes the skill wrong updates it in the same commit. The skill steps aside outside an Atelier repository (ADR 0029, 2026-11-08) | A command and the guidance that describes it landed in separate repositories and drifted; a second copy of the skill diverged |
-| A mission's success criteria are optional, and any criterion must be something the mission's own work can make true and an agent can check when it closes. Work that waits on calendar time, outside adoption or a measurement after shipping is its own item outside the mission (ADR 0024, 2026-11-04) | Criteria that restated items or waited on events stalled missions, and each stall asked Sumeet the same question again |
+| A mission's success criteria are optional, and any criterion must be something the mission's own work can make true and an agent can check when it closes. Work that waits on calendar time, outside adoption or a measurement after shipping is its own item outside the mission (ADR 0024, 2026-11-04) | Criteria that restated items or waited on events stalled missions, and each stall asked the human the same question again |
 | A new rule or record kind names the kind of defect it would have caught in real agent sessions, and a rule that only patches another rule's edge case is a reason to remove the first rule (ADR 0028, 2026-11-07) | When qualities conflict, fewer concepts win over finer guarantees; a rule added for another rule's edge case is how the old machinery grew |
 | One installed binary serves every repository on a host, so a later change to the record format keeps reading the old form until every repository on the host has moved. The redesign's change of layout was the one exception, made by converting every repository at once (ADR 0028) | A format change that one repository has not taken stops the binary there |
 | Only a merge writes the base (2026-11-13, atelier-to83) | A protected branch refuses anything else, and most repositories protect theirs; requiring the opposite would be backwards. Content (the plan, findings, the Report) is written, reviewed and tied to code at a commit; coordination state (who holds what, what is in flight) is derived from the base and the named branches, not committed to the base, which is what made `.atelier/` behave like a database |
 | Branch names are `<item-id>`, `<mission-id>` and `backlog/<slug>`, with one optional prefix in `config.toml` that applies to all three (2026-11-13) | The names are the index where there is no forge, the claim, and the line between published work and scratch. One prefix covers a host's own naming rule; a free pattern could not be read back into an ID |
-| Three commands act on Git; the rest write files (2026-11-13) | `start` makes and claims a branch of any of the three kinds, `submit` publishes it, and `merge` merges it. `new`, `set`, `ready`, `drop`, `close`, `lead`, `review` and `verdict` write the file and stop; the agent commits and pushes, and the hooks validate. Sumeet said on 2026-11-10 that the tool leaned too far toward wrapping Git, and the plan had drifted the same way. `start` never switches the base's own checkout, which has cost us before, and the pre-commit hook refuses a record change committed on the base |
+| Three commands act on Git; the rest write files (2026-11-13) | `start` makes and claims a branch of any of the three kinds, `submit` publishes it, and `merge` merges it. `new`, `set`, `ready`, `drop`, `close`, `lead`, `review` and `verdict` write the file and stop; the agent commits and pushes, and the hooks validate. The human said on 2026-11-10 that the tool leaned too far toward wrapping Git, and the plan had drifted the same way. `start` never switches the base's own checkout, which has cost us before, and the pre-commit hook refuses a record change committed on the base |
 | A branch merges on what it contains (2026-11-13) | Code needs an independent review; a new mission or a changed plan needs two approving plan reviews; records alone need `atelier check`. A branch counts as records alone only when every path it changes is under `.atelier/`. A plan is compared by section of `mission.md`, not by file, and until it has merged its items are part of it |
 | The trunk, not an integration branch (2026-11-13) | Each item merges to the base on its own and leaves it working, so a mission half done on the base is an accurate picture |
 | A mission's stored status is `open`, `done` or `dropped` (2026-11-13) | Proposed is never stored: it is `open` read from a branch that has not merged. A mission dropped on its branch is dropped, and `merge` refuses it. An open mission on the base is agreed and may be led and closed. An old record's `ready` reads as `open`, and an old `draft` reads as proposed until the rollout moves it to a branch or its plan merges |
 | A mission records its planners (2026-11-13) | `start --mission` binds the calling thread, as `start` binds an implementer, and a later thread takes the plan over by `submit`. It is how `merge` knows a plan review is independent |
-| A review is a file the reviewer commits (2026-11-13) | `review` creates the file for the commit the checkout is at and prints the brief; `verdict` writes the verdict into it; the reviewer commits and, for a plan, pushes to the branch it reviewed. Blind means a reviewer forms its view without the other's, and each starts in its own checkout at the submitted commit. A reviewer who goes looking, with `show` or a fetch, can read the other's verdict; that is accepted on Sumeet's direction of 2026-11-13, because the tool's checks are nudges for trusted agents, and hiding it cost a rule in three commands. Plan review 7-dkmp of atelier-to83 kept a finding against this, and it stands as a recorded disagreement |
+| A review is a file the reviewer commits (2026-11-13) | `review` creates the file for the commit the checkout is at and prints the brief; `verdict` writes the verdict into it; the reviewer commits and, for a plan, pushes to the branch it reviewed. Blind means a reviewer forms its view without the other's, and each starts in its own checkout at the submitted commit. A reviewer who goes looking, with `show` or a fetch, can read the other's verdict; that is accepted on the human's direction of 2026-11-13, because the tool's checks are nudges for trusted agents, and hiding it cost a rule in three commands. Plan review 7-dkmp of atelier-to83 kept a finding against this, and it stands as a recorded disagreement |
 | A started item's branch is pushed at `start` where a remote is configured (2026-11-13) | That push is the claim across clones. The loser is refused, told the holder, and its local branch removed, so nothing in that clone shows the item as held there; a later `start` there is a take-over. With no remote the local ref is the claim |
 | Stopping a mission is dropping it, and a drop counts once published (2026-11-13) | `drop` writes the record and stops nothing until it is merged, for an agreed mission by the record-only path, or pushed with its pull request closed, for a proposed plan. `status` and `show` say when a drop is not yet published, and the Desk's stop carries it through. From then `start`, a take-over and an item's `merge` refuse, naming the stop |
 | A started item is dropped on its own branch (2026-11-13) | Its record changes only there, so that is where a drop takes effect: once pushed, its `submit` and `merge` are refused. The base's copy follows by the record-only path, and `status` says so until it has. A drop of an item already merged is refused |
 | A mission has no draft status (2026-11-13) | A plan on its branch is a draft by where it is. An idea for a mission is a draft item on the base, so the base stays the one list of what might be done and branches stay short-lived |
-| A mission has no go-ahead (2026-11-13) | It protected direction, and direction is given when the mission starts, in a conversation with Sumeet or a proposal he agreed; the Why says which. The plan reviews do the checking, and found nine problems in atelier-g961 that neither he nor the planner had seen. He keeps a veto at any time, made real by the Desk telling him when a plan is proposed and when it merges |
+| A mission has no go-ahead (2026-11-13) | It protected direction, and direction is given when the mission starts, in a conversation with the human or a proposal they agreed; the Why says which. The plan reviews do the checking, and found nine problems in atelier-g961 that neither they nor the planner had seen. They keep a veto at any time, made real by the Desk telling them when a plan is proposed and when it merges |
 | The two plan reviews are enforced by `merge` (2026-11-13) | They are now the only gate, and until then the rule lived only in the skill |
 | Items keep `draft` and `ready` (2026-11-13) | They record intent: agreed to exist, or agreed to start now. Readying a mission never readied its items, so a lead can hold later work until earlier work has shown what it shows |
 | `lead` stays a field on the mission, as attribution (2026-11-13) | The Desk shows who leads. It reaches the base by the record-only path once per mission. It is not a lock, and a second lead loses at merge |
@@ -1723,10 +1723,10 @@ carried here when the ADRs were deleted on 2026-11-11; Git keeps the ADR.
 | The T3 Code extension lives in this repository, under `t3-extension/`, outside the `atelier` release, as the Desk is (ADR 0032). `atelier` still has no Node step in its build or release (2026-11-16, atelier-n4g7) | It talks to the Desk over the Desk's host contract, and every change to it so far also changed the Desk, so one item and one review should cover both sides |
 | The T3 Code extension is released on its own tags, `t3-extension-v<version>`, as a bundle of its files and installer with a checksum. The release builds no Rust and runs no test: it publishes only when CI passed, with the extension's job, on the last merge at or before the tag that changed what that job tests. It is never the repository's latest release, and `dist` runs `atelier`'s release only for `v*` tags (`tag-namespace`, so its workflow is `v-release.yml`) (2026-11-16, atelier-451s) | The extension changes more often than `atelier`, and a device should download five script files without a clone of a Rust project. CI already tested the commit, so the release trusts that run instead of repeating it |
 
-Three points of the design went beyond what he had confirmed when it was
-written, and were put to him with it:
+Three points of the design went beyond what they had confirmed when it was
+written, and were put to them with it:
 
-- **One cutover per host.** He agreed to convert repositories one at a time
+- **One cutover per host.** They agreed to convert repositories one at a time
   with the binary reading both layouts. The skill is installed once per host,
   so the process would change for every repository at once anyway, and
   reading both layouts would keep the old code alive through the whole build.
@@ -1734,7 +1734,7 @@ written, and were put to him with it:
   commit that replaces one record layout with the other: the old one cannot
   read what it produces, and the new one cannot read what it starts from.
   They are a reviewed script's output, checked mechanically.
-- **Deferred findings create no items.** He agreed that a deferred finding
+- **Deferred findings create no items.** They agreed that a deferred finding
   becomes a draft item at merge. This design leaves it in its review file
   and lists it with `list --deferred`, because the backlog already holds four
   piles of such items that nobody reads.

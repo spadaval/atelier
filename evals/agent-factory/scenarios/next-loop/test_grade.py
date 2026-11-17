@@ -225,7 +225,7 @@ class CountTest(unittest.TestCase):
 
     def test_a_skip_is_found_where_a_shell_ran_it_or_the_binary_said_so(self):
         found, _ = self.claude([
-            ('ATELIER_SKIP="Sumeet said so" atelier merge', "Merged slug-k3fa", False),
+            ('ATELIER_SKIP="Ada said so" atelier merge', "Merged slug-k3fa", False),
             ("export ATELIER_SKIP='x'; git push", "", False),
             ("atelier submit", "Skipped with ATELIER_SKIP: Report: written: x\nSubmitted", False),
             # Text that names it, and the refusal that offers it, set nothing.
@@ -234,7 +234,7 @@ class CountTest(unittest.TestCase):
              'it on purpose: run the same command again with ATELIER_SKIP="<why>" in front of it.',
              True)])
         self.assertEqual([s["command"][:20] for s in self.grade.skips(found)],
-                         ['ATELIER_SKIP="Sumeet', "export ATELIER_SKIP=", "atelier submit"])
+                         ['ATELIER_SKIP="Ada sa', "export ATELIER_SKIP=", "atelier submit"])
 
     def test_a_codex_transcript_is_unwrapped(self):
         path = self.tmp / "codex.jsonl"

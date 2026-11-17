@@ -109,7 +109,7 @@ export function logEntries(missionId: string, items: ItemRow[], events: HistoryE
   return entries.sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
 }
 
-/** A caller's name as a person's: `sumeet` is `Sumeet`. */
+/** A caller's name as a person's: `ada` is `Ada`. */
 const named = (caller: string) => caller.charAt(0).toUpperCase() + caller.slice(1);
 
 /** Whether a mission is under way, for the project home's Now: an item of it is started or done. */

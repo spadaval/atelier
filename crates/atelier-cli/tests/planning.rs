@@ -206,7 +206,7 @@ fn the_planning_commands_write_nothing_in_the_bases_checkout_nor_on_an_items_bra
     let commands = [
         &["new", "Say hello"][..],
         &["set", ID, "--title", "Hi"],
-        &["ready", ID, "--by", "sumeet"],
+        &["ready", ID, "--by", "ada"],
         &["drop", ID, "--reason", "Not needed"],
         &["close", ID, "Not needed"],
         &["lead", "demo-zzzz"],
@@ -447,11 +447,7 @@ fn ready_marks_each_named_draft_with_who_and_when_changes_no_other_item_and_comm
     let before = head_and_index(&root);
 
     // Several IDs at once; one named twice is readied once.
-    let run = atelier(
-        &root,
-        "p1",
-        &["ready", ID, "demo-b10c", ID, "--by", "sumeet"],
-    );
+    let run = atelier(&root, "p1", &["ready", ID, "demo-b10c", ID, "--by", "ada"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert_eq!(wrote(&run.stdout), [item_path(ID), item_path("demo-b10c")]);
     for id in [ID, "demo-b10c"] {
@@ -459,11 +455,11 @@ fn ready_marks_each_named_draft_with_who_and_when_changes_no_other_item_and_comm
         assert_eq!(front(&text, "status"), "ready");
         let at = text.lines().find_map(|l| l.strip_prefix("  at: ")).unwrap();
         assert!(chrono::DateTime::parse_from_rfc3339(at).is_ok(), "{at}");
-        assert!(text.contains("ready:\n  by: sumeet\n"));
+        assert!(text.contains("ready:\n  by: ada\n"));
     }
     assert!(run
         .stdout
-        .contains(&format!("Made ready, as sumeet said: {ID}, demo-b10c.\n")));
+        .contains(&format!("Made ready, as ada said: {ID}, demo-b10c.\n")));
     // No commit, and nothing staged.
     assert_eq!(head_and_index(&root), before);
     let mut changed: Vec<String> = git(&root, &["diff", "--name-only"])
@@ -1504,7 +1500,7 @@ fn a_mission_goes_from_its_branch_through_two_plan_reviews_and_its_items_to_clos
     let text = fs::read_to_string(&why).unwrap();
     fs::write(
         &why,
-        text.replace("## Why\n", "## Why\n\nSumeet asked, in conversation.\n"),
+        text.replace("## Why\n", "## Why\n\nAda asked, in conversation.\n"),
     )
     .unwrap();
     commit_all(&root, "Define it");
@@ -1599,7 +1595,7 @@ fn a_mission_goes_from_its_branch_through_two_plan_reviews_and_its_items_to_clos
     );
     assert_eq!(front(&text, "status"), "open");
     // Agreed, its items are made ready one by one, with no go for it.
-    plan(&root, &["ready", &a, "--by", "sumeet"]);
+    plan(&root, &["ready", &a, "--by", "ada"]);
 
     // The item's work, through review to its merge.
     let work = scratch.worktree("work");
@@ -2018,7 +2014,7 @@ fn check_says_when_a_missions_why_is_empty() {
     let text = fs::read_to_string(&path).unwrap();
     fs::write(
         &path,
-        text.replace("## Why\n", "## Why\n\nSumeet asked, in conversation.\n"),
+        text.replace("## Why\n", "## Why\n\nAda asked, in conversation.\n"),
     )
     .unwrap();
     let run = atelier(&root, "p1", &["check"]);

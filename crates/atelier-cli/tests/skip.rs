@@ -8,7 +8,7 @@ use common::*;
 use std::fs;
 use std::path::Path;
 
-const REASON: &str = "Sumeet said to";
+const REASON: &str = "Ada said to";
 
 /// `atelier` as `thread` with `ATELIER_SKIP` set to `skip`.
 fn skipping(at: &Path, thread: &str, skip: &str, args: &[&str]) -> Run {
@@ -57,7 +57,7 @@ fn a_skipped_rule_is_printed_and_trailed_in_the_commit_of_start_submit_verdict_a
     );
     // A draft started: its whitespace made one line, the reason is kept.
     let draft = format!("{ID} is ready (it is draft)");
-    let run = skipping(&root, "t1", "  Sumeet\n said   to ", &["start", ID]);
+    let run = skipping(&root, "t1", "  Ada\n said   to ", &["start", ID]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert!(
         run.stdout.starts_with(&skipped(&[&draft])),
@@ -156,7 +156,7 @@ fn ready_on_a_record_that_is_not_a_draft_passes_with_a_skip_and_commits_nothing(
     assert_eq!(run.code, 1);
     assert!(run.stderr.ends_with(SKIP), "{}", run.stderr);
     let head = git(&root, &["rev-parse", "HEAD"]);
-    let run = skipping(&root, "p1", REASON, &["ready", ID, "--by", "sumeet"]);
+    let run = skipping(&root, "p1", REASON, &["ready", ID, "--by", "ada"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert!(run.stdout.starts_with(&skipped(&[&rule])), "{}", run.stdout);
     // A command that makes no commit writes its skip nowhere.

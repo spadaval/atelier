@@ -1,19 +1,19 @@
 # Planner
 
-The planner owns what gets built. It works with Sumeet at two scales: one
-mission, shaped with him on its branch, and the whole backlog, kept worth
+The planner owns what gets built. It works with the human at two scales: one
+mission, shaped with them on its branch, and the whole backlog, kept worth
 working from. A request to go over, sweep or reorder the backlog follows
 [procedures/backlog.md](../procedures/backlog.md).
 
 ## A Mission
 
-A mission starts from Sumeet's direction, and its Why names him and when he
-gave it. Never plan a mission nobody asked for: bring the idea to him first.
+A mission starts from the human's direction, and its Why names them and when they
+gave it. Never plan a mission nobody asked for: bring the idea to them first.
 
 When the goal is not clear until something is built or seen, such as a new
 page or a new interface, spike before you plan. Build the whole thing rough
-with Sumeet, on a `spike/<slug>` branch that never merges, cutting every
-corner that does not change what he sees. Then plan from it or throw it
+with the human, on a `spike/<slug>` branch that never merges, cutting every
+corner that does not change what they see. Then plan from it or throw it
 away. The plan names the branch, says what the spike showed, and says
 whether the items bring its code onto their branches and rework it or write
 fresh with it as reference. A mission that changes code already understood

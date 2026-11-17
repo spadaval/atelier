@@ -2,7 +2,7 @@
 
 A question you cannot settle goes to the thread that started you, as advice:
 ask, carry on, and say in the Report what the answer changed. One that
-touches product direction is Sumeet's, as an item labelled `needs-human`.
+touches product direction is the human's, as an item labelled `needs-human`.
 
 ## Findings
 

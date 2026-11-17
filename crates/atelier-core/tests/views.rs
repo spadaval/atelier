@@ -103,7 +103,7 @@ fn scratch() -> (TempDir, PathBuf) {
 }
 
 fn caller() -> Thread {
-    Thread("sumeet".into())
+    Thread("ada".into())
 }
 
 #[test]

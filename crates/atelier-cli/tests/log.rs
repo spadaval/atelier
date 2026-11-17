@@ -12,7 +12,7 @@ use std::process::Command;
 const MISSION: &str = "demo-m1ss";
 const DONE: &str = "demo-d0ne";
 const DONE_REVIEW: &str = ".atelier/items/demo-d0ne/reviews/1-aaaa.md";
-const REASON: &str = "Sumeet said to";
+const REASON: &str = "Ada said to";
 
 /// `atelier log` with `args`, which must succeed; its lines.
 fn log(root: &Path, args: &[&str]) -> Vec<String> {
@@ -85,7 +85,7 @@ fn the_plain_path_prints_its_actions_in_order_and_the_same_lines_once_its_branch
 ) {
     let scratch = Scratch::new(&[(ID, "draft")]);
     let root = scratch.root();
-    ok(planned(&root, "p1", &["ready", ID, "--by", "sumeet"]));
+    ok(planned(&root, "p1", &["ready", ID, "--by", "ada"]));
     ok(atelier(&root, "t1", &["start", ID]));
     hello(&root);
     finish_and_submit(&root, "t1");
@@ -95,7 +95,7 @@ fn the_plain_path_prints_its_actions_in_order_and_the_same_lines_once_its_branch
 
     // Before the merge, the branch's actions come from its tip.
     let started = [
-        format!("{ID} ready - draft -> ready; by sumeet"),
+        format!("{ID} ready - draft -> ready; by ada"),
         format!("{ID} start t1 ready -> building"),
         format!("{ID} submit t1 building -> in_review"),
         format!("{ID} review t2 {review}"),
@@ -256,14 +256,14 @@ fn a_mission_shows_its_ready_lead_plan_review_and_close_with_its_items_actions()
     ok(planned(
         &root,
         "p1",
-        &["ready", ID, "demo-0ther", "--by", "sumeet"],
+        &["ready", ID, "demo-0ther", "--by", "ada"],
     ));
     // Made ready as a mission was before it had no go-ahead, by the old
     // tool, which wrote who said go.
     let path = format!(".atelier/missions/{MISSION}/mission.md");
     let text = fs::read_to_string(root.join(&path)).unwrap().replace(
         "status: draft\nlabels: []\nlead: null\nready: null\n",
-        "status: ready\nlabels: []\nlead: null\nready:\n  by: sumeet\n  at: 2026-11-10T10:00:00Z\n",
+        "status: ready\nlabels: []\nlead: null\nready:\n  by: ada\n  at: 2026-11-10T10:00:00Z\n",
     );
     fs::write(root.join(&path), text).unwrap();
     on_base(&root, "Ready the mission");
@@ -293,8 +293,8 @@ fn a_mission_shows_its_ready_lead_plan_review_and_close_with_its_items_actions()
     let review = stem.strip_suffix(".md").unwrap();
 
     let ours = [
-        format!("{ID} ready - draft -> ready; by sumeet"),
-        format!("{MISSION} ready - draft -> open; by sumeet"),
+        format!("{ID} ready - draft -> ready; by ada"),
+        format!("{MISSION} ready - draft -> open; by ada"),
         format!("{MISSION} lead l1"),
         format!("{MISSION} review r1 {review}"),
         format!("{MISSION} verdict r1 {review} approve"),
@@ -305,7 +305,7 @@ fn a_mission_shows_its_ready_lead_plan_review_and_close_with_its_items_actions()
     // Everything holds the other item too; the item alone holds its own.
     let all = actions(&root, &log(&root, &[]));
     assert_eq!(all.len(), ours.len() + 1);
-    assert_eq!(all[0], "demo-0ther ready - draft -> ready; by sumeet");
+    assert_eq!(all[0], "demo-0ther ready - draft -> ready; by ada");
     assert_eq!(
         actions(&root, &log(&root, &[ID])),
         [ours[0].clone(), ours[5].clone()]
@@ -340,11 +340,7 @@ fn since_leaves_out_the_actions_committed_before_it() {
             .unwrap();
         assert!(output.status.success(), "{output:?}");
     };
-    at(
-        "2026-01-01T00:00:00Z",
-        "p1",
-        &["ready", ID, "--by", "sumeet"],
-    );
+    at("2026-01-01T00:00:00Z", "p1", &["ready", ID, "--by", "ada"]);
     // The agent commits it, and its backlog branch's merge moves the base.
     let committed = identity(
         Command::new("git")
@@ -358,7 +354,7 @@ fn since_leaves_out_the_actions_committed_before_it() {
     git(&root, &["branch", "-f", "main", "HEAD"]);
     at("2026-02-01T12:00:00Z", "t1", &["start", ID]);
     let ready = format!(
-        "2026-01-01T00:00:00Z {} {ID} ready - draft -> ready; by sumeet",
+        "2026-01-01T00:00:00Z {} {ID} ready - draft -> ready; by ada",
         short(&root, "main")
     );
     let start = format!(
@@ -398,7 +394,7 @@ fn two_actions_on_one_record_in_one_commit_show_as_their_net_change() {
     write_item(&root, ID, "done", &[], &[], "Not needed.\n");
     let text = fs::read_to_string(&path).unwrap().replace(
         "ready: null",
-        "ready:\n  by: sumeet\n  at: 2026-11-10T09:00:00Z",
+        "ready:\n  by: ada\n  at: 2026-11-10T09:00:00Z",
     );
     fs::write(&path, text).unwrap();
     on_base(&root, "Ready and close");

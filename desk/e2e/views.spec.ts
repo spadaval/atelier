@@ -65,7 +65,7 @@ test("mission control shows the active item, the items, the log and the threads"
   await expect(log.getByText("Started atelier-uwxy")).toBeVisible();
   // The human readied every item five days ago, on the log's last page.
   for (let at = 0; at < 4; at++) await page.keyboard.press("]");
-  await expect(log.locator(".mcx-log.waited").last()).toContainText("Sumeet readied 9 items");
+  await expect(log.locator(".mcx-log.waited").last()).toContainText("Ada readied 9 items");
   await expect(page.locator(".mcx-pane.workers .mcx-worker.live")).toHaveCount(2);
   // Choosing an item from the list makes it the active one.
   await page.locator(".mcx-row", { hasText: "atelier-1ie1" }).click();

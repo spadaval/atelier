@@ -35,7 +35,7 @@ fn stop_with(signal: &str) -> (std::process::ExitStatus, String) {
         .unwrap();
     fs::create_dir(dir.path().join("repos")).unwrap();
     let config = dir.path().join("config.toml");
-    let text = "caller = \"sumeet\"\nroots = [\"repos\"]\nlisten = [\"127.0.0.1:0\"]\n\
+    let text = "caller = \"ada\"\nroots = [\"repos\"]\nlisten = [\"127.0.0.1:0\"]\n\
                 [t3]\ncommand = \"t3\"\nurl = \"http://127.0.0.1:9/mcp\"\n";
     fs::write(&config, text).unwrap();
     let mut server = Command::new(env!("CARGO_BIN_EXE_atelier-desk"))

@@ -273,7 +273,7 @@ fn settling_is_refused_with_nothing_written_and_says_why() {
     // it is no rule's to skip again.
     let skipping = |args: &[&str]| {
         let output = atelier_command(&root, "t9", args)
-            .env("ATELIER_SKIP", "Sumeet said so")
+            .env("ATELIER_SKIP", "Ada said so")
             .output()
             .unwrap();
         let stderr = String::from_utf8(output.stderr).unwrap();
