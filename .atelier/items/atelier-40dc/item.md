@@ -29,7 +29,7 @@ script is deleted.
 - [ ] The repository holds no hand-written `custom.js` or `host-adapter.js`, and `pnpm typecheck` passes with `strict` on and no file excluded.
 - [ ] Each fact about T3's behaviour in the old code's comments for these parts is kept beside the code that handles it: the copy T3 appends when it fades a removed row, the range gestures and their platform rule, the folder's `aria-expanded`, and timers throttled in a covered window. The Report lists them.
 - [ ] The checks in `test-extension.mjs` for these parts pass, unchanged in what they assert.
-- [ ] `test-contract.mjs` passes against T3 Code Nightly on Legend's test instance, and the sidebar, the strip and the layer are seen working there.
+- [ ] `test-contract.mjs` passes with every hook against the test instance on this host (atelier-diru), and the sidebar, the strip and the layer are seen working there.
 
 ## Scope
 

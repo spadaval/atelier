@@ -57,6 +57,19 @@ Two things were built with him before this plan.
   tooltip portalled into the shadow root is drawn and themed there. It did
   not run inside T3 Code, and tried no menu, popover or dialog.
 
+A third spike, on 2026-11-17, answered his question whether this could be
+tested on this host instead of on Legend, his Windows machine, which has to
+be on with him logged in. T3 Code Nightly's Linux AppImage ran here with no
+display, under the installed `Xvnc` and with Chromium's sandbox off, with
+its own home, data folder and backend port, and nothing under the real
+`~/.t3` changed. The injector attached unchanged and the extension drew its
+Inbox row and project strip. With no provider signed in it had no thread,
+so `test-contract.mjs` could not check 15 hooks; a free OpenCode model
+answered from a fresh home with no sign-in. He chose a provider in the
+test instance as the way to give it threads; making one inside T3 Code
+is not yet tried. The
+spike's notes are in `~/t3-linux-spike` on this host.
+
 ## Outcome
 
 The extension is a TypeScript project built by Vite into the one script the
@@ -91,7 +104,8 @@ reviewed first. It has no progress log.
 - needs-you-first: for fixture missions that between them hold an item labelled needs-human,
   a thread that began waiting on a person a minute ago, a live thread that
   has not changed in 30 minutes and two live threads that have, the mission page
-  shows, for each mission, a sentence naming what it holds, a row for each of the first three
+  shows a sentence naming what that mission holds, a row for each item or
+  thread that needs the human
   with a button that opens the item or the thread, and a line per live
   thread; its drafts and merged items are each one folded line; and it has
   no list of the mission's steps.
@@ -104,8 +118,12 @@ reviewed first. It has no progress log.
   control, This thread and the project home as it answers an unknown page.
 - frames-kept: an item's page and the inbox still open framed in T3's panel
   from a record link and from the Inbox row.
-- seen-in-t3: each of the three pages is seen in T3 Code Nightly on Legend's
-  test instance, in light and dark, with a screenshot in its item's Report.
+- test-instance: one command on this host starts T3 Code Nightly's Linux
+  build with no display, apart from the T3 Code server this host runs for
+  the human, with a thread in it, and `test-contract.mjs` passes against it
+  with every hook.
+- seen-in-t3: each of the three pages is seen in that test instance, in
+  light and dark, with a screenshot in its item's Report.
 - installs-without-node: a release bundle built by
   `scripts/t3-extension-release.sh` holds the built script, installs with
   `install.py` on a machine with no Node, and reports its version.
@@ -132,6 +150,8 @@ Out:
   page or a pull request.
 - Finding a merged item's pull request once its branch is deleted or it has
   left the forge's recent list. The retro links the ones the Desk gives.
+- Launching T3 Code on Linux from the loader. The test instance is started
+  by its own command, and the injector attaches to it as it is.
 - T3 Code on a phone, where the extension does not run.
 
 ## Authority
@@ -164,9 +184,15 @@ copy appended to the list, range selection differs by platform, a covered
 window throttles timers. A rewrite carries each of these over on purpose.
 An implementer who drops one says why in its Report.
 
-Five items are seen in T3 Code on Legend's test instance. An implementer
-who cannot reach Legend, or finds nobody logged on there to start the test
-instance, ticks nothing it did not see and asks the thread that started it.
+Five items are seen in T3 Code on this host's test instance, which
+atelier-diru makes. An implementer who cannot start it ticks nothing it did
+not see and asks the thread that started it.
+
+Linux is not where the human runs T3 Code, and some of what the extension
+does differs by platform, such as the range gestures. So before cutting
+the release the lead runs `test-contract.mjs` on Legend's test instance
+(port 9333, never the daily one on 9222) and looks at the three pages
+there. What Windows shows that Linux did not becomes an item.
 
 The Desk's three pages stay until the last item, atelier-yy4j, which waits for the
 human to install the release that replaces them. Until then both drawings

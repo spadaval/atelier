@@ -29,7 +29,7 @@ T3 hook or a Desk field is a type error and not a blank panel.
 - [ ] Each fact about T3's behaviour in the old code's comments for these parts is kept in a comment beside the code that handles it, or the Report says why it was dropped.
 - [ ] The Desk's API types come from `desk/src/api`, not from hand-written shapes.
 - [ ] The checks in `test-extension.mjs` for these parts pass, unchanged in what they assert.
-- [ ] These parts are seen working in T3 Code Nightly on Legend's test instance, with what was checked in the Report.
+- [ ] These parts are seen working in T3 Code Nightly on the test instance on this host (atelier-diru), with what was checked in the Report.
 
 ## Scope
 
