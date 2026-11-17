@@ -1,0 +1,43 @@
+# Throwaway probe for atelier-4bxj: how long Chrome's first start takes on a fresh runner.
+name: probe
+on:
+  pull_request:
+    branches: [master]
+permissions:
+  contents: read
+jobs:
+  chrome:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      matrix:
+        n: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+        variant: [plain, preread]
+    steps:
+      - name: probe
+        run: |
+          now() { date +%s.%N; }
+          launch() {
+            dir=$(mktemp -d); t0=$(now)
+            /usr/bin/google-chrome --headless=new --no-first-run --no-default-browser-check --disable-background-networking \
+              --user-data-dir=$dir/profile --remote-debugging-port=19222 --remote-debugging-address=127.0.0.1 \
+              --window-size=1600,1000 about:blank > $dir/log 2>&1 &
+            pid=$!; ok=no
+            for i in $(seq 1 1200); do
+              if curl -s -m 1 http://127.0.0.1:19222/json/version > /dev/null; then ok=yes; break; fi
+              sleep 0.1
+            done
+            t1=$(now)
+            first=$(grep -m1 -o '^\[[0-9:/.]*' $dir/log || true)
+            echo "RESULT variant=${{ matrix.variant }} launch=$1 ready=$ok seconds=$(echo "$t1 - $t0" | bc) started_at=$(date -u -d @$t0 +%H%M%S.%N | cut -c1-10) first_log=$first"
+            echo "--- chrome log ($1)"; cat $dir/log
+            kill $pid; wait $pid 2>/dev/null || true; sleep 1
+          }
+          echo "DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS-unset}"
+          if [ "${{ matrix.variant }}" = preread ]; then
+            t0=$(now); cat /opt/google/chrome/* > /dev/null 2>&1 || true; t1=$(now)
+            echo "RESULT variant=preread read_seconds=$(echo "$t1 - $t0" | bc) bytes=$(du -sb /opt/google/chrome | cut -f1)"
+          fi
+          launch first
+          launch second
