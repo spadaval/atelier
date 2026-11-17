@@ -28,6 +28,7 @@ person sees beside every thread no longer looks like a web page in a frame.
 - [ ] A link to an item, a mission's record page or the inbox opens that Desk page framed in the panel, with a way back to This thread. The title of a mission that is agreed or done opens the mission page; a proposed mission's title opens its record page framed.
 - [ ] A read that fails leaves its part out and says which, and the page then does not claim the thread holds nothing.
 - [ ] `docs/product/desk.md` and `docs/architecture/desk.md` say where the page is drawn now. The Desk's page itself stays until atelier-yy4j.
+- [ ] The checks in `test-extension.mjs` that the panel opens a frame on `/embed/`, that `host:thread` is sent and that the frame follows the thread to `/embed/t` become checks that the panel shows the native page for the thread T3 shows, with no `iframe` and no `host:thread` sent. The checks that a record link opens its Desk page framed stay.
 - [ ] Fixture checks in `t3-extension/` cover a thread that implements an item, one that leads a mission, one with children and mentions only, one that planned a mission still proposed, whose title opens the framed record page, and one with nothing.
 - [ ] The page is seen in T3 Code Nightly on Legend's test instance for a thread that holds an item and one that holds nothing, in light and dark, with screenshots in the Report.
 

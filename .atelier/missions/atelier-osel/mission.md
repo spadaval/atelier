@@ -88,10 +88,10 @@ reviewed first. It has no progress log.
 - drawn-as-t3-draws: a check in CI draws each T3 component the extension
   copies in a shadow root and beside it under T3's stylesheet as last
   copied, and their computed styles are equal in light and dark.
-- needs-you-first: for a fixture mission with an item labelled needs-human,
+- needs-you-first: for fixture missions that between them hold an item labelled needs-human,
   a thread that began waiting on a person a minute ago, a live thread that
   has not changed in 30 minutes and two live threads that have, the mission page
-  shows a sentence naming those facts, a row for each of the first three
+  shows, for each mission, a sentence naming what it holds, a row for each of the first three
   with a button that opens the item or the thread, and a line per live
   thread; its drafts and merged items are each one folded line; and it has
   no list of the mission's steps.

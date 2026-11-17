@@ -26,6 +26,7 @@ last of the three views to leave its frame.
 - [ ] The project's name in T3's thread breadcrumb opens the project home drawn by the extension in React with no `iframe`: Now, Next and Later, with a mission folding open to its items and their holders, and the strip of the last seven days, as `docs/architecture/desk.md` lists them today.
 - [ ] The title of a mission that is agreed or done opens the mission page. A proposed mission's title, under Later, opens its record page framed. An item opens its Desk page framed. Each framed page has a way back.
 - [ ] `docs/product/desk.md` and `docs/architecture/desk.md` say where the page is drawn now. The Desk's page itself stays until atelier-yy4j.
+- [ ] The checks in `test-extension.mjs` that the breadcrumb and the "more missions" row open a frame on `/embed/home/...` become checks that they open the native page with no `iframe`.
 - [ ] Fixture checks in `t3-extension/` cover a repository with a mission in each of Now, Next and Later, and one with nothing open, and that the proposed mission under Later opens the framed record page.
 - [ ] The page is seen in T3 Code Nightly on Legend's test instance, in light and dark, with screenshots in the Report.
 
