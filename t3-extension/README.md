@@ -247,7 +247,8 @@ mission's title opens mission control; its chevron folds it, hiding its
 threads, and a folded mission shows how many of its threads are here, and a dot
 when something in it waits on the human. Which missions are folded is kept in
 localStorage (`t3-custom:atelier:missions:v1`); a mission starts open. A closed
-folder shows none of its threads, so it shows no mission rows either. A mission
+folder (its button's `aria-expanded="false"`) shows no mission rows; the one
+row T3 keeps under it, the open thread's, stays a plain row. A mission
 thread T3 does not list in the folder (unknown to this window, or pinned,
 snoozed or settled) is simply not under its mission.
 
@@ -268,9 +269,11 @@ again every 3 seconds.
 between two others, in T3's own order, which is no longer the order drawn:
 dragging from a row's Settle button settles them, and Shift-click selects them,
 for bulk Settle, Snooze, Delete or a drag to the composer. While a mission is
-placed, both are stopped before T3 sees them. A plain click on Settle still
-settles that one thread, and a click and Ctrl- or Cmd-click on a row still open
-and select it.
+placed, both are stopped before T3 sees them: a press on Settle, and every
+click with Shift held on a thread row, whatever other key is held, since which
+of those T3 takes as a range depends on the platform. A plain click on Settle
+still settles that one thread, and a click and Ctrl- or Cmd-click on a row still
+open and select it.
 
 T3 fades a row it removes by appending a copy of it, and does so for the
 extension's rows too. The extension removes copies of its own rows as they
@@ -595,8 +598,9 @@ in the browser); the project strip the draft store, `route:draft`,
   folder with missions they can jump between mission threads and loose
   threads. The Ctrl+1–9 jump shortcuts count in T3's order too, but T3 draws
   each hint on its row, so the row labelled is the row opened.
-- While a mission is placed, Shift-click selects nothing; select several
-  threads with Ctrl- or Cmd-click. A thread selected before its mission is
+- While a mission is placed, a click with Shift held on a thread row does
+  nothing, Ctrl+Shift-click included; select several threads with Ctrl- or
+  Cmd-click. A thread selected before its mission is
   folded stays selected while hidden, and bulk actions include it.
 - A copy T3 makes of one of the extension's rows after the extension has
   stopped is T3's to remove; it goes when T3's fade ends, which a covered
@@ -815,11 +819,12 @@ It checks:
   indented, with their role (none on the threads they started), "1 more
   mission" with its dot, then the folder's loose thread; the other folder
   untouched; folding (kept in localStorage, and after a reinjection) to the
-  thread count and dot; a press on Settle and a Shift-click on a row not
-  reaching T3 while a mission is placed, and reaching it when none is, and a
+  thread count and dot; a press on Settle and a click on a row with Shift and
+  any other keys not reaching T3 while a mission is placed, and reaching it when none is, and a
   click on Settle and a Ctrl-click reaching it; copies of a mission header
   removed while the view is on and after it turns off; a
-  row T3 adds in place, a folder closed (no mission rows) and opened again,
+  row T3 adds in place, a folder closed (no mission rows, the open thread's row
+  kept plain), opened by its button alone, and opened again,
   T3's fading copies of removed rows, and a new list, each laid out again; the
   boring sidebar off and the views off, each leaving no order, row or rule of
   the extension's in T3's list, the first with its note; a mission's title

@@ -1,5 +1,24 @@
 # Verification
 
+## Round 2 review fixes for missions in T3's list (atelier-ytor), Windows, November 16, 2026
+
+Same T3 build, test instance (port 9333) and Desk as below; the daily instance
+was not touched. `node run-tests.mjs` passes on Linux. With each fix undone:
+
+| Finding | Fix undone | Failure |
+| --- | --- | --- |
+| 1. Shift-click with the other modifier | Ctrl and Meta exempt from the stop again | "a click with Shift held reached T3 while a mission was placed, or a Ctrl-click did not" |
+| 3. Closed folder keeping the open thread | Open read from the rows, not `aria-expanded` | "A closed folder has no mission rows" timed out (mission header, indented `thread-a` and "1 more mission" drawn) |
+
+In the test instance, with the real `custom.js`, the atelier folder holds only
+the open thread and "1 more mission". Closing it left that thread a plain row
+and removed "1 more mission". Reopening, which changes only the button's
+`aria-expanded`, at first did not bring the row back until the 3-second refresh
+(throttled in the covered window); the page observer now watches
+`aria-expanded`, and the row came back at once. The fixture check for a folder
+opened by its button alone passes with or without that change, since another
+pass lays the fixture out within a second; the real app is what shows it.
+
 ## Review fixes for missions in T3's list (atelier-ytor), Windows, November 16, 2026
 
 Fixes for round 1 of the review of atelier-ytor; same T3 build, test instance

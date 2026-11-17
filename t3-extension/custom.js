@@ -923,10 +923,12 @@ function syncMissionLayout() {
     sequence.push(node);
     const button = node.matches(hostSelectors.projectFolder) && node.querySelector(hostSelectors.folderButton);
     if (!button) continue;
-    // A folder's threads are the thread rows after its header; a closed folder has none.
+    // A folder's threads are the thread rows after its header. A closed folder keeps only the open
+    // thread's row, which stays a plain row under it, with no mission rows.
     const threads = [];
     while (index < children.length && children[index].matches(hostSelectors.threadItem)) threads.push(children[index++]);
     folderThreads += threads.length;
+    if (button.getAttribute('aria-expanded') !== 'true') { sequence.push(...threads); continue; }
     const groups = new Map(); const loose = [];
     for (const item of threads) {
       const claim = claims.get(item.dataset.threadItem);
@@ -968,13 +970,14 @@ function syncMissionLayout() {
 // and Shift-click selects every row between the anchor and the row clicked, which bulk Settle,
 // Snooze, Delete and a drag to the composer then act on. While a mission is placed, both are
 // stopped before T3 sees them: a press on Settle, so no drag starts (a plain click still settles
-// that thread), and a Shift-click on a thread row (a click and Ctrl- or Cmd-click still work).
+// that thread), and every click with Shift held on a thread row, whatever other key is held, as
+// T3's own rule for which of those is a range depends on the platform (a click and Ctrl- or
+// Cmd-click without Shift still work).
 listen(document, 'pointerdown', event => {
   if (layoutActive && event.target instanceof Element && event.target.closest(hostSelectors.settleButton)) event.stopPropagation();
 }, { capture: true });
 listen(document, 'click', event => {
-  if (!layoutActive || !event.shiftKey || event.ctrlKey || event.metaKey || !(event.target instanceof Element)) return;
-  if (event.target.closest(hostSelectors.threadItem) && !event.target.closest('button, a')) { event.preventDefault(); event.stopPropagation(); }
+  if (layoutActive && event.shiftKey && event.target instanceof Element && event.target.closest(hostSelectors.threadItem)) { event.preventDefault(); event.stopPropagation(); }
 }, { capture: true });
 
 function syncSidebar() {
@@ -1144,7 +1147,8 @@ const observer = new MutationObserver(records => {
   scheduleDOM();
   if (records.some(record => (record.target.nodeType === Node.ELEMENT_NODE ? record.target : record.target.parentElement)?.closest(hostSelectors.conversation))) queueScan();
 });
-observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+// aria-expanded too: a closed folder holding only the open thread's row reopens with no other change.
+observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['aria-expanded'] });
 disposers.push(() => {
   observer.disconnect(); clearTimeout(scanTimer); clearTimeout(hoverTimer); clearTimeout(dismissTimer); clearTimeout(domFrame); clearTimeout(noticeTimer); cancelAnimationFrame(rectFrame);
   hideCard(); restoreNative(); mount.remove(); tab.remove(); controls.remove(); launch.remove(); settingsHost.remove(); CSS.highlights?.delete('t3-atelier-refs');
