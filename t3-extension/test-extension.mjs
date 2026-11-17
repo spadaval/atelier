@@ -211,7 +211,12 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE; delete env.NODE_OPTIONS;
   browser = spawn(browserPath, ['--headless=new', '--no-first-run', '--no-default-browser-check', '--disable-background-networking', `--user-data-dir=${path.join(temp, 'profile')}`, `--remote-debugging-port=${debugPort}`, '--remote-debugging-address=127.0.0.1', '--window-size=1600,1000', base + '/#/env/thread-a'], { env, stdio: ['ignore', browserLog.fd, browserLog.fd] });
   await browserLog.close();
-  page = await until(() => connectPage(debugPort, base), 'Browser startup');
+  // The first start of Chrome on a machine that has not read its files is slow: on 20 fresh
+  // GitHub runners it took 0.6 to 47 seconds until this port answered, and 0.2 to 0.4 the second
+  // time (atelier-4bxj). So this wait is longer than the others, and the time is printed.
+  const browserStarted = Date.now();
+  page = await until(() => connectPage(debugPort, base), 'Browser startup', 120000);
+  console.log(`Browser started in ${((Date.now() - browserStarted) / 1000).toFixed(1)}s`);
   const injectorLog = await fs.open(path.join(temp, 'injector.log'), 'w');
   injector = spawn(process.execPath, [path.join(root, 't3-custom.mjs'), 'daemon', '--home', temp], { stdio: ['ignore', injectorLog.fd, injectorLog.fd] });
   await injectorLog.close();
