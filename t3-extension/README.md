@@ -19,12 +19,17 @@ Three layers:
   reloads on file change. It knows nothing about Atelier. Launching, process
   detection, dialogs and the control channel differ per platform, all in its
   `platform` object.
-- `host-adapter.js`: the only code coupled to T3 internals.
-- `custom.js`: the Atelier extension, written against the adapter and Desk's HTTP
+- `src/host-adapter.js`: the only code coupled to T3 internals.
+- `src/custom.js`: the Atelier extension, written against the adapter and Desk's HTTP
   API. The Desk panel is an iframe showing the Desk's embedded mode, and the two
   talk over the Desk's host contract
   ([docs/architecture/desk.md](../docs/architecture/desk.md), "The embedded
   mode" and "The host contract").
+
+The adapter and the extension are modules under `src/`, which Vite builds
+(`pnpm build`) into one classic script, `dist/custom.js`, from the entry
+`src/main.ts`. That script is what installs as `custom.js` and what the loader
+injects: it defines `T3Custom`, and the loader calls `T3Custom.start(api)`.
 
 ## Install
 
@@ -53,11 +58,14 @@ updates itself from releases (see [Updates](#updates)); the unpacked folder can
 be deleted.
 
 **For development, from a checkout.** The installer copies the checkout's files
-instead, and the install reports its release as `development`:
+and its build instead, and the install reports its release as `development`.
+Building needs Node.js and pnpm; the installer refuses, naming the command,
+when `dist/custom.js` is missing or older than a file in `src/`:
 
 ```sh
 git clone https://github.com/spadaval/atelier.git
 cd atelier/t3-extension
+pnpm install && pnpm build   # writes dist/custom.js
 cp config.example.json config.json
 # Edit config.json: desk.urls.
 python3 install.py        # Windows: py install.py
@@ -84,12 +92,13 @@ keys a repository should also match, or a reference prefix other than its name.
 T3 it finds.
 
 Running the installer again upgrades an installation: it replaces the managed
-files (`t3-custom.mjs`, `host-adapter.js`, `custom.js`, `README.md`), keeping a
+files (`t3-custom.mjs`, the built `custom.js`, `README.md`), keeping a
 `custom.js` edited since the last install as `custom.js.previous`
-(`custom.js.sha256` records the one installed). It keeps `custom.css` and
-`config.json`, only adding missing top-level keys. A running injector picks up
-the new `custom.js` and adapter at once; restart it (`stop`, then the launcher)
-after a change to `t3-custom.mjs`.
+(`custom.js.sha256` records the one installed), and removes the
+`host-adapter.js` an install from before the build left, which `custom.js`
+now holds. It keeps `custom.css` and `config.json`, only adding missing
+top-level keys. A running injector picks up the new `custom.js` at once;
+restart it (`stop`, then the launcher) after a change to `t3-custom.mjs`.
 
 `--app <path>` names T3 Code's app and overrides `appPath`; on macOS (and on
 Linux, where only tests run it) the path is an app bundle whose
@@ -140,8 +149,8 @@ release exists. A failure there changes nothing else: the installed version
 stays, and the injector and the extension keep running.
 
 Known limit: an update that changes `t3-custom.mjs` takes effect only when the
-injector restarts. `reload` reinjects `custom.js`, `custom.css` and the
-adapter, but the running injector keeps the loader it started with. Status then
+injector restarts. `reload` reinjects `custom.js` and `custom.css`, but the
+running injector keeps the loader it started with. Status then
 reports `restartNeeded: true` and the Customizations section says so; run
 `t3-custom stop` and open T3 Custom again. An update never restarts T3 Code or
 the injector by itself.
@@ -473,9 +482,10 @@ checked settings) are the protection there.
 
 Installed files, in the install folder above:
 
-- `custom.js`: extension UI, settings, project behavior, and references.
+- `custom.js`: the built extension (UI, settings, project behavior, and
+  references) with the adapter, the boundary coupled to T3's private DOM and
+  modules. Its source is `src/` in a checkout.
 - `custom.css`: optional CSS for T3 itself.
-- `host-adapter.js`: the boundary coupled to T3's private DOM and modules.
 - `config.json`: app path, port, URL matching, Desk URLs, optional repository
   overrides, the extension's settings, and optional `appEnv` (environment for a
   test instance, Windows only).
@@ -484,7 +494,17 @@ Installed files, in the install folder above:
 - `VERSION`: the installed release; absent for an install from a checkout.
 - `update.json`: the last release lookup or update and its error, if any.
 
-Saving client/adapter/CSS/config files reapplies them without refreshing T3.
+Saving `custom.js`, `custom.css` or `config.json` reapplies them without
+refreshing T3. To work on the extension, leave a build watching `src/` that
+writes into the install folder; each save in `src/` rebuilds `custom.js` there
+and the injector reapplies it:
+
+```sh
+pnpm watch --outDir "<install folder>"   # in t3-extension/
+```
+
+The next `install.py` keeps that `custom.js` as `custom.js.previous`, since it
+differs from the one installed.
 A change to `t3-custom.mjs` needs the injector restarted (`stop`, then
 `launch`).
 Reload scripts forces reinjection even when files did not change. A T3 reload
@@ -518,7 +538,7 @@ network-facing debugging listener is enabled.
 
 ## T3 hooks
 
-`host-adapter.js` names each private hook and probes it at startup:
+`src/host-adapter.js` names each private hook and probes it at startup:
 
 - `module:workspace-panel-store`, `module:atom-registry`,
   `module:thread-snapshot-atom`, `module:environment-atoms`,
@@ -677,8 +697,11 @@ in it, on the last merge at or before the tag that changed something that job
 tests (`scripts/t3-extension-release.sh check`, which reads the rule from
 `scripts/ci-jobs.sh`). A tag on a later merge that changed only records is
 accepted on the strength of that one. If CI is still running, re-run the
-workflow once it passes. The release holds `t3-extension-<version>.zip`, every
-file of `t3-extension/` at the tag plus `VERSION`, and its `.sha256`. It is
+workflow once it passes. The release holds `t3-extension-<version>.zip` and its
+`.sha256`. The zip holds the files of `t3-extension/` at the tag but the build's
+inputs (`src/`, `package.json`, `pnpm-lock.yaml`, `tsconfig.json`,
+`vite.config.ts`), the built `dist/custom.js` and `VERSION`, and installs with
+no Node beyond T3's own executable. It is
 never marked the repository's latest release, which stays the newest `atelier`
 one, and its notes list the items merged since the previous extension tag that
 changed `t3-extension/`. On a pull request that changes the extension or the
@@ -687,21 +710,27 @@ run's artifact and publishes nothing.
 
 ## Development and verification
 
-No npm dependencies are needed. The tests need Node.js 22 or newer.
+The build needs Node.js and pnpm: `pnpm install`, then `pnpm build` writes
+`dist/custom.js`, `pnpm watch` rebuilds it on each change in `src/`, and
+`pnpm typecheck` runs TypeScript in strict mode on the TypeScript sources
+(the JavaScript ones are not checked yet). The tests need Node.js 22 or newer
+and run the built script, so build first; `run-tests.mjs` refuses without a
+build.
 
 `node run-tests.mjs` runs every test here that needs no real T3 Code: each
 `test-*.mjs` but `test-contract.mjs`, one at a time. It exits non-zero and
 names each test that failed. A new test is a new `test-*.mjs` file; the runner
 and CI find it. `test-extension.mjs` drives the extension in a fixture page in
 headless Chrome. `test-update.mjs` needs no browser or Desk, but needs
-`python3`: it builds release bundles from this folder, installs one into an
-empty home with a stand-in for T3 Code's app, and runs the installed
+`python3`: it builds release bundles from this folder and its build, installs
+one into an empty home with a stand-in for T3 Code's app, and runs the installed
 `t3-custom update` and injector against a local releases list. `test-fixture-desk.mjs` checks that the fixture Desk's
 address is read only from a whole "serving on" line, however its output is
 split.
 
-**In CI.** The `extension` job in `.github/workflows/ci.yml` runs
-`node run-tests.mjs` on Linux in headless Chrome, after building
+**In CI.** The `extension` job in `.github/workflows/ci.yml` installs the
+extension's packages from its lockfile, runs `pnpm typecheck` and `pnpm build`,
+then runs `node run-tests.mjs` on Linux in headless Chrome, after building
 `atelier-desk` (`cargo build -p atelier-desk`) and the Desk's app
 (`pnpm build` in `desk/`) from the same commit, so a change to the Desk that
 breaks the extension fails its own pull request. It runs when a change
@@ -718,6 +747,7 @@ core.
 # Let the test start a Desk from this checkout:
 cargo build -p atelier-desk
 pnpm --dir desk install && pnpm --dir desk build
+pnpm --dir t3-extension install && pnpm --dir t3-extension build
 node t3-extension/run-tests.mjs
 
 # Or start the fixture Desk yourself, anywhere that has the build, and point

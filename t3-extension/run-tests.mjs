@@ -10,6 +10,11 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
+// The tests run the extension pnpm build wrote, not src/.
+await fs.access(path.join(root, 'dist/custom.js')).catch(() => {
+  console.error(`${path.join(root, 'dist/custom.js')} does not exist; build the extension first: in ${root}, run pnpm install && pnpm build`);
+  process.exit(1);
+});
 // Tests that drive a running T3 Code, run by hand after a T3 update (README.md).
 const needsT3 = ['test-contract.mjs'];
 

@@ -87,6 +87,11 @@ item in `items/<id>/item.md` with its reviews beside it, and the rules in
 - Installed CLI: `atelier`, installed from this tree with `cargo install
   --path crates/atelier-cli --locked`.
 - The Desk's app: `desk/` (`pnpm test`, `pnpm e2e`; see `desk/README.md`).
+- The T3 Code extension: `t3-extension/`. Its sources in `src/` build into
+  `dist/custom.js` with `pnpm install && pnpm build`; `pnpm watch --outDir
+  "<install folder>"` rebuilds into an installed copy on each save, and
+  `python3 install.py` installs from the checkout after a build. Its tests,
+  `node run-tests.mjs`, run the build (see `t3-extension/README.md`).
 - The T3 Code extension: `node t3-extension/run-tests.mjs`, against a Desk
   built from this checkout (see `t3-extension/README.md`).
 - The T3 Code extension: `t3-extension/` (`node t3-extension/test-extension.mjs`

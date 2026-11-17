@@ -253,10 +253,12 @@ class CDP {
 async function buildBundle(config) {
   const jsPath = path.join(home, 'custom.js');
   const cssPath = path.join(home, 'custom.css');
-  const [js, css, adapter] = await Promise.all([fs.readFile(jsPath, 'utf8'), fs.readFile(cssPath, 'utf8'), fs.readFile(path.join(home, 'host-adapter.js'), 'utf8')]);
-  const version = createHash('sha256').update(js).update(css).update(adapter).update(JSON.stringify(config)).digest('hex').slice(0, 12);
+  // custom.js is the extension built from src/ (pnpm build), adapter included: a classic script
+  // that defines T3Custom, whose start(api) runs it.
+  const [js, css] = await Promise.all([fs.readFile(jsPath, 'utf8'), fs.readFile(cssPath, 'utf8')]);
+  const version = createHash('sha256').update(js).update(css).update(JSON.stringify(config)).digest('hex').slice(0, 12);
   // Everything but the settings, to tell a change of settings alone.
-  const base = createHash('sha256').update(js).update(css).update(adapter).update(JSON.stringify({ ...config, settings: null })).digest('hex');
+  const base = createHash('sha256').update(js).update(css).update(JSON.stringify({ ...config, settings: null })).digest('hex');
   const source = `(() => {
     if (window.top !== window || !${JSON.stringify(config.targetPrefixes)}.some(prefix => location.href.startsWith(prefix))) return;
     globalThis.__t3Custom?.dispose();
@@ -300,7 +302,7 @@ async function buildBundle(config) {
         version: state.version
       };
       try {
-        await (async function(api) {\n${adapter}\n${js}\n})(api);
+        await (async function(api) {\n${js}\nif (typeof T3Custom === 'undefined' || typeof T3Custom.start !== 'function') throw new Error(${JSON.stringify(`${jsPath} defines no T3Custom.start: it is not the extension built from src/ (pnpm build)`)});\nreturn T3Custom.start(api);\n})(api);
         if (!controller.signal.aborted) report('applied');
       } catch (error) { api.reportError(error?.stack ?? error); }
     };
@@ -507,7 +509,7 @@ async function daemon() {
   process.once('SIGINT', () => void stop());
   await reload();
   watcher = watch(home, (_event, filename) => {
-    if (!['custom.js', 'custom.css', 'host-adapter.js', 'config.json'].includes(String(filename))) return;
+    if (!['custom.js', 'custom.css', 'config.json'].includes(String(filename))) return;
     clearTimeout(updateTimer); updateTimer = setTimeout(() => void reload(), 150);
   });
   log('Injector ready', { port: config.debugPort, targets: config.targetPrefixes });

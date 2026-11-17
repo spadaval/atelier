@@ -12,7 +12,7 @@ Options:
 Run from an unpacked release bundle, it installs that bundle's files and its
 VERSION; `t3-custom update` downloads a newer bundle and runs its install.py
 with --home. Run from a checkout, it installs the checkout's files as a
-development install.
+development install, with the extension `pnpm build` wrote to dist/custom.js.
 """
 import hashlib
 import json
@@ -24,6 +24,15 @@ import sys
 from pathlib import Path
 
 source = Path(__file__).resolve().parent
+# The extension, built from src/ with its adapter: a bundle carries it, a checkout builds it.
+built = source / 'dist/custom.js'
+build = f'in {source}, run pnpm install && pnpm build'
+if not built.exists():
+    raise SystemExit(f'{built} does not exist; build the extension first: {build}')
+if (source / 'src').exists():
+    changed = [path for path in (source / 'src').rglob('*') if path.stat().st_mtime > built.stat().st_mtime]
+    if changed:
+        raise SystemExit(f'{built} is older than {changed[0]}; build the extension again: {build}')
 windows = sys.platform == 'win32'
 # --home installs a separate copy (for example a test instance) without a launcher.
 make_launcher = '--home' not in sys.argv
@@ -35,16 +44,18 @@ support.mkdir(parents=True, exist_ok=True, mode=0o700)
 # kept beside it. custom.js.sha256 records the one installed, so an update that ships a new
 # custom.js does not count as an edit; without it, any difference from the new one does.
 digest = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
-for name in ['t3-custom.mjs', 'host-adapter.js', 'custom.js', 'README.md']:
+for name, path in [('t3-custom.mjs', source / 't3-custom.mjs'), ('custom.js', built), ('README.md', source / 'README.md')]:
     target = support / name
     if name == 'custom.js' and target.exists():
         installed = support / 'custom.js.sha256'
-        unedited = installed.read_text().strip() if installed.exists() else digest(source / name)
+        unedited = installed.read_text().strip() if installed.exists() else digest(path)
         if digest(target) != unedited:
             shutil.copy2(target, support / 'custom.js.previous')
             print(f'Replaced a modified {target}; the old copy is custom.js.previous')
-    shutil.copy2(source / name, target)
-(support / 'custom.js.sha256').write_text(digest(source / 'custom.js') + '\n')
+    shutil.copy2(path, target)
+(support / 'custom.js.sha256').write_text(digest(built) + '\n')
+# Before the build, the adapter was a file of its own; custom.js now holds it and nothing reads one.
+(support / 'host-adapter.js').unlink(missing_ok=True)
 # A release bundle carries its version in VERSION, which the loader reports;
 # an install from a checkout has none, so a stale one is removed.
 if (source / 'VERSION').exists():
