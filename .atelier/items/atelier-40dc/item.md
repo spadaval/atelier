@@ -24,6 +24,7 @@ script is deleted.
 ## Done when
 
 - [ ] These are TypeScript modules under `t3-extension/src`: missions in T3's thread list with their folding and their rows; the Inbox row and its count; the project strip under the new-thread composer; and the layer over T3's main area that holds a native page or a framed one.
+- [ ] After the layer is rewritten, a mission's title still opens atelier-ut89's native page with no `iframe`, and the Inbox row still opens the inbox framed. A separate check covers each.
 - [ ] The project strip is React, drawn with the copied T3 components. Rows placed inside T3's own list stay direct DOM code.
 - [ ] The repository holds no hand-written `custom.js` or `host-adapter.js`, and `pnpm typecheck` passes with `strict` on and no file excluded.
 - [ ] Each fact about T3's behaviour in the old code's comments for these parts is kept beside the code that handles it: the copy T3 appends when it fades a removed row, the range gestures and their platform rule, the folder's `aria-expanded`, and timers throttled in a covered window. The Report lists them.

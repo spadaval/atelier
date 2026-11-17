@@ -89,9 +89,9 @@ reviewed first. It has no progress log.
   copies in a shadow root and beside it under T3's stylesheet as last
   copied, and their computed styles are equal in light and dark.
 - needs-you-first: for a fixture mission with an item labelled needs-human,
-  a live thread that has not changed in 30 minutes and two live threads
-  that have, the mission page
-  shows a sentence naming all three facts, a row for each of the first two
+  a thread that began waiting on a person a minute ago, a live thread that
+  has not changed in 30 minutes and two live threads that have, the mission page
+  shows a sentence naming those facts, a row for each of the first three
   with a button that opens the item or the thread, and a line per live
   thread; its drafts and merged items are each one folded line; and it has
   no list of the mission's steps.
@@ -140,12 +140,19 @@ types and pure functions through a pnpm workspace or a path; the wording of
 the page's one-sentence summary; and how a native page and a framed page
 share the panel or the layer, so long as a framed page has a way back.
 
-An implementer asks the thread that started it before: adding a dependency
+atelier-6dm7 opens the loader's read gate to seven existing `GET` reads of
+the Desk, named in that item, which is the one change this mission makes to
+what the loader lets the extension do.
+
+An implementer asks the thread that started it before: opening the gate to
+any other read; adding a dependency
 other than React, React DOM, Base UI, class-variance-authority,
 tailwind-merge, Lucide's icons, Tailwind, Vite and their plugins; changing
 how the loader, the installer or the updater talk to the extension; adding
-a read or a write to the Desk's API; showing something on a page that the
-mockups do not, or leaving out something they show; or changing how a view
+a read or a write to the Desk's API; showing something on the mission page that
+its mockup does not, or leaving out something it shows; showing something
+on This thread or the project home that the Desk's page does not show
+today, or leaving out something it shows; or changing how a view
 this mission does not replace behaves.
 
 The extension's code has learned things about T3 Code from the running app

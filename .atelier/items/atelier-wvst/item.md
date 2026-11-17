@@ -24,9 +24,9 @@ last of the three views to leave its frame.
 ## Done when
 
 - [ ] The project's name in T3's thread breadcrumb opens the project home drawn by the extension in React with no `iframe`: Now, Next and Later, with a mission folding open to its items and their holders, and the strip of the last seven days, as `docs/architecture/desk.md` lists them today.
-- [ ] A mission's title opens the mission page. An item opens its Desk page framed, with a way back.
+- [ ] The title of a mission that is agreed or done opens the mission page. A proposed mission's title, under Later, opens its record page framed. An item opens its Desk page framed. Each framed page has a way back.
 - [ ] `docs/product/desk.md` and `docs/architecture/desk.md` say where the page is drawn now. The Desk's page itself stays until atelier-yy4j.
-- [ ] Fixture checks in `t3-extension/` cover a repository with a mission in each of Now, Next and Later, and one with nothing open.
+- [ ] Fixture checks in `t3-extension/` cover a repository with a mission in each of Now, Next and Later, and one with nothing open, and that the proposed mission under Later opens the framed record page.
 - [ ] The page is seen in T3 Code Nightly on Legend's test instance, in light and dark, with screenshots in the Report.
 
 ## Scope
@@ -37,4 +37,4 @@ Out: a new design for the page; the inbox, which stays framed, in columns when w
 
 ## Context
 
-`desk/src/pages/ProjectHome.tsx` is React, and its reads need the same hook over `desk-get` as This thread's. `GET /api/roadmap` and `GET /api/history?days=7` give its data.
+`desk/src/pages/ProjectHome.tsx` is React, and its reads go through atelier-6dm7's hook. `GET /api/roadmap` and `GET /api/history?days=7` give its data.

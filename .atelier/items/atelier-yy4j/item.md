@@ -28,15 +28,15 @@ the messages only they used are dead contract.
 ## Done when
 
 - [ ] An extension release that holds the three native pages exists, and the human has said their installs run it. The Customizations section shows the installed release. This line is why the item is labelled needs-human.
-- [ ] `desk/src/pages/MissionControl.tsx`, `ThisThread.tsx` and `ProjectHome.tsx` are deleted with their routes, styles and tests, and with every hook, read and route of `crates/atelier-desk` that only they used.
-- [ ] The host contract loses what only those pages used: `desk:resized`, and the fields of `host:thread` that fed This thread, or the whole message if nothing else reads it. The extension stops sending them.
+- [ ] `desk/src/pages/MissionControl.tsx`, `ThisThread.tsx` and `ProjectHome.tsx` are deleted with their routes in the app, their styles and their tests. The Desk's JSON reads stay, because the native pages call them through the loader: `/api/history`, `/api/checks`, `/api/roadmap`, `/api/thread`, `/api/ties`, `/api/motion` and the missions list.
+- [ ] The host contract loses what only those pages used: `desk:resized` and `host:thread`. `useFollowThread` in `desk/src/components/Shell.tsx`, which sends a frame to `/t` on `host:thread`, is deleted with it, so no remaining frame can be sent to a page that is gone.
 - [ ] The Desk answers `/embed/mission/...`, `/embed/t` and `/embed/home/...` as it answers an unknown page.
 - [ ] An item's page and the inbox still open framed in T3's panel, with the host's theme and with thread links that open in T3. `pnpm e2e` and `node run-tests.mjs` pass.
 - [ ] `docs/product/desk.md` and `docs/architecture/desk.md` say that no page of the Desk is made only for T3 Code, and list the contract's messages that remain.
 
 ## Scope
 
-In: `desk/`, `crates/atelier-desk`, `t3-extension/`, `docs/product/desk.md`, `docs/architecture/desk.md`.
+In: `desk/`, `t3-extension/`, `docs/product/desk.md`, `docs/architecture/desk.md`.
 
 Out: the Desk's other embedded pages and the rest of the host contract.
 
