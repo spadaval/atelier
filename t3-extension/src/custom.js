@@ -2,6 +2,7 @@
 // The Desk is shown in its embedded mode and talks to this page over its host contract
 // (atelier: docs/architecture/desk.md, "The embedded mode" and "The host contract").
 import { mountReleaseBadge } from './react/settings.tsx';
+import { mountMissionLayer } from './mission/mount.tsx';
 import { createHostAdapter, expectHostDom, hostDomExpected, hostImportedModules, hostListProblem, hostProbes, hostSelectors, observeHostDom, observeHostTheme, readHostTheme, setHostProbe, useHostApi } from './host-adapter.js';
 
 // Runs the extension on the page. The loader calls it with the injected script's api
@@ -42,6 +43,7 @@ const icons = {
   external: icon('<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>'),
   settings: icon('<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>'),
   desk: icon('<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/>'),
+  back: icon('<path d="m15 18-6-6 6-6"/>'),
 };
 const css = `
   :host { color: var(--foreground, #eee); font: 13px var(--font-sans, system-ui, sans-serif); }
@@ -696,10 +698,12 @@ const expectTimer = setInterval(() => { if (Object.keys(hostDomExpected).length)
 // An item ID as Atelier writes them: lowercase letters and digits in dash-separated parts.
 const itemIdPattern = /^[a-z0-9]+(?:-[a-z0-9]+)+$/;
 
-// The layer: one Desk frame over T3's main area, leaving the sidebar usable. It shows the inbox,
-// a mission's mission control, a project's home or an item. It speaks the host contract: themed on
-// desk:ready, desk:open-thread navigates T3 and closes it, desk:key Escape closes it. Its messages
-// count only from its own frame's window with its Desk's origin, as the panel's do.
+// The layer over T3's main area, leaving the sidebar usable. It shows the extension's own mission
+// page (src/mission), drawn in React with no frame, or a Desk page in one frame: the inbox, a
+// project's home, an item or a proposed mission's record page. A framed page opened from the
+// mission page has a Back button to it. The frame speaks the host contract: themed on desk:ready,
+// desk:open-thread navigates T3 and closes the layer, desk:key Escape closes it. Its messages count
+// only from its own frame's window with its Desk's origin, as the panel's do.
 const layerFrame = { iframe: element('iframe', { title: 'Atelier Desk' }), desk: null, path: null, ready: false, theme: '' };
 layerFrame.iframe.style.cssText = 'display:block;width:100%;height:100%;border:0;background:var(--background)';
 function sendLayerTheme(always) {
@@ -713,29 +717,47 @@ listen(window, 'message', event => {
   if (!layerFrame.desk || event.source !== layerFrame.iframe.contentWindow || event.origin !== new URL(layerFrame.desk).origin) return;
   const message = event.data;
   if (!message || typeof message !== 'object') return;
-  if (message.type === 'desk:ready') { layerFrame.ready = true; sendLayerTheme(true); if (layer) layerFrame.iframe.focus(); }
+  if (message.type === 'desk:ready') { layerFrame.ready = true; sendLayerTheme(true); if (layer && !layer.mission) layerFrame.iframe.focus(); }
   else if (message.type === 'desk:open-thread' && typeof message.thread === 'string') { openThread(message.thread); closeLayer(); }
   else if (message.type === 'desk:key' && message.key === 'Escape') closeLayer();
 });
 disposers.push(observeHostTheme(() => sendLayerTheme(false)));
-// layer: { key, desk, path }; key is 'inbox', 'mission:…', 'home:…' or 'item:…'.
+// layer: { key, desk, path, mission, back }; key is 'inbox', 'mission:…', 'home:…' or 'item:…'.
+// `mission` ({ repo, id }) draws the native mission page instead of framing `path`; `back` is the
+// layer a framed page was opened from.
 let layer = null;
-function openLayer(key, desk, path) {
+function openLayer(key, desk, path, mission = null, back = null) {
   // Without T3's main area the page opens in the browser at its normal address.
   if (!viewOn('layer')) { window.open(desk + path, '_blank', 'noopener'); return; }
-  layer = { key, desk, path };
-  if (layerFrame.desk !== desk || layerFrame.path !== path) {
-    Object.assign(layerFrame, { desk, path, ready: false, theme: '' });
-    layerFrame.iframe.src = `${desk}/embed${path}`;
+  layer = { key, desk, path, mission, back };
+  if (mission) {
+    const from = layer;
+    const openItem = id => openLayer(`item:${desk}/${mission.repo}/${id}`, desk, `/r/${encodeURIComponent(mission.repo)}/item/${encodeURIComponent(id)}`, null, from);
+    missionLayer.show({ desk, repo: mission.repo, id: mission.id, onClose: closeLayer, openThread: thread => { openThread(thread); closeLayer(); }, openItem, openUrl: url => window.open(url, '_blank', 'noopener') });
+  } else {
+    missionLayer.hide();
+    if (layerFrame.desk !== desk || layerFrame.path !== path) {
+      Object.assign(layerFrame, { desk, path, ready: false, theme: '' });
+      layerFrame.iframe.src = `${desk}/embed${path}`;
+    }
   }
   // The layer follows at once: a covered window delays the DOM pass's timer.
   syncSidebar();
 }
-function closeLayer() { if (!layer) return; layer = null; syncSidebar(); }
-const toggleLayer = (key, desk, path) => layer?.key === key ? closeLayer() : openLayer(key, desk, path);
+function closeLayer() { if (!layer) return; layer = null; missionLayer.hide(); syncSidebar(); }
+// Opens the mission page for any mission of a Desk, as a mission's title does for the open ones the
+// sidebar lists: for checks and the console, such as a done mission (README.md, "The mission page").
+globalThis.__t3Custom.openMission = (repo, id, desk = deskUrls[0]) => openLayer(`mission:${desk}/${repo}/${id}`, desk, `/r/${encodeURIComponent(repo)}/mission/${encodeURIComponent(id)}`, { repo, id });
+const toggleLayer = (key, desk, path, mission = null) => layer?.key === key ? closeLayer() : openLayer(key, desk, path, mission);
+// The mission page draws its own close and keys; a framed page gets the layer's close, and Back
+// when it was opened from the mission page.
 const layerClose = element('button', { 'data-t3-layer-close': '', 'aria-label': 'Close', title: 'Close (Esc)', html: icons.close });
-const layerNode = element('div', { 'data-t3-layer': '', hidden: '' }, layerFrame.iframe, layerClose);
+const layerBack = element('button', { 'data-t3-layer-back': '', title: 'Back to the mission', html: `${icons.back}<span>Back</span>` });
+const layerNative = element('div', { 'data-t3-layer-native': '' });
+const missionLayer = mountMissionLayer(layerNative, api);
+const layerNode = element('div', { 'data-t3-layer': '', hidden: '' });
 listen(layerClose, 'click', closeLayer);
+listen(layerBack, 'click', () => { const back = layer?.back; if (back) openLayer(back.key, back.desk, back.path, back.mission, back.back); });
 listen(document, 'keydown', event => { if (event.key === 'Escape' && layer) closeLayer(); });
 // Going to a thread in the sidebar, or anywhere else in T3, closes the layer.
 listen(document, 'click', event => { if (event.target instanceof Element && event.target.closest(hostSelectors.sidebarRow)) closeLayer(); }, { capture: true });
@@ -773,7 +795,9 @@ const viewStyle = element('style', { text: `
   [data-t3-more-row] > div { height: 28px; padding-left: 36px; font-size: 12px; color: var(--sidebar-muted-foreground); }
   [data-t3-layer] { position: absolute; inset: 0; z-index: 60; background: var(--background); -webkit-app-region: no-drag; }
   [data-t3-layer-close] { position: absolute; top: 8px; right: 12px; z-index: 1; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--foreground); cursor: pointer; -webkit-app-region: no-drag; }
-  [data-t3-layer-close]:hover { background: var(--accent); }
+  [data-t3-layer-close]:hover, [data-t3-layer-back]:hover { background: var(--accent); }
+  [data-t3-layer-back] { position: absolute; top: 8px; right: 48px; z-index: 1; display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 10px 0 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--foreground); font: 13px var(--font-sans, system-ui, sans-serif); cursor: pointer; -webkit-app-region: no-drag; }
+  [data-t3-layer-native] { width: 100%; height: 100%; }
   [data-t3-layer-open] [data-sidebar-row][aria-current] { background: transparent !important; }
   [data-t3-strip] { position: absolute; z-index: 21; box-sizing: border-box; height: 176px; display: flex; flex-direction: column; gap: 8px; padding: 0 2px; font-size: 13px; color: var(--foreground); }
   [data-t3-strip] button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: start; }
@@ -896,8 +920,11 @@ const ring = (done, total) => {
 function missionHeader(key, entry, count, folded) {
   const { mission } = entry;
   return listRow(key, JSON.stringify([mission, count, folded]), node => {
-    const title = element('button', { 'data-t3-mission-title': '', title: `${mission.id}: ${mission.title} (${mission.state}). Open mission control`, text: mission.title });
-    listen(title, 'click', () => toggleLayer(`mission:${entry.key}`, entry.desk, `/mission/${encodeURIComponent(entry.repo)}/${encodeURIComponent(mission.id)}`));
+    const title = element('button', { 'data-t3-mission-title': '', title: `${mission.id}: ${mission.title} (${mission.state}). Open ${mission.state === 'proposed' ? 'its plan' : 'the mission page'}`, text: mission.title });
+    // An agreed or running mission opens the mission page; a proposed plan, which that page does not
+    // serve, its record page, framed.
+    const path = `/r/${encodeURIComponent(entry.repo)}/mission/${encodeURIComponent(mission.id)}`;
+    listen(title, 'click', () => toggleLayer(`mission:${entry.key}`, entry.desk, path, mission.state === 'proposed' ? null : { repo: entry.repo, id: mission.id }));
     const fold = element('button', { 'data-t3-fold': '', 'aria-expanded': String(!folded), 'aria-label': `${folded ? 'Unfold' : 'Fold'} ${mission.title}`, html: sideIcons.chevron });
     listen(fold, 'click', () => { if (folded) delete missionView.folded[entry.key]; else missionView.folded[entry.key] = true; saveMissionView(); syncMissionLayout(); });
     const marks = folded
@@ -1009,12 +1036,17 @@ function syncSidebar() {
   for (const row of document.querySelectorAll('[data-t3-layer-key]')) row.setAttribute('aria-pressed', String(shown && row.dataset.t3LayerKey === layer.key));
   document.documentElement.toggleAttribute('data-t3-layer-open', shown);
   if (shown && layerNode.parentElement !== main) main.append(layerNode);
-  // The Desk's pages take keys (mission control is keyboard-driven): its frame gets focus as the
-  // layer appears, and again on desk:ready for a page still loading.
-  const appearing = shown && layerNode.hidden;
+  // The layer holds the mission page or the frame, never both, so a native page has no iframe.
+  // Moving the iframe reloads it, so it is moved only when the layer changes between them.
+  const content = !shown ? [] : layer.mission ? [layerNative] : [layerFrame.iframe, ...(layer.back ? [layerBack] : []), layerClose];
+  if (content.length && (content.length !== layerNode.children.length || content.some((node, at) => layerNode.children[at] !== node))) layerNode.replaceChildren(...content);
+  // The pages take keys: the frame gets focus as it appears, and again on desk:ready for a page
+  // still loading; the mission page focuses itself as it is drawn (src/mission/MissionPage.tsx).
+  const appearing = shown && (layerNode.hidden || layerNode.dataset.shown !== layer.key);
   layerNode.hidden = !shown;
-  if (appearing) layerFrame.iframe.focus();
-  if (!shown && document.activeElement === layerFrame.iframe) layerFrame.iframe.blur();
+  layerNode.dataset.shown = shown ? layer.key : '';
+  if (appearing && !layer.mission) layerFrame.iframe.focus();
+  if (!shown && (document.activeElement === layerFrame.iframe || document.activeElement === layerNative)) document.activeElement.blur();
 }
 
 // The count: needs-human items, proposed plans and waiting threads, across repositories and Desks.

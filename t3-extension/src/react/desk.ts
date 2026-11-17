@@ -61,3 +61,53 @@ export function useDeskRead<T>(desk: string, path: string, intervalMs = 15000): 
   }, [api, desk, path, intervalMs]);
   return state;
 }
+
+/** One path's answer: its last body, and the error its latest read failed with, if it did. */
+export type DeskAnswer<T> = { data: T | undefined; error: Error | null };
+
+/**
+ * Reads each of `paths` as `useDeskRead` does, together, again every `intervalMs` while the page is
+ * visible. A path not in the map has not been answered yet. A failed read keeps the path's last
+ * body beside its error, so a Desk that stops answering never looks like one with nothing in it.
+ */
+export function useDeskReads<T>(desk: string, paths: string[], intervalMs = 15000): Map<string, DeskAnswer<T>> {
+  const api = useHostApi();
+  const key = [...new Set(paths)].join("\n");
+  const [answers, setAnswers] = useState<Map<string, DeskAnswer<T>>>(() => new Map());
+  useEffect(() => {
+    let live = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let reading = false;
+    const list = key === "" ? [] : key.split("\n");
+    const read = async () => {
+      clearTimeout(timer);
+      if (reading) return;
+      reading = true;
+      const results = await Promise.all(
+        list.map(async (path): Promise<[string, T | Error]> => {
+          try {
+            return [path, (await api.request("desk-get", { desk, path })) as T];
+          } catch (error) {
+            return [path, error instanceof Error ? error : new Error(String(error))];
+          }
+        }),
+      );
+      reading = false;
+      if (!live) return;
+      setAnswers((last) => new Map(results.map(([path, result]): [string, DeskAnswer<T>] => [path, result instanceof Error ? { data: last.get(path)?.data, error: result } : { data: result, error: null }])));
+      if (document.visibilityState === "visible") timer = setTimeout(read, intervalMs);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void read();
+      else clearTimeout(timer);
+    };
+    document.addEventListener("visibilitychange", onVisibility, { signal: api.signal });
+    void read();
+    return () => {
+      live = false;
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [api, desk, key, intervalMs]);
+  return answers;
+}

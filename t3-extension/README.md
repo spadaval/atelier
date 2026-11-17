@@ -252,7 +252,8 @@ folder whose threads include mission threads, the list reads:
 - the folder's other threads, in T3's order.
 
 The pinned rows, other folders and the shelves stay as T3 draws them. A
-mission's title opens mission control; its chevron folds it, hiding its
+mission's title opens the mission page (see [The mission page](#the-mission-page)),
+or a proposed plan's title its record page; its chevron folds it, hiding its
 threads, and a folded mission shows how many of its threads are here, and a dot
 when something in it waits on the human. Which missions are folded is kept in
 localStorage (`t3-custom:atelier:missions:v1`); a mission starts open. A closed
@@ -288,17 +289,42 @@ T3 fades a row it removes by appending a copy of it, and does so for the
 extension's rows too. The extension removes copies of its own rows as they
 appear, when the view turns off and when it stops.
 
-**The layer.** The Inbox row, a mission's title and N more missions open the
-Desk over T3's main area (`/embed/inbox`, `/embed/mission/<repo>/<id>`,
-`/embed/home/<repo>`), leaving the sidebar usable; the
-row shows as selected. The layer is one frame filling the main area, with a
-close button and nothing else of the extension's. The frame takes focus as the
-layer appears, so the Desk's keys work at once. It closes on Escape in T3,
+**The layer.** The Inbox row, a mission's title and N more missions open a
+page over T3's main area, leaving the sidebar usable; the row shows as
+selected. A mission's title draws the extension's own mission page there, with
+no frame. The others open the Desk in one frame filling the main area
+(`/embed/inbox`, `/embed/home/<repo>`, and a proposed plan's record page
+`/embed/r/<repo>/mission/<id>`), with a close button and nothing else of the
+extension's; a Desk page opened from the mission page, such as an item, adds a
+**Back** button to it. The frame takes focus as the layer appears, so the
+Desk's keys work at once. It closes on Escape in T3,
 `desk:key {key: "Escape"}` from the Desk (Escape pressed inside its frame), the
 close button, its row again, a click on a thread row in T3's sidebar, any route
 change, and `desk:open-thread`, which also navigates T3. It speaks the same host
 contract as the panel (`host:theme` on `desk:ready` and on theme changes), and a
 message counts only from the layer frame's own window with its Desk's origin.
+
+## The mission page
+
+A mission's title in the sidebar opens the mission page over T3's main area,
+drawn by the extension (`src/mission/`) with T3's components through
+`mountReact`, from the Desk's reads through the injector: the mission, its
+history, each thread T3 lists in full and, once done, each merged item's page.
+Running, it says in one sentence how the mission stands, lists under *Needs
+you* each item labelled needs-human and each thread waiting on a person or
+quiet for 30 minutes, with a button that opens it, lists the other live
+threads under *At work* with their latest line, and folds *Not started*,
+*Merged* and *Outcome and success criteria* to a line each. Done, it shows
+the Result as written, a lane per item over time and the merged items, most
+review rounds first, each opening its pull request, or its Desk page where
+the Desk knows none. `L` opens the lead's thread, `Enter` the focused row,
+`Esc` closes it. What it shows and why is in
+[docs/architecture/desk.md](../docs/architecture/desk.md) ("The mission
+page"). A proposed plan's title opens its record page, framed, instead. The
+Desk's mission control page (`/embed/mission/...`) is no longer opened.
+`__t3Custom.openMission(repo, id, desk)` opens the page for any mission of a
+Desk (`desk` defaults to the first in `desk.urls`), such as a done one, which
+the sidebar does not list; the checks and the test instance use it.
 
 ## The project strip
 
@@ -757,7 +783,9 @@ T3's plain `@theme` (its font variables, which Settings → Appearance changes o
 rather than declaring defaults over them. A tree reads the Desk with
 `useDeskRead(desk, path)` (`src/react/desk.ts`), through the injector's gate,
 again every 15 seconds while the page is visible; a failed read is an `error`,
-with the last data kept, never empty data. The roots unmount when the extension
+with the last data kept, never empty data. `useDeskReads(desk, paths)` reads several
+paths together the same way, giving each its body or the error its read
+failed with. The roots unmount when the extension
 is reloaded or disposed.
 
 **After a T3 Code update**, copy again and check:
@@ -797,7 +825,16 @@ build. `test-components.mjs` builds what it checks itself (see
 `test-*.mjs` but `test-contract.mjs`, one at a time. It exits non-zero and
 names each test that failed. A new test is a new `test-*.mjs` file; the runner
 and CI find it. `test-extension.mjs` drives the extension in a fixture page in
-headless Chrome. `test-update.mjs` needs no browser or Desk, but needs
+headless Chrome. `test-mission.mjs` draws the mission page from the fixture
+missions in `check/mission-fixtures.ts`, with a stand-in injector and a fixed
+clock, in a page carrying T3's stylesheet: a running mission with an item
+labelled needs-human, a quiet thread and live threads; one with a thread that
+began waiting a minute ago; one with nothing needing the human; and a done
+one with a merged item whose pull request is not known. It checks the
+sentence, the rows and what each button and key opens, the folds, the lanes
+and merged items, the reads it makes, and the layout at 500, 728, 1,100 and
+1,400 pixels, and writes screenshots to `artifacts/mission-*.png`.
+`test-update.mjs` needs no browser or Desk, but needs
 `python3`: it builds release bundles from this folder and its build, installs
 one into an empty home with a stand-in for T3 Code's app, and runs the installed
 `t3-custom update` and injector against a local releases list. `test-fixture-desk.mjs` checks that the fixture Desk's
@@ -936,8 +973,10 @@ It checks:
   T3's fading copies of removed rows, and a new list, each laid out again; the
   boring sidebar off and the views off, each leaving no order, row or rule of
   the extension's in T3's list, the first with its note; a mission's title
-  opening mission control in the layer, selected and focused, and N more
-  missions the project home;
+  opening the mission page in the layer with no iframe, from the Desk's read
+  of the mission, selected and focused, an item of it opening framed with
+  Back to it, and a proposed plan's title opening its record page framed; N
+  more missions the project home;
 - the breadcrumb's project opening the project home without T3's own action;
 - the project strip: its three cards and their rows from the fixture's launch
   data, as wide as the composer and under it; a Next up row filling the
