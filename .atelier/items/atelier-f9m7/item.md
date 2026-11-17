@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-f9m7
 title: Say in the extension's rules that code must be worth writing, not that it is expensive
-status: in_review
+status: approved
 mission: null
 labels: []
 priority: medium
