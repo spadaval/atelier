@@ -65,8 +65,9 @@ its own home, data folder and backend port, and nothing under the real
 `~/.t3` changed. The injector attached unchanged and the extension drew its
 Inbox row and project strip. With no provider signed in it had no thread,
 so `test-contract.mjs` could not check 15 hooks; a free OpenCode model
-answered from the isolated home once OpenCode's two configuration folders
-were linked into it. He chose that way to give the instance threads. The
+answered from a fresh home with no sign-in. He chose a provider in the
+test instance as the way to give it threads; making one inside T3 Code
+is not yet tried. The
 spike's notes are in `~/t3-linux-spike` on this host.
 
 ## Outcome
@@ -103,7 +104,8 @@ reviewed first. It has no progress log.
 - needs-you-first: for fixture missions that between them hold an item labelled needs-human,
   a thread that began waiting on a person a minute ago, a live thread that
   has not changed in 30 minutes and two live threads that have, the mission page
-  shows, for each mission, a sentence naming what it holds, a row for each of the first three
+  shows a sentence naming what that mission holds, a row for each item or
+  thread that needs the human
   with a button that opens the item or the thread, and a line per live
   thread; its drafts and merged items are each one folded line; and it has
   no list of the mission's steps.

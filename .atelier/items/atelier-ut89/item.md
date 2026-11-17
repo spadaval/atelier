@@ -9,7 +9,6 @@ labels: []
 priority: medium
 blocked_by:
 - atelier-6dm7
-- atelier-diru
 implementers: []
 ready: null
 trivial: null
@@ -47,4 +46,4 @@ Out: a proposed plan, which the page need not serve; the mockup's "Differed from
 
 ## Context
 
-The mockups are `t3-extension/spike/mockups/mission-concepts.html` on `spike/extension-react`; open the file in a browser. The data mission control reads today is enough: `GET /api/repos/{repo}/missions/{id}` (sections, items, threads), each item's page, `GET /api/history` and `GET /api/thread?full=1`. `desk/src/lib/mission.ts` holds the stage and age logic with tests. The extension does not fetch the Desk itself: it asks the loader (`api.request('desk-get', { desk, path })`), for each Desk in its configuration, while the Desk's hooks in `desk/src/lib/api.ts` fetch paths on their own origin. So the components and the pure functions move, and the reads go through atelier-6dm7's hook, which also opened the loader's gate for them. This item mounts into the layer the old script already draws over T3's main area; atelier-40dc rewrites that layer afterwards. atelier-diru's command starts T3 Code here with the fixture Desk, whose records hold a running mission and a done one.
+The mockups are `t3-extension/spike/mockups/mission-concepts.html` on `spike/extension-react`; open the file in a browser. The data mission control reads today is enough: `GET /api/repos/{repo}/missions/{id}` (sections, items, threads), each item's page, `GET /api/history` and `GET /api/thread?full=1`. `desk/src/lib/mission.ts` holds the stage and age logic with tests. The extension does not fetch the Desk itself: it asks the loader (`api.request('desk-get', { desk, path })`), for each Desk in its configuration, while the Desk's hooks in `desk/src/lib/api.ts` fetch paths on their own origin. So the components and the pure functions move, and the reads go through atelier-6dm7's hook, which also opened the loader's gate for them. This item mounts into the layer the old script already draws over T3's main area; atelier-40dc rewrites that layer afterwards. This item may start before atelier-diru merges, and its last line waits for it. atelier-diru's command starts T3 Code here with the fixture Desk, whose records hold a running mission and a done one.
