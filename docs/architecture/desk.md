@@ -486,13 +486,17 @@ Its model is `t3-extension/src/mission/model.ts`.
   waiting when T3 Code says `waiting`, listed at once whatever its age, and
   quiet when its `updated_at` is 30 minutes old, This thread's rule, so a
   long stage with a thread still changing is not quiet. A thread both
-  waiting and quiet is one row. With none, there is no *Needs you*. *At
+  waiting and quiet is one row. A thread whose read fails keeps its last
+  answer, with a note naming the error; one with no answer yet is listed
+  under *At work* as not read, and the sentence says whether it needs the
+  human is not known rather than "Nothing needs you". With none, there is no *Needs you*. *At
   work*: each other live thread, with its item, latest line and how long
   its latest run has gone. *Not started*, *Merged* and *Outcome and
   success criteria* are each one folded line that opens in place; an item
   in them opens its Desk page, framed.
 - Done (or dropped): the state and when it closed, and how long after the
-  plan merged; the Result as written; a lane per item from the plan's merge
+  plan merged; the Result as written; a lane per item, dropped ones
+  included and ended where they were dropped, from the plan's merge
   to the close, with its building, review and merging spans, a legend, and
   its review rounds and time from start to merge at its end; and the
   merged items, most review rounds first, each opening its pull request on

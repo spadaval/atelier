@@ -8,9 +8,21 @@ import type { ItemRow } from "../../../desk/src/api/ItemRow";
 import type { MissionPage } from "../../../desk/src/api/MissionPage";
 import type { Role } from "../../../desk/src/api/Role";
 import type { ThreadInfo } from "../../../desk/src/api/ThreadInfo";
-import { span } from "../../../desk/src/lib/mission";
 
-export { span };
+/**
+ * `2h 14m`, `36m`, `48s`: a duration, short. The Desk's own `span` (desk/src/lib/mission.ts),
+ * restated: the release bundle is built from t3-extension/ alone (scripts/t3-extension-release.sh),
+ * so the extension may import only types from desk/, which the build erases.
+ */
+export function span(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 60) return `${s}s`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 48) return `${h}h ${m % 60}m`;
+  return `${Math.round(h / 24)}d`;
+}
 
 /** A live thread whose `updated_at` has not changed for this long is quiet: This thread's rule (desk/src/pages/ThisThread.tsx). */
 export const QUIET_MS = 30 * 60 * 1000;
@@ -39,7 +51,12 @@ export function pageState(page: MissionPage): PageState {
 export const counted = (page: MissionPage) => page.items.filter((i) => i.status !== "dropped");
 
 /** One thread on the mission: its identity, the role and item it is listed under first, and what T3 Code says of it. */
-export type Worker = { identity: string; role: Role; item: ItemRow | null; info: ThreadInfo | null; waiting: boolean; quiet: boolean; changedMs: number | null };
+/**
+ * `unknown` is a thread whose full read has no answer yet, or none at all: whether it is quiet
+ * cannot be told, so it is neither at work nor said to need nothing. `info` may be the last answer
+ * of a read that has since failed.
+ */
+export type Worker = { identity: string; role: Role; item: ItemRow | null; info: ThreadInfo | null; waiting: boolean; quiet: boolean; unknown: boolean; changedMs: number | null };
 
 /**
  * The identities to read in full: each the Desk names as a thread T3 Code lists (`thread` set),
@@ -72,6 +89,7 @@ export function liveWorkers(page: MissionPage, infos: Map<string, ThreadInfo>, n
       info,
       waiting: status === "waiting",
       quiet: changedMs !== null && changedMs >= QUIET_MS,
+      unknown: info === null,
       changedMs,
     });
   }
@@ -167,10 +185,13 @@ export function summary(page: MissionPage, workers: Worker[]): { work: string; w
     const longest = Math.max(...quiet.map((w) => w.changedMs ?? 0));
     warn.push(quiet.length === 1 ? `one thread has been quiet for ${span(longest)}` : `${count(quiet.length, "thread", "threads")} have been quiet, the longest for ${span(longest)}`);
   }
+  // A thread not read cannot be said to need nothing: the sentence says so instead.
+  const unknown = workers.filter((w) => w.unknown && !w.waiting).length;
+  if (unknown) warn.push(`whether ${count(unknown, "thread needs", "threads need")} you is not known yet`);
   return warn.length ? { work: workText, warn: `${capital(list(warn))}.`, needs: true } : { work: workText, warn: "Nothing needs you.", needs: false };
 }
 
-/** *At work*: each live thread not already under *Needs you*. */
+/** *At work*: each live thread not already under *Needs you*. One not read yet is listed as such, not as working. */
 export const atWork = (workers: Worker[]) => workers.filter((w) => !w.waiting && !w.quiet);
 
 /** How long a thread's latest run has gone on. */
@@ -203,8 +224,8 @@ export function mergedItems(page: MissionPage, events: HistoryEvent[]): ItemRow[
 
 export type Stage = "building" | "review" | "merging";
 export type Span = { stage: Stage; from: number; to: number };
-/** An item's lane: its spans over time, its review rounds and how long it took from start to merge. */
-export type Lane = { item: ItemRow; spans: Span[]; rounds: number; took: number | null };
+/** An item's lane: its spans over time, its review rounds, and how long it took from its first step to its merge or its drop. */
+export type Lane = { item: ItemRow; spans: Span[]; rounds: number; took: number | null; dropped: boolean };
 
 /**
  * An item's lane from its steps: building from `started` (and after a review asking for changes),
@@ -220,7 +241,8 @@ export function lane(item: ItemRow, events: HistoryEvent[], end: number): Lane {
   };
   let rounds = 0;
   let first: number | null = null;
-  let merged: number | null = null;
+  let ended: number | null = null;
+  let dropped = false;
   for (const e of steps(events, item.id)) {
     const at = Date.parse(e.at);
     if (Number.isNaN(at)) continue;
@@ -236,13 +258,15 @@ export function lane(item: ItemRow, events: HistoryEvent[], end: number): Lane {
       rounds = Math.max(rounds + 1, e.round ?? 0);
       close(at);
       open = { stage: e.verdict === "approved" ? "merging" : "building", from: at };
-    } else if (e.kind === "merged") {
+    } else if (e.kind === "merged" || e.kind === "dropped") {
+      // A dropped item's work ends when it was dropped, not at the mission's close.
       close(at);
-      merged = at;
+      ended = at;
+      dropped = e.kind === "dropped";
     }
   }
-  if (merged === null) close(end);
-  return { item, spans, rounds, took: first !== null && merged !== null ? merged - first : null };
+  if (ended === null) close(end);
+  return { item, spans, rounds, took: first !== null && ended !== null ? ended - first : null, dropped: dropped || item.status === "dropped" };
 }
 
 /** The done page's lanes and the span they are drawn over: from the plan's merge to the close. */
@@ -250,7 +274,8 @@ export function lanes(page: MissionPage, events: HistoryEvent[], now: number): {
   const id = page.mission.id;
   const closed = closedAt(events, id);
   const end = closed ? Date.parse(closed) : now;
-  const all = counted(page).map((i) => lane(i, events, end));
+  // Every item, dropped ones too: the time spent on an item later dropped is part of where it went.
+  const all = page.items.map((i) => lane(i, events, end));
   const starts = all.flatMap((l) => l.spans.map((s) => s.from));
   const planned = planMergedAt(events, id);
   const from = planned ? Date.parse(planned) : starts.length ? Math.min(...starts) : end;

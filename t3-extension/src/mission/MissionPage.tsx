@@ -11,7 +11,7 @@ import type { HistoryResponse } from "../../../desk/src/api/HistoryResponse";
 import type { ItemPage } from "../../../desk/src/api/ItemPage";
 import type { MissionPage as MissionRead } from "../../../desk/src/api/MissionPage";
 import type { ThreadInfo } from "../../../desk/src/api/ThreadInfo";
-import { useDeskRead, useDeskReads } from "../react/desk";
+import { useDeskRead, useDeskReads, type DeskAnswer } from "../react/desk";
 import { Badge } from "../t3/ui/badge";
 import { Button } from "../t3/ui/button";
 import { CollapsibleSectionHeader } from "../t3/ui/collapsible-section-header";
@@ -44,7 +44,6 @@ function useNow(clock: () => number): number {
   return now;
 }
 
-const isError = (value: unknown): value is Error => value instanceof Error;
 
 export function MissionPage({ desk, repo, id, onClose, openThread, openItem, openUrl, now: clock = Date.now }: MissionPageProps) {
   const now = useNow(clock);
@@ -52,11 +51,9 @@ export function MissionPage({ desk, repo, id, onClose, openThread, openItem, ope
   const mission = read.data;
   const ids = useMemo(() => (mission ? [id, ...mission.items.map((i) => i.id)] : []), [id, mission]);
   const history = useDeskReads<HistoryResponse>(desk, ids.length ? [m.paths.history(repo, ids)] : [], 30_000);
-  const events = useMemo(() => {
-    const answer = [...history.values()][0];
-    return answer && !isError(answer) ? answer.events : [];
-  }, [history]);
-  const historyError = [...history.values()].find(isError) ?? null;
+  const historyAnswer = [...history.values()][0];
+  const events = useMemo(() => historyAnswer?.data?.events ?? [], [historyAnswer]);
+  const historyError = historyAnswer?.error ?? null;
   const state = mission ? m.pageState(mission) : null;
   const finished = state === "done" || state === "dropped";
   // A finished mission's threads are about something else now; only its merged items' pages are read, for their pull requests.
@@ -172,16 +169,18 @@ function Running({
 }: {
   mission: MissionRead;
   events: HistoryEvent[];
-  threads: Map<string, ThreadInfo | Error>;
+  threads: Map<string, DeskAnswer<ThreadInfo>>;
   now: number;
   openItem(id: string): void;
   openThread(identity: string): void;
 }) {
+  // Each listed thread's last answer, kept through a failed read, by the identity it was asked for.
   const infos = new Map<string, ThreadInfo>();
   const failed: string[] = [];
-  for (const [path, answer] of threads) {
-    if (isError(answer)) failed.push(`${path}: ${answer.message}`);
-    else infos.set(answer.id, answer);
+  for (const identity of m.listedIdentities(mission)) {
+    const answer = threads.get(m.paths.thread(identity));
+    if (answer?.data) infos.set(identity, answer.data);
+    if (answer?.error) failed.push(`${m.paths.thread(identity)}: ${answer.error.message}`);
   }
   // T3 Code's threads are the Desk's to read; a mission whose threads could not be read is never said to need nothing.
   const t3Error = mission.t3.reachable ? null : (mission.t3.error ?? "the Desk has not read T3 Code's threads");
@@ -218,7 +217,7 @@ function Running({
         {sentence.work} {t3Error ? null : <span className={sentence.needs ? "text-warning-foreground" : undefined}>{sentence.warn}</span>}
       </p>
       {t3Error ? <Note>{`T3 Code's threads could not be read, so threads waiting on you or gone quiet are not shown: ${t3Error}`}</Note> : null}
-      {failed.length ? <Note>{`${failed.length === 1 ? "One thread" : `${failed.length} threads`} could not be read: ${failed[0]}`}</Note> : null}
+      {failed.length ? <Note>{`${failed.length === 1 ? "One thread" : `${failed.length} threads`} could not be read again; what is shown of ${failed.length === 1 ? "it" : "them"} is from the last read that answered: ${failed[0]}`}</Note> : null}
       <div className="grid gap-x-8 @min-[1100px]:grid-cols-[minmax(0,75ch)_minmax(0,75ch)]">
         {asks.length ? (
           <section data-section="needs-you">
@@ -267,9 +266,13 @@ function Running({
               title={`${m.roleWord(w.role)}: ${w.info?.title ?? w.identity}. Open the thread`}
               className="grid h-7 w-full cursor-pointer grid-cols-[6px_minmax(0,14rem)_minmax(0,1fr)_auto] items-center gap-2.5 rounded-md px-2 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset @max-[560px]:grid-cols-[6px_minmax(0,1fr)_auto]"
             >
-              <span className="size-1.5 rounded-full bg-success" aria-hidden />
+              <span className={`size-1.5 rounded-full ${w.unknown ? "bg-muted-foreground/50" : "bg-success"}`} aria-hidden data-unknown={w.unknown ? "" : undefined} />
               <span className="truncate">{m.workerTitle(w)}</span>
-              <span className="truncate font-mono text-muted-foreground text-xs @max-[560px]:hidden">{w.info?.last_line ?? w.info?.title ?? ""}</span>
+              {w.unknown ? (
+                <span className="truncate text-muted-foreground text-xs @max-[560px]:hidden">Not read yet, so whether it is quiet is not known</span>
+              ) : (
+                <span className="truncate font-mono text-muted-foreground text-xs @max-[560px]:hidden">{w.info?.last_line ?? w.info?.title ?? ""}</span>
+              )}
               <span className="text-muted-foreground text-xs tabular-nums">{m.running(w, now) ?? ""}</span>
             </button>
           ))}
@@ -344,7 +347,7 @@ function Retro({
 }: {
   mission: MissionRead;
   events: HistoryEvent[];
-  pages: Map<string, ItemPage | Error>;
+  pages: Map<string, DeskAnswer<ItemPage>>;
   repo: string;
   now: number;
   openItem(id: string): void;
@@ -353,7 +356,7 @@ function Retro({
   const read = new Map<string, ItemPage>();
   for (const item of mission.items) {
     const answer = pages.get(m.paths.item(repo, item.id));
-    if (answer && !isError(answer)) read.set(item.id, answer);
+    if (answer?.data) read.set(item.id, answer.data);
   }
   const items = m.counted(mission);
   const merged = m.retroItems(mission, events, read, now);
@@ -454,7 +457,7 @@ function Lane({ lane, from, to }: { lane: m.Lane; from: number; to: number }) {
         ))}
       </div>
       <span className="truncate text-right text-muted-foreground text-xs tabular-nums @max-[560px]:hidden">
-        {lane.spans.length ? `${rounds(lane.rounds)}${lane.took !== null ? ` · ${m.span(lane.took)}` : ""}` : "no step recorded"}
+        {lane.spans.length ? `${lane.dropped ? "dropped · " : ""}${rounds(lane.rounds)}${lane.took !== null ? ` · ${m.span(lane.took)}` : ""}` : lane.dropped ? "dropped" : "no step recorded"}
       </span>
     </div>
   );

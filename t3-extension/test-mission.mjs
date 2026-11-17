@@ -55,8 +55,9 @@ try {
   await fs.mkdir(path.join(root, 'artifacts'), { recursive: true });
 
   // Opens a scenario at a width and waits until its page has drawn from its reads.
-  const open = async (scenario, width = 1000, appearance = 'light') => {
-    const url = `${base}/?scenario=${scenario}&width=${width}&appearance=${appearance}`;
+  // `fail` names a path the stand-in injector answers `after` times and then fails (check/mission.tsx).
+  const open = async (scenario, width = 1000, appearance = 'light', fail = null) => {
+    const url = `${base}/?${new URLSearchParams({ scenario, width, appearance, ...(fail ?? {}) })}`;
     await page.call('Page.navigate', { url });
     await until(() => page.evaluate(`location.href === ${JSON.stringify(url)} && document.readyState === 'complete' && document.querySelector('#mission')?.shadowRoot?.querySelector('[data-mission-page]')?.dataset.missionPage !== 'loading'`), `${scenario} drawn`);
     // The fixture answers at once; the reads that follow the mission's (history, threads, items) are in by then.
@@ -176,6 +177,26 @@ try {
     assert.deepEqual(await rows('at-work'), ['thread:thread:calm']);
   });
 
+  // A thread's full read can fail on its own while T3 Code's list is read: the page must not then
+  // move a quiet thread to At work, or say nothing needs the human.
+  const threadPath = id => `/api/thread?id=${encodeURIComponent(id)}&full=1`;
+  await open('needs-you', 1000, 'light', { fail: threadPath('thread:quiet'), after: 1 });
+  await check('running: a quiet thread whose read answers and then fails stays under Needs you, from its last answer, with a note', async () => {
+    assert.deepEqual(await rows('needs-you'), ['item:atelier-r001', 'thread:thread:quiet']);
+    await page.evaluate('document.dispatchEvent(new Event("visibilitychange"))');
+    await until(() => read(`text(p.querySelector('[data-note]'))?.startsWith('One thread could not be read again')`), 'The failed read noted');
+    assert.deepEqual(await rows('needs-you'), ['item:atelier-r001', 'thread:thread:quiet']);
+    assert.deepEqual(await rows('at-work'), ['thread:thread:lead', 'thread:thread:busy', 'thread:thread:merging']);
+    assert.match(await read(`text(p.querySelector('[data-note]'))`), /HTTP 502/);
+  });
+  await open('calm', 1000, 'light', { fail: threadPath('thread:calm'), after: 0 });
+  await check('running: a thread whose read never answers is listed as not read, and the sentence does not say nothing needs you', async () => {
+    assert.equal(await read(`text(p.querySelector('[data-summary]'))`), 'One item is being built. Whether one thread needs you is not known yet.');
+    assert.deepEqual(await rows('at-work'), ['thread:thread:calm']);
+    assert.match(await read(`text(p.querySelector('[data-row="thread:thread:calm"]'))`), /Not read yet/);
+    assert.equal(await read(`Boolean(p.querySelector('[data-row="thread:thread:calm"] [data-unknown]'))`), true);
+  });
+
   await open('done', 1000);
   await check('done: the state and when it closed, the Result as written, a lane per item with its spans, rounds and duration, and a legend', async () => {
     assert.equal(await read(`p.dataset.missionPage`), 'done');
@@ -186,7 +207,11 @@ try {
     assert.deepEqual(await read(`[...p.querySelectorAll('[data-lane]')].map(l => [l.dataset.lane, [...l.querySelectorAll('[data-span]')].map(s => s.dataset.span).join(' '), text(l.lastElementChild)])`), [
       ['atelier-d002', 'building review merging', '1 round · 50m'],
       ['atelier-d001', 'building review building review building review merging', '3 rounds · 3h 30m'],
+      ['atelier-d003', 'building review building', 'dropped · 1 round · 3h 0m'],
     ]);
+    // A dropped item's lane ends where it was dropped, 300 of the 420 minutes in, not at the close.
+    const droppedEnd = await read(`(() => { const lane = p.querySelector('[data-lane="atelier-d003"]'); const track = lane.children[1].getBoundingClientRect(); const spans = [...lane.querySelectorAll('[data-span]')]; return (spans.at(-1).getBoundingClientRect().right - track.left) / track.width; })()`);
+    assert(Math.abs(droppedEnd - 300 / 420) < 0.01, `the dropped item's lane ends at ${droppedEnd} of the lane`);
     // The lanes run from the plan's merge to the close: the first span starts 10 minutes in.
     const first = await read(`(() => { const lane = p.querySelector('[data-lane="atelier-d002"]'); const track = lane.children[1].getBoundingClientRect(); const span = lane.querySelector('[data-span]').getBoundingClientRect(); return (span.left - track.left) / track.width; })()`);
     assert(Math.abs(first - 10 / 420) < 0.01, `the first span starts at ${first} of the lane`);

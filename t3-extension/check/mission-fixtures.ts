@@ -161,12 +161,13 @@ export const scenarios: Record<string, Scenario> = {
     [thread("thread:calm", "Implement atelier-c001", "running", 4, 25, "Reading src/sidebar.ts")],
   ),
   // Done: two merged items, one with three review rounds and its pull request, one with one round
-  // whose pull request the Desk does not know (pull_request null).
+  // whose pull request the Desk does not know (pull_request null); and one built, reviewed and dropped.
   done: (() => {
     const d1 = item("atelier-d001", "Let a host theme the embedded Desk", "done");
     const d2 = item("atelier-d002", "Lay the Desk out for a panel", "done");
+    const d3 = item("atelier-d003", "Theme the Desk from the host's palette", "dropped");
     return scenario(
-      mission("atelier-dm01", "Make the Desk feel native inside T3 Code", "done", [d2, d1], [agent("thread:lead4", "lead", null, true)], {
+      mission("atelier-dm01", "Make the Desk feel native inside T3 Code", "done", [d2, d1, d3], [agent("thread:lead4", "lead", null, true)], {
         sections: [...sections, { heading: "Result", markdown: "The Desk has an embedded mode under `/embed` and a host contract.\n\nAll 7 success criteria are checked by a test." }],
       }),
       [
@@ -183,6 +184,11 @@ export const scenarios: Record<string, Scenario> = {
         event("atelier-d001", "submitted", 330),
         event("atelier-d001", "review", 300, { round: 3, verdict: "approved" }),
         event("atelier-d001", "merged", 290),
+        // Built and reviewed once, then dropped two hours before the close.
+        event("atelier-d003", "started", 480),
+        event("atelier-d003", "submitted", 400),
+        event("atelier-d003", "review", 390, { round: 1, verdict: "changes requested" }),
+        event("atelier-d003", "dropped", 300),
         event("atelier-dm01", "closed", 180),
       ].reverse(),
       [],

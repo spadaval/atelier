@@ -62,15 +62,18 @@ export function useDeskRead<T>(desk: string, path: string, intervalMs = 15000): 
   return state;
 }
 
+/** One path's answer: its last body, and the error its latest read failed with, if it did. */
+export type DeskAnswer<T> = { data: T | undefined; error: Error | null };
+
 /**
  * Reads each of `paths` as `useDeskRead` does, together, again every `intervalMs` while the page is
- * visible. Each answer is the body, or the error its read failed with, so one failed read leaves the
- * rest drawn. The answers of the last round stay until the next round has all of its own.
+ * visible. A path not in the map has not been answered yet. A failed read keeps the path's last
+ * body beside its error, so a Desk that stops answering never looks like one with nothing in it.
  */
-export function useDeskReads<T>(desk: string, paths: string[], intervalMs = 15000): Map<string, T | Error> {
+export function useDeskReads<T>(desk: string, paths: string[], intervalMs = 15000): Map<string, DeskAnswer<T>> {
   const api = useHostApi();
   const key = [...new Set(paths)].join("\n");
-  const [answers, setAnswers] = useState<Map<string, T | Error>>(() => new Map());
+  const [answers, setAnswers] = useState<Map<string, DeskAnswer<T>>>(() => new Map());
   useEffect(() => {
     let live = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -81,17 +84,17 @@ export function useDeskReads<T>(desk: string, paths: string[], intervalMs = 1500
       if (reading) return;
       reading = true;
       const results = await Promise.all(
-        list.map(async (path) => {
+        list.map(async (path): Promise<[string, T | Error]> => {
           try {
-            return [path, (await api.request("desk-get", { desk, path })) as T | Error] as const;
+            return [path, (await api.request("desk-get", { desk, path })) as T];
           } catch (error) {
-            return [path, (error instanceof Error ? error : new Error(String(error))) as T | Error] as const;
+            return [path, error instanceof Error ? error : new Error(String(error))];
           }
         }),
       );
       reading = false;
       if (!live) return;
-      setAnswers(new Map<string, T | Error>(results));
+      setAnswers((last) => new Map(results.map(([path, result]): [string, DeskAnswer<T>] => [path, result instanceof Error ? { data: last.get(path)?.data, error: result } : { data: result, error: null }])));
       if (document.visibilityState === "visible") timer = setTimeout(read, intervalMs);
     };
     const onVisibility = () => {

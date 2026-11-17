@@ -1,6 +1,6 @@
 // The page script of test-mission.mjs: draws the mission page of `?scenario=` (check/mission-fixtures.ts)
 // through mountMissionLayer, as the layer does, at `?width=` pixels, with a stand-in injector that
-// answers the fixture's reads, and records what the page asks to open in `missionCalls`.
+// answers the fixture's reads (failing one on request), and records what the page asks to open in `missionCalls`.
 import { mountMissionLayer } from "../src/mission/mount";
 import { NOW, REPO, scenarios } from "./mission-fixtures";
 
@@ -19,6 +19,8 @@ const api = {
   request: (action: string, payload?: unknown) => {
     const { path } = payload as { desk: string; path: string };
     reads.push(path);
+    // `?fail=<path>&after=<n>`: that path answers its first n reads, then fails.
+    if (path === params.get("fail") && reads.filter((read) => read === path).length > Number(params.get("after") ?? 0)) return Promise.reject(new Error(`GET ${path}: HTTP 502: the fixture failed it`));
     if (action !== "desk-get" || !chosen || !(path in chosen.answers)) return Promise.reject(new Error(`GET ${path}: the fixture has no answer`));
     return Promise.resolve(structuredClone(chosen.answers[path]));
   },
