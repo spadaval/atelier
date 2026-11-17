@@ -3,12 +3,13 @@ schema: atelier.item
 schema_version: 3
 id: atelier-3dip
 title: Build the T3 extension from TypeScript sources with Vite, with its behaviour unchanged
-status: ready
+status: building
 mission: atelier-osel
 labels: []
 priority: high
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A899532db-24ca-47d2-b870-5d183ff33c40%3Adelegate-task%3A18f1460f-3960-46d4-b8ca-de072c2398a1
 ready:
   by: 'sumeet, in conversation on 2026-11-17: looks good, start up a lead'
   at: 2026-11-17T21:31:50.834606783Z
