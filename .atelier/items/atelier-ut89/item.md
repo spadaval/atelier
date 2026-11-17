@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-ut89
 title: 'Draw the mission page natively: what needs you while it runs, and the result and where the time went once it is done'
-status: changes_requested
+status: in_review
 mission: atelier-osel
 labels: []
 priority: medium
@@ -57,7 +57,7 @@ A mission's title in T3's sidebar now opens a mission page the extension
 draws itself, in React with T3's `Badge`, `Button`, `Kbd` and
 `CollapsibleSectionHeader`, with no `iframe`. It was seen working in T3 Code
 Nightly on this host, and `node run-tests.mjs` passes all five tests,
-including the new `test-mission.mjs` (10 checks) and the changed
+including the new `test-mission.mjs` (12 checks) and the changed
 `test-extension.mjs`.
 
 **What changed.**
@@ -85,11 +85,11 @@ admitted; the gate is unchanged.
 
 **Decisions within the mission's Authority.**
 
-- The extension reads the Desk's generated types and `span` from
-  `desk/src/lib/mission.ts` by relative path, with no pnpm workspace. It does
-  not import `desk/src/lib/api.ts`: that file imports React, which would
-  resolve to `desk/node_modules` and bundle a second React. The few paths it
-  needs are in `model.ts`.
+- The extension imports only the Desk's generated types from `desk/src`, by
+  relative path, with no pnpm workspace. The build erases them. Any runtime
+  import from `desk/` would break the release bundle, which is built from
+  `t3-extension/` alone. So `model.ts` restates the Desk's 9-line `span` and
+  the few paths the page reads.
 - The sentence counts items in review as well as building and merging
   ("Two items are being built, one is in review and one is merging. One item
   waits on you and one thread has been quiet for 47m.").
@@ -110,7 +110,10 @@ and does not say "Nothing needs you".
 **Quiet and waiting.** A thread counts as live when T3 Code lists it, says it
 is live and its status is not an ended one. It is waiting when its status is
 `waiting`, whatever its age, and quiet when its `updated_at` is 30 minutes old.
-It is one row when it is both. An item's stage age plays no part.
+It is one row when it is both. An item's stage age plays no part. A thread
+whose read fails keeps its last answer, with a note. One with no answer yet is
+listed under *At work* as not read, and the sentence then says whether it
+needs you is not known, never "Nothing needs you".
 
 **Checks.**
 
@@ -171,3 +174,7 @@ the iframe only when it changes between native and framed, since moving it
 reloads it. Nothing the old comments recorded was dropped.
 
 ### Responses
+
+- 1-9zxf.1: fixed in 597a35ed0. The extension imports only types from `desk/`, which the build erases, and restates the Desk's `span`; `scripts/t3-extension-release.test.sh` passes, `bundle` and `verify` included.
+- 1-9zxf.2: fixed in 597a35ed0. `useDeskReads` keeps a path's last answer beside its error, thread answers are keyed by the identity asked for, and a thread with no answer yet is listed as not read while the sentence says whether it needs you is not known. Two new checks cover a quiet thread whose read answers then fails (it stays under *Needs you* with a note) and one whose read never answers.
+- 1-9zxf.3: fixed in 597a35ed0. Every item has a lane, and a `dropped` step ends its last span there. The done fixture gains an item built, reviewed once and dropped; the check asserts its lane, `dropped · 1 round · 3h 0m`, ending 300 of the 420 minutes in, and that it stays out of the merged list and count.
