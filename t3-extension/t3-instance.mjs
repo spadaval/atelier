@@ -524,7 +524,7 @@ async function isolation() {
   if (changed.length || removed.length) console.log(`Changed while the check ran, by the host's own T3 server unless named below:\n${[...changed, ...removed].slice(0, 15).map(file => `  ${file}`).join('\n')}${changed.length + removed.length > 15 ? `\n  … and ${changed.length + removed.length - 15} more` : ''}`);
   console.log(`The instance's OpenCode, asked for its credentials (opencode auth list): ${held}`);
   if (problems.length) { console.error(`Isolation broken:\n${problems.map(problem => `  ${problem}`).join('\n')}`); process.exitCode = 1; }
-  else console.log('Isolation holds: no instance process opened a guarded folder, nothing changed in them names or holds the instance, and OpenCode used no folder in the human's home.');
+  else console.log("Isolation holds: no instance process opened a guarded folder, nothing changed in them names or holds the instance, and OpenCode used no folder in the human's home.");
 }
 
 const commands = { start, stop, status, shot, isolation };
