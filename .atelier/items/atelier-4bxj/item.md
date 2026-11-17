@@ -3,13 +3,15 @@ schema: atelier.item
 schema_version: 3
 id: atelier-4bxj
 title: Stop the extension's CI job failing when the browser is slow to start
-status: draft
+status: ready
 mission: null
 labels: []
 priority: medium
 blocked_by: []
 implementers: []
-ready: null
+ready:
+  by: sumeet
+  at: 2026-11-17T16:28:54.621829728Z
 trivial: null
 caused_by: null
 created_at: 2026-11-17T16:21:23.509642997Z
@@ -27,9 +29,9 @@ and teaches agents to rerun a red job without reading it.
 
 ## Done when
 
-- [ ] The Report says why the browser's debugging port is not answering when the test gives up: the cause, from a failing run's log, not a guess.
+- [ ] The Report says why the browser's debugging port is not answering when the test gives up: the cause, from the runs' logs, not a guess.
 - [ ] The fix is at that cause. A longer timeout or a retry alone is not one unless the Report shows the browser is only slow, with the times measured in CI.
-- [ ] The job passes 20 runs in a row on one commit.
+- [ ] The test prints how long the browser took to start, so a later run's log shows how near the limit it was.
 
 ## Scope
 
