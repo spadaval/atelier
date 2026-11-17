@@ -25,14 +25,17 @@ export const fixture = {
   repo: 'atelier',
   identity: 'example.invalid/fixture/atelier',
   origin: 'https://example.invalid/fixture/atelier.git',
-  // Open, with one item started: the one mission GET /api/sidebar lists.
+  // Open, with one item started and threads T3 lists: GET /api/sidebar lists it first.
   mission: { id: 'atelier-fm01', title: 'Fixture mission' },
+  // Open, with one needs-human item and no threads: the sidebar's "1 more mission".
+  quietMission: { id: 'atelier-fm03', title: 'Quiet mission' },
   // Done: resolved by GET /api/records but not in the sidebar.
   closedMission: { id: 'atelier-fm02', title: 'Closed fixture mission' },
   items: {
     started: { id: 'atelier-fi01', title: 'First item' },
     waiting: { id: 'atelier-fi02', title: 'Second item' },
     done: { id: 'atelier-fi03', title: 'Third item' },
+    quiet: { id: 'atelier-fi04', title: 'Quiet item' },
     // In no mission; the test's conversations name it.
     reference: { id: 'atelier-rf01', title: 'Fixture reference item' },
   },
@@ -60,10 +63,10 @@ async function write(root, file, text) {
 }
 
 // The repository at `root`: on master, the mission open with its three items (one ready, one ready
-// and needs-human, one done), the closed mission and the reference item; on branch atelier-fi01, its
-// item building, held by thread-a.
+// and needs-human, one done), the quiet mission open with one needs-human item, the closed mission
+// and the reference item; on branch atelier-fi01, its item building, held by thread-a.
 export async function writeFixtureRepository(root) {
-  const { mission: open, closedMission, items, threads } = fixture;
+  const { mission: open, quietMission, closedMission, items, threads } = fixture;
   const git = (...args) => execFileSync('git', ['-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid', ...args], { cwd: root, stdio: 'pipe' });
   await fs.mkdir(root, { recursive: true });
   git('init', '-q', '-b', 'master');
@@ -71,10 +74,12 @@ export async function writeFixtureRepository(root) {
   await write(root, '.atelier/config.toml', 'schema_version = 3\nslug = "atelier"\nbase_branch = "master"\n');
   await write(root, `.atelier/missions/${open.id}/mission.md`, mission(open, 'open', threads.lead));
   await write(root, `.atelier/missions/${open.id}/reviews/1-fx01.md`, review(threads.reviewer));
+  await write(root, `.atelier/missions/${quietMission.id}/mission.md`, mission(quietMission, 'open'));
   await write(root, `.atelier/missions/${closedMission.id}/mission.md`, mission(closedMission, 'done'));
   await write(root, `.atelier/items/${items.started.id}/item.md`, item(items.started, { status: 'ready', mission: open.id }));
   await write(root, `.atelier/items/${items.waiting.id}/item.md`, item(items.waiting, { status: 'ready', mission: open.id, labels: '[needs-human]' }));
   await write(root, `.atelier/items/${items.done.id}/item.md`, item(items.done, { status: 'done', mission: open.id }));
+  await write(root, `.atelier/items/${items.quiet.id}/item.md`, item(items.quiet, { status: 'ready', mission: quietMission.id, labels: '[needs-human]' }));
   await write(root, `.atelier/items/${items.reference.id}/item.md`, item(items.reference, { status: 'ready' }));
   git('add', '-A');
   git('commit', '-qm', 'Fixture records');
@@ -82,6 +87,11 @@ export async function writeFixtureRepository(root) {
   await write(root, `.atelier/items/${items.started.id}/item.md`, item(items.started, { status: 'building', mission: open.id, implementers: `[${threads.implementer}]` }));
   git('commit', '-qam', `Start ${items.started.id}`);
   git('switch', '-q', 'master');
+}
+
+// The address in atelier-desk's "serving on <url>" line, once the whole line has arrived, or null.
+export function servingUrl(text) {
+  return text.match(/serving on (http:\/\/\S+)\r?\n/)?.[1] ?? null;
 }
 
 // Builds the fixture repository under a new temporary directory and serves it with atelier-desk on
@@ -100,12 +110,16 @@ export async function startFixtureDesk() {
   const desk = spawn(binary, ['--config', config], { stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '';
   const url = await new Promise((resolve, reject) => {
-    const read = chunk => {
-      output += chunk;
-      const serving = output.match(/serving on (http:\/\/\S+)/);
-      if (serving) resolve(serving[1]);
+    // Each stream on its own: a chunk can end mid-line, and the two streams' chunks interleave.
+    const listen = stream => {
+      let text = '';
+      stream.on('data', chunk => {
+        output += chunk; text += chunk;
+        const serving = servingUrl(text);
+        if (serving) resolve(serving);
+      });
     };
-    desk.stdout.on('data', read); desk.stderr.on('data', read);
+    listen(desk.stdout); listen(desk.stderr);
     desk.on('error', reject);
     desk.on('exit', code => reject(new Error(`atelier-desk exited with ${code} before serving:\n${output}`)));
   });

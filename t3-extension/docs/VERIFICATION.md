@@ -1,5 +1,96 @@
 # Verification
 
+## Round 2 review fixes for missions in T3's list (atelier-ytor), Windows, November 16, 2026
+
+Same T3 build, test instance (port 9333) and Desk as below; the daily instance
+was not touched. `node run-tests.mjs` passes on Linux. With each fix undone:
+
+| Finding | Fix undone | Failure |
+| --- | --- | --- |
+| 1. Shift-click with the other modifier | Ctrl and Meta exempt from the stop again | "a click with Shift held reached T3 while a mission was placed, or a Ctrl-click did not" |
+| 3. Closed folder keeping the open thread | Open read from the rows, not `aria-expanded` | "A closed folder has no mission rows" timed out (mission header, indented `thread-a` and "1 more mission" drawn) |
+
+In the test instance, with the real `custom.js`, the atelier folder holds only
+the open thread and "1 more mission". Closing it left that thread a plain row
+and removed "1 more mission". Reopening, which changes only the button's
+`aria-expanded`, at first did not bring the row back until the 3-second refresh
+(throttled in the covered window); the page observer now watches
+`aria-expanded`, and the row came back at once. The fixture check for a folder
+opened by its button alone passes with or without that change, since another
+pass lays the fixture out within a second; the real app is what shows it.
+
+## Review fixes for missions in T3's list (atelier-ytor), Windows, November 16, 2026
+
+Fixes for round 1 of the review of atelier-ytor; same T3 build, test instance
+(port 9333) and Desk as below. The daily instance was not touched.
+
+`node run-tests.mjs` passes on Linux. Each new check was run with only its fix
+undone, and failed:
+
+| Finding | Fix undone | Failure |
+| --- | --- | --- |
+| 1. Shift-click ranges in T3's order | Shift-click not stopped | "a Shift-click reached T3 while a mission was placed, or a Ctrl-click did not" |
+| 2. Copies of mission rows kept | Copies left while the view is on | "A copy of a mission header removed" timed out |
+| 2. (view off) | Copies left when the view is off | "A copy of a mission header removed with the views off" timed out |
+| 3. Fixture Desk address | (`test-fixture-desk.mjs`, new) | every split of the "serving on" line is checked |
+
+In the test instance, with the synthetic mission again (a temporary copy of
+`custom.js`, since replaced by the real one), real CDP clicks on two rows drawn
+next to each other with a third between them in T3's order: Ctrl-click the
+first selected it, Shift-click the second selected nothing more and did not
+navigate, Ctrl-click the second selected it too, and Escape cleared both.
+Closing and reopening the folder left no copy of the mission header (last round
+it left one); T3's copies of its own rows are T3's.
+
+Not verified: T3's Shift-click range against the reordered list without the fix
+on the real app (the review reproduced it with T3's own selection store).
+
+## Missions in T3's thread list (atelier-ytor), Windows, November 16, 2026
+
+T3 Code Nightly 0.1.10-nightly.20261115, test instance (port 9333), boring
+sidebar on, Desk `http://buildbot:3780`; the daily instance was not touched.
+The test instance's only threads come from a paired read-only environment, so
+T3 refuses to settle any of them.
+
+`node run-tests.mjs` passes on Linux (the fixture test's 30 checks and the update
+test). Each new check was run with only its piece undone, and failed:
+
+| Piece | Undone | Failure |
+| --- | --- | --- |
+| Settle press stopped | No capture-phase stop | "a press on Settle reached T3, or the click did not" |
+| T3's fading copies skipped | Copies walked as list rows | "A fading copy among the folder's rows" timed out (the mission's other threads fell out of it) |
+| Orders cleared when off | `clearLayout` leaving `order` on T3's rows | "T3's list whole with the views off" timed out |
+| Rows follow a new list | Rows left in T3's old, detached list | "A new list laid out" timed out |
+
+`node test-contract.mjs --port 9333 --thread <atelier test thread>` passes with
+every probe ok, including the new `dom:projectFolder`, `dom:folderButton`,
+`dom:settleButton` and `layout:threadList`.
+
+In the test instance, through its debug port with CDP mouse input:
+
+- Before any change, pressing a row's Settle button and dragging two rows down
+  marked all three rows swept (`bg-sidebar-row-selected`); Escape cancelled it.
+- With the extension, a synthetic mission naming two of the instance's threads
+  (put in for this check through a temporary copy of `custom.js`, since none of
+  the Desk's missions has a thread this instance lists) showed as in the
+  mockup: header with ring and `2/5`, the two threads indented with `build` and
+  `lead`, the folder's other thread after them, and "2 more missions" with its
+  dot in the atelier folder. The same drag swept no row, with Escape or
+  released; a plain click on Settle reached T3, which answered "Failed to
+  settle thread. This connection cannot change threads or projects."
+- Fold and unfold, a folder closed (no mission rows) and opened, a search
+  (T3's new list: no folders, no rows, no orders) and back (rows on the new
+  list), and N more missions opening the project home in the layer all worked.
+- Found and fixed: T3 fades a removed row by appending an inert, absolutely
+  placed copy (`Sidebar.motion.ts`), the extension's own rows included. In the
+  covered test window those animations never finish, so copies stayed; the
+  layout now leaves them out of its walk.
+- The real `custom.js` was put back; the instance shows "1 more mission".
+
+Not verified: that a settle actually happens on a click (the environment
+refuses it, after T3's handler ran), T3's slide animations against the
+reordered list (the covered window runs none), and macOS.
+
 ## Re-review fixes, against the merged Desk, Windows, November 16, 2026
 
 The Desk work has merged: these runs used the real Desk at

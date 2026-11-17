@@ -14,13 +14,19 @@ const hostSelectors = {
   // (the strip goes under it) and its editor (ProseMirror), which a Next up card fills.
   composerOverlay: '[data-workspace-area="composer"][data-chat-composer-overlay]',
   composerStack: '[data-chat-composer-stack]',
-  // Sidebar views: the search field (the Inbox row and Missions go below its group), T3's main
-  // area (the layer covers it) and its thread rows (a click on one closes the layer).
+  // Sidebar views: the search field (the Inbox row goes below its group), T3's main area (the
+  // layer covers it) and its thread rows (a click on one closes the layer).
   sidebarSearch: '[data-workspace-area="sidebar"] [data-slot="sidebar-group"] input[type="search"]',
   mainInset: 'main[data-slot="sidebar-inset"]',
   sidebarRow: '[data-sidebar-row]',
-  // T3's own thread list items, hidden by CSS when a mission holds the thread.
+  // T3's own thread list items (li[data-thread-item="<environment>:<thread>"]). In the boring
+  // sidebar they follow their project's folder header in one flat list, which missions reorder
+  // with CSS order; the folder's button names it and says whether it is open.
   threadItem: '[data-thread-item]',
+  projectFolder: '[data-workspace-area="sidebar"] li[data-testid="sidebar-project-folder"]',
+  folderButton: 'button[data-sidebar-row^="folder:"][aria-expanded]',
+  // A thread row's Settle button: pressed and dragged it settles every row between, in T3's order.
+  settleButton: 'li[data-thread-item] button[aria-label="Settle thread"]',
   composerEditor: '[data-testid="composer-editor"]',
   // The thread breadcrumb's project button, which opens the project home instead.
   breadcrumbProject: 'nav[aria-label="Thread breadcrumb"] li:first-child button',
@@ -181,14 +187,17 @@ async function createHostAdapter(api) {
     if ((after[draftId] ?? '') !== text) return `T3's draft store did not record the text for draft ${draftId} (it holds ${JSON.stringify(after[draftId] ?? null)})`;
     return null;
   }
-  // Every thread of the connected environments, with who started it: lineage.parentThreadId for a
-  // local subagent (delegate_task), delegatedFrom.threadId for a thread a linked environment's
-  // agent delegated or launched here (the creator's thread ID in that other environment).
+  // Every thread of the connected environments, with its project's repository identity and who
+  // started it: lineage.parentThreadId for a local subagent (delegate_task), delegatedFrom.threadId
+  // for a thread a linked environment's agent delegated or launched here (the creator's thread ID
+  // in that other environment).
   function threadList() {
     const list = [];
     for (const environmentId of registry.get(environments.connectedEnvironmentIdsAtom) ?? []) {
-      for (const thread of registry.get(threads.snapshotAtom(environmentId))?.threads ?? []) {
-        list.push({ environmentId, id: thread.id, title: thread.title, status: thread.status, parent: thread.lineage?.parentThreadId ?? null, delegatedFrom: thread.delegatedFrom?.threadId ?? null, hasLineage: 'lineage' in thread });
+      const snapshot = registry.get(threads.snapshotAtom(environmentId));
+      const projects = new Map((snapshot?.projects ?? []).map(project => [project.id, project]));
+      for (const thread of snapshot?.threads ?? []) {
+        list.push({ environmentId, id: thread.id, title: thread.title, status: thread.status, parent: thread.lineage?.parentThreadId ?? null, delegatedFrom: thread.delegatedFrom?.threadId ?? null, hasLineage: 'lineage' in thread, projectId: thread.projectId, repositoryKey: projects.get(thread.projectId)?.repositoryIdentity?.canonicalKey ?? null });
       }
     }
     // Only the lineage field is checked: delegatedFrom is absent on threads no linked environment started.
@@ -235,6 +244,18 @@ async function createHostAdapter(api) {
       subscribe: listener => panelStore.subscribe(listener),
     } : null,
   };
+}
+
+// Why T3's boring sidebar list, the parent of its project folders, is not what missions need, or
+// null: one flex column holding every folder, each with its button.
+function hostListProblem(list) {
+  const style = getComputedStyle(list);
+  if (style.display !== 'flex' || style.flexDirection !== 'column') return `the folders' list is "${style.display} ${style.flexDirection}", not a flex column`;
+  for (const folder of document.querySelectorAll(hostSelectors.projectFolder)) {
+    if (folder.parentElement !== list) return 'the project folders are not all in one list';
+    if (!folder.querySelector(hostSelectors.folderButton)) return `a project folder has no ${hostSelectors.folderButton}`;
+  }
+  return null;
 }
 
 // T3's composer is a ProseMirror (TipTap) editor: its content is selected and replaced with

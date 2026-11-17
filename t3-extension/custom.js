@@ -665,14 +665,14 @@ listen(document, 'click', event => {
 listen(document, 'scroll', queueRects, { capture: true }); listen(window, 'resize', queueRects);
 listen(document, 'visibilitychange', () => { scheduleDOM(); queueRects(); });
 
-// Views outside the panel: the Inbox row and Missions section in T3's sidebar, the layer over
-// T3's main area, the project strip under the new-thread composer and the project home from the
-// breadcrumb. Each needs only its own hooks; a missing one turns off that view alone.
+// Views outside the panel: the Inbox row in T3's sidebar, missions in T3's thread list, the layer
+// over T3's main area, the project strip under the new-thread composer and the project home from
+// the breadcrumb. Each needs only its own hooks; a missing one turns off that view alone.
 const views = {
-  sidebar: { label: 'Inbox and Missions in the sidebar', hooks: ['dom:sidebarSearch'] },
+  sidebar: { label: 'Inbox row in the sidebar', hooks: ['dom:sidebarSearch'] },
+  missions: { label: 'Missions in T3\'s thread list', hooks: ['layout:threadList', 'dom:settleButton'], off: 'T3\'s list is left as T3 drew it' },
   layer: { label: 'Desk layer over T3\'s main area', hooks: ['dom:mainInset'], off: 'its pages open in the browser' },
   missionThreads: { label: 'Mission threads read from T3', hooks: ['module:atom-registry', 'module:thread-snapshot-atom', 'module:environment-atoms', 'state:thread-origin'] },
-  hiding: { label: 'Hiding mission threads from T3\'s list', hooks: ['dom:threadItem'] },
   strip: { label: 'Project strip on the new-thread screen', hooks: ['module:composer-draft-store', 'route:draft', 'dom:composerOverlay', 'dom:composerStack'] },
   composer: { label: 'Filling T3\'s composer from the strip', hooks: ['dom:composerEditor'] },
   home: { label: 'Project home from the breadcrumb', hooks: ['dom:breadcrumbProject'] },
@@ -731,44 +731,34 @@ listen(window, 'hashchange', closeLayer);
 
 const sideIcons = {
   inbox: icon('<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>'),
-  chevron: icon('<path d="m9 18 6-6-6-6"/>'),
+  chevron: icon('<path d="m6 9 6 6 6-6"/>'),
 };
 // T3's own variables, so the views follow its theme: --sidebar-* in the sidebar, --card and
-// --border for the strip's cards.
+// --border for the strip's cards. The rows in T3's thread list copy its folder header's metrics:
+// 32px high, 14px text, a 12px chevron, the count and dot in 12px muted text.
 const viewStyle = element('style', { text: `
-  [data-t3-ext-sidebar] { flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; max-height: 45vh; padding: 0 var(--sidebar-content-inset, 8px) 4px; }
-  [data-t3-ext-sidebar] button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: start; -webkit-app-region: no-drag; }
-  [data-t3-side-row] { display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 10px; border-radius: 6px; cursor: pointer; font-size: 14px; color: var(--sidebar-muted-foreground); user-select: none; outline: none; -webkit-app-region: no-drag; min-width: 0; }
-  [data-t3-side-row]:hover { background: var(--sidebar-row-hover); color: var(--sidebar-foreground); }
-  [data-t3-side-row][aria-pressed="true"] { background: var(--sidebar-row-active); color: var(--sidebar-foreground); }
-  [data-t3-side-row]:focus-visible, [data-t3-ext-sidebar] button:focus-visible { box-shadow: inset 0 0 0 2px var(--ring); outline: none; }
-  [data-t3-side-icon] { display: inline-flex; flex-shrink: 0; width: 16px; height: 16px; } [data-t3-side-icon] svg { width: 16px; height: 16px; }
+  [data-t3-ext-sidebar] { flex-shrink: 0; display: flex; flex-direction: column; padding: 0 var(--sidebar-content-inset, 8px) 4px; }
+  [data-t3-side-row] { display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 var(--sidebar-row-content-inset, 10px); border-radius: var(--control-radius, 6px); cursor: pointer; font-size: 14px; font-weight: 500; color: var(--sidebar-foreground); user-select: none; outline: none; -webkit-app-region: no-drag; min-width: 0; }
+  [data-t3-side-row]:hover, [data-t3-list-row] > div:hover { background: var(--sidebar-row-hover); }
+  [data-t3-side-row][aria-pressed="true"], [data-t3-list-row][aria-pressed="true"] > div { background: var(--sidebar-row-active); }
+  [data-t3-side-row]:focus-visible, [data-t3-list-row] button:focus-visible { box-shadow: inset 0 0 0 2px var(--ring); outline: none; }
+  [data-t3-side-icon] { display: inline-flex; flex-shrink: 0; width: 16px; height: 16px; color: var(--sidebar-muted-foreground); } [data-t3-side-icon] svg { width: 16px; height: 16px; }
   [data-t3-side-label] { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   [data-t3-inbox-count] { font-size: 12px; font-variant-numeric: tabular-nums; min-width: 20px; padding: 1px 6px; border-radius: 999px; text-align: center; background: var(--sidebar-row-active); color: var(--sidebar-foreground); }
   [data-t3-inbox-count][data-zero] { background: transparent; color: var(--sidebar-muted-foreground); }
   [data-t3-inbox-count][data-error] { color: var(--destructive); }
-  [data-t3-missions-head] { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 10px 10px 4px; font-size: 12px; color: var(--sidebar-muted-foreground); }
-  [data-t3-missions-head] button { font-size: 11px; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--border) !important; color: var(--sidebar-muted-foreground); flex-shrink: 0; }
-  [data-t3-missions-head] button[aria-pressed="true"] { background: var(--sidebar-row-active); color: var(--sidebar-foreground); }
-  [data-t3-missions] { display: flex; flex-direction: column; min-height: 0; flex: 1; }
-  [data-t3-missions-list] { overflow: auto; min-height: 0; flex: 1; }
-  [data-t3-mission] [data-t3-side-row] { gap: 6px; padding-left: 4px; height: 42px; }
-  [data-t3-two-line] { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
-  [data-t3-two-line] > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  [data-t3-expand] { display: inline-flex; width: 18px; height: 18px; align-items: center; justify-content: center; border-radius: 4px; flex-shrink: 0; transition: transform .1s; }
-  [data-t3-expand]:hover { background: var(--sidebar-row-hover); }
-  [data-t3-expand][aria-expanded="true"] { transform: rotate(90deg); }
-  [data-t3-meta] { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--sidebar-muted-foreground); white-space: nowrap; }
-  [data-t3-waiting] { width: 7px; height: 7px; border-radius: 50%; background: var(--warning, #f5a524); flex-shrink: 0; }
-  [data-t3-mission-body] { padding: 0 0 6px 24px; display: flex; flex-direction: column; gap: 1px; }
-  [data-t3-group] { font-size: 11px; color: var(--sidebar-muted-foreground); padding: 6px 6px 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  [data-t3-thread] { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 6px; border-radius: 6px; font-size: 13px; color: var(--sidebar-muted-foreground); min-width: 0; width: 100%; }
-  button[data-t3-thread]:hover { background: var(--sidebar-row-hover); color: var(--sidebar-foreground); }
-  [data-t3-thread][data-unknown] { opacity: .55; cursor: default; }
-  [data-t3-thread][aria-current="page"] { background: var(--sidebar-row-active); color: var(--sidebar-foreground); }
-  [data-t3-role] { font-size: 10px; text-transform: uppercase; letter-spacing: .03em; color: var(--sidebar-muted-foreground); flex-shrink: 0; }
-  [data-t3-missions-note] { font-size: 12px; color: var(--sidebar-muted-foreground); padding: 4px 10px; overflow-wrap: anywhere; }
+  [data-t3-missions-note] { font-size: 12px; color: var(--sidebar-muted-foreground); padding: 4px var(--sidebar-row-content-inset, 10px); overflow-wrap: anywhere; white-space: pre-line; }
   [data-t3-missions-note][data-error] { color: var(--destructive); }
+  li[data-t3-list-row] { list-style: none; }
+  [data-t3-list-row] > div { display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 var(--sidebar-row-content-inset, 10px) 0 12px; border-radius: var(--control-radius, 6px); min-width: 0; font-size: 14px; color: var(--sidebar-foreground); user-select: none; -webkit-app-region: no-drag; }
+  [data-t3-list-row] button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: start; height: 100%; }
+  [data-t3-mission-title] { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+  [data-t3-ring] { display: inline-flex; flex-shrink: 0; color: var(--sidebar-muted-foreground); }
+  [data-t3-count] { flex-shrink: 0; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--sidebar-muted-foreground); }
+  [data-t3-dot] { flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%; background: var(--warning, #f5a524); }
+  [data-t3-fold] { display: inline-flex; align-items: center; flex-shrink: 0; color: var(--sidebar-muted-foreground) !important; }
+  [data-t3-fold] svg { width: 12px; height: 12px; transition: transform .1s; } [data-t3-fold][aria-expanded="false"] svg { transform: rotate(-90deg); }
+  [data-t3-more-row] > div { height: 28px; padding-left: 36px; font-size: 12px; color: var(--sidebar-muted-foreground); }
   [data-t3-layer] { position: absolute; inset: 0; z-index: 60; background: var(--background); -webkit-app-region: no-drag; }
   [data-t3-layer-close] { position: absolute; top: 8px; right: 12px; z-index: 1; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--foreground); cursor: pointer; -webkit-app-region: no-drag; }
   [data-t3-layer-close]:hover { background: var(--accent); }
@@ -800,28 +790,26 @@ const viewStyle = element('style', { text: `
 ` });
 document.head.append(viewStyle);
 
-// The sidebar block under T3's search: the Inbox row, then the Missions section.
+// The Inbox row under T3's search; under it, a note when T3's list cannot hold missions and the
+// errors of reading them.
 const inboxCount = element('span', { 'data-t3-inbox-count': '', text: '…' });
-const inboxRow = element('div', { 'data-t3-side-row': '', 'data-t3-inbox-row': '', 'data-layer-key': 'inbox', role: 'button', tabindex: '0', 'aria-pressed': 'false', title: 'Atelier inbox' },
+const inboxRow = element('div', { 'data-t3-side-row': '', 'data-t3-inbox-row': '', 'data-t3-layer-key': 'inbox', role: 'button', tabindex: '0', 'aria-pressed': 'false', title: 'Atelier inbox' },
   element('span', { 'data-t3-side-icon': '', html: sideIcons.inbox }), element('span', { 'data-t3-side-label': '', text: 'Inbox' }), inboxCount);
 const keyActivate = node => listen(node, 'keydown', event => { if (event.target === node && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); node.click(); } });
 listen(inboxRow, 'click', () => toggleLayer('inbox', deskUrls[0], '/inbox')); keyActivate(inboxRow);
-const missionsHidden = element('span', { 'data-t3-missions-hidden': '' });
-const showAllToggle = element('button', { 'data-t3-show-all': '', 'aria-pressed': 'false', title: 'Show threads that belong to a mission in T3\'s own list too', text: 'Show all threads' });
-const missionsList = element('div', { 'data-t3-missions-list': '' });
-const missionsSection = element('div', { 'data-t3-missions': '' }, element('div', { 'data-t3-missions-head': '' }, element('span', {}, document.createTextNode('Missions'), missionsHidden), showAllToggle), missionsList);
-const extSidebar = element('div', { 'data-t3-ext-sidebar': '' }, inboxRow, missionsSection);
+const boringNote = element('div', { 'data-t3-missions-note': '', 'data-t3-boring-note': '', hidden: '', text: 'Missions show in T3\'s thread list with Settings → Labs → Boring sidebar on.' });
+const missionsError = element('div', { 'data-t3-missions-note': '', 'data-error': '', hidden: '' });
+const extSidebar = element('div', { 'data-t3-ext-sidebar': '' }, inboxRow, boringNote, missionsError);
 
-// View state in localStorage: which missions are expanded, and whether T3's list shows all threads.
+// Which missions are folded, in localStorage; a mission starts open.
 const missionViewKey = 't3-custom:atelier:missions:v1';
 let missionView;
 try { missionView = JSON.parse(localStorage.getItem(missionViewKey) ?? '{}'); } catch { missionView = {}; }
-missionView = { expanded: {}, showAll: false, ...missionView };
+missionView = { folded: missionView.folded ?? {} };
 const saveMissionView = () => localStorage.setItem(missionViewKey, JSON.stringify(missionView));
-listen(showAllToggle, 'click', () => { missionView.showAll = !missionView.showAll; saveMissionView(); renderMissions(); });
 
 // GET /api/sidebar from each Desk; each mission keeps the Desk that served it.
-let sidebarRepos = null; let sidebarErrors = [];
+let sidebarRepos = null;
 async function readSidebar() {
   const repos = []; const errors = [];
   await Promise.all(deskUrls.map(async desk => {
@@ -829,86 +817,168 @@ async function readSidebar() {
     catch (error) { errors.push(`GET ${desk}/api/sidebar: ${error.message}`); }
   }));
   if (api.signal.aborted) return;
-  sidebarRepos = repos; sidebarErrors = errors; renderMissions();
+  sidebarRepos = repos;
+  missionsError.hidden = !errors.length; missionsError.textContent = errors.join('\n');
+  refreshMissions();
 }
 const threadList = () => viewOn('missionThreads') ? host?.threadList?.() ?? [] : [];
-// Each open mission with its threads; a thread T3 knows shows T3's live title and status. "Other
-// threads" are T3 threads whose creator (lineage.parentThreadId, or delegatedFrom.threadId for a
-// thread delegated from a linked environment) is one of the mission's threads.
-function missionModel(t3) {
-  return (sidebarRepos ?? []).flatMap(repo => repo.missions.map(mission => {
-    const own = new Set([...mission.threads, ...mission.items.flatMap(item => item.threads)].map(thread => thread.identity));
-    const other = t3.filter(thread => !own.has(thread.id) && (own.has(thread.parent) || own.has(thread.delegatedFrom)));
-    return { key: `${repo.desk}/${repo.repo}/${mission.id}`, repo: repo.repo, desk: repo.desk, mission, other, own };
-  }));
-}
-const hideStyle = element('style', { 'data-t3-hide-threads': '' });
-document.head.append(hideStyle);
-let missionsSignature = '';
-function renderMissions() {
+// The Desk's role names, as the list labels a mission thread.
+const roleLabels = { lead: 'lead', planner: 'plan', implementer: 'build', reviewer: 'review', decider: 'decide' };
+// What T3's list needs, read on each Desk read and every 3 seconds: the open missions in the
+// Desks' order; which T3 row (by its exact "<environment>:<thread>" key) belongs to which mission,
+// with its role; and which repository each row's project maps to. A mission's "other threads" are
+// T3 threads whose creator (lineage.parentThreadId, or delegatedFrom.threadId for a thread
+// delegated from a linked environment) is one of its threads; they get no role.
+let missions = []; let claims = new Map(); let rowRepos = new Map();
+function refreshMissions() {
   const list = threadList();
-  const t3 = new Map(list.map(thread => [thread.id, thread]));
-  const model = missionModel(list);
-  // T3's own list items (li[data-thread-item="<environment>:<thread>"]) of mission threads are
-  // hidden with CSS, so React's nodes stay where React put them. T3's Working and Settled counts
-  // still include them; the note beside the title says how many are hidden.
-  // Only while the Missions section is shown, with its toggle: with the views off or without the
-  // sidebar hook, T3's list is left whole.
-  const missionsShown = settings.enabled && viewOn('sidebar') && extSidebar.isConnected;
-  const hiddenIds = missionView.showAll || !viewOn('hiding') || !missionsShown ? new Set() : new Set(model.flatMap(entry => [...entry.own, ...entry.other.map(thread => thread.id)]));
-  // One exact selector per environment and thread T3 lists: a thread ID may itself hold colons,
-  // so a suffix match on ":<thread>" could hide another thread.
-  const hidden = list.filter(thread => hiddenIds.has(thread.id));
-  const itemAttribute = hostSelectors.threadItem.slice(1, -1);
-  hideStyle.textContent = hidden.length ? `${hidden.map(thread => `[${itemAttribute}="${CSS.escape(`${thread.environmentId}:${thread.id}`)}"]`).join(',\n')} { display: none !important; }` : '';
-  missionsHidden.textContent = hidden.length ? ` · ${hidden.length} hidden from T3's list` : '';
-  showAllToggle.setAttribute('aria-pressed', String(missionView.showAll));
-  showAllToggle.hidden = !viewOn('hiding');
-  const signature = JSON.stringify([model.map(entry => [entry.key, entry.mission, entry.other.map(thread => thread.id)]), list.map(thread => [thread.id, thread.title, thread.status]), missionView.expanded, sidebarErrors, current?.threadId, layer?.key]);
-  if (signature === missionsSignature) return;
-  missionsSignature = signature;
-  const nodes = [];
-  for (const error of sidebarErrors) nodes.push(element('div', { 'data-t3-missions-note': '', 'data-error': '', text: error }));
-  if (!sidebarRepos && !sidebarErrors.length) nodes.push(element('div', { 'data-t3-missions-note': '', text: 'Reading missions…' }));
-  if (sidebarRepos && !model.length && !sidebarErrors.length) nodes.push(element('div', { 'data-t3-missions-note': '', text: 'No open missions.' }));
-  const threadEntry = (identity, role) => {
-    const thread = t3.get(identity);
-    if (!thread) return element('div', { 'data-t3-thread': '', 'data-unknown': '', 'data-identity': identity, title: `${identity}: not a thread of any connected T3 environment` },
-      element('span', { 'data-t3-role': '', text: role }), element('span', { 'data-t3-side-label': '', text: identity.length > 18 ? `${identity.slice(0, 8)}…${identity.slice(-6)}` : identity }));
-    const node = element('button', { 'data-t3-thread': '', 'data-identity': identity, title: `${thread.title} (${thread.status})` },
-      element('span', { 'data-t3-role': '', text: role }), element('span', { 'data-t3-side-label': '', text: thread.title }), element('span', { 'data-t3-meta': '', text: thread.status }));
-    if (current?.threadId === thread.id) node.setAttribute('aria-current', 'page');
-    node.addEventListener('click', () => host.showThread(thread.environmentId, thread.id));
-    return node;
-  };
-  for (const entry of model) {
-    const { mission } = entry;
-    const expanded = Boolean(missionView.expanded[entry.key]);
-    const expand = element('button', { 'data-t3-expand': '', 'aria-expanded': String(expanded), 'aria-label': `${expanded ? 'Collapse' : 'Expand'} ${mission.title}`, html: sideIcons.chevron });
-    const row = element('div', { 'data-t3-side-row': '', 'data-layer-key': `mission:${entry.key}`, 'data-mission': mission.id, role: 'button', tabindex: '0', 'aria-pressed': String(layer?.key === `mission:${entry.key}`), title: `${mission.id}: ${mission.title} (${mission.state}), open mission control` },
-      expand, element('span', { 'data-t3-two-line': '' }, element('span', { text: mission.title }), element('span', { 'data-t3-meta': '', text: `${entry.repo} · ${mission.done}/${mission.total} done${mission.state === 'in_progress' ? '' : ` · ${mission.state}`}` })),
-      ...(mission.waiting > 0 ? [element('span', { 'data-t3-waiting': '', title: `${mission.waiting} waiting on you` })] : []));
-    expand.addEventListener('click', event => { event.stopPropagation(); if (expanded) delete missionView.expanded[entry.key]; else missionView.expanded[entry.key] = true; saveMissionView(); renderMissions(); });
-    row.addEventListener('click', () => toggleLayer(`mission:${entry.key}`, entry.desk, `/mission/${encodeURIComponent(entry.repo)}/${encodeURIComponent(mission.id)}`));
-    keyActivate(row);
-    const block = element('div', { 'data-t3-mission': '' }, row);
-    if (expanded) {
-      const body = element('div', { 'data-t3-mission-body': '' });
-      for (const item of mission.items) {
-        if (!item.threads.length) continue;
-        body.append(element('div', { 'data-t3-group': '', title: `${item.id}: ${item.title} (${item.status})`, text: `${item.id} · ${item.title}` }), ...item.threads.map(thread => threadEntry(thread.identity, thread.role)));
-      }
-      if (mission.threads.length) body.append(element('div', { 'data-t3-group': '', text: 'Mission' }), ...mission.threads.map(thread => threadEntry(thread.identity, thread.role)));
-      if (entry.other.length) body.append(element('div', { 'data-t3-group': '', text: 'Other threads' }), ...entry.other.map(thread => threadEntry(thread.id, thread.parent ? 'child' : 'delegated')));
-      if (!body.children.length) body.append(element('div', { 'data-t3-group': '', text: 'No threads yet.' }));
-      block.append(body);
+  const rowKey = thread => `${thread.environmentId}:${thread.id}`;
+  missions = (sidebarRepos ?? []).flatMap(repo => repo.missions.map(mission => ({ key: `${repo.desk}/${repo.repo}/${mission.id}`, repo: repo.repo, desk: repo.desk, mission })));
+  rowRepos = new Map(list.map(thread => [rowKey(thread), mappedRepository(thread)]).filter(([, repo]) => repo));
+  claims = new Map();
+  for (const entry of missions) {
+    const own = new Map();
+    for (const thread of [...entry.mission.threads, ...entry.mission.items.flatMap(item => item.threads)]) if (!own.has(thread.identity)) own.set(thread.identity, thread.role);
+    for (const thread of list) {
+      if (claims.has(rowKey(thread))) continue;
+      if (own.has(thread.id)) claims.set(rowKey(thread), { entry, role: own.get(thread.id) });
+      else if (own.has(thread.parent) || own.has(thread.delegatedFrom)) claims.set(rowKey(thread), { entry, role: null });
     }
-    nodes.push(block);
   }
-  missionsList.replaceChildren(...nodes);
+  syncMissionLayout();
 }
-// T3's titles and statuses change as threads run.
-const missionsTimer = setInterval(renderMissions, 3000);
+const missionsTimer = setInterval(refreshMissions, 3000);
+
+// Missions in T3's own thread list. T3's boring sidebar is one flex column of li: a header per
+// project folder, the folder's thread rows after it, then other rows (pinned, shelves). The
+// extension never moves or changes T3's nodes: it appends its own rows to that list and gives
+// every child a CSS order, so each open folder reads: its header, each mission with threads in it
+// (a header, then those threads, indented, with their role), "N more missions" for the
+// repository's missions with none there, then the folder's other threads in T3's order. A
+// generated stylesheet keyed on data-thread-item indents, labels and folds the mission threads.
+const layoutStyle = element('style', { 'data-t3-mission-layout': '' });
+document.head.append(layoutStyle);
+const listRows = new Map(); const rowSignatures = new WeakMap();
+let ordered = new Set(); let layoutList = null; let layoutActive = false;
+// T3 fades a removed row by appending a copy of it, the extension's rows included, so every row
+// carrying the extension's mark goes, copies too.
+const removeListRows = keep => { for (const node of document.querySelectorAll('[data-t3-list-row]')) if (!keep?.has(node)) node.remove(); };
+function clearLayout() {
+  for (const node of ordered) node.style.order = '';
+  removeListRows();
+  listRows.clear(); ordered = new Set(); layoutList = null; layoutActive = false; layoutStyle.textContent = '';
+}
+// One of the extension's rows in T3's list, kept across syncs and rebuilt when its data changes.
+function listRow(key, signature, build) {
+  let node = listRows.get(key);
+  if (!node) { node = element('li', { 'data-t3-list-row': '' }); listRows.set(key, node); }
+  if (rowSignatures.get(node) !== signature) { rowSignatures.set(node, signature); build(node); }
+  return node;
+}
+const ring = (done, total) => {
+  const length = 2 * Math.PI * 5; const part = total > 0 ? length * Number(done) / Number(total) : 0;
+  return element('span', { 'data-t3-ring': '', html: `<svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-opacity=".25" stroke-width="2"/><circle cx="7" cy="7" r="5" fill="none" stroke="var(--success, #10b981)" stroke-width="2" stroke-dasharray="${part} ${length}" transform="rotate(-90 7 7)"/></svg>` });
+};
+// A mission's header, like T3's folder header: open, it shows items done of total; folded, the
+// number of its threads here and a dot when something in it waits on the human.
+function missionHeader(key, entry, count, folded) {
+  const { mission } = entry;
+  return listRow(key, JSON.stringify([mission, count, folded]), node => {
+    const title = element('button', { 'data-t3-mission-title': '', title: `${mission.id}: ${mission.title} (${mission.state}). Open mission control`, text: mission.title });
+    listen(title, 'click', () => toggleLayer(`mission:${entry.key}`, entry.desk, `/mission/${encodeURIComponent(entry.repo)}/${encodeURIComponent(mission.id)}`));
+    const fold = element('button', { 'data-t3-fold': '', 'aria-expanded': String(!folded), 'aria-label': `${folded ? 'Unfold' : 'Fold'} ${mission.title}`, html: sideIcons.chevron });
+    listen(fold, 'click', () => { if (folded) delete missionView.folded[entry.key]; else missionView.folded[entry.key] = true; saveMissionView(); syncMissionLayout(); });
+    const marks = folded
+      ? [...(mission.waiting > 0 ? [element('span', { 'data-t3-dot': '', title: `${mission.waiting} waiting on you` })] : []), element('span', { 'data-t3-count': '', title: `${count} of its threads here`, text: String(count) })]
+      : [element('span', { 'data-t3-count': '', title: `${mission.done} of ${mission.total} items done`, text: `${mission.done}/${mission.total}` })];
+    node.setAttribute('data-t3-mission-row', mission.id); node.setAttribute('data-t3-layer-key', `mission:${entry.key}`);
+    node.replaceChildren(element('div', {}, ring(mission.done, mission.total), title, ...marks, fold));
+  });
+}
+// The repository's missions with no thread in this folder, in one row that opens the project home.
+function moreRow(key, repo, rest) {
+  const waiting = rest.filter(entry => entry.mission.waiting > 0).length;
+  return listRow(key, JSON.stringify([repositoryKey(repo), rest.map(entry => [entry.mission.title, entry.mission.waiting])]), node => {
+    const open = element('button', { 'data-t3-side-label': '', title: `${rest.map(entry => `${entry.mission.id}: ${entry.mission.title}`).join('\n')}\nOpen the ${repo.repo} project home`, text: `${rest.length} more mission${rest.length === 1 ? '' : 's'}` });
+    listen(open, 'click', () => toggleLayer(`home:${repositoryKey(repo)}`, repo.desk, `/home/${encodeURIComponent(repo.repo)}`));
+    node.setAttribute('data-t3-more-row', repo.repo); node.setAttribute('data-t3-layer-key', `home:${repositoryKey(repo)}`);
+    node.replaceChildren(element('div', {}, open, ...(waiting ? [element('span', { 'data-t3-dot': '', title: `${waiting} of them wait on you` })] : [])));
+  });
+}
+function syncMissionLayout() {
+  const on = settings.enabled && viewOn('missions');
+  const list = on ? document.querySelector(hostSelectors.projectFolder)?.parentElement : null;
+  // T3 lists threads but no folders, and is not searching: the boring sidebar is off.
+  boringNote.hidden = !on || Boolean(list) || Boolean(document.querySelector(hostSelectors.sidebarSearch)?.value) || !document.querySelector(hostSelectors.threadItem);
+  const problem = list && hostListProblem(list);
+  if (list) setHostProbe('layout:threadList', !problem, problem ? `T3's thread list: ${problem}` : 'project folders and their thread rows in one flex column');
+  if (!list || problem) { if (layoutList || ordered.size || document.querySelector('[data-t3-list-row]')) clearLayout(); return; }
+  // T3 fades a row it removes by appending an inert, absolutely placed copy (Sidebar.motion.ts);
+  // being out of flow, those copies, like the extension's own rows, are left out of the walk.
+  const children = [...list.children].filter(node => !node.hasAttribute('data-t3-list-row') && !(node.inert && node.style.position === 'absolute'));
+  const sequence = []; const rules = []; const used = new Set(); let folderThreads = 0;
+  const add = (key, node) => { used.add(key); sequence.push(node); };
+  for (let index = 0; index < children.length;) {
+    const node = children[index++];
+    sequence.push(node);
+    const button = node.matches(hostSelectors.projectFolder) && node.querySelector(hostSelectors.folderButton);
+    if (!button) continue;
+    // A folder's threads are the thread rows after its header. A closed folder keeps only the open
+    // thread's row, which stays a plain row under it, with no mission rows.
+    const threads = [];
+    while (index < children.length && children[index].matches(hostSelectors.threadItem)) threads.push(children[index++]);
+    folderThreads += threads.length;
+    if (button.getAttribute('aria-expanded') !== 'true') { sequence.push(...threads); continue; }
+    const groups = new Map(); const loose = [];
+    for (const item of threads) {
+      const claim = claims.get(item.dataset.threadItem);
+      if (!claim) { loose.push(item); continue; }
+      if (!groups.has(claim.entry)) groups.set(claim.entry, []);
+      groups.get(claim.entry).push([item, claim]);
+    }
+    const folderKey = button.dataset.sidebarRow;
+    for (const entry of missions.filter(entry => groups.has(entry))) {
+      const items = groups.get(entry); const folded = Boolean(missionView.folded[entry.key]);
+      add(`${folderKey}|${entry.key}`, missionHeader(`${folderKey}|${entry.key}`, entry, items.length, folded));
+      for (const [item, claim] of items) {
+        const selector = `li[data-thread-item="${CSS.escape(item.dataset.threadItem)}"]`;
+        rules.push(folded ? `${selector} { display: none !important; }` : `${selector} { margin-left: 18px; box-shadow: inset 1px 0 var(--border); }`);
+        if (claim.role && !folded) rules.push(`${selector} [data-sidebar-row]::after { content: "${CSS.escape(roleLabels[claim.role] ?? claim.role)}"; flex-shrink: 0; font-size: 11px; color: var(--sidebar-muted-foreground, var(--muted-foreground)); }`);
+        sequence.push(item);
+      }
+    }
+    const repo = threads.map(item => rowRepos.get(item.dataset.threadItem)).find(Boolean);
+    const rest = repo ? missions.filter(entry => entry.desk === repo.desk && entry.repo === repo.repo && !groups.has(entry)) : [];
+    if (rest.length) add(`${folderKey}|more`, moreRow(`${folderKey}|more`, repo, rest));
+    sequence.push(...loose);
+  }
+  for (const key of listRows.keys()) if (!used.has(key)) listRows.delete(key);
+  removeListRows(new Set(listRows.values()));
+  for (const node of listRows.values()) if (node.parentElement !== list) list.append(node);
+  const next = new Set(sequence);
+  for (const node of ordered) if (!next.has(node)) node.style.order = '';
+  sequence.forEach((node, position) => { if (node.style.order !== String(position)) node.style.order = String(position); });
+  ordered = next; layoutList = list;
+  layoutActive = [...used].some(key => !key.endsWith('|more'));
+  const css = rules.join('\n');
+  if (layoutStyle.textContent !== css) layoutStyle.textContent = css;
+  for (const node of listRows.values()) node.setAttribute('aria-pressed', String(Boolean(layer) && node.dataset.t3LayerKey === layer.key));
+  expectHostDom('settleButton', folderThreads > 0, 'T3 listed threads in a project folder');
+}
+// Two of T3's gestures act on a run of rows taken from T3's own order, which differs from what is
+// drawn once a mission is placed: dragging from a row's Settle button settles every row between,
+// and Shift-click selects every row between the anchor and the row clicked, which bulk Settle,
+// Snooze, Delete and a drag to the composer then act on. While a mission is placed, both are
+// stopped before T3 sees them: a press on Settle, so no drag starts (a plain click still settles
+// that thread), and every click with Shift held on a thread row, whatever other key is held, as
+// T3's own rule for which of those is a range depends on the platform (a click and Ctrl- or
+// Cmd-click without Shift still work).
+listen(document, 'pointerdown', event => {
+  if (layoutActive && event.target instanceof Element && event.target.closest(hostSelectors.settleButton)) event.stopPropagation();
+}, { capture: true });
+listen(document, 'click', event => {
+  if (layoutActive && event.shiftKey && event.target instanceof Element && event.target.closest(hostSelectors.threadItem)) { event.preventDefault(); event.stopPropagation(); }
+}, { capture: true });
 
 function syncSidebar() {
   const onMain = Boolean(host) && !location.hash.includes('/settings');
@@ -919,14 +989,12 @@ function syncSidebar() {
   expectHostDom('sidebarRow', onMain && t3Threads, 'T3 listed its threads');
   const search = viewOn('sidebar') && document.querySelector(hostSelectors.sidebarSearch);
   const group = search?.closest('[data-slot="sidebar-group"]')?.parentElement;
-  const missionsWereShown = extSidebar.isConnected;
   if (group && settings.enabled) { if (extSidebar.previousElementSibling !== group) group.after(extSidebar); }
   else extSidebar.remove();
-  // Hiding follows the section: it starts when Missions appears and stops when it goes.
-  if (extSidebar.isConnected !== missionsWereShown) renderMissions();
+  syncMissionLayout();
   const main = document.querySelector(hostSelectors.mainInset);
   const shown = Boolean(layer) && Boolean(main) && settings.enabled;
-  for (const row of extSidebar.querySelectorAll('[data-layer-key]')) row.setAttribute('aria-pressed', String(shown && row.dataset.layerKey === layer.key));
+  for (const row of document.querySelectorAll('[data-t3-layer-key]')) row.setAttribute('aria-pressed', String(shown && row.dataset.t3LayerKey === layer.key));
   document.documentElement.toggleAttribute('data-t3-layer-open', shown);
   if (shown && layerNode.parentElement !== main) main.append(layerNode);
   // The Desk's pages take keys (mission control is keyboard-driven): its frame gets focus as the
@@ -1061,20 +1129,26 @@ listen(document, 'click', event => {
 // A covered window throttles timers: when it is shown again, every view reads afresh.
 listen(document, 'visibilitychange', () => {
   if (document.hidden) return;
-  readDesks(); launchAt = 0; renderMissions(); tellDeskThread(); scheduleDOM();
+  readDesks(); launchAt = 0; refreshMissions(); tellDeskThread(); scheduleDOM();
 });
 disposers.push(() => {
   clearInterval(deskTimer); clearInterval(missionsTimer); clearInterval(expectTimer); stripResize.disconnect();
-  extSidebar.remove(); layerNode.remove(); strip.remove(); viewStyle.remove(); hideStyle.remove();
+  clearLayout(); extSidebar.remove(); layerNode.remove(); strip.remove(); viewStyle.remove(); layoutStyle.remove();
   document.documentElement.removeAttribute('data-t3-layer-open');
 });
 listen(window, 'resize', scheduleDOM);
 
 const observer = new MutationObserver(records => {
+  // Missions are placed before the browser paints what T3 changed in its list, and on the new
+  // list when T3 replaces it (a search, a route change).
+  const list = document.querySelector(hostSelectors.projectFolder)?.parentElement ?? null;
+  const sidebar = document.querySelector('[data-workspace-area="sidebar"]');
+  if (list !== layoutList || records.some(record => sidebar?.contains(record.target))) syncMissionLayout();
   scheduleDOM();
   if (records.some(record => (record.target.nodeType === Node.ELEMENT_NODE ? record.target : record.target.parentElement)?.closest(hostSelectors.conversation))) queueScan();
 });
-observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+// aria-expanded too: a closed folder holding only the open thread's row reopens with no other change.
+observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['aria-expanded'] });
 disposers.push(() => {
   observer.disconnect(); clearTimeout(scanTimer); clearTimeout(hoverTimer); clearTimeout(dismissTimer); clearTimeout(domFrame); clearTimeout(noticeTimer); cancelAnimationFrame(rectFrame);
   hideCard(); restoreNative(); mount.remove(); tab.remove(); controls.remove(); launch.remove(); settingsHost.remove(); CSS.highlights?.delete('t3-atelier-refs');

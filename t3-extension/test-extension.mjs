@@ -50,6 +50,8 @@ const shell = {
     // A subagent of thread-a (delegate_task), and a thread a linked environment's agent started from thread-b.
     { id: 'thread-child', projectId: 'project-a', title: 'Child of A', status: 'idle', lineage: { parentThreadId: 'thread-a' } },
     { id: 'thread-delegated', projectId: 'project-a', title: 'Delegated from B', status: 'idle', lineage: { parentThreadId: null }, delegatedFrom: { environmentId: 'env-remote', threadId: 'thread-b', title: 'Thread B' } },
+    // A thread of the mapped project that no mission holds.
+    { id: 'thread-loose', projectId: 'project-a', title: 'Loose A', status: 'idle', lineage: { parentThreadId: null } },
     // An ID with a colon whose list item ends like thread-a's ("env:other:thread-a"); no mission holds it.
     { id: 'other:thread-a', projectId: 'project-c', title: 'Other A', status: 'idle', lineage: { parentThreadId: null } },
   ],
@@ -82,8 +84,33 @@ new Worker('/assets/imageDecode.worker-fixture.js');`,
   // Like T3's image decoder worker: its top-level code must never run in the window.
   'imageDecode.worker-fixture.js': `if (typeof window !== 'undefined') globalThis.workerScriptRanInWindow = true;`,
 };
-const listItems = shell.threads.map(thread => `<li data-thread-item="env:${thread.id}"><div data-sidebar-row="env:${thread.id}" data-route="/env/${thread.id}">${thread.title}</div></li>`).join('');
-const html = `<!doctype html><html class="dark"><head><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; connect-src 'self' blob: http: https: ws: wss:; style-src 'self' 'unsafe-inline'; frame-src 'self' blob: http: https:; worker-src 'self' blob:"><title>Atelier extension fixture</title><script type="module" src="/assets/index-fixture.js"></script>${Object.keys(chunks).filter(name => !name.includes('worker')).map(name => `<link rel="modulepreload" href="/assets/${name}">`).join('')}<style>html{--background:#202124;--foreground:#eeeeee;--card:#2a2b2e;--border:#555555;--muted-foreground:#a0a0a8;--secondary:#353639;--primary:#9bbcff}body{margin:0;background:var(--background);color:var(--foreground);font:14px Georgia, serif}#app{height:100vh;display:flex}[data-workspace-area=sidebar]{width:260px;flex-shrink:0;display:flex;flex-direction:column;border-right:1px solid #555}#thread-list{margin:0;padding:8px;list-style:none;overflow:auto}[data-sidebar-row]{padding:8px;cursor:pointer}main[data-slot=sidebar-inset]{position:relative;flex:1;min-width:0;display:flex;flex-direction:column}header{padding:12px;border-bottom:1px solid #555;display:flex;gap:12px}nav ol{display:flex;gap:8px;margin:0;padding:0;list-style:none}#workspace{display:flex;flex:1;min-height:0}[data-workspace-area=conversation]{flex:1;padding:20px;min-width:0;overflow:auto}[data-workspace-area=panel]{width:750px;display:flex;flex-direction:column;min-width:0}[data-right-panel-tabbar]{height:52px;display:flex;align-items:center}[data-right-panel-tabbar]>div{display:flex;align-items:center}[data-right-panel-surface-content]{position:relative;flex:1;min-height:0}#native-content{padding:20px}#settings{overflow:auto;padding:24px;max-width:850px}#composer{margin-top:30px;border:1px solid #555;padding:12px}#draft{flex:1;min-height:0}[data-chat-canvas]{position:relative;height:100%}[data-chat-composer-overlay]{position:absolute;inset:0;display:flex;align-items:center;pointer-events:none}[data-chat-composer-stack]{width:760px;max-width:calc(100% - 40px);margin:0 auto;pointer-events:auto}[data-testid=composer-editor]{min-height:60px;border:1px solid #555;padding:12px}</style></head><body><div id="app"><div data-workspace-area="sidebar"><div id="search-wrap"><div data-slot="sidebar-group"><input type="search" aria-label="Search threads"></div></div><ul id="thread-list">${listItems}</ul></div><main data-slot="sidebar-inset"><header><nav aria-label="Thread breadcrumb"><ol><li><button id="crumb-project">atelier</button></li><li>/</li><li>Thread</li></ol></nav><span data-panel-layout-controls>Workspace controls</span></header><div id="workspace"><div data-workspace-area="conversation"><h1>Conversation</h1><p id="reference-prose">Investigate ${referenceId}, then <code>${referenceId}</code>. Ignore other-xabc and not-${referenceId}-extra.</p><pre>${referenceId}</pre><div id="composer" contenteditable="true">${referenceId}</div><p id="stream"></p><div id="thread-row"></div></div><div data-workspace-area="panel"><div data-right-panel-tabbar><div data-right-panel-tab-list><div data-active-tab="true"><button id="native-tab">Files</button></div><button aria-label="Add panel surface">+</button></div></div><div data-right-panel-surface-content><div id="native-content"><button id="native-control">Native file viewer</button></div></div></div></div><div id="draft" hidden><div data-chat-canvas><div data-workspace-area="composer" data-chat-composer-overlay><div data-chat-composer-stack><div data-testid="composer-editor" contenteditable="true" aria-label="Message"></div></div></div></div></div><div id="settings" hidden><div data-settings-page-scroll><div><h1>General</h1><p>T3 settings fixture</p></div></div></div></main></div><script>
+// T3's boring sidebar: one flex column of li, a pinned header, each project folder's header with
+// its thread rows after it, then the Settled shelf. Like T3, it closes a folder by removing its
+// rows but the open thread's (routeThreadOnly), appending an inert, absolutely placed copy of each to the list, as T3 fades a removed row
+// (Sidebar.motion.ts; here they stay, as in a hidden window, whose animations never finish);
+// fadingCopy(node) makes one. A click on a row that reaches T3 is handled as T3 does on Windows:
+// with Ctrl a toggle (fixtureList.toggles), else with Shift a range of its order
+// (fixtureList.ranges), Meta or Alt held or not. And
+// replaceList() draws a new list (as a search or a route change does). With
+// fixtureList.boring false it is a flat list with no folders. A row's Settle button records a
+// press that reaches T3's own handler (where T3 would start its drag-sweep) and a click.
+const listFolders = [
+  { key: `folder:${fixtureRepositoryKey}`, title: 'atelier', threads: ['thread-child', 'thread-loose', 'thread-a', 'thread-delegated', 'thread-b'] },
+  { key: 'folder:elsewhere/unlinked', title: 'unlinked', threads: ['thread-c', 'other:thread-a'] },
+];
+const listScript = `const fixtureList=globalThis.fixtureList={boring:true,closed:new Set(),folders:${JSON.stringify(listFolders)},titles:${JSON.stringify(Object.fromEntries(shell.threads.map(thread => [thread.id, thread.title])))},sweeps:[],settled:[],ranges:[],toggles:[]};
+const li=(attributes,html)=>{const node=document.createElement('li');for(const [name,value] of Object.entries(attributes))node.setAttribute(name,value);node.innerHTML=html;return node};
+const threadNode=id=>{const node=li({'data-thread-item':'env:'+id},'<div data-sidebar-row="env:'+id+'" data-route="/env/'+id+'"><span></span><button aria-label="Settle thread">✓</button></div>');node.querySelector('span').textContent=fixtureList.titles[id]??id;return node};
+globalThis.fadingCopy=row=>{const copy=row.cloneNode(true);copy.removeAttribute('data-thread-item');copy.setAttribute('aria-hidden','true');copy.inert=true;Object.assign(copy.style,{position:'absolute',top:'0px',left:'0px',width:'200px',opacity:'0.5'});return copy};
+const routeRow=id=>location.hash==='#/env/'+id;
+const folderRows=folder=>folder.threads.filter(id=>!fixtureList.closed.has(folder.key)||routeRow(id)).map(threadNode);
+const folderNode=folder=>{const node=li({'data-testid':'sidebar-project-folder'},'<button data-sidebar-row="'+folder.key+'" aria-expanded="'+!fixtureList.closed.has(folder.key)+'"></button>');node.querySelector('button').textContent=folder.title;return node};
+globalThis.replaceList=()=>{const list=document.createElement('ul');list.id='thread-list';list.append(...(fixtureList.boring?[li({'data-testid':'sidebar-pinned-header'},'Pinned'),...fixtureList.folders.flatMap(folder=>[folderNode(folder),...folderRows(folder)]),li({'data-testid':'sidebar-settled-header'},'Settled')]:fixtureList.folders.flatMap(folder=>folder.threads.map(threadNode))));document.querySelector('#thread-list').replaceWith(list)};
+document.addEventListener('click',event=>{const folder=event.target.closest('#thread-list [data-testid=sidebar-project-folder] button');if(!folder)return;const spec=fixtureList.folders.find(entry=>entry.key===folder.dataset.sidebarRow);const header=folder.parentElement;const rowOf=id=>header.parentElement.querySelector('[data-thread-item="env:'+CSS.escape(id)+'"]');if(fixtureList.closed.has(spec.key)){fixtureList.closed.delete(spec.key);for(const id of spec.threads)rowOf(id)?.remove();header.after(...folderRows(spec))}else{fixtureList.closed.add(spec.key);for(const id of spec.threads){const row=rowOf(id);if(!row||routeRow(id))continue;header.parentElement.append(fadingCopy(row));row.remove()}}folder.setAttribute('aria-expanded',String(!fixtureList.closed.has(spec.key)))});
+document.addEventListener('pointerdown',event=>{const button=event.target.closest('#thread-list [aria-label="Settle thread"]');if(button)fixtureList.sweeps.push(button.closest('[data-thread-item]').dataset.threadItem)});
+document.addEventListener('click',event=>{const button=event.target.closest('#thread-list [aria-label="Settle thread"]');if(!button)return;event.stopPropagation();fixtureList.settled.push(button.closest('[data-thread-item]').dataset.threadItem)},true);
+replaceList();`;
+const html = `<!doctype html><html class="dark"><head><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; connect-src 'self' blob: http: https: ws: wss:; style-src 'self' 'unsafe-inline'; frame-src 'self' blob: http: https:; worker-src 'self' blob:"><title>Atelier extension fixture</title><script type="module" src="/assets/index-fixture.js"></script>${Object.keys(chunks).filter(name => !name.includes('worker')).map(name => `<link rel="modulepreload" href="/assets/${name}">`).join('')}<style>html{--background:#202124;--foreground:#eeeeee;--card:#2a2b2e;--border:#555555;--muted-foreground:#a0a0a8;--secondary:#353639;--primary:#9bbcff}body{margin:0;background:var(--background);color:var(--foreground);font:14px Georgia, serif}#app{height:100vh;display:flex}[data-workspace-area=sidebar]{width:260px;flex-shrink:0;display:flex;flex-direction:column;border-right:1px solid #555}#thread-list{margin:0;padding:8px;list-style:none;overflow:auto;display:flex;flex-direction:column}[data-sidebar-row]{padding:8px;cursor:pointer;display:flex;gap:8px}[data-sidebar-row]>span{flex:1}main[data-slot=sidebar-inset]{position:relative;flex:1;min-width:0;display:flex;flex-direction:column}header{padding:12px;border-bottom:1px solid #555;display:flex;gap:12px}nav ol{display:flex;gap:8px;margin:0;padding:0;list-style:none}#workspace{display:flex;flex:1;min-height:0}[data-workspace-area=conversation]{flex:1;padding:20px;min-width:0;overflow:auto}[data-workspace-area=panel]{width:750px;display:flex;flex-direction:column;min-width:0}[data-right-panel-tabbar]{height:52px;display:flex;align-items:center}[data-right-panel-tabbar]>div{display:flex;align-items:center}[data-right-panel-surface-content]{position:relative;flex:1;min-height:0}#native-content{padding:20px}#settings{overflow:auto;padding:24px;max-width:850px}#composer{margin-top:30px;border:1px solid #555;padding:12px}#draft{flex:1;min-height:0}[data-chat-canvas]{position:relative;height:100%}[data-chat-composer-overlay]{position:absolute;inset:0;display:flex;align-items:center;pointer-events:none}[data-chat-composer-stack]{width:760px;max-width:calc(100% - 40px);margin:0 auto;pointer-events:auto}[data-testid=composer-editor]{min-height:60px;border:1px solid #555;padding:12px}</style></head><body><div id="app"><div data-workspace-area="sidebar"><div id="search-wrap"><div data-slot="sidebar-group"><input type="search" aria-label="Search threads"></div></div><ul id="thread-list"></ul></div><main data-slot="sidebar-inset"><header><nav aria-label="Thread breadcrumb"><ol><li><button id="crumb-project">atelier</button></li><li>/</li><li>Thread</li></ol></nav><span data-panel-layout-controls>Workspace controls</span></header><div id="workspace"><div data-workspace-area="conversation"><h1>Conversation</h1><p id="reference-prose">Investigate ${referenceId}, then <code>${referenceId}</code>. Ignore other-xabc and not-${referenceId}-extra.</p><pre>${referenceId}</pre><div id="composer" contenteditable="true">${referenceId}</div><p id="stream"></p><div id="thread-row"></div></div><div data-workspace-area="panel"><div data-right-panel-tabbar><div data-right-panel-tab-list><div data-active-tab="true"><button id="native-tab">Files</button></div><button aria-label="Add panel surface">+</button></div></div><div data-right-panel-surface-content><div id="native-content"><button id="native-control">Native file viewer</button></div></div></div></div><div id="draft" hidden><div data-chat-canvas><div data-workspace-area="composer" data-chat-composer-overlay><div data-chat-composer-stack><div data-testid="composer-editor" contenteditable="true" aria-label="Message"></div></div></div></div></div><div id="settings" hidden><div data-settings-page-scroll><div><h1>General</h1><p>T3 settings fixture</p></div></div></div></main></div><script>
 const threadRows={'#/env/thread-a':{marked:'thread-a',text:''},'#/env/thread-b':{marked:'thread-b',text:'Thread B works on ${threadBReference}.'},'#/env/thread-child':{marked:'thread-child',text:'The child names ${childReference}.'},'#/env/other:thread-a':{text:'Other A names ${otherReference}.'}};
 let rendered=0;
 // Like T3, a thread's conversation is rendered as new row nodes, and each assistant message names its
@@ -93,7 +120,8 @@ const show=()=>{const route=location.hash;if(route.startsWith('#/env/')){const w
 addEventListener('hashchange',show);show();
 // T3 starts a new thread from the breadcrumb's project, opens a thread from its row, and sends the composer on Enter.
 document.querySelector('#crumb-project').addEventListener('click',()=>{globalThis.crumbStartedThread=true});
-document.querySelector('#thread-list').addEventListener('click',event=>{const row=event.target.closest('[data-route]');if(row)location.hash=row.dataset.route});
+${listScript}
+document.addEventListener('click',event=>{const row=event.target.closest('#thread-list [data-route]');if(!row)return;const key=row.closest('[data-thread-item]').dataset.threadItem;if(event.ctrlKey)fixtureList.toggles.push(key);else if(event.shiftKey)fixtureList.ranges.push(key);else location.hash=row.dataset.route});
 const editor=document.querySelector('[data-testid=composer-editor]');
 editor.addEventListener('keydown',event=>{if(event.key==='Enter')globalThis.fixtureSent=event.target.textContent});
 // Like T3, the editor's text reaches the draft store a microtask later, under the draft the editor
@@ -508,63 +536,118 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   await evaluate('document.querySelector("[data-t3-layer-close]").click()');
   console.log('PASS: the Inbox row counts every Desk\'s inbox and opens it in a layer over T3\'s main area that takes focus and closes on desk:key Escape, Escape, its button, the row, a thread row and desk:open-thread; messages from other windows or origins are ignored');
 
-  // Missions from /api/sidebar: collapsed rows; expanded, the threads by item, the mission's own
-  // threads and the T3 threads they started; a thread T3 knows opens, one it does not is dimmed.
+  // Missions in T3's own thread list (the boring sidebar): in its folder, a header per mission
+  // with threads there, those threads in T3's order, indented with their role, the repository's
+  // other missions in one "N more missions" row, then the folder's other threads. Everything is
+  // read as drawn: visible children of the list by their top edge.
   const mission = fixture.mission;
   const missionKey = `${deskBase}/${fixture.repo}/${mission.id}`;
-  const missionRow = `document.querySelector('[data-t3-mission] [data-mission="${mission.id}"]')`;
-  await until(() => evaluate(`Boolean(${missionRow})`), 'Mission row from /api/sidebar');
-  assert.equal(await evaluate('document.querySelectorAll("[data-t3-mission]").length'), 1, 'the second Desk lists no missions');
-  const rowText = await evaluate(`${missionRow}.textContent`);
-  assert(rowText.includes('Fixture mission') && rowText.includes(`${fixture.repo} · 1/3 done`), rowText);
-  assert(await evaluate(`Boolean(${missionRow}.querySelector('[data-t3-waiting]'))`), 'no mark for a mission waiting on the human');
-  assert.equal(await evaluate(`${missionRow}.querySelector('[data-t3-expand]').getAttribute('aria-expanded')`), 'false', 'a mission starts collapsed');
-  await evaluate(`${missionRow}.querySelector('[data-t3-expand]').click()`);
-  await until(() => evaluate('Boolean(document.querySelector("[data-t3-mission-body]"))'), 'Expanded mission');
-  assert.deepEqual(JSON.parse(await evaluate('localStorage.getItem("t3-custom:atelier:missions:v1")')).expanded, { [missionKey]: true });
-  const missionBody = await evaluate(`[...document.querySelector('[data-t3-mission-body]').children].map(node => node.matches('[data-t3-group]') ? 'group: ' + node.textContent : (node.dataset.unknown !== undefined ? 'unknown ' : 'thread ') + node.dataset.identity + ': ' + node.textContent)`);
-  assert.deepEqual(missionBody, ['group: atelier-fi01 · First item', 'thread thread-a: implementerThread Aidle', 'group: Mission', 'thread thread-b: leadThread Brunning', 'unknown remote-thread-0123456789: reviewerremote-t…456789', 'group: Other threads', 'thread thread-child: childChild of Aidle', 'thread thread-delegated: delegatedDelegated from Bidle']);
-  assert.equal(await evaluate('document.querySelector(\'[data-t3-mission-body] [data-identity="remote-thread-0123456789"]\').tagName'), 'DIV', 'a thread T3 does not know can be clicked');
-  await evaluate('document.querySelector(\'[data-t3-mission-body] [data-identity="thread-b"]\').click()');
-  await until(async () => (await evaluate('location.hash')) === '#/env/thread-b', 'A mission thread T3 knows opens on click');
-  console.log('PASS: Missions from /api/sidebar start collapsed, expand (remembered in localStorage) to threads by item, the mission\'s threads and Other threads by lineage and delegatedFrom; a known thread opens, an unknown one is dimmed');
-  // T3's own list items of those threads are hidden, with a note; the toggle shows them again.
-  const listShown = () => evaluate('[...document.querySelectorAll("[data-thread-item]")].filter(node => node.getBoundingClientRect().height > 0).map(node => node.dataset.threadItem)');
-  await until(async () => JSON.stringify(await listShown()) === '["env:thread-c","env:other:thread-a"]', 'Mission threads hidden from T3\'s list, and only they');
-  assert.equal(await evaluate('document.querySelector("[data-t3-missions-hidden]").textContent'), ' · 4 hidden from T3\'s list');
-  await evaluate('document.querySelector("[data-t3-show-all]").click()');
-  await until(async () => (await listShown()).length === 6, 'Show all threads');
-  assert.equal(await evaluate('document.querySelector("[data-t3-missions-hidden]").textContent'), '');
-  assert.equal(await evaluate('JSON.parse(localStorage.getItem("t3-custom:atelier:missions:v1")).showAll'), true);
-  await evaluate('document.querySelector("[data-t3-show-all]").click()');
-  await until(async () => (await listShown()).length === 2, 'Mission threads hidden again');
-  // With the Atelier views turned off the Missions section goes, and so does the hiding.
+  const missionRow = 'document.querySelector("[data-t3-mission-row]")';
+  const drawn = () => evaluate(`[...document.querySelector('#thread-list').children].filter(node => node.getBoundingClientRect().height > 0 && !node.inert).sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top).map(node => {
+    const dot = node.querySelector('[data-t3-dot]') ? ' •' : '';
+    if (node.dataset.threadItem) { const role = getComputedStyle(node.querySelector('[data-sidebar-row]'), '::after').content; return node.dataset.threadItem + (role === 'none' ? '' : ' ' + JSON.parse(role)) + (parseFloat(getComputedStyle(node).marginLeft) > 0 ? ' (indented)' : ''); }
+    if (node.dataset.t3MissionRow) return 'mission: ' + node.textContent + dot;
+    if (node.dataset.t3MoreRow) return 'more: ' + node.textContent + dot;
+    return node.dataset.testid + ': ' + node.textContent;
+  })`);
+  const tail = ['sidebar-project-folder: unlinked', 'env:thread-c', 'env:other:thread-a', 'sidebar-settled-header: Settled'];
+  const laidOut = ['sidebar-pinned-header: Pinned', 'sidebar-project-folder: atelier', 'mission: Fixture mission1/3', 'env:thread-child (indented)', 'env:thread-a build (indented)', 'env:thread-delegated (indented)', 'env:thread-b lead (indented)', 'more: 1 more mission •', 'env:thread-loose', ...tail];
+  const untilDrawn = async (expected, label, timeout) => { try { await until(async () => JSON.stringify(await drawn()) === JSON.stringify(expected), label, timeout); } catch (error) { throw new Error(`${error.message}; drawn: ${JSON.stringify(await drawn())}`); } };
+  const noOrders = () => evaluate('[...document.querySelector("#thread-list").children].every(node => !node.style.order) && !document.querySelector("[data-t3-list-row]") && !document.querySelector("[data-t3-mission-layout]")?.textContent');
+  await untilDrawn(laidOut, 'Missions laid out in T3\'s list');
+  assert.equal(await evaluate('__t3Custom.diagnostics().probes["layout:threadList"].ok'), true);
+  assert.equal(await evaluate('document.querySelectorAll("[data-t3-mission-row]").length'), 1, 'the second Desk lists no missions');
+  console.log('PASS: in T3\'s folder, the mission\'s header, its threads in T3\'s order (indented, with their role; Other threads with none), "1 more mission" with a dot, then the folder\'s other threads; other folders untouched');
+  // Folding hides the mission's threads and shows their number and the waiting dot; remembered.
+  await evaluate(`${missionRow}.querySelector('[data-t3-fold]').click()`);
+  await untilDrawn(['sidebar-pinned-header: Pinned', 'sidebar-project-folder: atelier', 'mission: Fixture mission4 •', 'more: 1 more mission •', 'env:thread-loose', ...tail], 'Folded mission');
+  assert.deepEqual(JSON.parse(await evaluate('localStorage.getItem("t3-custom:atelier:missions:v1")')), { folded: { [missionKey]: true } });
+  await evaluate(`${missionRow}.querySelector('[data-t3-fold]').click()`);
+  await untilDrawn(laidOut, 'Unfolded mission');
+  console.log('PASS: the chevron folds a mission to its thread count and waiting dot, remembered in localStorage');
+  // Pressing a row's Settle button never reaches T3 while missions are placed, so T3's drag-sweep
+  // cannot start; a click on it still does.
+  const settle = id => `document.querySelector('[data-thread-item="env:${id}"] [aria-label="Settle thread"]')`;
+  await evaluate(`${settle('thread-a')}.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, isPrimary: true, button: 0 })); ${settle('thread-a')}.click()`);
+  assert.deepEqual(await evaluate('[fixtureList.sweeps, fixtureList.settled]'), [[], ['env:thread-a']], 'a press on Settle reached T3, or the click did not');
+  // No click with Shift held reaches T3 either, whatever other key is held, since which of them T3
+  // turns into a range of its own order depends on the platform; a Ctrl-click does.
+  const rowClick = (id, init) => `document.querySelector('[data-sidebar-row="env:${id}"] span').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ...${JSON.stringify(init)} }))`;
+  const withShift = [{}, { ctrlKey: true }, { metaKey: true }, { altKey: true }, { ctrlKey: true, metaKey: true, altKey: true }].map(keys => rowClick('thread-a', { shiftKey: true, ...keys }));
+  await evaluate(`${rowClick('thread-child', { ctrlKey: true })}; ${withShift.join('; ')}; ${rowClick('thread-a', { ctrlKey: true })}`);
+  assert.deepEqual(await evaluate('[fixtureList.ranges, fixtureList.toggles]'), [[], ['env:thread-child', 'env:thread-a']], 'a click with Shift held reached T3 while a mission was placed, or a Ctrl-click did not');
+  // T3's fading copies of the extension's own rows are removed as they appear.
+  await evaluate('document.querySelector("#thread-list").append(fadingCopy(document.querySelector("[data-t3-mission-row]")))');
+  await until(() => evaluate('document.querySelectorAll("[data-t3-list-row]").length === 2'), 'A copy of a mission header removed');
+  // T3 adds a row in place, closes and opens a folder, and replaces its list: each is laid out again.
+  await evaluate('document.querySelector("#thread-list").insertBefore(threadNode("thread-new"), document.querySelectorAll("#thread-list [data-testid=sidebar-project-folder]")[1])');
+  await untilDrawn([...laidOut.slice(0, 9), 'env:thread-new', ...tail], 'A row T3 added, in its place');
+  // A closed folder keeps the open thread's row, which reads as a plain row: no mission rows.
+  await evaluate('document.querySelector("[data-thread-item=\'env:thread-new\']").remove(); location.hash = "/env/thread-a"');
+  await until(() => evaluate('__t3Custom.diagnostics().context?.threadId === "thread-a"'), 'On thread-a');
+  await evaluate('document.querySelector("[data-sidebar-row^=\'folder:example\']").click()');
+  await untilDrawn(['sidebar-pinned-header: Pinned', 'sidebar-project-folder: atelier', 'env:thread-a', ...tail], 'A closed folder has no mission rows');
+  // T3 can open a folder by its button alone, when its rows do not change; laid out at once, not
+  // on the next 3-second refresh.
+  await evaluate('document.querySelector("[data-sidebar-row^=\'folder:example\']").setAttribute("aria-expanded", "true")');
+  await untilDrawn(['sidebar-pinned-header: Pinned', 'sidebar-project-folder: atelier', 'mission: Fixture mission1/3', 'env:thread-a build (indented)', 'more: 1 more mission •', ...tail], 'A folder opened by its button alone', 1500);
+  await evaluate('document.querySelector("[data-sidebar-row^=\'folder:example\']").click()');
+  await untilDrawn(laidOut, 'The folder open again');
+  // A fading copy React's later rows land after, here among the folder's rows, changes nothing.
+  await evaluate('(()=>{const row=document.querySelector("[data-thread-item=\'env:thread-a\']");row.before(fadingCopy(row))})()');
+  await untilDrawn(laidOut, 'A fading copy among the folder\'s rows');
+  await evaluate('replaceList()');
+  await untilDrawn(laidOut, 'A new list laid out');
+  assert.equal(await evaluate('[...document.querySelectorAll("[data-t3-list-row]")].every(row => row.parentElement === document.querySelector("#thread-list")) && document.querySelectorAll("[data-t3-list-row]").length'), 2);
+  console.log('PASS: a press on Settle never reaches T3 while missions are placed, a click does; a row T3 adds, a folder closed and opened, and a new list are laid out again');
+  // With the boring sidebar off (no folders) nothing is reordered and a note says how to turn it on.
+  await evaluate('fixtureList.boring = false; replaceList()');
+  await until(async () => await noOrders() && await evaluate('!document.querySelector("[data-t3-boring-note]").hidden'), 'Boring sidebar off');
+  await evaluate(`${rowClick('thread-a', { shiftKey: true })}`);
+  assert.deepEqual(await evaluate('fixtureList.ranges'), ['env:thread-a'], 'a Shift-click was stopped with no missions placed');
+  assert.match(await evaluate('document.querySelector("[data-t3-boring-note]").textContent'), /Settings → Labs → Boring sidebar/);
+  await evaluate(`${settle('thread-a')}.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, isPrimary: true, button: 0 }))`);
+  assert.deepEqual(await evaluate('fixtureList.sweeps'), ['env:thread-a'], 'a press on Settle was stopped with no missions placed');
+  await evaluate('fixtureList.boring = true; fixtureList.sweeps = []; replaceList()');
+  await untilDrawn(laidOut, 'Boring sidebar on again');
+  assert(await evaluate('document.querySelector("[data-t3-boring-note]").hidden'));
+  // With the Atelier views turned off T3's list is left as T3 drew it.
   await evaluate('location.hash = "/settings/general"');
   const settingToggle = name => `document.querySelector("#t3-custom-settings").shadowRoot.querySelector('[data-setting="${name}"]')`;
   await until(() => evaluate(`Boolean(${settingToggle('enabled')})`), 'Settings section for the views toggle');
   await evaluate(`${settingToggle('enabled')}.click()`);
-  await until(async () => (await listShown()).length === 6 && await evaluate('!document.querySelector("[data-t3-ext-sidebar]")'), 'T3\'s list whole with the views off');
+  await until(async () => await noOrders() && await evaluate('!document.querySelector("[data-t3-ext-sidebar]")'), 'T3\'s list whole with the views off');
+  // A copy T3 fades in after the rows went, from its last positions, goes too.
+  await evaluate('globalThis.keptHeader = document.createElement("li"); keptHeader.setAttribute("data-t3-list-row", ""); keptHeader.setAttribute("data-t3-mission-row", "x"); keptHeader.textContent = "Fixture mission"; document.querySelector("#thread-list").append(fadingCopy(keptHeader))');
+  await until(() => noOrders(), 'A copy of a mission header removed with the views off');
   await evaluate(`${settingToggle('enabled')}.click()`);
-  await until(async () => (await listShown()).length === 2 && await evaluate('Boolean(document.querySelector("[data-t3-ext-sidebar]"))'), 'Hiding back with the views on');
+  await untilDrawn(laidOut, 'Missions back with the views on');
   await evaluate('location.hash = "/env/thread-b"');
   await until(() => evaluate('__t3Custom.diagnostics().context?.threadId === "thread-b"'), 'Back on thread-b');
-  console.log('PASS: T3\'s list items of mission threads, and no other thread\'s, are hidden with an "N hidden" note; "Show all threads" and turning the views off show them again');
-  // A mission row opens mission control in the layer, selected, with focus; the row again closes it.
-  await evaluate(`${missionRow}.click()`);
+  console.log('PASS: with the boring sidebar off, or the views off, T3\'s list keeps its order with none of the extension\'s rows; the first shows a note naming the setting');
+  // A mission's title opens mission control in the layer, selected, with focus; again, it closes it.
+  await evaluate(`${missionRow}.querySelector('[data-t3-mission-title]').click()`);
   await until(async () => (await layerState())?.key === `mission:${missionKey}` && (await layerState()).shown, 'Mission control in the layer');
   assert.equal(await layerSrc(), `${deskBase}/embed/mission/${fixture.repo}/${mission.id}`);
   assert.equal(await evaluate(`${missionRow}.getAttribute('aria-pressed')`), 'true');
   assert.equal(await evaluate('document.querySelector("[data-t3-inbox-row]").getAttribute("aria-pressed")'), 'false');
   await until(() => evaluate('__t3Custom.diagnostics().layer?.ready && document.activeElement === document.querySelector("[data-t3-layer] iframe")'), 'Mission control has focus');
-  await evaluate(`${missionRow}.click()`);
-  await until(async () => !(await layerState()), 'The mission row again closes mission control');
+  await evaluate(`${missionRow}.querySelector('[data-t3-mission-title]').click()`);
+  await until(async () => !(await layerState()), 'The mission title again closes mission control');
+  // "N more missions" opens the project home.
+  await evaluate('document.querySelector("[data-t3-more-row] button").click()');
+  await until(async () => (await layerState())?.key === `home:${deskBase}/r/atelier` && (await layerState()).shown, 'Project home from N more missions');
+  assert.equal(await layerSrc(), `${deskBase}/embed/home/atelier`);
+  assert.equal(await evaluate('document.querySelector("[data-t3-more-row]").getAttribute("aria-pressed")'), 'true');
+  await evaluate('document.querySelector("[data-t3-layer-close]").click()');
+  await until(async () => !(await layerState()), 'Project home closed');
   // The project's name in T3's breadcrumb opens the project home instead of starting a thread.
   await evaluate('document.querySelector("#crumb-project").click()');
   await until(async () => (await layerState())?.shown, 'Project home layer');
   assert.equal(await layerSrc(), `${deskBase}/embed/home/atelier`);
   assert.equal(await evaluate('globalThis.crumbStartedThread ?? false'), false, 'T3 started a new thread as well');
   await evaluate('document.querySelector("[data-t3-layer-close]").click()');
-  console.log('PASS: a mission row opens mission control in the layer, selected and focused; the breadcrumb\'s project opens the project home and T3 starts no thread');
+  console.log('PASS: a mission\'s title opens mission control in the layer, selected and focused; "N more missions" and the breadcrumb\'s project open the project home and T3 starts no thread');
 
   // The project strip under the new-thread composer, from /api/launch.
   await evaluate('location.hash = "/draft/draft-a"');
@@ -677,11 +760,13 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   const timeOrigin = await evaluate('performance.timeOrigin');
   await evaluate('location.hash="/settings/general"');
   await until(() => evaluate('Boolean(document.querySelector("#t3-custom-settings"))'), 'Settings remount');
+  // A folded mission, as a fold saves it, stays folded after reinjection.
+  await evaluate(`localStorage.setItem("t3-custom:atelier:missions:v1", ${JSON.stringify(JSON.stringify({ folded: { [`${deskBase}/${fixture.repo}/${fixture.mission.id}`]: true } }))})`);
   await evaluate('globalThis.previousRoot=document.querySelector("#t3-custom-root");document.querySelector("#t3-custom-settings").shadowRoot.querySelector("#reload-scripts").click()');
   await until(() => evaluate('Boolean(document.querySelector("#t3-custom-root")) && document.querySelector("#t3-custom-root") !== globalThis.previousRoot'), 'Settings reinjection control');
   assert.equal(await evaluate('performance.timeOrigin'), timeOrigin);
   assert.equal(await evaluate('fixtureListeners.size'), 1);
-  await until(() => evaluate('document.querySelector("[data-t3-expand]")?.getAttribute("aria-expanded") === "true"'), 'Expanded mission remembered across reinjection');
+  await until(() => evaluate('document.querySelector("[data-t3-mission-row] [data-t3-fold]")?.getAttribute("aria-expanded") === "false"'), 'Folded mission remembered across reinjection');
   // By now the worker is in the page's resource timings, as after a TIFF/HEIF preview in T3.
   assert.equal(await evaluate('globalThis.workerScriptRanInWindow ?? false'), false, 'reinjection imported a worker script into the window');
   assert.equal(await evaluate('document.querySelector("#t3-custom-settings").shadowRoot.querySelector("#project-mapping").disabled'), false);
@@ -699,12 +784,21 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   await evaluate('document.querySelector("#search-wrap input").type = "text"');
   await until(() => evaluate('__t3Custom.diagnostics().probes["dom:sidebarSearch"].ok === false && !document.querySelector("[data-t3-ext-sidebar]")'), 'Sidebar views off without T3\'s search field', 10000);
   assert.deepEqual(await evaluate('__t3Custom.diagnostics().views.sidebar'), ['dom:sidebarSearch']);
-  // Without the Missions section and its toggle, none of T3's own rows stays hidden.
-  assert.equal(await evaluate('[...document.querySelectorAll("[data-thread-item]")].filter(node => node.getBoundingClientRect().height > 0).length'), 6, 'mission threads stayed hidden without the Missions section');
+  // Missions in T3's list need no search field.
+  assert.equal(await evaluate('document.querySelectorAll("[data-t3-mission-row]").length'), 1, 'missions left T3\'s list with the search field');
   assert(await evaluate('!document.querySelector("[data-t3-desk-mount]").hidden && __t3Custom.diagnostics().deskAvailable'), 'the Desk panel went with the sidebar hook');
   await evaluate('(()=>{const link=document.querySelector("#t3-custom-root").shadowRoot.querySelector("[data-atelier-id]");link.blur();link.focus()})()');
   await until(() => evaluate('Boolean(document.querySelector("#t3-custom-root").shadowRoot.querySelector("#atelier-hovercard h3"))'), 'References without the sidebar hook');
   console.log('PASS: a missing sidebar hook turns off the sidebar views by name and leaves the Desk panel and references working');
+  // A thread list not shaped as missions need turns that view off by name and leaves T3's list
+  // exactly as T3 drew it.
+  await evaluate('document.querySelector("#thread-list").style.display = "block"; document.querySelector("#thread-list").append(document.createElement("li"))');
+  await until(() => evaluate('__t3Custom.diagnostics().probes["layout:threadList"].ok === false'), 'The list structure probe');
+  assert.match(await evaluate('__t3Custom.diagnostics().probes["layout:threadList"].detail'), /not a flex column/);
+  assert.deepEqual(await evaluate('__t3Custom.diagnostics().views.missions'), ['layout:threadList']);
+  await evaluate('document.querySelector("#thread-list").append(fadingCopy(keptHeader))');
+  await until(() => evaluate('[...document.querySelector("#thread-list").children].every(node => !node.style.order) && !document.querySelector("[data-t3-list-row]") && !document.querySelector("[data-t3-mission-layout]").textContent'), 'T3\'s list whole with the missions view off');
+  console.log('PASS: a thread list missions cannot use turns the missions view off by name, with no order, row or rule of the extension left in it');
 
   // If T3 renames its panel slot, reference clicks open Desk externally and the probe names the hook.
   await evaluate('window.open = url => { globalThis.openedExternally = url; }; const slot = document.querySelector("[data-right-panel-surface-content]"); slot.removeAttribute("data-right-panel-surface-content"); slot.setAttribute("data-renamed-surface-content", "")');
@@ -729,10 +823,10 @@ createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(ap
   await evaluate('location.hash="/settings/general"');
   await until(() => evaluate('document.querySelector("#t3-custom-settings")?.shadowRoot.textContent.includes("Desk panel: off, missing dom:panelContent")'), 'Settings names the missing panel hook');
   const probeList = await evaluate('document.querySelector("#t3-custom-settings").shadowRoot.textContent');
-  for (const line of ['Inbox and Missions in the sidebar: off, missing dom:sidebarSearch', 'Desk layer over T3\'s main area: on', 'Project strip on the new-thread screen: on', 'Project home from the breadcrumb: on', 'dom:composerStack', 'dom:threadItem', 'state:thread-origin', 'module:composer-draft-store']) assert(probeList.includes(line), `the settings section does not say "${line}"`);
+  for (const line of ['Inbox row in the sidebar: off, missing dom:sidebarSearch', 'Missions in T3\'s thread list: off (T3\'s list is left as T3 drew it), missing layout:threadList', 'Desk layer over T3\'s main area: on', 'Project strip on the new-thread screen: on', 'Project home from the breadcrumb: on', 'dom:composerStack', 'dom:threadItem', 'state:thread-origin', 'module:composer-draft-store']) assert(probeList.includes(line), `the settings section does not say "${line}"`);
   console.log('PASS: a renamed panel slot turns the Desk panel off by name and reference clicks open Desk externally');
   await control('stop');
-  await until(() => evaluate('!document.querySelector("#t3-custom-root") && !document.querySelector("[data-t3-desk-mount]") && !document.querySelector("[data-t3-desk-launch]") && !document.querySelector("[data-t3-ext-sidebar], [data-t3-layer], [data-t3-strip], [data-t3-hide-threads]")'), 'Full extension removal');
+  await until(() => evaluate('!document.querySelector("#t3-custom-root") && !document.querySelector("[data-t3-desk-mount]") && !document.querySelector("[data-t3-desk-launch]") && !document.querySelector("[data-t3-ext-sidebar], [data-t3-layer], [data-t3-strip], [data-t3-list-row], [data-t3-mission-layout]")'), 'Full extension removal');
   assert.equal(await evaluate('document.querySelector("#native-content").inert'), false);
   console.log('PASS: stop removes custom panel, sidebar views, layer, strip, settings controls, links, and native-content overrides');
   console.log('Test logs:', temp);
