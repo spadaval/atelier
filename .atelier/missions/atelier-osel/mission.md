@@ -42,9 +42,8 @@ Two things were built with him before this plan.
 - **Mockups**, in `t3-extension/spike/mockups/` on the branch
   `spike/extension-react`. `mission-concepts.html` holds three concepts for
   a running mission and a retro. The planner recommended concept A ("the
-  briefing") with concept B's timeline as the main part of the retro. He did
-  not choose in so many words; he moved on to how to build it and asked for
-  this plan.
+  briefing") with concept B's timeline as the main part of the retro. Asked
+  which the plan should build, he chose that on 2026-11-17.
 - **A build spike**, `t3-extension/spike/` on the same branch, which never
   merges. It showed that Vite 8 builds a React 19 root with T3 Code's own
   `Badge` and `Kbd` (copied from its MIT source) into one classic script
