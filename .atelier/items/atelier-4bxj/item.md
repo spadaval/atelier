@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-4bxj
 title: Stop the extension's CI job failing when the browser is slow to start
-status: in_review
+status: approved
 mission: null
 labels: []
 priority: medium
