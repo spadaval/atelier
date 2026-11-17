@@ -197,6 +197,16 @@ try {
     assert.equal(await read(`Boolean(p.querySelector('[data-row="thread:thread:calm"] [data-unknown]'))`), true);
   });
 
+  await open('turns-waiting', 1000, 'light', { fail: threadPath('thread:turns'), after: 1 });
+  await check('running: a thread T3 Code\'s list now says is waiting is listed under Needs you at once, though its last full answer says running', async () => {
+    assert.deepEqual(await rows('at-work'), ['thread:thread:turns']);
+    await page.evaluate('document.dispatchEvent(new Event("visibilitychange"))');
+    await until(async () => (await rows('needs-you'))?.join() === 'thread:thread:turns', 'The waiting thread under Needs you');
+    assert.equal(await read(`text(p.querySelector('[data-summary]'))`), 'One item is being built. One thread waits on you.');
+    assert.deepEqual(await rows('at-work'), []);
+    assert.match(await read(`text(p.querySelector('[data-row="thread:thread:turns"]'))`), /Implementer is waiting on you\. Last: Reading src\/desk\.ts/);
+  });
+
   await open('done', 1000);
   await check('done: the state and when it closed, the Result as written, a lane per item with its spans, rounds and duration, and a legend', async () => {
     assert.equal(await read(`p.dataset.missionPage`), 'done');

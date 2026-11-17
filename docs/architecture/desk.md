@@ -489,7 +489,11 @@ Its model is `t3-extension/src/mission/model.ts`.
   waiting and quiet is one row. A thread whose read fails keeps its last
   answer, with a note naming the error; one with no answer yet is listed
   under *At work* as not read, and the sentence says whether it needs the
-  human is not known rather than "Nothing needs you". With none, there is no *Needs you*. *At
+  human is not known rather than "Nothing needs you". Whether a thread is
+  live and waiting comes from T3 Code's list as the mission's read gives
+  it, which the Desk polls more often than it refreshes a full answer;
+  either saying `waiting` lists it. The full answer gives the latest line
+  and times. With none, there is no *Needs you*. *At
   work*: each other live thread, with its item, latest line and how long
   its latest run has gone. *Not started*, *Merged* and *Outcome and
   success criteria* are each one folded line that opens in place; an item

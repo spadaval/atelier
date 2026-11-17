@@ -20,9 +20,13 @@ const api = {
     const { path } = payload as { desk: string; path: string };
     reads.push(path);
     // `?fail=<path>&after=<n>`: that path answers its first n reads, then fails.
-    if (path === params.get("fail") && reads.filter((read) => read === path).length > Number(params.get("after") ?? 0)) return Promise.reject(new Error(`GET ${path}: HTTP 502: the fixture failed it`));
+    if (path === params.get("fail") && reads.filter((read) => read === path).length > Number(params.get("after") ?? 0))
+      return Promise.reject(new Error(`GET ${path}: HTTP 502: the fixture failed it`));
     if (action !== "desk-get" || !chosen || !(path in chosen.answers)) return Promise.reject(new Error(`GET ${path}: the fixture has no answer`));
-    return Promise.resolve(structuredClone(chosen.answers[path]));
+    // An answer `{ sequence: [...] }` gives its first body to the first read, its second to the next, and its last ever after.
+    const answer = chosen.answers[path] as { sequence?: unknown[] };
+    const count = reads.filter((read) => read === path).length;
+    return Promise.resolve(structuredClone(answer?.sequence ? answer.sequence[Math.min(count, answer.sequence.length) - 1] : answer));
   },
   onCleanup: () => {},
   reportError: (error: unknown) => errors.push(String(error)),

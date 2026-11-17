@@ -160,6 +160,17 @@ export const scenarios: Record<string, Scenario> = {
     [event("atelier-rm03", "merged", 60)],
     [thread("thread:calm", "Implement atelier-c001", "running", 4, 25, "Reading src/sidebar.ts")],
   ),
+  // A running thread that begins waiting: the mission's second read lists it as waiting, while its
+  // full answer still says running (test-mission.mjs fails the full read after the first).
+  "turns-waiting": (() => {
+    const items = [item("atelier-t001", "Ask which Desk to read", "building", { holder: "thread:turns" })];
+    const running = mission("atelier-rm04", "Read the Desk through the gate", "open", items, [agent("thread:turns", "implementer", "atelier-t001", true)]);
+    const waiting = structuredClone(running);
+    waiting.threads[0].thread!.status = "waiting";
+    const made = scenario(running, [event("atelier-rm04", "merged", 100)], [thread("thread:turns", "Implement atelier-t001", "running", 1, 20, "Reading src/desk.ts")]);
+    made.answers[paths.mission(REPO, "atelier-rm04")] = { sequence: [running, waiting] };
+    return made;
+  })(),
   // Done: two merged items, one with three review rounds and its pull request, one with one round
   // whose pull request the Desk does not know (pull_request null); and one built, reviewed and dropped.
   done: (() => {
