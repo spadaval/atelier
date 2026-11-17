@@ -1,6 +1,7 @@
 // T3 extension UI. Desk remains the backend; no T3 credentials enter its iframe.
 // The Desk is shown in its embedded mode and talks to this page over its host contract
 // (atelier: docs/architecture/desk.md, "The embedded mode" and "The host contract").
+import { mountReleaseBadge } from './react/settings.tsx';
 import { createHostAdapter, expectHostDom, hostDomExpected, hostImportedModules, hostListProblem, hostProbes, hostSelectors, observeHostDom, observeHostTheme, readHostTheme, setHostProbe, useHostApi } from './host-adapter.js';
 
 // Runs the extension on the page. The loader calls it with the injected script's api
@@ -341,6 +342,9 @@ const statusText = element('p', { class: 'muted', text: 'Reading injector status
 const statusError = element('p', { class: 'error', hidden: '' });
 // The installed release and the last release check, from the injector's update.json.
 const releaseText = element('p', { id: 'release-status', class: 'muted', text: 'Reading release status…' });
+// The installed release in T3's own Badge, drawn by React (react/settings.tsx).
+const releaseBadgeHost = element('span', { id: 'release-badge', hidden: '' });
+const showReleaseBadge = mountReleaseBadge(releaseBadgeHost, api);
 const releaseError = element('p', { id: 'release-error', class: 'error', hidden: '' });
 const updateRelease = element('button', { id: 'update-release', hidden: '' });
 const deskList = element('ul', { 'aria-label': 'Desks' });
@@ -361,7 +365,7 @@ const refreshStatus = element('button', { id: 'refresh-status', text: 'Refresh s
 const deskAction = element('button', { text: 'Open Desk' });
 settingsRoot.append(element('div', { class: 'stack' }, element('h2', { text: 'Customizations' }), statusText, statusError,
   element('div', { class: 'row' }, reloadScripts, refreshStatus, openFolder, deskAction),
-  element('h3', { text: 'Release' }), releaseText, releaseError, element('div', { class: 'row' }, updateRelease),
+  element('h3', { text: 'Release' }), element('div', { class: 'row' }, element('span', { text: 'Extension' }), releaseBadgeHost, releaseText), releaseError, element('div', { class: 'row' }, updateRelease),
   checkbox('autoUpdate', 'Install new extension releases by themselves (checked at start and daily)'),
   element('h3', { text: 'Desks' }), deskList,
   element('h3', { text: 'Settings' }), element('p', { class: 'muted', text: `Saved in ${api.home}${api.home.includes('\\') ? '\\' : '/'}config.json` }),
@@ -399,9 +403,10 @@ async function readStatus() {
 }
 function showRelease(status) {
   const update = status.update;
-  const checked = update ? ` · checked ${new Date(update.checkedAt).toLocaleString()}` : ' · not checked yet';
-  const newest = !update || update.error ? '' : update.newer ? ` · release ${update.latest.version} is available` : update.latest ? ` · newest release ${update.latest.version}, up to date` : ' · no extension release published';
-  releaseText.textContent = `Extension ${status.release}${newest}${checked}`;
+  const checked = update ? `checked ${new Date(update.checkedAt).toLocaleString()}` : 'not checked yet';
+  const newest = !update || update.error ? '' : update.newer ? `release ${update.latest.version} is available` : update.latest ? `newest release ${update.latest.version}, up to date` : 'no extension release published';
+  releaseBadgeHost.hidden = false; showReleaseBadge(status.release);
+  releaseText.textContent = [newest, checked].filter(Boolean).join(' · ');
   const problems = [update?.error && `Release check failed: ${update.error}`, status.restartNeeded && 'An update changed t3-custom.mjs: run t3-custom stop, then open T3 Custom again to load it.'].filter(Boolean);
   releaseError.hidden = !problems.length; releaseError.textContent = problems.join(' ');
   updateRelease.hidden = !update?.newer;

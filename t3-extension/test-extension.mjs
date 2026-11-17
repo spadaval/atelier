@@ -402,6 +402,24 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
     assert.match(String(refused), /not allowed/, `${sneaky} was read`);
   }
   assert(!deskRequests.some(url => url.startsWith('/api/action')), `a normalised path reached the Desk: ${deskRequests.filter(url => url.startsWith('/api/action')).join(', ')}`);
+  // The reads the native pages make reach the Desk as asked. The Desk may answer one with an
+  // error (the fixture names no forge for /api/checks), but never the gate.
+  const pageReads = [`/api/repos/${fixture.repo}/missions`, '/api/motion', `/api/history?repo=${fixture.repo}&days=7`, `/api/history?repo=${fixture.repo}&ids=${fixture.mission.id},${referenceId}`,
+    `/api/checks?repo=${fixture.repo}&pr=1`, `/api/roadmap?repo=${fixture.repo}`, `/api/thread?id=${encodeURIComponent('env:thread-a')}`, `/api/thread?id=${encodeURIComponent('env:thread-a')}&full=1`, '/api/ties?thread=thread-b'];
+  for (const read of pageReads) {
+    const answer = await evaluate(`fixtureApi.request('desk-get',{desk:'${deskBase}',path:${JSON.stringify(read)}}).then(()=>'read',error=>error.message)`);
+    assert.doesNotMatch(answer, /not allowed/, `${read} was refused`);
+    assert(deskRequests.includes(read), `${read} did not reach the Desk as asked: ${answer}`);
+  }
+  // Around those reads, the gate still refuses what is not one of their forms, before the Desk sees it.
+  const seenBefore = deskRequests.length;
+  for (const refused of ['/api/motion?x=1', '/api/history?repo=atelier', '/api/history?days=7&repo=atelier', '/api/history?repo=atelier&days=7&ids=a', '/api/thread?id=x&full=0', '/api/ties?thread=', '/api/checks?repo=atelier&pr=1&pr=2', '/api/motion#x', '/api/thread?id=x#y', String.raw`/api/repos/a\b/missions`, '/api/repos/./atelier/missions', '/api/repos/atelier/../missions', '/api/sessions']) {
+    const answer = await evaluate(`fixtureApi.request('desk-get',{desk:'${deskBase}',path:${JSON.stringify(refused)}}).then(()=>'read',error=>error.message)`);
+    assert.match(answer, /not allowed/, `${refused} was read`);
+  }
+  assert.match(await evaluate(`fixtureApi.request('desk-get',{desk:'http://127.0.0.1:1',path:'/api/motion'}).then(()=>'read',error=>error.message)`), /not in desk.urls/);
+  assert.deepEqual(deskRequests.slice(seenBefore), [], 'a refused read reached the Desk');
+  console.log(`PASS: the gate admits the ${pageReads.length} reads the native pages make, exactly as asked, and refuses an unlisted parameter, a fragment, a backslash, a dot segment, a write and another Desk`);
   // Settings that would break the extension are refused, and config.json is left as it was.
   const configBefore = await fs.readFile(path.join(temp, 'config.json'), 'utf8');
   for (const bad of [{ mappings: null }, { mappings: [] }, { mappings: { a: 1 } }, { enabled: null }, { references: 'yes' }, { toString: null }, { constructor: null }, { pinnedRepo: 3 }]) {
@@ -725,11 +743,15 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   const settingsQuery = selector => `document.querySelector("#t3-custom-settings").shadowRoot.querySelector(${JSON.stringify(selector)})`;
   const refreshUntil = (expression, label) => until(() => evaluate(`(${expression})||(${settingsQuery('#refresh-status')}.click(),false)`), label);
   await refreshUntil(`${settingsQuery('#release-error')}.textContent === "Release check failed: Looking up releases: GET ${base}/releases: HTTP 503 Service Unavailable"`, 'The failed release lookup in Customizations');
-  assert.match(await evaluate(`${settingsQuery('#release-status')}.textContent`), /^Extension development · checked /);
+  assert.match(await evaluate(`${settingsQuery('#release-status')}.textContent`), /^checked /);
+  // The installed release is T3's Badge, drawn by React in a shadow root of its own (src/react/settings.tsx).
+  const badge = `${settingsQuery('#release-badge')}.shadowRoot.querySelector('[data-slot="badge"]')`;
+  assert.equal(await evaluate(`${badge}?.textContent`), 'development');
+  assert.notEqual(await evaluate(`getComputedStyle(${badge}).borderTopStyle`), 'none', 'the release Badge is drawn without its stylesheet');
   assert.equal(await evaluate(`${settingsQuery('#update-release')}.hidden`), true, 'an update was offered after a failed lookup');
   // A newer release, as a later check records it, is offered with a button.
   await fs.writeFile(path.join(temp, 'update.json'), JSON.stringify({ checkedAt: new Date().toISOString(), installed: 'development', latest: { version: '0.5.0', tag: 't3-extension-v0.5.0' }, newer: true, error: null }));
-  await refreshUntil(`${settingsQuery('#release-status')}.textContent.includes("· release 0.5.0 is available ·")`, 'The newer release in Customizations');
+  await refreshUntil(`${settingsQuery('#release-status')}.textContent.startsWith("release 0.5.0 is available · ")`, 'The newer release in Customizations');
   assert.equal(await evaluate(`${settingsQuery('#release-error')}.hidden`), true);
   assert.equal(await evaluate(`${settingsQuery('#update-release')}.hidden ? null : ${settingsQuery('#update-release')}.textContent`), 'Update to 0.5.0');
   assert.equal(await evaluate(`${settingsQuery('[data-setting="autoUpdate"]')}.checked`), false, 'automatic updates are on by default');
@@ -756,7 +778,9 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   const stored = await evaluate('JSON.stringify(Object.fromEntries(Object.keys(localStorage).map(key => [key, localStorage[key]])))');
   assert(!stored.includes('mappings') && stored.includes('openThreads'), `localStorage holds only view state: ${stored}`);
   await evaluate('location.hash="/env/thread-c"');
-  await until(() => evaluate('!document.querySelector("[data-t3-desk-mount]")?.shadowRoot.querySelector("iframe").hidden'), 'Explicit project mapping');
+  // The mount must exist: the reapplied extension may not have drawn it yet, and a missing mount is
+  // not a shown Desk.
+  await until(() => evaluate('document.querySelector("[data-t3-desk-mount]")?.shadowRoot.querySelector("iframe")?.hidden === false'), 'Explicit project mapping');
   await evaluate('document.querySelector("#native-tab").click()');
   await until(() => evaluate('document.querySelector("[data-t3-desk-mount]").hidden && !document.querySelector("#native-content").inert'), 'Native tab restoration');
   console.log('PASS: Customizations names a failed release lookup and offers a newer release; automatic updates are off by default');
@@ -767,8 +791,14 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   await until(() => evaluate('Boolean(document.querySelector("#t3-custom-settings"))'), 'Settings remount');
   // A folded mission, as a fold saves it, stays folded after reinjection.
   await evaluate(`localStorage.setItem("t3-custom:atelier:missions:v1", ${JSON.stringify(JSON.stringify({ folded: { [`${deskBase}/${fixture.repo}/${fixture.mission.id}`]: true } }))})`);
+  await until(() => evaluate('Boolean(document.querySelector("#t3-custom-settings").shadowRoot.querySelector("#release-badge").shadowRoot.querySelector("[data-slot=badge]"))'), 'The release Badge before reinjection');
+  await evaluate('globalThis.previousBadge=document.querySelector("#t3-custom-settings").shadowRoot.querySelector("#release-badge").shadowRoot;globalThis.adoptedBefore=document.adoptedStyleSheets.length');
   await evaluate('globalThis.previousRoot=document.querySelector("#t3-custom-root");document.querySelector("#t3-custom-settings").shadowRoot.querySelector("#reload-scripts").click()');
   await until(() => evaluate('Boolean(document.querySelector("#t3-custom-root")) && document.querySelector("#t3-custom-root") !== globalThis.previousRoot'), 'Settings reinjection control');
+  // The old extension's React root is unmounted, and Tailwind's @property rules are on the document once.
+  assert.equal(await evaluate('globalThis.previousBadge.querySelector("[data-react-root]")'), null, 'the release Badge of the disposed extension is still mounted');
+  await until(() => evaluate('Boolean(document.querySelector("#t3-custom-settings")?.shadowRoot.querySelector("#release-badge").shadowRoot?.querySelector("[data-slot=badge]"))'), 'The release Badge after reinjection');
+  assert.equal(await evaluate('document.adoptedStyleSheets.length'), await evaluate('globalThis.adoptedBefore'), 'reinjection left a second copy of the @property rules on the document');
   assert.equal(await evaluate('performance.timeOrigin'), timeOrigin);
   assert.equal(await evaluate('fixtureListeners.size'), 1);
   await until(() => evaluate('document.querySelector("[data-t3-mission-row] [data-t3-fold]")?.getAttribute("aria-expanded") === "false"'), 'Folded mission remembered across reinjection');
