@@ -6,9 +6,9 @@
 # commit that is not on master, and one whose tested commit, the last at or
 # before it that changed what CI's extension job tests, did not pass CI with
 # that job run (scripts/t3-extension-release.sh check). It then builds one
-# bundle, the extension's files and installer plus VERSION, checks it, and
-# publishes it with its SHA-256 checksum as a release that is never the
-# repository's latest. On a pull request and when started by hand it builds
+# bundle, the built extension, its loader and installer plus VERSION, checks
+# it, and publishes it with its SHA-256 checksum as a release that is never
+# the repository's latest. On a pull request and when started by hand it builds
 # and checks the bundle as the run's artifact and publishes nothing.
 name: T3 extension release
 
@@ -56,6 +56,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/t3-extension-release.sh check HEAD origin/master
+      # Bundle builds the extension; verify installs it with no Node on PATH.
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: t3-extension/package.json
+      - uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+          cache: pnpm
+          cache-dependency-path: t3-extension/pnpm-lock.yaml
       - id: bundle
         name: Bundle
         run: echo "zip=$(scripts/t3-extension-release.sh bundle "${{ steps.version.outputs.version }}" dist)" >> "$GITHUB_OUTPUT"

@@ -201,12 +201,12 @@ try {
   config.desk = { urls: [deskBase, secondDeskBase] }; delete config.settings;
   config.debugPort = debugPort; config.targetPrefixes = [base]; config.releases = `${base}/releases`;
   await fs.writeFile(path.join(temp, 'config.json'), JSON.stringify(config));
-  await fs.copyFile(path.join(root, 'custom.js'), path.join(temp, 'custom.js'));
   await fs.copyFile(path.join(root, 'custom.css'), path.join(temp, 'custom.css'));
-  // The real adapter, including module discovery; the wrapper only exposes the bridge to the test.
-  await fs.writeFile(path.join(temp, 'host-adapter.js'), await fs.readFile(path.join(root, 'host-adapter.js'), 'utf8') + `
-const discoverHost = createHostAdapter;
-createHostAdapter = api => { globalThis.fixtureApi = api; return discoverHost(api); };`);
+  // The built extension (pnpm build), with the real adapter and its module discovery; the wrapper
+  // only exposes the bridge to the test.
+  await fs.writeFile(path.join(temp, 'custom.js'), await fs.readFile(path.join(root, 'dist/custom.js'), 'utf8') + `
+const startExtension = T3Custom.start;
+T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api); };`);
   const browserLog = await fs.open(path.join(temp, 'browser.log'), 'w');
   const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE; delete env.NODE_OPTIONS;
   browser = spawn(browserPath, ['--headless=new', '--no-first-run', '--no-default-browser-check', '--disable-background-networking', `--user-data-dir=${path.join(temp, 'profile')}`, `--remote-debugging-port=${debugPort}`, '--remote-debugging-address=127.0.0.1', '--window-size=1600,1000', base + '/#/env/thread-a'], { env, stdio: ['ignore', browserLog.fd, browserLog.fd] });

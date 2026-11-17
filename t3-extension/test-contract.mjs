@@ -1,4 +1,4 @@
-// Checks every T3 hook host-adapter.js relies on against a running T3 build.
+// Checks every T3 hook src/host-adapter.js relies on against a running T3 build.
 // Usage: node test-contract.mjs [--port 9333] [--thread <environmentId>/<threadId>] [--draft <draftId>]
 // It shows a thread, the workspace panel, a new-thread screen (the first draft
 // with a project, or --draft) and Settings in that T3 window, then restores the
@@ -11,10 +11,12 @@ const option = (name, fallback) => { const index = process.argv.indexOf(name); r
 const port = Number(option('--port', 9333));
 const thread = option('--thread', null);
 const draft = option('--draft', null);
-const adapter = await fs.readFile(new URL('./host-adapter.js', import.meta.url), 'utf8');
+// The adapter's source, run inline as a script: its exports are plain declarations here.
+const adapter = (await fs.readFile(new URL('./src/host-adapter.js', import.meta.url), 'utf8')).replace(/^export /gm, '');
 const page = await connectPage(port);
 const { probes, imported, declared } = await page.evaluate(`(async api => {
   ${adapter}
+  useHostApi(api);
   // Resolves to whether check() came true within ms.
   const wait = async (check, ms = 10000) => { const end = Date.now() + ms; while (!check() && Date.now() < end) await new Promise(r => setTimeout(r, 100)); observeHostDom(); return Boolean(check()); };
   const original = location.hash;

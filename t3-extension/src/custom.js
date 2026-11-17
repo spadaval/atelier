@@ -1,6 +1,13 @@
 // T3 extension UI. Desk remains the backend; no T3 credentials enter its iframe.
 // The Desk is shown in its embedded mode and talks to this page over its host contract
 // (atelier: docs/architecture/desk.md, "The embedded mode" and "The host contract").
+import { createHostAdapter, expectHostDom, hostDomExpected, hostImportedModules, hostListProblem, hostProbes, hostSelectors, observeHostDom, observeHostTheme, readHostTheme, setHostProbe, useHostApi } from './host-adapter.js';
+
+// Runs the extension on the page. The loader calls it with the injected script's api
+// (t3-custom.mjs, buildBundle) and reports what it throws. The body is the script this file was
+// before it became a module, left unindented so its history follows it.
+export async function start(api) {
+useHostApi(api);
 const deskUrls = api.config.urls;
 // Manual repository overrides from config.json: extra repository keys or a different slug.
 const overrides = api.config.repositories;
@@ -1175,3 +1182,4 @@ try {
 await repositoriesLoaded;
 scheduleDOM(); queueScan();
 api.log('Atelier extension ready', { desks: deskUrls, repositories: repositories.map(repo => repo.repo) });
+}

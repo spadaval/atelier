@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Tests scripts/t3-extension-release.sh against a scratch repository whose
 # master is a line of merges, with GitHub's answers about CI runs served by a
-# stand-in `gh` from fixtures. CI's `changes` job runs it.
+# stand-in `gh` from fixtures. CI's `changes` job runs it. Its bundle and
+# verify cases build this checkout's t3-extension/, so they need Node and pnpm.
 set -euo pipefail
 
 script=$(cd "$(dirname "$0")" && pwd)/t3-extension-release.sh
+checkout=$(cd "$(dirname "$0")/.." && pwd)
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
 failed=0
@@ -131,18 +133,64 @@ notes() {
 notes notes-first-release t3-extension-v0.1.0 "atelier-aaaa"
 notes notes-since-previous-tag t3-extension-v0.2.0 "atelier-iiii atelier-hhhh atelier-gggg"
 
-# The bundle holds t3-extension/ at HEAD and VERSION, under one directory.
+# The bundle builds the extension: this checkout's t3-extension/, as its
+# files stand (tracked and new, not ignored), committed to the scratch master.
+rm -rf "$repo/t3-extension"
+git -C "$checkout" ls-files -z --cached --others --exclude-standard -- t3-extension |
+  while IFS= read -r -d '' path; do
+    [ -f "$checkout/$path" ] || continue
+    mkdir -p "$repo/$(dirname "$path")"
+    cp "$checkout/$path" "$repo/$path"
+  done
+g add -A
+g commit -qm "The extension as this checkout has it"
+
+# The bundle holds t3-extension/ at HEAD but the build's inputs, the built
+# dist/custom.js and VERSION, under one directory.
 out=$scratch/out
-(cd "$repo" && "$script" bundle 0.2.0 "$out" >/dev/null)
+(cd "$repo" && "$script" bundle 0.2.0 "$out" >/dev/null 2>"$scratch/err") ||
+  { echo "FAIL bundle: $(cat "$scratch/err")"; failed=1; }
 mkdir "$scratch/unpacked" "$scratch/tree"
 python3 -m zipfile -e "$out/t3-extension-0.2.0.zip" "$scratch/unpacked"
+bundled=$scratch/unpacked/t3-extension-0.2.0
 git -C "$repo" archive HEAD:t3-extension | tar -x -C "$scratch/tree"
+(cd "$scratch/tree" && rm -rf src package.json pnpm-lock.yaml tsconfig.json vite.config.ts)
+mkdir "$scratch/tree/dist"
+cp "$bundled/dist/custom.js" "$scratch/tree/dist/custom.js"
 echo 0.2.0 > "$scratch/tree/VERSION"
-if diff -r "$scratch/tree" "$scratch/unpacked/t3-extension-0.2.0" >/dev/null &&
+if diff -r "$scratch/tree" "$bundled" >/dev/null &&
+  [ ! -e "$bundled/src" ] && [ ! -e "$bundled/node_modules" ] &&
+  grep -q 'var T3Custom = ' "$bundled/dist/custom.js" &&
   (cd "$out" && sha256sum -c --quiet t3-extension-0.2.0.zip.sha256); then
   echo "ok   bundle"
 else
   echo "FAIL bundle"
+  failed=1
+fi
+
+# verify accepts it, installing it with no Node on PATH.
+if (cd "$repo" && "$script" verify "$out/t3-extension-0.2.0.zip" 0.2.0 2>"$scratch/err"); then
+  echo "ok   verify"
+else
+  echo "FAIL verify: $(cat "$scratch/err")"
+  failed=1
+fi
+
+# verify refuses a bundle that carries src/, the build's input.
+mkdir "$scratch/extra"
+cp -r "$bundled" "$scratch/extra/"
+mkdir "$scratch/extra/t3-extension-0.2.0/src"
+cp "$repo/t3-extension/src/main.ts" "$scratch/extra/t3-extension-0.2.0/src/"
+rm "$out/t3-extension-0.2.0.zip"
+(cd "$scratch/extra" && python3 -m zipfile -c "$out/t3-extension-0.2.0.zip" t3-extension-0.2.0)
+(cd "$out" && sha256sum t3-extension-0.2.0.zip > t3-extension-0.2.0.zip.sha256)
+if (cd "$repo" && "$script" verify "$out/t3-extension-0.2.0.zip" 0.2.0 >/dev/null 2>"$scratch/err"); then
+  echo "FAIL verify-refuses-src: accepted"
+  failed=1
+elif grep -q "differ from t3-extension/ at HEAD" "$scratch/err"; then
+  echo "ok   verify-refuses-src"
+else
+  echo "FAIL verify-refuses-src: $(cat "$scratch/err")"
   failed=1
 fi
 

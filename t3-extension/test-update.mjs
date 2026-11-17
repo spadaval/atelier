@@ -26,17 +26,18 @@ await fs.mkdir(path.join(app, 'Contents/MacOS'), { recursive: true });
 await execute('python3', ['-c', 'import plistlib, sys; plistlib.dump({"CFBundleExecutable": "T3 Code"}, open(sys.argv[1], "wb"))', path.join(app, 'Contents/Info.plist')]);
 await fs.writeFile(path.join(app, 'Contents/MacOS/T3 Code'), `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} "$@"\n`, { mode: 0o755 });
 
-// A bundle as the release workflow builds it: this folder's files under t3-extension-<version>/
-// plus VERSION, zipped, with its sha256sum line. Each version's custom.js differs, so an update
-// visibly replaces it.
+// A bundle as the release workflow builds it: this folder's files and the built dist/custom.js
+// (pnpm build) under t3-extension-<version>/, plus VERSION, zipped, with its sha256sum line. Each
+// version's custom.js differs, so an update visibly replaces it.
 async function makeBundle(version) {
   const stage = path.join(temp, `stage-${version}`);
   const folder = path.join(stage, `t3-extension-${version}`);
-  await fs.mkdir(folder, { recursive: true });
+  await fs.mkdir(path.join(folder, 'dist'), { recursive: true });
   for (const entry of await fs.readdir(root, { withFileTypes: true })) {
     if (entry.isFile() && entry.name !== 'config.json' && !entry.name.endsWith('.log')) await fs.copyFile(path.join(root, entry.name), path.join(folder, entry.name));
   }
-  await fs.appendFile(path.join(folder, 'custom.js'), `\n// release ${version}\n`);
+  await fs.copyFile(path.join(root, 'dist/custom.js'), path.join(folder, 'dist/custom.js'));
+  await fs.appendFile(path.join(folder, 'dist/custom.js'), `\n// release ${version}\n`);
   await fs.writeFile(path.join(folder, 'VERSION'), `${version}\n`);
   const zip = path.join(stage, `t3-extension-${version}.zip`);
   await execute('python3', ['-m', 'zipfile', '-c', zip, `t3-extension-${version}`], { cwd: stage });
@@ -101,10 +102,20 @@ async function until(check, label, timeout = 15000) {
 const installFrom = version => execute('python3', [path.join(bundles[version].folder, 'install.py'), '--home', home, '--app', app]);
 
 try {
+  // Without a build there is nothing to install: install.py names the command and writes nothing.
+  const unbuilt = path.join(temp, 'unbuilt');
+  await fs.cp(bundles['0.1.0'].folder, unbuilt, { recursive: true });
+  await fs.rm(path.join(unbuilt, 'dist'), { recursive: true });
+  const noBuild = await execute('python3', [path.join(unbuilt, 'install.py'), '--home', home, '--app', app]).then(() => null, error => error);
+  assert(noBuild, 'install.py installed with no dist/custom.js');
+  assert.match(noBuild.stderr, /dist\/custom\.js does not exist; build the extension first: in .*unbuilt, run pnpm install && pnpm build/);
+  assert(!(await fs.access(home).then(() => true, () => false)), 'install.py created the home with no build');
+  console.log('PASS: install.py with no build refuses, names pnpm build and writes nothing');
+
   // An install from a bundle into an empty home.
   await installFrom('0.1.0');
   assert.equal((await read('VERSION')).trim(), '0.1.0');
-  for (const name of ['t3-custom.mjs', 'host-adapter.js', 'custom.js', 'custom.css', 'README.md', 't3-custom']) assert(await exists(name), `${name} was not installed`);
+  for (const name of ['t3-custom.mjs', 'custom.js', 'custom.css', 'README.md', 't3-custom']) assert(await exists(name), `${name} was not installed`);
   const installedConfig = JSON.parse(await read('config.json'));
   assert.equal(installedConfig.appPath, app);
   assert.equal(installedConfig.python, (await execute('python3', ['-c', 'import sys; print(sys.executable)'])).stdout.trim());
@@ -174,9 +185,12 @@ try {
 
   // The injector checks for a release when it starts. A failed lookup is in status by name, and the
   // injector itself carries on.
-  // An edited custom.js is kept beside the new one.
+  // An edited custom.js is kept beside the new one. The adapter an install before the build left
+  // is removed, since custom.js now holds it.
   await fs.appendFile(path.join(home, 'custom.js'), '// my edit\n');
+  await fs.writeFile(path.join(home, 'host-adapter.js'), '// the adapter, before the build\n');
   await installFrom('0.1.0');
+  assert(!(await exists('host-adapter.js')), 'an old install\'s host-adapter.js was left');
   assert.match(await read('custom.js.previous'), /\/\/ my edit\n$/);
   assert.match(await read('custom.js'), /\/\/ release 0\.1\.0\n$/);
   await fs.rm(path.join(home, 'update.json'));

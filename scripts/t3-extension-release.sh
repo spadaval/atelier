@@ -22,14 +22,20 @@
 # t3-extension-v* tag, or for the first release since the import, the oldest
 # commit that changed t3-extension/, which is left out.
 #
-# bundle writes t3-extension-<version>.zip, holding t3-extension/ at HEAD
-# under t3-extension-<version>/ plus a VERSION file, and its .sha256 beside it.
+# bundle builds t3-extension/ at HEAD (pnpm install --frozen-lockfile, then
+# pnpm build) and writes t3-extension-<version>.zip, holding under
+# t3-extension-<version>/ the files of t3-extension/ at HEAD but the build's
+# inputs (src/ and the files that configure the build), the built
+# dist/custom.js and a VERSION file, and its .sha256 beside it. It needs Node
+# and pnpm.
 #
-# verify unpacks a bundle, compares its files with t3-extension/ at HEAD, and
-# installs it into an empty home with install.py, naming with --app a
-# stand-in for T3 Code's app whose executable runs Node, as a Linux runner
-# has no T3 Code. It then runs the installed `t3-custom check`, which must
-# report the bundle's version.
+# verify unpacks a bundle, compares its files with what bundle puts in from
+# t3-extension/ at HEAD, checks it holds dist/custom.js and nothing else under
+# dist/, and installs it into an empty home with install.py, naming with --app
+# a stand-in for T3 Code's app whose executable runs Node, as a Linux runner
+# has no T3 Code. The install and the installed `t3-custom check`, which must
+# report the bundle's version, run with nothing on PATH, so they need no Node
+# but T3's executable, as on a user's machine.
 set -euo pipefail
 
 scripts=$(cd "$(dirname "$0")" && pwd)
@@ -37,6 +43,15 @@ scripts=$(cd "$(dirname "$0")" && pwd)
 refuse() {
   echo "t3-extension-release: $*" >&2
   exit 1
+}
+
+# What the build reads, which a bundle leaves out: it holds the build instead.
+build_inputs=(src package.json pnpm-lock.yaml tsconfig.json vite.config.ts)
+
+# extension_files <dir>: t3-extension/ at HEAD in <dir>, but the build's inputs.
+extension_files() {
+  git archive HEAD:t3-extension | tar -x -C "$1"
+  (cd "$1" && rm -rf "${build_inputs[@]}")
 }
 
 check() {
@@ -119,8 +134,12 @@ bundle() {
   out=$(cd "$out" && pwd)
   stage=$(mktemp -d)
   trap 'rm -rf "$stage"' RETURN
-  mkdir "$stage/$name"
-  git archive HEAD:t3-extension | tar -x -C "$stage/$name"
+  mkdir "$stage/build" "$stage/$name" "$stage/$name/dist"
+  git archive HEAD:t3-extension | tar -x -C "$stage/build"
+  (cd "$stage/build" && pnpm install --frozen-lockfile && pnpm build) >&2 ||
+    refuse "building t3-extension/ at $(git rev-parse HEAD) failed."
+  extension_files "$stage/$name"
+  cp "$stage/build/dist/custom.js" "$stage/$name/dist/custom.js"
   printf '%s\n' "$version" > "$stage/$name/VERSION"
   rm -f "$out/$name.zip"
   (cd "$stage" && python3 -m zipfile -c "$out/$name.zip" "$name")
@@ -139,21 +158,27 @@ verify() {
   (cd "$(dirname "$zip")" && sha256sum -c --quiet "$(basename "$zip").sha256") ||
     refuse "the bundle does not match its checksum."
   python3 -m zipfile -e "$zip" "$work/bundle"
-  git archive HEAD:t3-extension | tar -x -C "$work/tree"
+  extension_files "$work/tree"
   printf '%s\n' "$version" > "$work/tree/VERSION"
-  diff -r "$work/tree" "$work/bundle/$name" || refuse "the bundle's files differ from t3-extension/ at HEAD."
-  echo "t3-extension-release: the bundle holds t3-extension/ at $(git rev-parse HEAD) and VERSION." >&2
+  diff -r -x dist "$work/tree" "$work/bundle/$name" ||
+    refuse "the bundle's files differ from t3-extension/ at HEAD without ${build_inputs[*]}."
+  [ "$(ls -A "$work/bundle/$name/dist" 2>/dev/null)" = custom.js ] ||
+    refuse "the bundle's dist/ holds $(ls -A "$work/bundle/$name/dist" 2>/dev/null | paste -sd' ' || true), not the built custom.js alone."
+  echo "t3-extension-release: the bundle holds t3-extension/ at $(git rev-parse HEAD) without its build's inputs, dist/custom.js and VERSION." >&2
 
-  local app="$work/T3 Code.app"
-  mkdir -p "$app/Contents/MacOS"
-  python3 -c 'import plistlib, sys; plistlib.dump({"CFBundleExecutable": "T3 Code"}, open(sys.argv[1], "wb"))' \
+  # The stand-in names Node by its path, as T3's own executable carries it.
+  local app="$work/T3 Code.app" node python
+  node=$(command -v node) || refuse "verify needs Node for the stand-in for T3 Code's executable."
+  python=$(command -v python3)
+  mkdir -p "$app/Contents/MacOS" "$work/empty"
+  "$python" -c 'import plistlib, sys; plistlib.dump({"CFBundleExecutable": "T3 Code"}, open(sys.argv[1], "wb"))' \
     "$app/Contents/Info.plist"
-  printf '#!/bin/sh\nexec node "$@"\n' > "$app/Contents/MacOS/T3 Code"
+  printf '#!/bin/sh\nexec %q "$@"\n' "$node" > "$app/Contents/MacOS/T3 Code"
   chmod +x "$app/Contents/MacOS/T3 Code"
   (cd "$work/bundle/$name" &&
-    HOME=$work/home python3 install.py --home "$work/home/T3 Custom" --app "$app") >&2
+    HOME=$work/home PATH=$work/empty "$python" install.py --home "$work/home/T3 Custom" --app "$app") >&2
   local report
-  report=$("$work/home/T3 Custom/t3-custom" check)
+  report=$(PATH=$work/empty "$work/home/T3 Custom/t3-custom" check)
   echo "t3-extension-release: installed t3-custom check: $report" >&2
   [ "$(printf '%s' "$report" | jq -r '.valid and .release == $v' --arg v "$version")" = true ] ||
     refuse "the installed extension did not report release $version."

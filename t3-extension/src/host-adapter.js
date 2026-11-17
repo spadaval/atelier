@@ -1,6 +1,6 @@
 // The only client code coupled to T3 internals. Every hook has a named probe:
 // a missing hook is reported by name and turns off only the surfaces that need it.
-const hostSelectors = {
+export const hostSelectors = {
   panel: '[data-workspace-area="panel"]',
   panelContent: '[data-right-panel-surface-content]',
   panelTabbar: '[data-right-panel-tabbar]',
@@ -35,15 +35,19 @@ const hostSelectors = {
   conversationThread: '[data-assistant-citation-thread]',
   timelineRow: '[data-timeline-row-id]',
 };
+// The injected script's api, which setHostProbe reports through. The caller sets it before
+// anything here runs.
+let hostApi;
+export function useHostApi(api) { hostApi = api; }
 // ok: true (found), false (missing), null (DOM hook not on screen yet).
-const hostProbes = Object.fromEntries(Object.keys(hostSelectors).map(name => [`dom:${name}`, { ok: null, detail: `${hostSelectors[name]} not seen yet` }]));
-function setHostProbe(name, ok, detail) {
+export const hostProbes = Object.fromEntries(Object.keys(hostSelectors).map(name => [`dom:${name}`, { ok: null, detail: `${hostSelectors[name]} not seen yet` }]));
+export function setHostProbe(name, ok, detail) {
   if (hostProbes[name]?.ok === ok && hostProbes[name]?.detail === detail) return;
   hostProbes[name] = { ok, detail };
-  api.reportProbes?.(hostProbes);
+  hostApi.reportProbes?.(hostProbes);
 }
 // DOM hooks only exist while their part of T3 is shown, so they are confirmed when seen.
-function observeHostDom() {
+export function observeHostDom() {
   for (const [name, selector] of Object.entries(hostSelectors)) {
     if (!hostProbes[`dom:${name}`].ok && document.querySelector(selector)) setHostProbe(`dom:${name}`, true, selector);
   }
@@ -52,8 +56,8 @@ function observeHostDom() {
 // A DOM hook a view needs where T3 should render it: found, it is confirmed; still not found 3
 // seconds after the view first looked for it, it is reported missing and that view turns off.
 // hostDomExpected holds the hooks being waited for, so the caller can look again.
-const hostDomExpected = {};
-function expectHostDom(name, expected, where) {
+export const hostDomExpected = {};
+export function expectHostDom(name, expected, where) {
   if (!expected) { delete hostDomExpected[name]; return; }
   const selector = hostSelectors[name];
   if (document.querySelector(selector)) { delete hostDomExpected[name]; setHostProbe(`dom:${name}`, true, selector); return; }
@@ -62,9 +66,9 @@ function expectHostDom(name, expected, where) {
 }
 
 // Every module discovery imported, for diagnostics and the contract test.
-const hostImportedModules = [];
+export const hostImportedModules = [];
 
-async function createHostAdapter(api) {
+export async function createHostAdapter(api) {
   // Modules are matched by the shape of their exports, not by chunk or export names,
   // which change with every T3 build.
   const shapes = {
@@ -248,7 +252,7 @@ async function createHostAdapter(api) {
 
 // Why T3's boring sidebar list, the parent of its project folders, is not what missions need, or
 // null: one flex column holding every folder, each with its button.
-function hostListProblem(list) {
+export function hostListProblem(list) {
   const style = getComputedStyle(list);
   if (style.display !== 'flex' || style.flexDirection !== 'column') return `the folders' list is "${style.display} ${style.flexDirection}", not a flex column`;
   for (const folder of document.querySelectorAll(hostSelectors.projectFolder)) {
@@ -261,7 +265,7 @@ function hostListProblem(list) {
 // T3's composer is a ProseMirror (TipTap) editor: its content is selected and replaced with
 // execCommand('insertText'), which fires the beforeinput/input events ProseMirror handles. Empty
 // text clears it.
-function writeHostComposer(editor, text) {
+export function writeHostComposer(editor, text) {
   editor.focus();
   getSelection().selectAllChildren(editor);
   return document.execCommand(text ? 'insertText' : 'delete', false, text);
@@ -269,8 +273,8 @@ function writeHostComposer(editor, text) {
 
 // T3's theme, from its own CSS custom properties, in the form of the Desk's host:theme message.
 // Each colour is resolved to a computed value, so the Desk gets no var() or color-mix() of T3's.
-const hostThemeColors = { background: '--background', foreground: '--foreground', surface: '--card', border: '--border', muted: '--muted-foreground', accent: '--primary' };
-function readHostTheme(root) {
+export const hostThemeColors = { background: '--background', foreground: '--foreground', surface: '--card', border: '--border', muted: '--muted-foreground', accent: '--primary' };
+export function readHostTheme(root) {
   const probe = document.createElement('span');
   root.append(probe);
   const colors = {};
@@ -286,7 +290,7 @@ function readHostTheme(root) {
   return { colors, font: getComputedStyle(document.body).fontFamily, scheme };
 }
 // T3 switches theme on its root element's class and style attributes.
-function observeHostTheme(callback) {
+export function observeHostTheme(callback) {
   const observer = new MutationObserver(callback);
   observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style', 'data-theme'] });
   return () => observer.disconnect();

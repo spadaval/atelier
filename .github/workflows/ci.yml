@@ -34,6 +34,15 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      # The release test builds the extension's bundle.
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: t3-extension/package.json
+      - uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+          cache: pnpm
+          cache-dependency-path: t3-extension/pnpm-lock.yaml
       - run: scripts/ci-jobs.test.sh
       - run: scripts/t3-extension-release.test.sh
       - id: jobs
@@ -99,10 +108,11 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium-headless-shell
       - run: pnpm e2e
 
-  # The T3 Code extension's tests (t3-extension/run-tests.mjs) in headless
-  # Chrome, against an atelier-desk and the Desk's app built from this
-  # commit, serving a repository the tests write. A change to the Desk that
-  # breaks the extension fails here.
+  # The T3 Code extension's typecheck and build, then its tests
+  # (t3-extension/run-tests.mjs) on the built script in headless Chrome,
+  # against an atelier-desk and the Desk's app built from this commit,
+  # serving a repository the tests write. A change to the Desk that breaks
+  # the extension fails here.
   extension:
     needs: changes
     if: needs.changes.outputs.extension == 'true'
@@ -121,12 +131,20 @@ jobs:
         with:
           node-version: lts/*
           cache: pnpm
-          cache-dependency-path: desk/pnpm-lock.yaml
+          cache-dependency-path: |
+            desk/pnpm-lock.yaml
+            t3-extension/pnpm-lock.yaml
       - run: cargo build --locked -p atelier-desk
       - run: pnpm install --frozen-lockfile
         working-directory: desk
       - run: pnpm build
         working-directory: desk
+      - run: pnpm install --frozen-lockfile
+        working-directory: t3-extension
+      - run: pnpm typecheck
+        working-directory: t3-extension
+      - run: pnpm build
+        working-directory: t3-extension
       - run: node t3-extension/run-tests.mjs
         env:
           BROWSER: /usr/bin/google-chrome

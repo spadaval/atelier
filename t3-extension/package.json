@@ -1,0 +1,15 @@
+{
+  "name": "atelier-t3-extension",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "vite build",
+    "watch": "vite build --watch"
+  },
+  "packageManager": "pnpm@12.18.0",
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vite": "^8.3.6"
+  }
+}
