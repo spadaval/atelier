@@ -1,0 +1,256 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: var(--font-sans); font-size: 12px; line-height: 1.45; color: var(--foreground); font-variant-numeric: tabular-nums; }
+  ::selection { background: color-mix(in srgb, var(--primary) 30%, transparent); }
+  svg.i { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  svg.i.s { width: 11px; height: 11px; }
+  .mut { color: var(--muted-foreground); }
+  .mono { font-family: var(--font-mono); font-size: 11px; }
+  .ok { color: var(--success); } .warn { color: var(--warning); } .bad { color: var(--destructive); }
+  .trunc { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  p { margin: 0; }
+
+  h2 { margin: 0; font-size: 14px; font-weight: 600; }
+  .why { margin: 2px 0 10px; color: var(--muted-foreground); font-size: 12.5px; max-width: 68ch; }
+  section.m + section.m { margin-top: 36px; }
+  .state { margin: 14px 0 6px; font-size: 12px; font-weight: 500; color: var(--muted-foreground); }
+  .win { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+
+  .hd { display: flex; align-items: center; gap: 10px; }
+  .hd .ttl { font-size: 14px; font-weight: 600; flex: 1; }
+  .hd .x { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 6px; color: var(--muted-foreground); }
+  .sub { display: flex; align-items: center; gap: 10px; margin: 6px 0 14px; color: var(--muted-foreground); }
+  .bar { flex: 1; height: 4px; border-radius: 2px; background: var(--secondary); overflow: hidden; max-width: 180px; }
+  .bar i { display: block; height: 100%; background: var(--success); border-radius: 2px; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; font-weight: 500; white-space: nowrap; flex: none; }
+  kbd { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 4px; background: color-mix(in srgb, var(--foreground) 8%, transparent); color: var(--muted-foreground); font: 500 11px var(--font-sans); }
+  .b { display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 6px; border-radius: 4px; font-size: 11px; font-weight: 500; white-space: nowrap; }
+  .b.g { background: color-mix(in srgb, var(--success) 14%, transparent); color: var(--success-foreground, var(--success)); }
+  .b.w { background: color-mix(in srgb, var(--warning) 14%, transparent); color: var(--warning-foreground, var(--warning)); }
+  .b.s { background: var(--secondary); color: var(--secondary-foreground, var(--foreground)); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); flex: none; }
+  .dot.off { background: var(--muted-foreground); opacity: .5; }
+
+  .sec { display: flex; align-items: center; gap: 8px; height: 28px; margin-top: 10px; font-size: 12px; font-weight: 500; color: var(--muted-foreground); }
+  .sec .ln { flex: 1; height: 1px; background: var(--border); }
+  .sec svg.i { width: 12px; height: 12px; }
+  .sec.hot { color: var(--warning-foreground, var(--warning)); }
+
+  /* A: briefing */
+  .lede { font-size: 14px; line-height: 1.5; max-width: 60ch; text-wrap: pretty; }
+  .ask { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 7px 0; }
+  .ask + .ask { border-top: 1px solid var(--border); }
+  .ask .t { font-weight: 500; }
+  .ask .d { color: var(--muted-foreground); }
+  .work { display: grid; grid-template-columns: 6px 200px minmax(0, 1fr) 34px; gap: 10px; align-items: center; height: 26px; }
+  .prose { max-width: 66ch; }
+  .prose + .prose { margin-top: 8px; }
+  ul.pl { margin: 0; padding: 0; list-style: none; max-width: 66ch; }
+  ul.pl li { padding: 3px 0 3px 14px; position: relative; }
+  ul.pl li::before { content: ""; position: absolute; left: 2px; top: 10px; width: 4px; height: 4px; border-radius: 50%; background: var(--muted-foreground); }
+  .look { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 10px; align-items: center; height: 28px; }
+
+  /* B: timeline */
+  .lane { display: grid; grid-template-columns: 168px minmax(0, 1fr) 116px; gap: 10px; align-items: center; height: 26px; }
+  .track { display: flex; gap: 2px; height: 10px; align-items: stretch; }
+  .track i { display: block; border-radius: 3px; min-width: 3px; }
+  .track .gap { background: none; }
+  .build { background: var(--chart-1); } .review { background: var(--chart-2); } .merge { background: var(--chart-3); }
+  .you { background: repeating-linear-gradient(135deg, var(--warning) 0 3px, color-mix(in srgb, var(--warning) 35%, transparent) 3px 6px); }
+  .axis { display: grid; grid-template-columns: 168px minmax(0, 1fr) 116px; gap: 10px; color: var(--muted-foreground); font-size: 11px; }
+  .axis div { display: flex; justify-content: space-between; border-top: 1px solid var(--border); padding-top: 3px; margin-top: 4px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0 0 8px; color: var(--muted-foreground); font-size: 11px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .legend i { width: 10px; height: 10px; border-radius: 3px; }
+  .end { display: flex; align-items: center; gap: 5px; font-size: 11px; white-space: nowrap; }
+
+  /* C: crew */
+  .lead { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; }
+  .cr { display: grid; grid-template-columns: 6px minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; padding: 6px 8px; border-radius: 6px; }
+  .cr .who { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+  .cr .last { grid-column: 2 / 4; }
+
+  @media (max-width: 560px) {
+    .work { grid-template-columns: 6px minmax(0, 1fr) 34px; }
+    .work > :nth-child(3) { display: none; }
+    .lane, .axis { grid-template-columns: 96px minmax(0, 1fr); }
+    .lane .end, .axis > :last-child { display: none; }
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+  <symbol id="user" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+  <symbol id="pr" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M6 9v12"/></symbol>
+  <symbol id="msg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+</svg>
+
+<!-- ============ A ============ -->
+<section class="m">
+  <h2>A. The briefing</h2>
+  <p class="why">The page reads like a status report from the lead. It says how the mission is doing in one sentence, lists what needs you with the button that deals with it, and folds the rest. When the mission closes, the same page becomes its result.</p>
+
+  <div class="state">Running</div>
+  <div class="win">
+    <div class="hd">
+      <span class="ttl trunc">Glow-up: every page reads at a glance and fills the window</span>
+      <span class="btn"><svg class="i"><use href="#msg"/></svg>Lead <kbd>L</kbd></span>
+      <span class="x"><svg class="i"><use href="#x"/></svg></span>
+    </div>
+    <div class="sub">
+      <span class="b g"><span class="dot"></span>Running</span>
+      <span class="bar"><i style="width:54%"></i></span>
+      <span>14 of 26 merged</span>
+    </div>
+    <p class="lede">Three items are being built and one is merging. <span class="warn">One item waits on you, and one review has made no progress in 47 minutes.</span></p>
+
+    <div class="sec hot"><span>Needs you</span><span class="ln"></span><span>2</span></div>
+    <div class="ask"><svg class="i warn"><use href="#user"/></svg><div class="trunc"><div class="t trunc">The remaining pages move onto the layout component</div><div class="d trunc">Labelled needs-human 2 days ago. Three items wait behind it.</div></div><span class="btn">Open item</span></div>
+    <div class="ask"><svg class="i warn"><use href="#alert"/></svg><div class="trunc"><div class="t trunc">Glance test: an independent read of every converted page</div><div class="d trunc">Review 1 by gpt-6.1-sol. Last output 47m ago: <span class="mono">$ cargo nextest run</span></div></div><span class="btn">Open reviewer</span></div>
+
+    <div class="sec"><span>At work</span><span class="ln"></span><span>4 threads</span></div>
+    <div class="work"><span class="dot"></span><span class="trunc">Trade route as legs</span><span class="mono mut trunc">$ pnpm vitest run app/src/modules/route</span><span class="mut">38m</span></div>
+    <div class="work"><span class="dot"></span><span class="trunc">Exploration &gt; System as a system map</span><span class="mono mut trunc">Fix round 1: the map clips at 1100 wide</span><span class="mut">12m</span></div>
+    <div class="work"><span class="dot"></span><span class="trunc">Exploration &gt; Biology as a card per species</span><span class="mono mut trunc">Reading exploration/Biology.svelte</span><span class="mut">6m</span></div>
+    <div class="work"><span class="dot off"></span><span class="trunc">Session and Logbook as time</span><span class="mut trunc">Approved. Waiting for CI on #214</span><span class="mut">4m</span></div>
+
+    <div class="sec"><span>Not started</span><span class="ln"></span><span>2 can start, 4 drafts</span><svg class="i"><use href="#right"/></svg></div>
+    <div class="sec" style="margin-top:0"><span>Merged</span><span class="ln"></span><span>14</span><svg class="i"><use href="#right"/></svg></div>
+    <div class="sec" style="margin-top:0"><span>Outcome and success criteria</span><span class="ln"></span><svg class="i"><use href="#right"/></svg></div>
+  </div>
+
+  <div class="state">Done, read as a retro</div>
+  <div class="win">
+    <div class="hd">
+      <span class="ttl trunc">Make the Desk feel native inside T3 Code</span>
+      <span class="btn"><svg class="i"><use href="#msg"/></svg>Lead <kbd>L</kbd></span>
+      <span class="x"><svg class="i"><use href="#x"/></svg></span>
+    </div>
+    <div class="sub">
+      <span class="b s"><svg class="i s"><use href="#check"/></svg>Done</span>
+      <span>4 of 4 merged. Closed 3h ago, 5h after the plan merged.</span>
+    </div>
+    <p class="lede">The Desk has an embedded mode under <span class="mono">/embed</span>, a host contract over <span class="mono">postMessage</span>, and three reads for a host. All 7 success criteria are checked by a test.</p>
+
+    <div class="sec hot"><span>Differed from the plan</span><span class="ln"></span><span>3</span></div>
+    <ul class="pl">
+      <li>atelier-vg1l fixed the disputed page outside the embedded mode without asking first, because the page could not be read.</li>
+      <li>A plan reviewer stays current until the whole round ends.</li>
+      <li>The Desk does not rewrite a remote's key for hosts T3 Code rewrites, so those repositories will not match a T3 project.</li>
+    </ul>
+
+    <div class="sec"><span>Worth a look</span><span class="ln"></span><span>most review rounds first</span></div>
+    <div class="look"><span class="mono mut">#172</span><span class="trunc">Let a host theme the embedded Desk and open threads for it</span><span class="mut">3 rounds · 2h 40m</span></div>
+    <div class="look"><span class="mono mut">#173</span><span class="trunc">Open the page for what a thread holds</span><span class="mut">2 rounds · 1h 10m</span></div>
+    <div class="look"><span class="mono mut">#170</span><span class="trunc">Lay the Desk out for a panel when it is embedded</span><span class="mut">1 round · 50m</span></div>
+    <div class="look"><span class="mono mut">#171</span><span class="trunc">Tell an embedding host which repository, record and thread it is looking at</span><span class="mut">1 round · 35m</span></div>
+
+    <div class="sec"><span>Not seen working</span><span class="ln"></span></div>
+    <p class="prose">A thread that holds an item was not seen in the second T3 Code instance, because no thread there holds one.</p>
+    <div class="sec"><span>Success criteria</span><span class="ln"></span><span>7 of 7</span><svg class="i"><use href="#right"/></svg></div>
+  </div>
+</section>
+
+<!-- ============ B ============ -->
+<section class="m">
+  <h2>B. The timeline</h2>
+  <p class="why">One lane per item, drawn over time. A stall shows as a long bar without anyone computing "quiet". The same drawing, finished, is the retro: it shows where the hours went.</p>
+
+  <div class="state">Running</div>
+  <div class="win">
+    <div class="hd">
+      <span class="ttl trunc">Glow-up: every page reads at a glance and fills the window</span>
+      <span class="btn"><svg class="i"><use href="#msg"/></svg>Lead <kbd>L</kbd></span>
+      <span class="x"><svg class="i"><use href="#x"/></svg></span>
+    </div>
+    <div class="sub">
+      <span class="b g"><span class="dot"></span>Running</span>
+      <span class="bar"><i style="width:54%"></i></span>
+      <span>14 of 26 merged</span>
+      <span class="b w" style="margin-left:auto"><svg class="i s"><use href="#user"/></svg>1 waits on you</span>
+    </div>
+    <div class="legend">
+      <span><i class="build"></i>Building</span><span><i class="review"></i>In review</span><span><i class="merge"></i>Approved, merging</span><span><i class="you"></i>Waiting on you</span>
+    </div>
+    <div class="lane"><span class="trunc">The remaining pages move onto…</span><div class="track"><i class="you" style="flex:100" title="Waiting on you for 2d"></i></div><span class="end warn"><svg class="i s"><use href="#user"/></svg>On you, 2d</span></div>
+    <div class="lane"><span class="trunc">Glance test: an independent read…</span><div class="track"><i class="gap" style="flex:28"></i><i class="build" style="flex:42" title="Building 1h 15m"></i><i class="review" style="flex:30" title="In review 47m"></i></div><span class="end warn"><svg class="i s"><use href="#alert"/></svg>Review 1, quiet 47m</span></div>
+    <div class="lane"><span class="trunc">Exploration &gt; System as a system map</span><div class="track"><i class="gap" style="flex:10"></i><i class="build" style="flex:48"></i><i class="review" style="flex:34"></i><i class="build" style="flex:8" title="Fixing round 1, 12m"></i></div><span class="end"><span class="dot"></span>Fixing round 1</span></div>
+    <div class="lane"><span class="trunc">Trade route as legs</span><div class="track"><i class="gap" style="flex:76"></i><i class="build" style="flex:24" title="Building 38m"></i></div><span class="end"><span class="dot"></span>Building</span></div>
+    <div class="lane"><span class="trunc">Exploration &gt; Biology as a card…</span><div class="track"><i class="gap" style="flex:96"></i><i class="build" style="flex:4"></i></div><span class="end"><span class="dot"></span>Building</span></div>
+    <div class="lane"><span class="trunc">Session and Logbook as time</span><div class="track"><i class="gap" style="flex:40"></i><i class="build" style="flex:36"></i><i class="review" style="flex:21"></i><i class="merge" style="flex:3"></i></div><span class="end mut">CI on #214</span></div>
+    <div class="axis"><span></span><div><span>3h ago</span><span>2h</span><span>1h</span><span>now</span></div><span></span></div>
+
+    <div class="sec"><span>Not started</span><span class="ln"></span><span>2 can start, 4 drafts</span><svg class="i"><use href="#right"/></svg></div>
+    <div class="sec" style="margin-top:0"><span>Merged</span><span class="ln"></span><span>14</span><svg class="i"><use href="#right"/></svg></div>
+  </div>
+
+  <div class="state">Done, read as a retro</div>
+  <div class="win">
+    <div class="hd">
+      <span class="ttl trunc">Make the Desk feel native inside T3 Code</span>
+      <span class="btn"><svg class="i"><use href="#msg"/></svg>Lead <kbd>L</kbd></span>
+      <span class="x"><svg class="i"><use href="#x"/></svg></span>
+    </div>
+    <div class="sub">
+      <span class="b s"><svg class="i s"><use href="#check"/></svg>Done</span>
+      <span>4 of 4 merged in 5h. 7 review rounds. Nothing waited on you.</span>
+    </div>
+    <div class="legend">
+      <span><i class="build"></i>Building</span><span><i class="review"></i>In review</span><span><i class="merge"></i>Approved, merging</span>
+    </div>
+    <div class="lane"><span class="trunc">Lay the Desk out for a panel</span><div class="track"><i class="build" style="flex:11"></i><i class="review" style="flex:5"></i><i class="merge" style="flex:1"></i><i class="gap" style="flex:83"></i></div><span class="end mut">1 round · 50m</span></div>
+    <div class="lane"><span class="trunc">Tell an embedding host which…</span><div class="track"><i class="gap" style="flex:4"></i><i class="build" style="flex:7"></i><i class="review" style="flex:4"></i><i class="merge" style="flex:1"></i><i class="gap" style="flex:84"></i></div><span class="end mut">1 round · 35m</span></div>
+    <div class="lane"><span class="trunc">Let a host theme the embedded…</span><div class="track"><i class="gap" style="flex:18"></i><i class="build" style="flex:14"></i><i class="review" style="flex:9"></i><i class="build" style="flex:8"></i><i class="review" style="flex:7"></i><i class="build" style="flex:6"></i><i class="review" style="flex:8"></i><i class="merge" style="flex:1"></i><i class="gap" style="flex:29"></i></div><span class="end">3 rounds · 2h 40m</span></div>
+    <div class="lane"><span class="trunc">Open the page for what a thread…</span><div class="track"><i class="gap" style="flex:72"></i><i class="build" style="flex:9"></i><i class="review" style="flex:5"></i><i class="build" style="flex:4"></i><i class="review" style="flex:5"></i><i class="merge" style="flex:1"></i><i class="gap" style="flex:4"></i></div><span class="end">2 rounds · 1h 10m</span></div>
+    <div class="axis"><span></span><div><span>plan merged</span><span>1h</span><span>2h</span><span>3h</span><span>4h</span><span>closed</span></div><span></span></div>
+
+    <div class="sec"><span>Result</span><span class="ln"></span></div>
+    <p class="prose">The Desk has an embedded mode under <span class="mono">/embed</span>, a host contract over <span class="mono">postMessage</span>, and three reads for a host. All 7 success criteria are checked by a test.</p>
+    <div class="sec" style="margin-top:4px"><span>Differed from the plan</span><span class="ln"></span><span>3</span><svg class="i"><use href="#right"/></svg></div>
+  </div>
+</section>
+
+<!-- ============ C ============ -->
+<section class="m">
+  <h2>C. The crew</h2>
+  <p class="why">Organised by who is working, since the thing you do from this page is open a thread. The lead sits on top with its latest word. Items with no thread fold to a line.</p>
+
+  <div class="state">Running</div>
+  <div class="win">
+    <div class="hd">
+      <span class="ttl trunc">Glow-up: every page reads at a glance and fills the window</span>
+      <span class="x"><svg class="i"><use href="#x"/></svg></span>
+    </div>
+    <div class="sub">
+      <span class="b g"><span class="dot"></span>Running</span>
+      <span class="bar"><i style="width:54%"></i></span>
+      <span>14 of 26 merged</span>
+    </div>
+    <div class="lead">
+      <div class="who" style="display:flex;gap:8px;align-items:baseline"><span style="font-weight:500">Lead</span><span class="mut">fable-5-2 · 3h 5m</span></div>
+      <span class="btn" style="grid-row: span 2"><svg class="i"><use href="#msg"/></svg>Talk to lead <kbd>L</kbd></span>
+      <div class="mut trunc">Waiting on evj3 and el3i. gvy0 needs Sumeet: it changes six pages at once.</div>
+    </div>
+
+    <div class="sec hot"><span>Needs a look</span><span class="ln"></span><span>2</span></div>
+    <div class="cr"><svg class="i s warn" style="width:6px"></svg><div class="who"><span style="font-weight:500" class="trunc">The remaining pages move onto the layout component</span></div><span class="btn">Open item</span><div class="last warn">No thread. It waits on you, labelled needs-human 2 days ago.</div></div>
+    <div class="cr"><span class="dot off"></span><div class="who"><span style="font-weight:500" class="trunc">Glance test: an independent read of every converted page</span><span class="mut" style="white-space:nowrap">Reviewer · gpt-6.1-sol</span></div><span class="warn">quiet 47m</span><div class="last mono mut trunc">$ cargo nextest run</div></div>
+
+    <div class="sec"><span>Working</span><span class="ln"></span><span>3</span></div>
+    <div class="cr"><span class="dot"></span><div class="who"><span style="font-weight:500" class="trunc">Trade route as legs</span><span class="mut" style="white-space:nowrap">Implementer · opus-5-5</span></div><span class="mut">38m</span><div class="last mono mut trunc">$ pnpm vitest run app/src/modules/route --reporter=dot</div></div>
+    <div class="cr"><span class="dot"></span><div class="who"><span style="font-weight:500" class="trunc">Exploration &gt; System as a system map</span><span class="mut" style="white-space:nowrap">Implementer · opus-5-5 · fixing round 1</span></div><span class="mut">12m</span><div class="last mono mut trunc">Fix round 1: the map clips at 1100 wide</div></div>
+    <div class="cr"><span class="dot"></span><div class="who"><span style="font-weight:500" class="trunc">Exploration &gt; Biology as a card per species</span><span class="mut" style="white-space:nowrap">Implementer · opus-5-5</span></div><span class="mut">6m</span><div class="last mono mut trunc">Reading app/src/modules/exploration/Biology.svelte</div></div>
+
+    <div class="sec"><span>No thread</span><span class="ln"></span><span>1 merging, 2 can start, 4 drafts, 14 merged</span><svg class="i"><use href="#right"/></svg></div>
+  </div>
+</section>
+</body>
+</html>

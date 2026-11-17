@@ -1,0 +1,295 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: var(--font-sans); font-size: 12px; line-height: 1.45; color: var(--foreground); font-variant-numeric: tabular-nums; }
+  ::selection { background: color-mix(in srgb, var(--primary) 30%, transparent); }
+  svg.i { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .mut { color: var(--muted-foreground); }
+  .mono { font-family: var(--font-mono); font-size: 11px; }
+  .ok { color: var(--success); } .warn { color: var(--warning); } .info { color: var(--info); } .bad { color: var(--destructive); }
+  .trunc { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  h2 { margin: 0; font-size: 14px; font-weight: 600; }
+  .why { margin: 2px 0 10px; color: var(--muted-foreground); font-size: 12.5px; max-width: 68ch; }
+  section.m + section.m { margin-top: 36px; }
+
+  .win { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+
+  /* Header: one line of identity, one of state. */
+  .hd { display: flex; align-items: center; gap: 10px; }
+  .hd .ttl { font-size: 14px; font-weight: 600; flex: 1; }
+  .hd .x { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 6px; color: var(--muted-foreground); }
+  .sub { display: flex; align-items: center; gap: 10px; margin: 6px 0 14px; color: var(--muted-foreground); }
+  .bar { flex: 1; height: 4px; border-radius: 2px; background: var(--secondary); overflow: hidden; max-width: 180px; }
+  .bar i { display: block; height: 100%; background: var(--success); border-radius: 2px; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; font-weight: 500; color: var(--foreground); background: transparent; white-space: nowrap; }
+  kbd { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 4px; background: color-mix(in srgb, var(--foreground) 8%, transparent); color: var(--muted-foreground); font: 500 11px var(--font-sans); }
+
+  .b { display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 6px; border-radius: 4px; font-size: 11px; font-weight: 500; white-space: nowrap; }
+  .b.g { background: color-mix(in srgb, var(--success) 14%, transparent); color: var(--success-foreground, var(--success)); }
+  .b.w { background: color-mix(in srgb, var(--warning) 14%, transparent); color: var(--warning-foreground, var(--warning)); }
+  .b.n { background: color-mix(in srgb, var(--info) 14%, transparent); color: var(--info-foreground, var(--info)); }
+  .b.r { background: color-mix(in srgb, var(--destructive) 14%, transparent); color: var(--destructive-foreground, var(--destructive)); }
+  .b.s { background: var(--secondary); color: var(--secondary-foreground, var(--foreground)); }
+
+  /* Section header, after T3's CollapsibleSectionHeader: label, hairline, count, chevron. */
+  .sec { display: flex; align-items: center; gap: 8px; height: 28px; margin-top: 8px; font-size: 12px; font-weight: 500; color: var(--muted-foreground); }
+  .sec:first-child { margin-top: 0; }
+  .sec .ln { flex: 1; height: 1px; background: var(--border); }
+  .sec svg.i { width: 12px; height: 12px; }
+  .sec.hot { color: var(--warning-foreground, var(--warning)); }
+
+  .chip { display: inline-flex; align-items: center; gap: 5px; height: 18px; padding: 0 6px; border: 1px solid var(--border); border-radius: 9px; font-size: 11px; color: var(--muted-foreground); white-space: nowrap; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); flex: none; }
+  .dot.off { background: var(--muted-foreground); opacity: .5; }
+  .dot.wait { background: var(--warning); }
+
+  /* A: rows */
+  .row { display: grid; grid-template-columns: 14px 96px minmax(0, 1fr) auto auto; align-items: center; gap: 10px; min-height: 30px; padding: 0 8px; border-radius: 6px; }
+  .row .age { width: 34px; text-align: right; color: var(--muted-foreground); font-size: 11px; }
+  .row.on { background: color-mix(in srgb, var(--foreground) 7%, transparent); border-radius: 6px 6px 0 0; }
+  .open { background: color-mix(in srgb, var(--foreground) 7%, transparent); border-radius: 0 0 6px 6px; padding: 2px 8px 12px 128px; margin-bottom: 4px; }
+  .open ul { list-style: none; margin: 0 0 10px; padding: 0; }
+  .open li { display: grid; grid-template-columns: 14px 1fr; gap: 8px; padding: 2px 0; max-width: 62ch; }
+  .open li svg.i { margin-top: 2px; color: var(--muted-foreground); }
+  .line { display: flex; align-items: center; gap: 8px; min-width: 0; margin-top: 4px; }
+  .acts { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .fold { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 8px; color: var(--muted-foreground); }
+
+  /* B: list and detail */
+  .split { display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 16px; }
+  .list { border-right: 1px solid var(--border); padding-right: 12px; }
+  .li { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; column-gap: 8px; align-items: center; padding: 5px 8px; border-radius: 6px; }
+  .li .t { font-weight: 500; }
+  .li .s { grid-column: 2 / 4; color: var(--muted-foreground); font-size: 11px; }
+  .li.on { background: color-mix(in srgb, var(--foreground) 7%, transparent); }
+  .det h3 { margin: 0; font-size: 14px; font-weight: 600; text-wrap: balance; }
+  .facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 16px; margin: 12px 0 4px; }
+  .facts div { display: flex; gap: 8px; min-width: 0; }
+  .facts .k { width: 58px; flex: none; color: var(--muted-foreground); }
+  .th { display: grid; grid-template-columns: 6px 72px 78px 48px minmax(0, 1fr); gap: 8px; align-items: center; height: 26px; padding: 0 8px; margin: 0 -8px; border-radius: 6px; }
+  .dw { display: grid; grid-template-columns: 14px 1fr; gap: 8px; padding: 2px 0; }
+  .dw svg.i { margin-top: 2px; color: var(--muted-foreground); }
+  .tl { display: grid; grid-template-columns: 44px 1fr; gap: 8px; padding: 2px 0; }
+  .tl .w { color: var(--muted-foreground); font-size: 11px; text-align: right; padding-top: 1px; }
+
+  /* C: stages across */
+  .cols { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .col { padding: 8px 8px 10px; border-left: 1px solid var(--border); min-width: 0; }
+  .col:first-child { border-left: 0; padding-left: 0; }
+  .col:last-child { padding-right: 0; }
+  .col > header { display: flex; justify-content: space-between; font-weight: 500; color: var(--muted-foreground); margin-bottom: 6px; }
+  .it { padding: 6px; margin: 0 -6px; border-radius: 6px; }
+  .it.on { background: color-mix(in srgb, var(--foreground) 7%, transparent); }
+  .it .t { font-weight: 500; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .it .f { display: flex; align-items: center; gap: 5px; margin-top: 3px; color: var(--muted-foreground); font-size: 11px; }
+  .col .more { margin-top: 4px; color: var(--muted-foreground); font-size: 11px; }
+  .wk { display: grid; grid-template-columns: 6px 78px 40px 78px 34px minmax(0, 1fr); gap: 8px; align-items: center; height: 26px; }
+
+  @media (max-width: 560px) {
+    .row { grid-template-columns: 14px minmax(0, 1fr) auto; }
+    .row .mono, .row .chip { display: none; }
+    .open { padding-left: 32px; }
+    .split { grid-template-columns: 1fr; }
+    .list { border-right: 0; padding-right: 0; }
+    .cols { grid-template-columns: 1fr; }
+    .col { border-left: 0; padding-left: 0; padding-right: 0; border-top: 1px solid var(--border); }
+    .col:first-child { border-top: 0; }
+    .wk { grid-template-columns: 6px 78px minmax(0, 1fr); }
+    .wk > :nth-child(n+4):not(:last-child), .wk > :nth-child(3) { display: none; }
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></symbol>
+  <symbol id="moving" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor"/></symbol>
+  <symbol id="draft" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke-dasharray="3.5 4"/></symbol>
+  <symbol id="right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+  <symbol id="user" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+  <symbol id="pr" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M6 9v12"/></symbol>
+  <symbol id="msg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+</svg>
+
+<!-- ============ A ============ -->
+<section class="m">
+  <h2>A. One list, sorted by what needs you</h2>
+  <p class="why">No panes. Items are grouped by stage, with drafts and merged work folded to a line. The selected row opens in place. Each row carries its own thread and age, so the log and the threads pane are gone.</p>
+  <div class="win">
+    <div class="hd">
+      <span class="ttl trunc">Glow-up: every page reads at a glance and fills the window</span>
+      <span class="btn"><svg class="i"><use href="#msg"/></svg>Lead <kbd>L</kbd></span>
+      <span class="x"><svg class="i"><use href="#x"/></svg></span>
+    </div>
+    <div class="sub">
+      <span class="b g"><span class="dot"></span>Running</span>
+      <span class="mono">astromech-xajc</span>
+      <span class="bar"><i style="width:54%"></i></span>
+      <span>14 of 26 merged</span>
+    </div>
+
+    <div class="sec hot"><span>Needs a look</span><span class="ln"></span><span>3</span><svg class="i"><use href="#down"/></svg></div>
+    <div class="row"><svg class="i warn"><use href="#user"/></svg><span class="mono mut">astromech-gvy0</span><span class="trunc">The remaining pages move onto the layout component</span><span></span><span class="b w">Waits on you</span></div>
+    <div class="row"><svg class="i warn"><use href="#alert"/></svg><span class="mono mut">astromech-crxa</span><span class="trunc">Glance test: an independent read of every converted page</span><span class="chip"><span class="dot off"></span>reviewer · gpt-6.1-sol</span><span class="b w">In review 1 · quiet 47m</span></div>
+    <div class="row"><svg class="i bad"><use href="#moving"/></svg><span class="mono mut">astromech-dpaz</span><span class="trunc">Exploration &gt; System as a system map</span><span class="chip"><span class="dot"></span>implementer · opus-5-5</span><span class="b r">Changes requested · 12m</span></div>
+
+    <div class="sec"><span>Moving</span><span class="ln"></span><span>3</span><svg class="i"><use href="#down"/></svg></div>
+    <div class="row on"><svg class="i info"><use href="#moving"/></svg><span class="mono mut">astromech-el3i</span><span class="trunc" style="font-weight:500">Trade route as legs</span><span class="chip"><span class="dot"></span>implementer · opus-5-5</span><span class="b n">Building · 38m</span></div>
+    <div class="open">
+      <div class="mut" style="margin-bottom:4px">Done when, 2 of 5. Still open:</div>
+      <ul>
+        <li><svg class="i"><use href="#circle"/></svg><span>Each leg shows its jump count, fuel and the stop's services at 1100 × 700 without clipping.</span></li>
+        <li><svg class="i"><use href="#circle"/></svg><span>The page-sizing check is on for <span class="mono">route/Legs.svelte</span>, both parts.</span></li>
+        <li><svg class="i"><use href="#circle"/></svg><span><span class="mono">pnpm test</span> and <span class="mono">pnpm e2e</span> pass.</span></li>
+      </ul>
+      <div class="line"><span class="dot"></span><span class="mut" style="flex:none">now</span><span class="mono trunc">$ pnpm vitest run app/src/modules/route --reporter=dot</span></div>
+      <div class="line mut"><svg class="i"><use href="#pr"/></svg><span>No pull request yet. It opens on submit.</span></div>
+      <div class="acts">
+        <span class="btn">Open thread <kbd>↵</kbd></span>
+        <span class="btn">Item page <kbd>I</kbd></span>
+        <span class="btn">History</span>
+      </div>
+    </div>
+    <div class="row"><svg class="i info"><use href="#moving"/></svg><span class="mono mut">astromech-evj3</span><span class="trunc">Exploration &gt; Biology as a card per species</span><span class="chip"><span class="dot"></span>implementer · opus-5-5</span><span class="b n">Building · 6m</span></div>
+    <div class="row"><svg class="i ok"><use href="#moving"/></svg><span class="mono mut">astromech-fzhp</span><span class="trunc">Session and Logbook as time</span><span class="chip"><svg class="i" style="width:11px;height:11px"><use href="#pr"/></svg>#214 · CI running</span><span class="b g">Approved · 4m</span></div>
+
+    <div class="sec"><span>Can start</span><span class="ln"></span><span>2</span><svg class="i"><use href="#down"/></svg></div>
+    <div class="row"><svg class="i mut"><use href="#circle"/></svg><span class="mono mut">astromech-m07p</span><span class="trunc">Colonisation as progress per commodity</span><span></span><span class="b s">Ready</span></div>
+    <div class="row"><svg class="i mut"><use href="#circle"/></svg><span class="mono mut">astromech-m6gw</span><span class="trunc">Engineering &gt; Engineers as the unlock path</span><span class="mut" style="font-size:11px">after el3i</span><span class="b s">Blocked</span></div>
+
+    <div class="sec"><span>Drafts</span><span class="ln"></span><span>4</span><svg class="i"><use href="#right"/></svg></div>
+    <div class="sec" style="margin-top:0"><span>Merged</span><span class="ln"></span><span>14, latest astromech-irtr 4d ago</span><svg class="i"><use href="#right"/></svg></div>
+  </div>
+</section>
+
+<!-- ============ B ============ -->
+<section class="m">
+  <h2>B. List and detail</h2>
+  <p class="why">T3 Code's own shape: a narrow list on the left, the selected item on the right. The firehose becomes the history of the one item you are looking at, and threads show only where they work.</p>
+  <div class="win">
+    <div class="hd">
+      <span class="ttl trunc">Glow-up: every page reads at a glance and fills the window</span>
+      <span class="btn"><svg class="i"><use href="#msg"/></svg>Lead <kbd>L</kbd></span>
+      <span class="x"><svg class="i"><use href="#x"/></svg></span>
+    </div>
+    <div class="sub">
+      <span class="b g"><span class="dot"></span>Running</span>
+      <span class="mono">astromech-xajc</span>
+      <span class="bar"><i style="width:54%"></i></span>
+      <span>14 of 26 merged</span>
+    </div>
+    <div class="split">
+      <div class="list">
+        <div class="sec hot"><span>Needs a look</span><span class="ln"></span><span>3</span></div>
+        <div class="li"><svg class="i warn"><use href="#user"/></svg><span class="t trunc">The remaining pages move onto…</span><span></span><span class="s">Waits on you</span></div>
+        <div class="li on"><svg class="i warn"><use href="#alert"/></svg><span class="t trunc">Glance test: an independent read…</span><span></span><span class="s">In review 1 · quiet 47m</span></div>
+        <div class="li"><svg class="i bad"><use href="#moving"/></svg><span class="t trunc">Exploration &gt; System as a system map</span><span class="dot"></span><span class="s">Changes requested · 12m</span></div>
+        <div class="sec"><span>Moving</span><span class="ln"></span><span>3</span></div>
+        <div class="li"><svg class="i info"><use href="#moving"/></svg><span class="t trunc">Trade route as legs</span><span class="dot"></span><span class="s">Building · 38m</span></div>
+        <div class="li"><svg class="i info"><use href="#moving"/></svg><span class="t trunc">Exploration &gt; Biology as a card…</span><span class="dot"></span><span class="s">Building · 6m</span></div>
+        <div class="li"><svg class="i ok"><use href="#moving"/></svg><span class="t trunc">Session and Logbook as time</span><span></span><span class="s">Approved · CI running</span></div>
+        <div class="sec"><span>Can start</span><span class="ln"></span><span>2</span></div>
+        <div class="li"><svg class="i mut"><use href="#circle"/></svg><span class="t trunc">Colonisation as progress per…</span><span></span></div>
+        <div class="li"><svg class="i mut"><use href="#circle"/></svg><span class="t trunc">Engineering &gt; Engineers as the…</span><span></span><span class="s">Blocked by el3i</span></div>
+        <div class="sec"><span>Drafts</span><span class="ln"></span><span>4</span><svg class="i"><use href="#right"/></svg></div>
+        <div class="sec" style="margin-top:0"><span>Merged</span><span class="ln"></span><span>14</span><svg class="i"><use href="#right"/></svg></div>
+      </div>
+
+      <div class="det">
+        <h3>Glance test: an independent read of every converted page</h3>
+        <div class="line" style="margin-top:6px"><span class="mono mut">astromech-crxa</span><span class="b w">In review 1 · quiet 47m</span></div>
+        <div class="facts">
+          <div><span class="k">Holder</span><span class="trunc">Implement crxa: glance test</span></div>
+          <div><span class="k">PR</span><span class="trunc">#213 open</span></div>
+          <div><span class="k">Reviewer</span><span class="trunc">Review crxa, round 1</span></div>
+          <div><span class="k">CI</span><span class="trunc ok">Passing, 3 of 3</span></div>
+        </div>
+
+        <div class="sec"><span>Threads</span><span class="ln"></span><span>2</span></div>
+        <div class="th"><span class="dot off"></span><span>Reviewer</span><span class="mut">gpt-6.1-sol</span><span class="mut">47m</span><span class="mono trunc warn">No output since $ cargo nextest run</span></div>
+        <div class="th"><span class="dot off"></span><span>Implementer</span><span class="mut">opus-5-5</span><span class="mut">1h 12m</span><span class="mono trunc mut">Finished: atelier submit</span></div>
+
+        <div class="sec"><span>Done when</span><span class="ln"></span><span>3 of 5</span></div>
+        <div class="dw"><svg class="i"><use href="#circle"/></svg><span>An agent that wrote none of the pages reports, per capture, anything clipped, overlapping or below 12 px before scaling.</span></div>
+        <div class="dw"><svg class="i"><use href="#circle"/></svg><span>Each problem is fixed or filed as a bug on astromech-xajc.</span></div>
+        <div class="dw mut"><svg class="i"><use href="#right"/></svg><span>3 ticked</span></div>
+
+        <div class="sec"><span>History</span><span class="ln"></span></div>
+        <div class="tl"><span class="w">47m</span><span>Review 1 started</span></div>
+        <div class="tl"><span class="w">52m</span><span>Submitted for review</span></div>
+        <div class="tl"><span class="w">2h</span><span>Started</span></div>
+        <div class="tl"><span class="w">2d</span><span class="warn">You readied it: "go after irtr lands"</span></div>
+
+        <div class="acts">
+          <span class="btn">Open reviewer <kbd>↵</kbd></span>
+          <span class="btn">Item page <kbd>I</kbd></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ C ============ -->
+<section class="m">
+  <h2>C. Stages across the page</h2>
+  <p class="why">Uses the width of T3 Code's main area. Reading left to right shows where the mission is piling up. Threads appear below only while some are live.</p>
+  <div class="win">
+    <div class="hd">
+      <span class="ttl trunc">Glow-up: every page reads at a glance and fills the window</span>
+      <span class="btn"><svg class="i"><use href="#msg"/></svg>Lead <kbd>L</kbd></span>
+      <span class="x"><svg class="i"><use href="#x"/></svg></span>
+    </div>
+    <div class="sub">
+      <span class="b g"><span class="dot"></span>Running</span>
+      <span class="mono">astromech-xajc</span>
+      <span class="bar"><i style="width:54%"></i></span>
+      <span>14 of 26 merged</span>
+      <span class="b w" style="margin-left:auto"><svg class="i" style="width:11px;height:11px"><use href="#user"/></svg>1 waits on you</span>
+    </div>
+
+    <div class="cols">
+      <div class="col">
+        <header><span>Can start</span><span>3</span></header>
+        <div class="it"><div class="t">The remaining pages move onto the layout component</div><div class="f warn"><svg class="i" style="width:11px;height:11px"><use href="#user"/></svg>Waits on you</div></div>
+        <div class="it"><div class="t">Colonisation as progress per commodity</div><div class="f">Ready</div></div>
+        <div class="it"><div class="t">Engineering &gt; Engineers as the unlock path</div><div class="f">Blocked by el3i</div></div>
+        <div class="more">4 drafts behind these</div>
+      </div>
+      <div class="col">
+        <header><span>Building</span><span>3</span></header>
+        <div class="it on"><div class="t">Trade route as legs</div><div class="f"><span class="dot"></span>opus-5-5 · 38m</div></div>
+        <div class="it"><div class="t">Exploration &gt; Biology as a card per species</div><div class="f"><span class="dot"></span>opus-5-5 · 6m</div></div>
+        <div class="it"><div class="t">Exploration &gt; System as a system map</div><div class="f bad"><span class="dot"></span>Fixing round 1 · 12m</div></div>
+      </div>
+      <div class="col">
+        <header><span>In review</span><span>1</span></header>
+        <div class="it"><div class="t">Glance test: an independent read of every converted page</div><div class="f warn"><svg class="i" style="width:11px;height:11px"><use href="#alert"/></svg>Round 1 · quiet 47m</div></div>
+      </div>
+      <div class="col">
+        <header><span>Approved</span><span>1</span></header>
+        <div class="it"><div class="t">Session and Logbook as time</div><div class="f"><svg class="i" style="width:11px;height:11px"><use href="#pr"/></svg>#214 · CI running</div></div>
+      </div>
+      <div class="col">
+        <header><span>Merged</span><span>14</span></header>
+        <div class="it"><div class="t mut">Increment 1 checkpoint: the foundation and the Route page</div><div class="f"><svg class="i ok" style="width:11px;height:11px"><use href="#check"/></svg>4d ago</div></div>
+        <div class="it"><div class="t mut">Route page: the title is the plotted route</div><div class="f"><svg class="i ok" style="width:11px;height:11px"><use href="#check"/></svg>4d ago</div></div>
+        <div class="more">12 more</div>
+      </div>
+    </div>
+
+    <div class="sec" style="margin-top:12px"><span>Threads at work</span><span class="ln"></span><span>4</span></div>
+    <div class="wk"><span class="dot"></span><span>Implementer</span><span class="mono mut">el3i</span><span class="mut">opus-5-5</span><span class="mut">38m</span><span class="mono trunc">$ pnpm vitest run app/src/modules/route --reporter=dot</span></div>
+    <div class="wk"><span class="dot"></span><span>Implementer</span><span class="mono mut">evj3</span><span class="mut">opus-5-5</span><span class="mut">6m</span><span class="mono trunc">Reading app/src/modules/exploration/Biology.svelte</span></div>
+    <div class="wk"><span class="dot"></span><span>Implementer</span><span class="mono mut">dpaz</span><span class="mut">opus-5-5</span><span class="mut">12m</span><span class="mono trunc">Fix round 1: the map clips at 1100 wide</span></div>
+    <div class="wk"><span class="dot wait"></span><span>Reviewer</span><span class="mono mut">crxa</span><span class="mut">gpt-6.1-sol</span><span class="mut">47m</span><span class="mono trunc warn">No output since $ cargo nextest run</span></div>
+  </div>
+</section>
+</body>
+</html>
