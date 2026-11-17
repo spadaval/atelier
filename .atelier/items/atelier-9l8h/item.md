@@ -3,14 +3,16 @@ schema: atelier.item
 schema_version: 3
 id: atelier-9l8h
 title: Draw This thread natively in T3's panel
-status: draft
+status: ready
 mission: atelier-osel
 labels: []
 priority: medium
 blocked_by:
 - atelier-40dc
 implementers: []
-ready: null
+ready:
+  by: 'sumeet, in conversation on 2026-11-17: looks good, start up a lead'
+  at: 2026-11-17T21:31:50.834606783Z
 trivial: null
 caused_by: null
 created_at: 2026-11-17T19:24:26.396490199Z

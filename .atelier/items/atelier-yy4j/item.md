@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-yy4j
 title: Delete the Desk's three T3-only pages once the release that draws them natively is installed
-status: draft
+status: ready
 mission: atelier-osel
 labels:
 - needs-human
@@ -13,7 +13,9 @@ blocked_by:
 - atelier-9l8h
 - atelier-wvst
 implementers: []
-ready: null
+ready:
+  by: 'sumeet, in conversation on 2026-11-17: looks good, start up a lead'
+  at: 2026-11-17T21:31:50.834606783Z
 trivial: null
 caused_by: null
 created_at: 2026-11-17T19:28:10.550247610Z

@@ -3,14 +3,16 @@ schema: atelier.item
 schema_version: 3
 id: atelier-toee
 title: Rewrite the panel, the Desk tab, record links and the settings section as typed modules
-status: draft
+status: ready
 mission: atelier-osel
 labels: []
 priority: medium
 blocked_by:
 - atelier-ut89
 implementers: []
-ready: null
+ready:
+  by: 'sumeet, in conversation on 2026-11-17: looks good, start up a lead'
+  at: 2026-11-17T21:31:50.834606783Z
 trivial: null
 caused_by: null
 created_at: 2026-11-17T19:24:26.258637572Z

@@ -3,14 +3,16 @@ schema: atelier.item
 schema_version: 3
 id: atelier-ut89
 title: 'Draw the mission page natively: what needs you while it runs, and the result and where the time went once it is done'
-status: draft
+status: ready
 mission: atelier-osel
 labels: []
 priority: medium
 blocked_by:
 - atelier-6dm7
 implementers: []
-ready: null
+ready:
+  by: 'sumeet, in conversation on 2026-11-17: looks good, start up a lead'
+  at: 2026-11-17T21:31:50.834606783Z
 trivial: null
 caused_by: null
 created_at: 2026-11-17T19:24:26.186003324Z
