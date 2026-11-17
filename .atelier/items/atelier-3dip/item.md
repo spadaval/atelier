@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-3dip
 title: Build the T3 extension from TypeScript sources with Vite, with its behaviour unchanged
-status: approved
+status: in_review
 mission: atelier-osel
 labels: []
 priority: high
