@@ -3,14 +3,16 @@ schema: atelier.item
 schema_version: 3
 id: atelier-wvst
 title: Draw the project home natively over T3's main area
-status: draft
+status: ready
 mission: atelier-osel
 labels: []
 priority: medium
 blocked_by:
 - atelier-40dc
 implementers: []
-ready: null
+ready:
+  by: 'sumeet, in conversation on 2026-11-17: looks good, start up a lead'
+  at: 2026-11-17T21:31:50.834606783Z
 trivial: null
 caused_by: null
 created_at: 2026-11-17T19:24:26.466783114Z

@@ -3,14 +3,16 @@ schema: atelier.item
 schema_version: 3
 id: atelier-6dm7
 title: Give the extension a React root that draws T3 Code's own components, checked against T3's stylesheet
-status: draft
+status: ready
 mission: atelier-osel
 labels: []
 priority: medium
 blocked_by:
 - atelier-3dip
 implementers: []
-ready: null
+ready:
+  by: 'sumeet, in conversation on 2026-11-17: looks good, start up a lead'
+  at: 2026-11-17T21:31:50.834606783Z
 trivial: null
 caused_by: null
 created_at: 2026-11-17T19:24:26.113324242Z

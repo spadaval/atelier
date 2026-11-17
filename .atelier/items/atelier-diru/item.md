@@ -3,14 +3,16 @@ schema: atelier.item
 schema_version: 3
 id: atelier-diru
 title: Start a T3 Code test instance on this host, with a thread, from one command
-status: draft
+status: ready
 mission: atelier-osel
 labels: []
 priority: medium
 blocked_by:
 - atelier-3dip
 implementers: []
-ready: null
+ready:
+  by: 'sumeet, in conversation on 2026-11-17: looks good, start up a lead'
+  at: 2026-11-17T21:31:50.834606783Z
 trivial: null
 caused_by: null
 created_at: 2026-11-17T21:02:28.628244326Z
