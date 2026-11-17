@@ -1,0 +1,464 @@
+/* Copied by sync-t3.mjs from T3 Code (MIT, see LICENSE), apps/web/src/index.css at 532a7aaf424d. Do not edit: run sync-t3.mjs. */
+@custom-variant dark (:host-context(.dark) &);
+@custom-variant light (:host-context(html:not(.dark)) &);
+@custom-variant wco (:host-context(.wco) &);
+@custom-variant any-hover {
+  @media (any-hover: hover) {
+    &:hover {
+      @slot;
+    }
+  }
+}
+@theme reference {
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Inter Variable", "Segoe UI", system-ui, sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+}
+@theme inline {
+  /* Two steps below Tailwind's text-xs (12px) for dense UI: metadata rows,
+     badges, counters, keyboard hints and diagnostics tables. 2xs is 11px,
+     3xs is 10px. Provider icon overlays use 4xs (8px) and 5xs (7px) to fit
+     their smaller badges. Registered with tailwind-merge in
+     lib/utils.ts so cn() treats them as font sizes, not colours. */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: calc(1 / 0.6875);
+  --text-3xs: 0.625rem;
+  --text-3xs--line-height: calc(0.875 / 0.625);
+  --text-4xs: 0.5rem;
+  --text-4xs--line-height: 1;
+  --text-5xs: 0.4375rem;
+  --text-5xs--line-height: 1;
+  /* Motion. drawer is the decelerating curve for surfaces that slide or pop in
+     (composer context, pills). */
+  --inset-shadow-control-highlight: 0 1px rgb(255 255 255 / 16%);
+  --inset-shadow-control-pressed: 0 1px rgb(0 0 0 / 8%);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  /* The composer's elevation: a soft drop pulled in under the surface, shared
+     by the composer, its context strip and attached banners. */
+  --shadow-composer: 0 1px 2px rgb(0 0 0 / 5%);
+  --shadow-composer-dark: 0 14px 32px -18px rgb(0 0 0 / 75%);
+  /* Overlap the lower toolbar backdrop by one pixel to cover the composer seam. */
+  --spacing-composer-seam: calc(var(--spacing) * 4 - 1px);
+  /* Dark-mode shade where an attached surface meets the composer: 10px of
+     shadow fading away from the seam. Inline, so the offsets resolve on the
+     element. below: the context strip under the composer (1rem seam, faint
+     white fill). above: an attached banner over it (its tint on top). */
+  --background-image-composer-seam-below:
+    linear-gradient(
+      to bottom,
+      transparent 0 1rem,
+      rgb(0 0 0 / 18%) 1rem,
+      transparent calc(1rem + 10px)
+    ),
+    linear-gradient(rgb(255 255 255 / 1%), rgb(255 255 255 / 1%));
+  --background-image-composer-seam-above:
+    linear-gradient(var(--chat-composer-attached-tint), var(--chat-composer-attached-tint)),
+    linear-gradient(
+      to top,
+      transparent 0 var(--chat-composer-attachment-overlap),
+      rgb(0 0 0 / 18%) var(--chat-composer-attachment-overlap),
+      transparent calc(var(--chat-composer-attachment-overlap) + 10px)
+    );
+  --color-zinc-25: oklch(99.2% 0 0);
+  --animate-skeleton: skeleton 2.4s infinite;
+  /* Duty-cycled indicator animations: long holds with stepped ramps, so the
+     compositor updates discrete frames instead of every vsync. */
+  --animate-status-pulse: status-pulse 2s infinite;
+  --animate-status-ping: status-ping 2s infinite;
+  /* Stash pulses hold a highlight for 1.2s; the row then eases back over 200ms, the count snaps.
+     The row alternates two identical keyframes so each stash restarts it without a remount. */
+  --animate-stash-pulse-row: stash-pulse-row 1400ms;
+  --animate-stash-pulse-row-alt: stash-pulse-row-alt 1400ms;
+  --animate-stash-pulse-count: stash-pulse-count 1400ms step-start;
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning: var(--warning);
+  --color-warning-surface: var(--warning-surface);
+  --color-error-foreground: var(--error-foreground);
+  --color-tool-error-icon: var(--tool-error-icon);
+  --color-error: var(--error);
+  --color-error-surface: var(--error-surface);
+  --color-update-foreground: var(--update-foreground);
+  --color-update: var(--update);
+  --color-success-foreground: var(--success-foreground);
+  --color-success: var(--success);
+  --color-diff-addition: var(--diff-addition);
+  --color-diff-deletion: var(--diff-deletion);
+  --color-diff-addition-foreground: var(--diff-addition-foreground);
+  --color-diff-deletion-foreground: var(--diff-deletion-foreground);
+  --color-info-foreground: var(--info-foreground);
+  --color-info: var(--info);
+  --color-guest: var(--guest);
+  --color-guest-foreground: var(--guest-foreground);
+  --color-guest-surface: var(--guest-surface);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-ring: var(--ring);
+  --color-input: var(--contrast-input);
+  --color-border: var(--contrast-border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--contrast-accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--contrast-muted-foreground);
+  --color-muted: var(--muted);
+  --color-placeholder: var(--contrast-placeholder);
+  --color-secondary-label: var(--contrast-secondary-label);
+  --color-icon-muted: var(--contrast-icon-muted);
+  --color-secondary-foreground: var(--contrast-secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--contrast-popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--contrast-card-foreground);
+  --color-card: var(--card);
+  --color-code: var(--code-background);
+  --color-foreground: var(--contrast-foreground);
+  --color-background: var(--background);
+  --color-message: var(--message-surface);
+  --color-message-foreground: var(--contrast-message-foreground);
+  --color-message-action: var(--message-action);
+  --color-message-action-foreground: var(--message-action-foreground);
+  --color-message-action-hover: var(--message-action-hover);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--contrast-sidebar-foreground);
+  --color-sidebar-muted-foreground: var(--contrast-sidebar-muted-foreground);
+  --color-sidebar-control-surface: var(--sidebar-control-surface);
+  --color-sidebar-row-hover: var(--sidebar-row-hover);
+  --color-sidebar-row-active: var(--sidebar-row-active);
+  --color-sidebar-row-selected: var(--sidebar-row-selected);
+  --color-sidebar-border: var(--contrast-sidebar-border);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  @keyframes skeleton {
+    /* The single loading-bar breath used by every skeleton: one opacity pulse
+       per container, stepped so however many bars sit under it, the compositor
+       draws a handful of discrete frames per cycle rather than one per vsync —
+       which on a 120Hz display is the difference between ~14 and ~288 updates. */
+    0%,
+    42% {
+      opacity: 1;
+      animation-timing-function: steps(4);
+    }
+    50%,
+    92% {
+      opacity: 0.55;
+      animation-timing-function: steps(4);
+    }
+    100% {
+      opacity: 1;
+    }
+  }
+  @keyframes stash-pulse-row {
+    from,
+    85.7% {
+      color: var(--color-foreground);
+    }
+  }
+  @keyframes stash-pulse-row-alt {
+    from,
+    85.7% {
+      color: var(--color-foreground);
+    }
+  }
+  @keyframes stash-pulse-count {
+    from,
+    85.7% {
+      color: var(--color-primary);
+    }
+  }
+  @keyframes status-pulse {
+    0%,
+    40% {
+      opacity: 1;
+      animation-timing-function: steps(6);
+    }
+    50%,
+    90% {
+      opacity: 0.5;
+      animation-timing-function: steps(6);
+    }
+    100% {
+      opacity: 1;
+    }
+  }
+  @keyframes status-ping {
+    /* Burst first (immediate feedback for click ripples), then hold
+       invisible for the rest of the cycle. Mirrors animate-ping's
+       75%-scale start. */
+    0% {
+      opacity: 0.9;
+      scale: 0.75;
+      animation-timing-function: steps(8);
+    }
+    40%,
+    100% {
+      opacity: 0;
+      scale: 2;
+    }
+  }
+}
+@utility surface-glass {
+  background: color-mix(in srgb, var(--background) var(--glass-opacity), transparent);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+
+  @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+    background: var(--background) !important;
+  }
+}
+@utility alert-glass {
+  --alert-glass-tint: transparent;
+  background:
+    linear-gradient(
+      color-mix(in srgb, var(--alert-glass-tint) 4%, transparent),
+      color-mix(in srgb, var(--alert-glass-tint) 4%, transparent)
+    ),
+    color-mix(in srgb, var(--background) var(--glass-opacity), transparent) !important;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+
+  &[data-variant="error"] {
+    --alert-glass-tint: var(--destructive);
+  }
+
+  &[data-variant="info"] {
+    --alert-glass-tint: var(--info);
+  }
+
+  &[data-variant="success"] {
+    --alert-glass-tint: var(--success);
+  }
+
+  &[data-variant="warning"] {
+    --alert-glass-tint: var(--warning);
+  }
+
+  @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+    background: var(--background) !important;
+  }
+}
+@utility dialog-glass {
+  background: color-mix(in srgb, var(--background) var(--glass-opacity), transparent);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  border-color: color-mix(in srgb, var(--contrast-foreground) 10%, transparent);
+  box-shadow: 0 24px 64px -24px rgb(0 0 0 / 65%);
+
+  @variant dark {
+    border-color: color-mix(in srgb, var(--color-white) 8%, transparent);
+    box-shadow:
+      inset 0 1px rgb(255 255 255 / 4%),
+      0 24px 72px -20px rgb(0 0 0 / 90%);
+  }
+
+  @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+    background: var(--popover) !important;
+  }
+}
+@utility dialog-backdrop {
+  background: color-mix(in srgb, var(--background) 60%, transparent);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+
+  @variant dark {
+    background: color-mix(in srgb, var(--background) 64%, transparent);
+  }
+}
+@utility dropdown-glass {
+  background: color-mix(
+    in srgb,
+    var(--popover) 18%,
+    color-mix(in srgb, var(--popover) var(--glass-opacity), transparent)
+  );
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  border: 1px solid color-mix(in srgb, var(--contrast-foreground) 10%, transparent);
+
+  @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+    background: var(--popover) !important;
+  }
+}
+@utility topbar-scroll-fade {
+  -webkit-mask-image:
+    linear-gradient(
+      to bottom,
+      transparent 0%,
+      rgb(0 0 0 / 10%) 10%,
+      rgb(0 0 0 / 30%) 24%,
+      rgb(0 0 0 / 58%) 42%,
+      rgb(0 0 0 / 82%) 62%,
+      rgb(0 0 0 / 96%) 82%,
+      black 100%
+    ),
+    linear-gradient(black, black), linear-gradient(black, black);
+  -webkit-mask-position: top, bottom, right;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size:
+    100% calc(var(--workspace-titlebar-scroll-fade-height) + 1px),
+    100% calc(100% - var(--workspace-titlebar-scroll-fade-height)),
+    var(--app-scrollbar-width) 100%;
+  mask-image:
+    linear-gradient(
+      to bottom,
+      transparent 0%,
+      rgb(0 0 0 / 10%) 10%,
+      rgb(0 0 0 / 30%) 24%,
+      rgb(0 0 0 / 58%) 42%,
+      rgb(0 0 0 / 82%) 62%,
+      rgb(0 0 0 / 96%) 82%,
+      black 100%
+    ),
+    linear-gradient(black, black), linear-gradient(black, black);
+  mask-position: top, bottom, right;
+  mask-repeat: no-repeat;
+  mask-size:
+    100% calc(var(--workspace-titlebar-scroll-fade-height) + 1px),
+    100% calc(100% - var(--workspace-titlebar-scroll-fade-height)),
+    var(--app-scrollbar-width) 100%;
+}
+@utility virtualized-scroll-fade {
+  -webkit-mask-image: var(--virtualized-scroll-fade-mask), linear-gradient(black, black);
+  mask-image: var(--virtualized-scroll-fade-mask), linear-gradient(black, black);
+  -webkit-mask-position: left, right;
+  mask-position: left, right;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size:
+    calc(100% - var(--app-scrollbar-width)) 100%,
+    var(--app-scrollbar-width) 100%;
+  mask-size:
+    calc(100% - var(--app-scrollbar-width)) 100%,
+    var(--app-scrollbar-width) 100%;
+}
+@utility sidebar-stage-backdrop {
+  --stage-fade: var(--sidebar-stage-fade, var(--app-chrome-background));
+  mask-image: linear-gradient(to bottom, black 0%, black 55%, transparent 92%);
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, black 55%, transparent 92%);
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      to bottom,
+      transparent 0%,
+      transparent 28%,
+      color-mix(in srgb, var(--stage-fade) 10%, transparent) 40%,
+      color-mix(in srgb, var(--stage-fade) 30%, transparent) 52%,
+      color-mix(in srgb, var(--stage-fade) 58%, transparent) 64%,
+      color-mix(in srgb, var(--stage-fade) 82%, transparent) 75%,
+      color-mix(in srgb, var(--stage-fade) 96%, transparent) 85%,
+      var(--stage-fade) 93%
+    );
+  }
+}
+@utility live-tool-shine {
+  @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
+    color: transparent;
+    background-image:
+      linear-gradient(to right, transparent, var(--contrast-foreground), transparent),
+      linear-gradient(var(--contrast-secondary-label), var(--contrast-secondary-label));
+    background-size:
+      4.5rem 100%,
+      100% 100%;
+    background-repeat: no-repeat;
+    background-clip: text;
+    animation: live-tool-shine 2.2s steps(30) infinite;
+    animation-play-state: var(--visible-animation-state, paused);
+  }
+}
+@utility visible-animate-spin {
+  animation: var(--animate-spin);
+  animation-play-state: var(--visible-animation-state, paused);
+  will-change: var(--visible-animation-will-change, auto);
+}
+@utility live-activity-focus {
+  --live-activity-focus-width: 4.5rem;
+
+  right: auto;
+  left: calc(-1 * var(--live-activity-focus-width));
+  width: calc(100% + var(--live-activity-focus-width) + var(--live-activity-focus-width));
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    rgb(0 0 0 / 12%) 0.675rem,
+    rgb(0 0 0 / 55%) 1.575rem,
+    black 2.25rem,
+    rgb(0 0 0 / 55%) 2.925rem,
+    rgb(0 0 0 / 12%) 3.825rem,
+    transparent var(--live-activity-focus-width),
+    transparent 100%
+  );
+  -webkit-mask-repeat: no-repeat;
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    rgb(0 0 0 / 12%) 0.675rem,
+    rgb(0 0 0 / 55%) 1.575rem,
+    black 2.25rem,
+    rgb(0 0 0 / 55%) 2.925rem,
+    rgb(0 0 0 / 12%) 3.825rem,
+    transparent var(--live-activity-focus-width),
+    transparent 100%
+  );
+  mask-repeat: no-repeat;
+  animation: live-activity-focus 2.2s steps(30) infinite;
+  animation-play-state: var(--visible-animation-state, paused);
+  will-change: var(--visible-animation-will-change, auto);
+
+  @media (prefers-reduced-motion: reduce), (forced-colors: active) {
+    animation: none;
+    opacity: 0;
+    will-change: auto;
+  }
+}
+@utility live-activity-focus-counter {
+  width: 100%;
+  animation: live-activity-focus-counter 2.2s steps(30) infinite;
+  animation-play-state: var(--visible-animation-state, paused);
+  will-change: var(--visible-animation-will-change, auto);
+
+  @media (prefers-reduced-motion: reduce), (forced-colors: active) {
+    animation: none;
+    will-change: auto;
+  }
+}
+@utility live-activity-focus-aligned {
+  width: calc(100% - var(--live-activity-focus-width) - var(--live-activity-focus-width));
+  margin-left: var(--live-activity-focus-width);
+}
+@utility pt-safe {
+  padding-top: max(env(safe-area-inset-top), 0px);
+}
+@utility pb-safe {
+  padding-bottom: max(env(safe-area-inset-bottom), 0px);
+}
+@utility pl-safe {
+  padding-left: max(env(safe-area-inset-left), 0px);
+}
+@utility pr-safe {
+  padding-right: max(env(safe-area-inset-right), 0px);
+}
+@utility surface-grain {
+  background-image: var(--surface-grain);
+  background-repeat: repeat;
+  background-size: var(--surface-grain-size);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  *,
+  ::before,
+  ::after {
+    outline-offset: -2px;
+  }
+  :where(svg.lucide[stroke-width="2"]) {
+    stroke-width: 1.75;
+  }
+}

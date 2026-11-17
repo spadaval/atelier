@@ -1,0 +1,6 @@
+/* The stylesheet of every React root the extension draws (react/mount.tsx adopts it in each shadow
+   root): Tailwind, with T3 Code's variants, theme mapping and base-layer defaults (t3/theme.css,
+   copied by sync-t3.mjs). The colours themselves are T3's variables, inherited from its page.
+   Tailwind generates the classes it finds in src/, so a copied component is styled once it is here. */
+@import "tailwindcss";
+@import "./t3/theme.css";

@@ -376,8 +376,10 @@ The Customizations section (Settings → General) shows:
 - the current project's repository, Automatic (by identity, naming the match) or
   a manual override, and the list of overrides with a Remove button each,
   including any `desk.repositories` entries;
-- the installed release, the last release check and an Update button (see
-  [Updates](#updates));
+- the installed release, in T3's own `Badge` (the extension's first part drawn
+  with T3's components, see
+  [Drawing with T3 Code's components](#drawing-with-t3-codes-components)), the
+  last release check and an Update button (see [Updates](#updates));
 - injector status and errors, Reload scripts, Refresh status (also rereads the
   Desks), Open customization folder, Open Desk, each view with whether it is on
   or which hooks it lacks, and every T3 hook probe.
@@ -452,15 +454,28 @@ seconds; Refresh/Retry bypasses the cache. API failure and not-found states are
 shown explicitly.
 
 Desk reads go through the background injector because Desk does not currently
-advertise cross-origin access to the T3 renderer. The bridge permits only `GET`
-of `/api/repos`, `/api/inbox`, `/api/sidebar`, `/api/records/{id}`,
-`/api/repos/{repo}/items|missions/{id}` and `/api/launch?repo=<name>`, and only
-from a Desk in `desk.urls`. A repository segment may not hold `/`, `\`, `?`, `#`
-or `%`, and the URL the injector would fetch must have exactly the path asked
-for, with no query or fragment, so a dot segment, an encoded dot or a backslash
-cannot turn an allowed path into another. `/api/launch` takes exactly one query
-parameter, `repo`, whose value is letters, digits, `.`, `_` and `-`, and the
-parsed URL must have exactly that path and query. It does not proxy arbitrary
+advertise cross-origin access to the T3 renderer. The bridge (`deskReadUrl` in
+`t3-custom.mjs`) permits only `GET`, only from a Desk in `desk.urls`, and only of
+these paths:
+
+- with no query: `/api/repos`, `/api/inbox`, `/api/sidebar`, `/api/motion`,
+  `/api/records/{id}`, `/api/repos/{repo}/missions` and
+  `/api/repos/{repo}/items|missions/{id}`;
+- with exactly these parameters, in this order: `/api/launch?repo=`,
+  `/api/history?repo=&days=` or `?repo=&ids=`, `/api/checks?repo=&pr=`,
+  `/api/roadmap?repo=`, `/api/thread?id=` or `?id=&full=1`, and
+  `/api/ties?thread=`.
+
+A repository segment may not hold `/`, `\`, `?`, `#` or `%`, and the URL the
+injector would fetch must have exactly the path and query asked for, with no
+fragment, so a dot segment, an encoded dot or a backslash cannot turn an allowed
+path into another. Query values are checked too: `repo` is letters, digits, `.`,
+`_` and `-`; `days` and `pr` are digits; `ids` is record IDs joined by commas;
+`full` is `1`; `id` and `thread` are a T3 thread identity, encoded. An unlisted
+or repeated parameter is refused, naming the forms the path takes. The bridge
+lives in the injector, so a change to it takes effect only once the injector is
+restarted (`t3-custom stop`, then open T3 Custom again); reloading the scripts is
+not enough. It does not proxy arbitrary
 URLs, action endpoints, credentials, or shell commands. The other bridge actions
 are injector status, `save-settings`, and opening its fixed local folder.
 
@@ -708,6 +723,66 @@ changed `t3-extension/`. On a pull request that changes the extension or the
 workflow, and when started by hand, it builds and checks the bundle as the
 run's artifact and publishes nothing.
 
+## Drawing with T3 Code's components
+
+The extension draws with T3 Code's own React components rather than imitations
+of them. They are copied, unchanged but for their imports, from a T3 Code
+checkout into `src/t3/` by `sync-t3.mjs`, with T3's `cn`, its Tailwind variants,
+theme mapping, utilities and the base-layer defaults they rely on
+(`src/t3/theme.css`), its whole stylesheet for the check below
+(`src/t3/index.css`), its MIT licence (`src/t3/LICENSE`) and the commit copied
+from (`src/t3/SOURCE`). Nothing in `src/t3/` is edited by hand. The components
+are `badge`, `kbd`, `tooltip`, `collapsible-section-header` and `button`; a page
+that needs another adds its name to `components` in `sync-t3.mjs`.
+
+A React tree is drawn by `mountReact(host, api)` (`src/react/mount.tsx`) in a
+shadow root of its own, which adopts the built stylesheet, so T3's page and the
+extension cannot restyle each other. The colours are T3's variables, inherited
+from its page, so a theme or Appearance change in T3 reaches them. Three things
+make a shadow root draw as T3 does, each done once and checked below:
+
+- T3 marks dark mode with a class on `<html>`, which a selector in a shadow root
+  cannot see. `sync-t3.mjs` rewrites T3's `dark`, `light` and `wco` variants to
+  `:host-context(...)`, and stops, naming the line, if T3's form of one changes.
+- Tailwind's `@property` rules, which give its shadow and ring variables their
+  initial values, do nothing in a shadow root; `mountReact` registers them on the
+  document once and removes them when the extension goes.
+- Base UI portals a tooltip to `<body>`, outside the stylesheet. `mountReact`
+  gives each tree a portal container inside its shadow root, and `sync-t3.mjs`
+  points T3's `TooltipPopup` at it. T3's tooltip also reads its title bar height
+  from T3's app; `src/react/windowControlsOverlay.ts` restates that hook.
+
+T3's plain `@theme` (its font variables, which Settings → Appearance changes on
+`<html>`) is copied as `@theme reference`, so the shadow root reads T3's values
+rather than declaring defaults over them. A tree reads the Desk with
+`useDeskRead(desk, path)` (`src/react/desk.ts`), through the injector's gate,
+again every 15 seconds while the page is visible; a failed read is an `error`,
+with the last data kept, never empty data. The roots unmount when the extension
+is reloaded or disposed.
+
+**After a T3 Code update**, copy again and check:
+
+```sh
+git -C ~/projects/t3code pull                 # or any T3 Code checkout
+node sync-t3.mjs ~/projects/t3code            # refuses a checkout with local changes to what it copies
+pnpm build && node run-tests.mjs
+git diff src/t3/                              # what T3 changed, to review with the copy
+```
+
+`test-components.mjs`, which `run-tests.mjs` runs, proves the copy still draws
+as T3 does. It builds `check/Probe.tsx`, every copied component in each variant
+and size, with the extension's own build, and T3's stylesheet as last copied
+the way T3 builds it. A page carrying T3's stylesheet, with a custom font on
+`<html>` as Appearance would set, draws the tree twice: in the page itself, as
+T3 would, and through `mountReact` in a shadow root. It compares 47 computed
+properties of every element and its `::before` and `::after` (colours, borders,
+outline, radius, shadows, font, size, spacing, icon stroke) in light and in
+dark, and fails naming the element and property where they differ. It also
+hovers a tooltip trigger in the shadow root and fails if the tooltip opens
+outside it or unstyled. What it does not prove: that T3's running app has the
+stylesheet last copied (copy again after an update), or anything about
+behaviour beyond the tooltip opening.
+
 ## Development and verification
 
 The build needs Node.js and pnpm: `pnpm install`, then `pnpm build` writes
@@ -715,7 +790,8 @@ The build needs Node.js and pnpm: `pnpm install`, then `pnpm build` writes
 `pnpm typecheck` runs TypeScript in strict mode on the TypeScript sources
 (the JavaScript ones are not checked yet). The tests need Node.js 22 or newer
 and run the built script, so build first; `run-tests.mjs` refuses without a
-build.
+build. `test-components.mjs` builds what it checks itself (see
+[Drawing with T3 Code's components](#drawing-with-t3-codes-components)).
 
 `node run-tests.mjs` runs every test here that needs no real T3 Code: each
 `test-*.mjs` but `test-contract.mjs`, one at a time. It exits non-zero and
@@ -825,8 +901,10 @@ It checks:
   or a child comes or goes;
 - `desk:open-thread` going to `#/env/thread-b`, and the notice for an unknown
   thread;
-- the bridge's allow-list (no action endpoints, no unconfigured Desk, no path
-  that URL parsing would change), refused settings that would break the
+- the bridge's allow-list: each read the native pages make reaches the Desk
+  exactly as asked, and no action endpoint, unconfigured Desk, path that URL
+  parsing would change, fragment, backslash, unlisted or repeated parameter
+  gets through; refused settings that would break the
   extension, and that a same-site frame which sees the binding cannot use it;
 - references, keyboard hovercards, click-through (the Desk stays on the
   record) and streaming, and that a mission is resolved with `/api/records` reads

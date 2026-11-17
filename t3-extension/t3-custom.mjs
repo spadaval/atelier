@@ -169,22 +169,42 @@ function checkSettings(settings) {
   }
   return settings;
 }
-// A Desk read: only GET of the repository list, the inbox, the sidebar, one repository's launch
-// data, one record, or one item or mission. The path must come out of URL parsing unchanged, so no
-// dot segment, backslash, query or fragment gets through; /api/launch takes exactly one query
-// parameter, a repository name of letters, digits, '.', '_' and '-'.
-const readablePath = /^\/api\/(repos|inbox|sidebar|records\/[a-z0-9-]+|repos\/[^/\\?#%]+\/(items|missions)\/[a-z0-9-]+)$/;
+// A Desk read: only GET, only from a configured Desk, and only of these paths. A path must come out
+// of URL parsing unchanged, so no dot segment, backslash or fragment gets through, and its query
+// must have exactly the parameters, in the order, of one of its forms, each value of the shape
+// below. Nothing else on the Desk is reachable from the page, so its writes are not.
+const readablePaths = /^\/api\/(repos|inbox|sidebar|motion|records\/[a-z0-9-]+|repos\/[^/\\?#%]+\/missions|repos\/[^/\\?#%]+\/(items|missions)\/[a-z0-9-]+)$/;
+const readableQueries = {
+  '/api/launch': [['repo']],
+  '/api/history': [['repo', 'days'], ['repo', 'ids']],
+  '/api/checks': [['repo', 'pr']],
+  '/api/roadmap': [['repo']],
+  '/api/thread': [['id'], ['id', 'full']],
+  '/api/ties': [['thread']],
+};
+// A thread identity is T3's (environment and thread, encoded); the Desk looks up what it is given.
+const thread = value => value.length > 0 && value.length <= 1024;
+const readableValues = { repo: /^[A-Za-z0-9._-]+$/, days: /^[0-9]{1,4}$/, ids: /^[a-z0-9-]+(,[a-z0-9-]+)*$/, pr: /^[0-9]{1,9}$/, full: /^1$/, id: thread, thread };
 function deskReadUrl(config, desk, requested) {
   if (!deskUrls(config).includes(desk)) throw new Error(`Desk read is not allowed: ${desk} is not in desk.urls of ${configPath}`);
-  const launch = typeof requested === 'string' && requested.match(/^\/api\/launch\?repo=([A-Za-z0-9._-]+)$/);
-  if (launch) {
-    const url = new URL(desk + requested);
-    if (url.pathname !== '/api/launch' || url.search !== `?repo=${launch[1]}` || url.hash) throw new Error(`Desk read is not allowed: ${requested} (resolves to ${url.href})`);
+  if (typeof requested !== 'string') throw new Error(`Desk read is not allowed: the path is ${JSON.stringify(requested)}, not a string`);
+  const refuse = reason => { throw new Error(`Desk read is not allowed: ${requested}: ${reason}`); };
+  const [pathname, query = null] = requested.split(/\?(.*)/s);
+  const forms = readableQueries[pathname];
+  if (!forms && !readablePaths.test(pathname)) refuse('not a path the extension reads');
+  if (requested.includes('#') || requested.includes('\\')) refuse('it has a fragment or a backslash');
+  const url = new URL(desk + requested);
+  if (url.pathname !== pathname || url.search !== (query === null ? '' : `?${query}`)) refuse(`it resolves to ${url.href}`);
+  const keys = query === null ? [] : [...new URLSearchParams(query).keys()];
+  if (!forms) {
+    if (query !== null) refuse(`${pathname} takes no query`);
     return url.href;
   }
-  if (typeof requested !== 'string' || !readablePath.test(requested)) throw new Error(`Desk read is not allowed: ${requested}`);
-  const url = new URL(desk + requested);
-  if (url.pathname !== requested || url.search || url.hash || !readablePath.test(url.pathname)) throw new Error(`Desk read is not allowed: ${requested} (resolves to ${url.href})`);
+  if (!forms.some(form => form.join() === keys.join())) refuse(`${pathname} takes ${forms.map(form => form.join(' and ')).join(', or ')}, in that order; it has ${keys.join(', ') || 'none'}`);
+  for (const [key, value] of url.searchParams) {
+    const check = readableValues[key];
+    if (!(typeof check === 'function' ? check(value) : check.test(value))) refuse(`${key}=${JSON.stringify(value)} is not a ${key} the Desk is read with`);
+  }
   return url.href;
 }
 const log = (message, extra = {}) => console.log(JSON.stringify({ time: new Date().toISOString(), message, ...extra }));
@@ -411,7 +431,7 @@ async function daemon() {
       else if (report.action === 'open-folder') {
         await platform.openFolder(home); data = { opened: true };
       } else if (report.action === 'desk-get') {
-        // Only reads, only from a configured Desk: the repository list, one record, or one item or mission.
+        // Only reads, only from a configured Desk, only of the paths deskReadUrl admits.
         const url = deskReadUrl(config, report.payload.desk, report.payload.path);
         const result = await fetch(url, { signal: AbortSignal.timeout(15000), headers: { accept: 'application/json' }, redirect: 'error' });
         const body = await result.json();

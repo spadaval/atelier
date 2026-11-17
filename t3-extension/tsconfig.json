@@ -7,7 +7,19 @@
     "noEmit": true,
     "skipLibCheck": true,
     "allowJs": true,
-    "lib": ["ES2023", "DOM", "DOM.Iterable"]
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "jsx": "react-jsx",
+    "types": [
+      "vite/client"
+    ]
   },
-  "include": ["src", "vite.config.ts"]
+  "include": [
+    "src",
+    "check",
+    "vite.config.ts"
+  ]
 }
