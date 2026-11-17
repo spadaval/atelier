@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-diru
 title: Start a T3 Code test instance on this host, with a thread, from one command
-status: in_review
+status: approved
 mission: atelier-osel
 labels: []
 priority: medium
