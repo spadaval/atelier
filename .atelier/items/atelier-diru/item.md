@@ -163,7 +163,19 @@ Both findings held, and both are fixed.
 `test-extension.mjs` failing for the reviewer on port 19222 was another
 browser holding that port, not this change; it passed here before round 1.
 
+### Round 2 fix
+
+My last edit before round 2 put an apostrophe in a single-quoted string and I
+did not rerun `node --check` after it, so the submitted script did not parse.
+Fixed in cc9d69645. At that head: `node --check` passes; `isolation` passes (start, a
+thread, stop, no credentials, OpenCode used no folder in the home); two starts
+a second apart give one instance, the second waiting and reusing it; the
+contract passes all 35 probes with the printed values; `shot` saves both
+screenshots; `stop` ended 16 processes; and `start --model
+opencode/claude-fable-5-2` is refused by name.
+
 ### Responses
 
 1-d4r6.1: fixed in 538d83e04: the instance moved to /var/tmp outside the home folder, probes run in its home, and isolation reads OpenCode's log.
 1-d4r6.2: fixed in 538d83e04: start takes start.lock before reading state or clearing the folder; a second start waits and reuses.
+2-4ito.3: fixed in cc9d69645: the string is double-quoted; node --check passes and every command was rerun at that head.
