@@ -36,9 +36,9 @@ reopen, search and route changes.
 
 - [x] In an open project folder, each open mission with a thread there shows as a header (progress ring, title, items done of total, chevron) followed by those threads in T3's order, indented on a guide line with their role (lead, plan, build, review); threads a mission thread started go under it with no role; then one "N more missions" row for the repository's missions with no thread there (a dot when one waits on the human), then the folder's other threads in T3's order. Pinned rows, other folders and shelves keep T3's order.
 - [x] The extension never moves, removes or edits T3's nodes: it appends its own `li` rows to T3's list and sets CSS `order` on its children, from T3's DOM order, before the browser paints and again on every new list T3 draws (search, route change).
-- [x] A mission's title opens mission control in the Desk layer; its chevron folds it, hiding its threads, and folded it shows its thread count and a dot when it waits on the human; folded state is kept in `t3-custom:atelier:missions:v1`. "N more missions" opens the project home. A closed folder shows no mission rows.
+- [x] A mission's title opens mission control in the Desk layer; its chevron folds it, hiding its threads, and folded it shows its thread count and a dot when it waits on the human; folded state is kept in `t3-custom:atelier:missions:v1`. "N more missions" opens the project home. A closed folder (its button's `aria-expanded="false"`) shows no mission rows, and the open thread's row T3 keeps under it stays a plain row.
 - [x] With the boring sidebar off (no folder headers) nothing is reordered and a note under Inbox names Settings → Labs → Boring sidebar; the extension never changes T3's setting.
-- [x] While a mission is placed, no gesture of T3's that takes a run of rows from T3's own order reaches T3: a press on a row's Settle button (the drag-sweep) and a Shift-click on a row (range select, which bulk Settle, Snooze, Delete and a drag to the composer act on); a plain click on Settle, a click and a Ctrl-click still work; checked on the real app.
+- [x] While a mission is placed, no gesture of T3's that takes a run of rows from T3's own order reaches T3: a press on a row's Settle button (the drag-sweep) and every click with Shift held on a thread row, whatever other key is held (range select, which bulk Settle, Snooze, Delete and a drag to the composer act on); a plain click on Settle, a click and a Ctrl-click still work; checked on the real app.
 - [x] T3's faded copies of the extension's rows are removed as they appear, when the view turns off and when the extension stops.
 - [x] A named view (`missions`, probes `layout:threadList` and `dom:settleButton`) turns off when T3's list is not one flex column holding every folder with its button, and then T3's list is left exactly as T3 drew it: no order, row or rule of the extension's.
 - [x] The separate Missions block, "hidden from T3's list", "Show all threads" and the hiding stylesheet are removed; Inbox is one sidebar-styled row under search.
@@ -135,8 +135,39 @@ Tests: `node t3-extension/run-tests.mjs`: "All 3 tests passed:
 test-extension.mjs, test-fixture-desk.mjs, test-update.mjs". Each new check
 fails with its fix undone (`t3-extension/docs/VERIFICATION.md`).
 
+### Round 3
+
+Both findings hold, checked against T3's `Sidebar.tsx`. T3 toggles on the
+platform's own modifier and otherwise takes a click with Shift as a range, and
+`routeThreadOnly` keeps the open thread's row in a closed folder.
+
+1. **Shift with another modifier (fixed in c43d460cb).** Every click with Shift
+   held on a thread row is now stopped while a mission is placed, instead of
+   copying T3's per-platform rule. The cost is that Ctrl+Shift-click does not
+   toggle on Windows; that is under Known limits. The fixture handles clicks as
+   T3 does on Windows and checks Shift alone and with Ctrl, Meta, Alt and all
+   three. With the old exemption back, the check fails.
+2. **Closed folder keeping the open thread (fixed in c43d460cb).** The folder
+   button's `aria-expanded` decides. In a closed folder, the kept row stays a
+   plain row in T3's order, with no mission header, no "N more missions" and no
+   indent, role or fold rule. The fixture closes a folder the way T3 does,
+   keeping the open thread's row, and the check fails with the old rule.
+
+   On the real app, closing the atelier folder left its open thread plain and
+   removed "1 more mission". Reopening it changes only the button's attribute,
+   so the row came back only on the throttled 3-second refresh. The page
+   observer now also watches `aria-expanded`, and on the real app the row comes
+   back at once. A fixture check covers a folder opened by its button alone,
+   but it passes even without that change, because another pass lays out the
+   fixture within a second.
+
+Tests: `node t3-extension/run-tests.mjs`: "All 3 tests passed:
+test-extension.mjs, test-fixture-desk.mjs, test-update.mjs".
+
 ### Responses
 
 - 1-iclq.1: fixed in d839006d3 (Shift-click on a thread row stopped while a mission is placed; other order-based shortcuts listed under Known limits)
 - 1-iclq.2: fixed in d839006d3 (copies of the extension's rows removed on each sync, when the view is off and at teardown)
 - 1-iclq.3: fixed in 9de9e431e (the fixture Desk's address read from a whole line)
+- 2-7ulu.1: fixed in c43d460cb (every click with Shift held on a thread row stopped, whatever other key is held)
+- 2-7ulu.3: fixed in c43d460cb (a closed folder decided by its button's aria-expanded; the open thread's kept row stays plain)
