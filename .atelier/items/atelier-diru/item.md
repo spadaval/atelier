@@ -55,10 +55,10 @@ minute. Against it, `node test-contract.mjs --port 9333 --thread <…> --draft
 <…>` with the printed values passed all 35 probes.
 
 **What it does.** It fetches T3 Code Nightly `v0.1.11-nightly.20261117.4851`
-once into `~/.cache/atelier-t3-test/apps/` (tested from scratch by moving the
-unpacked copy aside), starts `Xvnc` (else `Xvfb`) on a free display, and
-starts T3 with `HOME`, `T3CODE_HOME` and all five `XDG_*` folders inside
-`~/.cache/atelier-t3-test/instance/`, backend port 47331, debugging port 9333
+once into `/var/tmp/atelier-t3-test-<user>/apps/` (tested from scratch by
+moving the unpacked copy aside), starts `Xvnc` (else `Xvfb`) on a free display, and
+starts T3 with `HOME`, `T3CODE_HOME` and all five `XDG_*` folders inside the instance
+folder beside it, backend port 47331, debugging port 9333
 and auto-update off. It seeds T3's `settings.json` (only OpenCode enabled,
 the free model for threads and titles) and `client-settings.json`
 (onboarding done, boring sidebar on), then drives T3's own screens: Add
@@ -129,3 +129,36 @@ anything starts); `stop` with nothing running.
 **Not done:** Windows is still checked once before a release (README says
 so). The spike's `~/t3-linux-spike` (1.2 GB) is the planner's and is left in
 place; it can be deleted.
+
+### Responses, round 1
+
+Both findings held, and both are fixed.
+
+1. **OpenCode read the human's folders.** The cause was where the instance
+   lived, not its environment: OpenCode looks for `.opencode`,
+   `.claude/skills`, `.agents/skills` and `opencode.json` in every folder
+   above the one it runs in, and both the instance (under `~/.cache`) and the
+   model probe (run in the caller's folder, here this checkout under
+   `~/.t3/worktrees`) sat below the real home. The instance now lives in
+   `/var/tmp/atelier-t3-test-<user>`, `start` refuses a `T3_TEST_ROOT` inside
+   the home folder and says why, and the probes run in the instance's home.
+   The isolation check now also fails if OpenCode's log names any folder in
+   the human's home it watched or ran in. Against the old layout (the home
+   check removed in a throwaway copy) it named `~/.claude/skills`,
+   `~/.agents/skills` and `~/.opencode/skill(s)`. At the new location it
+   passes, and OpenCode's log names only `/`, `/etc`, `/var/tmp` and the
+   instance. The reviewer's repro, an `opencode.json` with a costed fake
+   provider in the caller's folder, now gets `Refusing model
+   reviewfake/paid-test-model`, while `opencode models` run from that folder
+   still lists the fake model.
+2. **Simultaneous starts raced.** `start` now takes `start.lock` in the root,
+   linked into place whole and naming its owner by PID and start time, before
+   it reads state or clears the folder, and holds it until the state is
+   complete. A lock whose owner has exited is removed. Two starts launched
+   one second apart: the second printed "Another start (PID …) is making the
+   instance; waiting for it", then "Already running" with the first one's
+   thread and draft, and both exited 0. The contract then passed all 35
+   probes against it.
+
+`test-extension.mjs` failing for the reviewer on port 19222 was another
+browser holding that port, not this change; it passed here before round 1.
