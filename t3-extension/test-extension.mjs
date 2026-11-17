@@ -756,7 +756,9 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   const stored = await evaluate('JSON.stringify(Object.fromEntries(Object.keys(localStorage).map(key => [key, localStorage[key]])))');
   assert(!stored.includes('mappings') && stored.includes('openThreads'), `localStorage holds only view state: ${stored}`);
   await evaluate('location.hash="/env/thread-c"');
-  await until(() => evaluate('!document.querySelector("[data-t3-desk-mount]")?.shadowRoot.querySelector("iframe").hidden'), 'Explicit project mapping');
+  // The mount must exist: the reapplied extension may not have drawn it yet, and a missing mount is
+  // not a shown Desk.
+  await until(() => evaluate('document.querySelector("[data-t3-desk-mount]")?.shadowRoot.querySelector("iframe")?.hidden === false'), 'Explicit project mapping');
   await evaluate('document.querySelector("#native-tab").click()');
   await until(() => evaluate('document.querySelector("[data-t3-desk-mount]").hidden && !document.querySelector("#native-content").inert'), 'Native tab restoration');
   console.log('PASS: Customizations names a failed release lookup and offers a newer release; automatic updates are off by default');
