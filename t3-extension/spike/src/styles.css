@@ -1,0 +1,15 @@
+@import "tailwindcss";
+@import "./t3-theme.css";
+
+/* T3's element defaults from its base layer, kept by hand: its block holds much the extension
+   does not need. Without them a bare `border` is the text colour, not T3's border colour. */
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  *,
+  ::before,
+  ::after {
+    outline-offset: -2px;
+  }
+}
