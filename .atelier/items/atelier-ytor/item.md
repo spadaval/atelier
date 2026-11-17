@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-ytor
 title: Show missions around T3's own thread rows in the sidebar
-status: in_review
+status: approved
 mission: null
 labels: []
 priority: medium
