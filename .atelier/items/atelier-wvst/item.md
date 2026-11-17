@@ -28,7 +28,7 @@ last of the three views to leave its frame.
 - [ ] `docs/product/desk.md` and `docs/architecture/desk.md` say where the page is drawn now. The Desk's page itself stays until atelier-yy4j.
 - [ ] The checks in `test-extension.mjs` that the breadcrumb, the strip's project name and the "more missions" row each open a frame on `/embed/home/...` become checks that each opens the native page with no `iframe`. No code path of the extension asks for `/embed/home` afterwards.
 - [ ] Fixture checks in `t3-extension/` cover a repository with a mission in each of Now, Next and Later, and one with nothing open, and that the proposed mission under Later opens the framed record page.
-- [ ] The page is seen in T3 Code Nightly on Legend's test instance, in light and dark, with screenshots in the Report.
+- [ ] The page is seen in T3 Code Nightly on the test instance on this host (atelier-diru), in light and dark, with screenshots in the Report.
 
 ## Scope
 

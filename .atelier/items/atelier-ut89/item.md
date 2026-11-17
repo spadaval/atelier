@@ -9,6 +9,7 @@ labels: []
 priority: medium
 blocked_by:
 - atelier-6dm7
+- atelier-diru
 implementers: []
 ready: null
 trivial: null
@@ -36,7 +37,7 @@ wanted. Once it is done: what did I get, and what is worth a look.
 - [ ] `docs/product/desk.md` and `docs/architecture/desk.md` describe the new page and say the Desk's mission control page is no longer opened by the extension. The Desk's page itself stays until atelier-yy4j.
 - [ ] The check in `test-extension.mjs` that a mission's title opens a frame on `/embed/mission/...` becomes a check that it opens the native page with no `iframe`; the checks that the layer frames the inbox stay as they are.
 - [ ] Fixture checks in `t3-extension/` cover the running page with a needs-human item, a quiet thread and two live threads; the running page with no needs-human item and one thread that began waiting a minute ago, which is listed; the running page with nothing needing the human; and the done page, with one merged item whose `pull_request` is null.
-- [ ] The page is seen in T3 Code Nightly on Legend's test instance (port 9333), running and done, in light and dark, with screenshots in the Report.
+- [ ] The page is seen in T3 Code Nightly on the test instance on this host (atelier-diru), running and done, in light and dark, with screenshots in the Report.
 
 ## Scope
 
@@ -46,4 +47,4 @@ Out: a proposed plan, which the page need not serve; the mockup's "Differed from
 
 ## Context
 
-The mockups are `t3-extension/spike/mockups/mission-concepts.html` on `spike/extension-react`; open the file in a browser. The data mission control reads today is enough: `GET /api/repos/{repo}/missions/{id}` (sections, items, threads), each item's page, `GET /api/history` and `GET /api/thread?full=1`. `desk/src/lib/mission.ts` holds the stage and age logic with tests. The extension does not fetch the Desk itself: it asks the loader (`api.request('desk-get', { desk, path })`), for each Desk in its configuration, while the Desk's hooks in `desk/src/lib/api.ts` fetch paths on their own origin. So the components and the pure functions move, and the reads go through atelier-6dm7's hook, which also opened the loader's gate for them. This item mounts into the layer the old script already draws over T3's main area; atelier-40dc rewrites that layer afterwards. How to reach Legend is in `t3-extension/docs/VERIFICATION.md`; never run a test against its daily instance on port 9222.
+The mockups are `t3-extension/spike/mockups/mission-concepts.html` on `spike/extension-react`; open the file in a browser. The data mission control reads today is enough: `GET /api/repos/{repo}/missions/{id}` (sections, items, threads), each item's page, `GET /api/history` and `GET /api/thread?full=1`. `desk/src/lib/mission.ts` holds the stage and age logic with tests. The extension does not fetch the Desk itself: it asks the loader (`api.request('desk-get', { desk, path })`), for each Desk in its configuration, while the Desk's hooks in `desk/src/lib/api.ts` fetch paths on their own origin. So the components and the pure functions move, and the reads go through atelier-6dm7's hook, which also opened the loader's gate for them. This item mounts into the layer the old script already draws over T3's main area; atelier-40dc rewrites that layer afterwards. atelier-diru's command starts T3 Code here with the fixture Desk, whose records hold a running mission and a done one.
