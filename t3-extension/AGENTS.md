@@ -13,8 +13,14 @@
    - Users should be able to understand what the product is doing. They should
      not need to trust that it just works.
 
-3. Code is expensive.
-   - Less is more.
+3. Code is not free.
+   - Before you write something, say what it is for: what needs it, and
+     what would be worse without it. If you can't say, don't write it.
+   - This goes for everything you write.
+     - A guard: which failure does it catch, and can that failure happen?
+     - A test: which bug would make it fail? A test that cannot fail, or
+       that only restates the code, tests nothing.
+     - A tool: what does it let you do or check that you couldn't before?
    - Prefer the simplest implementation that satisfies the real requirement.
-   - Do not add defensive "just in case" guards, abstractions, or edge-case
-     handling unless there is a specific reason to be worried about that case.
+   - Size is not the measure. A large change with a clear purpose is fine.
+     A small one without a purpose is not.
