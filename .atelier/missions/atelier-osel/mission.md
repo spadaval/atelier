@@ -5,7 +5,7 @@ id: atelier-osel
 title: 'Draw the T3 extension''s pages natively: a TypeScript and React rewrite, and a mission page that says what needs you'
 status: open
 labels: []
-lead: null
+lead: thread:delegated-task:command%3Amcp%3Ad12574ac-fe2d-4335-bf72-c30aa232c7f3%3Adelegate-task%3A968c2e4c-7db7-40ce-813d-afb0b4162b34
 planners:
 - 420b2fcd-ed0d-4cda-89ab-12f168f7808e
 created_at: 2026-11-17T19:23:17.709726942Z
