@@ -1,13 +1,9 @@
 // What a React tree reaches the injector through: the injected script's api (t3-custom.mjs,
 // buildBundle), given by mountReact. useDeskRead reads a Desk path through it.
 import { createContext, useContext, useEffect, useState } from "react";
+import { deskGet, type ExtensionApi } from "../host/api";
 
-export type HostApi = {
-  request(action: string, payload?: unknown): Promise<unknown>;
-  onCleanup(callback: () => void): void;
-  reportError(error: unknown): void;
-  signal: AbortSignal;
-};
+export type HostApi = Pick<ExtensionApi, "request" | "onCleanup" | "reportError" | "signal">;
 
 export const DeskApi = createContext<HostApi | null>(null);
 
@@ -39,7 +35,7 @@ export function useDeskRead<T>(desk: string, path: string, intervalMs = 15000): 
       if (reading) return;
       reading = true;
       try {
-        const data = (await api.request("desk-get", { desk, path })) as T;
+        const data = await deskGet<T>(api, desk, path);
         if (live) setState({ data, error: null, loading: false, readAt: new Date() });
       } catch (error) {
         if (live) setState((last) => ({ ...last, error: error instanceof Error ? error : new Error(String(error)), loading: false }));
@@ -86,7 +82,7 @@ export function useDeskReads<T>(desk: string, paths: string[], intervalMs = 1500
       const results = await Promise.all(
         list.map(async (path): Promise<[string, T | Error]> => {
           try {
-            return [path, (await api.request("desk-get", { desk, path })) as T];
+            return [path, await deskGet<T>(api, desk, path)];
           } catch (error) {
             return [path, error instanceof Error ? error : new Error(String(error))];
           }

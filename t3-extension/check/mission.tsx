@@ -2,6 +2,7 @@
 // through mountMissionLayer, as the layer does, at `?width=` pixels, with a stand-in injector that
 // answers the fixture's reads (failing one on request), and records what the page asks to open in `missionCalls`.
 import { mountMissionLayer } from "../src/mission/mount";
+import type { HostApi } from "../src/react/desk";
 import { NOW, REPO, scenarios } from "./mission-fixtures";
 
 const params = new URLSearchParams(location.search);
@@ -16,7 +17,7 @@ const host = document.body.appendChild(document.createElement("div"));
 host.id = "mission";
 host.style.cssText = `width: ${Number(params.get("width") ?? 1000)}px; height: 900px; outline: 1px solid var(--border)`;
 const api = {
-  request: (action: string, payload?: unknown) => {
+  request: ((action: string, payload?: unknown) => {
     const { path } = payload as { desk: string; path: string };
     reads.push(path);
     // `?fail=<path>&after=<n>`: that path answers its first n reads, then fails.
@@ -27,7 +28,7 @@ const api = {
     const answer = chosen.answers[path] as { sequence?: unknown[] };
     const count = reads.filter((read) => read === path).length;
     return Promise.resolve(structuredClone(answer?.sequence ? answer.sequence[Math.min(count, answer.sequence.length) - 1] : answer));
-  },
+  }) as HostApi["request"],
   onCleanup: () => {},
   reportError: (error: unknown) => errors.push(String(error)),
   signal: new AbortController().signal,

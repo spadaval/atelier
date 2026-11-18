@@ -778,8 +778,8 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   const refreshUntil = (expression, label) => until(() => evaluate(`(${expression})||(${settingsQuery('#refresh-status')}.click(),false)`), label);
   await refreshUntil(`${settingsQuery('#release-error')}.textContent === "Release check failed: Looking up releases: GET ${base}/releases: HTTP 503 Service Unavailable"`, 'The failed release lookup in Customizations');
   assert.match(await evaluate(`${settingsQuery('#release-status')}.textContent`), /^checked /);
-  // The installed release is T3's Badge, drawn by React in a shadow root of its own (src/react/settings.tsx).
-  const badge = `${settingsQuery('#release-badge')}.shadowRoot.querySelector('[data-slot="badge"]')`;
+  // The installed release is T3's Badge, drawn by React with the section (src/settings/Customizations.tsx).
+  const badge = settingsQuery('#release-badge [data-slot="badge"]');
   assert.equal(await evaluate(`${badge}?.textContent`), 'development');
   assert.notEqual(await evaluate(`getComputedStyle(${badge}).borderTopStyle`), 'none', 'the release Badge is drawn without its stylesheet');
   assert.equal(await evaluate(`${settingsQuery('#update-release')}.hidden`), true, 'an update was offered after a failed lookup');
@@ -788,8 +788,12 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   await refreshUntil(`${settingsQuery('#release-status')}.textContent.startsWith("release 0.5.0 is available · ")`, 'The newer release in Customizations');
   assert.equal(await evaluate(`${settingsQuery('#release-error')}.hidden`), true);
   assert.equal(await evaluate(`${settingsQuery('#update-release')}.hidden ? null : ${settingsQuery('#update-release')}.textContent`), 'Update to 0.5.0');
-  assert.equal(await evaluate(`${settingsQuery('[data-setting="autoUpdate"]')}.checked`), false, 'automatic updates are on by default');
-  await evaluate(`(()=>{const select=document.querySelector("#t3-custom-settings").shadowRoot.querySelector("#project-mapping");select.value="${deskBase}/r/atelier";select.dispatchEvent(new Event("change"))})()`);
+  // The settings are T3's Switch (role switch, aria-checked) and Select (a list opened on mousedown).
+  assert.equal(await evaluate(`${settingsQuery('[data-setting="autoUpdate"]')}.getAttribute("aria-checked") === "true"`), false, 'automatic updates are on by default');
+  await evaluate(`${settingsQuery('#project-mapping')}.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }))`);
+  const mappingItem = settingsQuery(`[data-slot="select-item"][data-value="${deskBase}/r/atelier"]`);
+  await until(() => evaluate(`Boolean(${mappingItem})`), 'The project mapping list open');
+  await evaluate(`${mappingItem}.click()`);
   // The views toggle was saved earlier; wait for this mapping.
   const saved = await until(async () => { const settings = JSON.parse(await fs.readFile(path.join(temp, 'config.json'), 'utf8')).settings; return settings?.mappings?.['env:project-c'] && settings; }, 'Settings written to config.json');
   assert.deepEqual(saved.mappings, { 'env:project-c': `${deskBase}/r/atelier` });
@@ -825,13 +829,13 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   await until(() => evaluate('Boolean(document.querySelector("#t3-custom-settings"))'), 'Settings remount');
   // A folded mission, as a fold saves it, stays folded after reinjection.
   await evaluate(`localStorage.setItem("t3-custom:atelier:missions:v1", ${JSON.stringify(JSON.stringify({ folded: { [`${deskBase}/${fixture.repo}/${fixture.mission.id}`]: true } }))})`);
-  await until(() => evaluate('Boolean(document.querySelector("#t3-custom-settings").shadowRoot.querySelector("#release-badge").shadowRoot.querySelector("[data-slot=badge]"))'), 'The release Badge before reinjection');
-  await evaluate('globalThis.previousBadge=document.querySelector("#t3-custom-settings").shadowRoot.querySelector("#release-badge").shadowRoot;globalThis.adoptedBefore=document.adoptedStyleSheets.length');
+  await until(() => evaluate('Boolean(document.querySelector("#t3-custom-settings").shadowRoot.querySelector("#release-badge [data-slot=badge]"))'), 'The release Badge before reinjection');
+  await evaluate('globalThis.previousBadge=document.querySelector("#t3-custom-settings").shadowRoot;globalThis.adoptedBefore=document.adoptedStyleSheets.length');
   await evaluate('globalThis.previousRoot=document.querySelector("#t3-custom-root");document.querySelector("#t3-custom-settings").shadowRoot.querySelector("#reload-scripts").click()');
   await until(() => evaluate('Boolean(document.querySelector("#t3-custom-root")) && document.querySelector("#t3-custom-root") !== globalThis.previousRoot'), 'Settings reinjection control');
   // The old extension's React root is unmounted, and Tailwind's @property rules are on the document once.
   assert.equal(await evaluate('globalThis.previousBadge.querySelector("[data-react-root]")'), null, 'the release Badge of the disposed extension is still mounted');
-  await until(() => evaluate('Boolean(document.querySelector("#t3-custom-settings")?.shadowRoot.querySelector("#release-badge").shadowRoot?.querySelector("[data-slot=badge]"))'), 'The release Badge after reinjection');
+  await until(() => evaluate('Boolean(document.querySelector("#t3-custom-settings")?.shadowRoot.querySelector("#release-badge [data-slot=badge]"))'), 'The release Badge after reinjection');
   assert.equal(await evaluate('document.adoptedStyleSheets.length'), await evaluate('globalThis.adoptedBefore'), 'reinjection left a second copy of the @property rules on the document');
   assert.equal(await evaluate('performance.timeOrigin'), timeOrigin);
   assert.equal(await evaluate('fixtureListeners.size'), 1);
