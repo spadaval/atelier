@@ -124,6 +124,8 @@ async function until(check, label, timeout = 20000) {
 // walks both subtrees together and names every element and property whose computed style differs.
 function compare(properties) {
   const shadow = document.querySelector('#extension').shadowRoot;
+  // An open select focuses its list, in one of the two trees only; Chrome then rings that item.
+  shadow.activeElement?.blur(); document.activeElement?.blur();
   const lines = []; let compared = 0;
   const name = (element) => `${element.localName}${element.dataset.slot ? `[data-slot=${element.dataset.slot}]` : ''}`;
   const walk = (theirs, ours, label) => {
