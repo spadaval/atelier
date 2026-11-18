@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-9f7b
 title: Put a thread waiting on an approval under Needs you on the mission page
-status: in_review
+status: changes_requested
 mission: atelier-osel
 labels: []
 priority: medium
