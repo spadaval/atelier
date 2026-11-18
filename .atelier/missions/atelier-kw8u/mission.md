@@ -64,7 +64,9 @@ Two cases no longer test anything. `next-done-when-rewrite` says its 50 ms
 line cannot hold, and every model since 2026-11-11 has met it by building an
 index. `next-rebuttal-kept` passes 3 of 3 with no skill on every model, its
 command was removed, and its pass (do not take the kept finding's fix)
-contradicts `roles/implementer.md`, which says to fix it.
+contradicts `roles/implementer.md`, which says to fix it. The first is
+deleted. The second's fixture becomes a lead's case, where the ruling is
+the lead's to make.
 
 The skill may also have been cut too far. On 2026-11-11 a passage of the
 role files stayed only if it changed an outcome in the evals, and ten small
@@ -99,10 +101,12 @@ setups are kept: `sol`, the work host's, and `house`, this host's. Each
 result gives passes, time and tokens for every cell.
 
 A grade has two parts. Code reads facts from the records and the tree: what
-merged, who approved it, whether the tests pass. A model from another lab
-than the run's agent reads the run against the case's rubric for what
-depends on meaning: whether a finding says the test cannot fail, whether a
-review asked for less. No grader matches wording or parses a shell command.
+merged, who approved it, whether the tests pass. A model reads the run
+against the case's rubric for what depends on meaning: whether a finding
+says the test cannot fail, whether a review asked for less. Each question
+goes to a judge from another lab than the thread whose work it is about, so
+a setup whose threads come from two labs has two judges. No grader matches
+wording or parses a shell command.
 
 A lead is in charge of its mission. The skill gives it the process as its
 default: it does itself what needs no review, sends the rest to an
@@ -136,8 +140,9 @@ reported and not failed, and the judge says whether the reason holds.
   are read by the thread that wrote the results, and the judge's verdict
   differs from that reading on at most two. Each difference is listed with
   the run.
-- overrides-seen: for a fixture mission with an item merged past a rule,
-  `atelier show <mission>` names the rule, the reason and the thread.
+- overrides-seen: for a fixture mission whose lead merged an implementer's
+  item past a rule, `atelier show <mission>` names the rule, the reason and
+  the lead as the thread that passed it.
 - lead-in-charge: the lead's cases run with the skill before and after its
   change, in both setups. For each cell the results give the runs where a
   planted defect reached main, the runs that stopped with nothing raised,
@@ -167,15 +172,19 @@ reported and not failed, and the judge says whether the reason holds.
 
 - In: `evals/agent-factory/`; in the skill, `roles/lead.md`,
   `roles/implementer.md`'s Findings and `SKILL.md`'s Independent Review;
-  the lines the binary prints about a kept finding and to a lead, in
-  `crates/atelier-core/src/say.rs`; `atelier show <mission>`; the decision's
+  the passages atelier-oiwy tries and keeps, in `SKILL.md` and `roles/`;
+  the lines the binary prints about a kept finding and to a lead, wherever
+  in `crates/` they live; what a commit records when it passes a
+  rule, and `atelier show <mission>` and `atelier log` where they read it;
+  the decision's
   row in `docs/design.md`; the places that name a scenario, in
   `docs/design.md`,
   `.github/workflows/ci.yml` and `scripts/ci-jobs.sh`.
 - Out: evals of the planner, the gardener, the backlog procedure and the
   readiness checklist, which are conversations with the human, and the
   README says they are unmeasured; running the evals inside a T3 Code
-  instance; a model call in CI; any other change to the skill's text; a
+  instance; a model call in CI; a change to the skill's text beyond those
+  Scope names, and to `procedures/` at all; a
   new command, role or record for a lead's ruling; split plan reviews, which
   happen before a mission runs; the Desk's pages; the
   fixes the smoke run filed (atelier-u49o, atelier-yhaf, atelier-jfos); the
@@ -196,7 +205,7 @@ first replay item has reported what one review costs.
 
 It may restore a passage that atelier-oiwy shows changing an outcome, as
 that item says. It may not otherwise change the skill's text outside the
-three places Scope names;
+places Scope names;
 add a refusal to the binary; put code from another repository in a case;
 raise the limit of two eval agents
 alive at once; or build a case that needs a harness feature of its own. A

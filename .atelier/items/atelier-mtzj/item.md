@@ -49,8 +49,11 @@ an item that can never merge.
   Independent Review says the same as both.
 - [ ] The line `status` prints for a kept finding names the lead beside
   "fix it", and every line the binary prints to a lead agrees with the
-  skill. A test shows a lead merging an item past an open fix-now finding
-  with a reason, and the reason in `atelier log`.
+  skill, wherever it lives. One is in `crates/atelier-cli/src/view_output.rs`:
+  the heading over a mission's disputes says a lead steps in by moving the
+  disputed work out of the item's Scope. A test shows a lead merging an item
+  past an open fix-now finding with a reason, and the reason in `atelier
+  log`.
 - [ ] `docs/design.md` records the decision with its date and the human's
   reasons. The Report gives the word count of `SKILL.md` and `roles/` before
   and after; they are 1,231 today.
@@ -59,5 +62,7 @@ an item that can never merge.
 ## Scope
 
 `skills/agent-factory/SKILL.md`, `roles/lead.md` and `roles/implementer.md`;
-`crates/atelier-core/src/say.rs` and its tests; `docs/design.md`. No new
+the text the binary prints about a kept finding and to a lead, in
+`crates/atelier-core/src/say.rs`, `crates/atelier-cli/src/view_output.rs`
+and wherever else it is found, with its tests; `docs/design.md`. No new
 command, role or record.

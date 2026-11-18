@@ -28,15 +28,23 @@ rubric.
 
 - [ ] A case's `grade.py` prints facts only: named values read from the
   records, the tree and the run's recorded `atelier` calls. Its `rubric.md`
-  holds the questions of meaning, each with what a pass looks like.
+  holds the questions of meaning, each with what a pass looks like, and
+  each marked as graded or as reported.
 - [ ] The harness puts each rubric question to a judge: a model from another
-  lab than the thread whose work the question is about, named by the setup.
+  lab than the thread whose work the question is about. Each question names
+  the role it is about, and the setup names a judge for each lab its threads
+  come from, so `house` has two. A harness test covers a `house` run whose
+  reviewer's question goes to one judge and whose implementer's goes to the
+  other.
   The judge is given the rubric, the facts, the final reply, the review
   files and the diff the run left. It is not told the arm.
 - [ ] The judge answers each question pass or fail with the line it rests
   on, and the harness records both in `result.json`. A run passes when every
-  fact and every answer passes. A question the judge cannot answer fails
-  with its reason; only an invalid run is `null`.
+  fact and every graded answer passes. A reported answer is recorded and
+  shown and changes no grade: a harness test covers a run whose facts and
+  graded answers pass and whose reported answer fails, and it passes. A
+  graded question the judge cannot answer fails with its reason; only an
+  invalid run is `null`.
 - [ ] Three cases are brought over, one of each kind:
   `next-vacuous-test-review` (judged), `next-costly-hardening` (judged, and
   no longer by its title's first word) and `next-loop` (facts alone). Their

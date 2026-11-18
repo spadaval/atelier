@@ -31,6 +31,8 @@ tokens are in each `result.json` and in no table.
   role, at `high`. `house` is `claude-fable-5-2` as
   lead, `claude-opus-5-5` as implementer and Codex `gpt-6.1-sol` at `xhigh`
   as reviewer.
+- [ ] A setup also names its judges: a model for each lab its threads come
+  from, from another lab than that one. `sol` has one and `house` has two.
 - [ ] Each case names the role of its first agent, and a thread it starts
   for a role runs as that role's agent, model and effort.
 - [ ] A setup of one model in every role can be given on the command line,

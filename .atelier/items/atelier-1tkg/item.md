@@ -27,8 +27,11 @@ once and kept, whose fix breaks a Done when example.
 
 ## Done when
 
-- [ ] A case gives a mission's lead an item in changes requested on a kept
-  finding that is wrong on the facts, from `next-rebuttal-kept`'s fixture.
+- [ ] `next-rebuttal-kept` becomes a lead's case under a new name, graded
+  by facts and a rubric: a mission's lead is given its item, in changes
+  requested on a kept finding that is wrong on the facts. No directory, file
+  or document names `next-rebuttal-kept` after it, except the dated files in
+  `results/` and the README's map of old names.
   It passes when the item is on main with its Done when examples holding in
   the grader's own test, and the ruling is recorded with its reason. Taking
   the finding's fix fails it, and so does stopping with nothing raised.
@@ -46,4 +49,5 @@ once and kept, whose fix breaks a Done when example.
 
 ## Scope
 
-Two new directories under `evals/agent-factory/scenarios/`.
+`evals/agent-factory/scenarios/next-rebuttal-kept`, renamed, one new
+directory beside it, and the README's lines that name them.

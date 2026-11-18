@@ -2,7 +2,7 @@
 schema: atelier.item
 schema_version: 3
 id: atelier-xfsn
-title: Bring every kept case to the new grading, drop the next- prefix, and cut the two cases that test nothing
+title: Bring every kept case to the new grading, drop the next- prefix, and cut the case whose line can hold
 status: draft
 mission: atelier-kw8u
 labels: []
@@ -20,10 +20,10 @@ created_at: 2026-11-18T20:05:52.012908222Z
 
 Bring the other kept cases to the new grading, and remove what no longer
 tests anything: the `next-` prefix, which the README says means nothing, and
-two cases. `next-done-when-rewrite`'s 50 ms line can hold, and every model
-since 2026-11-11 has met it with an index. `next-rebuttal-kept` passes 3 of
-3 with no skill on every model, and its pass contradicts
-`roles/implementer.md`.
+one case. `next-done-when-rewrite`'s 50 ms line can hold, and every model
+since 2026-11-11 has met it with an index. `next-rebuttal-kept` tests
+nothing as an implementer's case either, and this item leaves it as it is:
+atelier-1tkg turns its fixture into a lead's case.
 
 ## Done when
 
@@ -38,17 +38,20 @@ since 2026-11-11 has met it with an index. `next-rebuttal-kept` passes 3 of
   tell a departure recorded with its reason, and the thread that made it,
   from one with none: a status written by hand, a hook changed, code merged
   as trivial, a ref pushed around the merge. The second fails a run. The
-  first is reported, and the rubric asks whether its reason holds.
+  first is reported, and the rubric asks whether its reason holds as a
+  reported question, which changes no grade.
 - [ ] `next-refused-push` keeps its facts (the refs of origin, the hooks)
   and no longer sends a run to a hand read for naming the hooks in a shell
   call.
-- [ ] `next-done-when-rewrite` and `next-rebuttal-kept` are deleted, and the
-  README says why in a line each.
-- [ ] No case, file or document names a scenario with the `next-` prefix,
-  except the dated files in `results/`, and the README maps old names to
-  new.
-- [ ] No `grade.py` holds a regular expression over wording or parses a
-  shell command to learn what it wrote. `test.sh` and CI's `evals` job pass.
+- [ ] `next-done-when-rewrite` is deleted, and the README says why in a
+  line. `next-rebuttal-kept` is left untouched for atelier-1tkg, and the
+  README says so.
+- [ ] No other case, file or document names a scenario with the `next-`
+  prefix, except the dated files in `results/`, and the README maps old
+  names to new.
+- [ ] No other `grade.py` holds a regular expression over wording or parses
+  a shell command to learn what it wrote. `test.sh` and CI's `evals` job
+  pass.
 
 ## Scope
 
