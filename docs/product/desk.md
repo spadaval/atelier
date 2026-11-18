@@ -130,8 +130,16 @@ settled on in a spike on 2026-11-16:
   The Desk's own mission control page stays until the release that draws
   the mission page natively is installed (atelier-yy4j).
 - **The project home**, over T3 Code's main area, for one repository:
-  what is under way now, what comes next and what later, and a strip of
-  what started and merged each day this week.
+  what is under way now, what comes next and what later, each mission
+  folding open to its items and who holds them, and a strip of what
+  started and merged each day this week. The T3 extension draws it itself,
+  in React with T3 Code's own components, from the Desk's reads. The
+  project's name in a thread's breadcrumb or under the composer opens it,
+  as does the row for a repository's other missions in the sidebar. A
+  mission's title opens the mission page, or a proposed plan's its record
+  page; an item opens its Desk page, with a way back. The Desk's own
+  project home page stays until the release that draws it natively is
+  installed (atelier-yy4j).
 
 The inbox opened over the main area spreads into columns. T3 Code's own
 sidebar and project strip read their missions, threads and what can start

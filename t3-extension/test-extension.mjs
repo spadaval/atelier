@@ -163,11 +163,16 @@ function deskProxyServer(requests, options) {
       inbox.repos.push({ repo: 'unreadable', commit: null, error: 'git: not a repository', needs_human: [], proposed: [], threads: [] });
       response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(inbox)); return;
     }
-    // proposed marks a mission of the real Desk's sidebar as a proposed plan.
+    // proposed marks a mission of the real Desk's sidebar, and of its repository's missions, as a proposed plan.
     if (request.url === '/api/sidebar' && options.proposed) {
       const sidebar = await (await fetch(realDesk + request.url)).json();
       for (const repo of sidebar.repos) for (const mission of repo.missions ?? []) if (mission.id === options.proposed) mission.state = 'proposed';
       response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(sidebar)); return;
+    }
+    if (/^\/api\/repos\/[^/]+\/missions$/.test(request.url) && options.proposed) {
+      const missions = await (await fetch(realDesk + request.url)).json();
+      for (const mission of missions.missions ?? []) if (mission.id === options.proposed) mission.state = 'proposed';
+      response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(missions)); return;
     }
     if (request.url === '/api/sidebar' && options.sidebar) { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(options.sidebar ?? { repos: [] })); return; }
     if (request.url === '/api/launch?repo=atelier' && options.launch) { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(options.launch)); return; }
@@ -696,20 +701,50 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   delete firstDesk.proposed;
   await evaluate('document.dispatchEvent(new Event("visibilitychange"))');
   await until(() => evaluate(`${missionRow}.querySelector('[data-t3-mission-title]').title.endsWith('Open the mission page')`), 'The mission read again as agreed');
-  // "N more missions" opens the project home.
+  // "N more missions" opens the project home, drawn by the extension with no frame.
+  const homePage = 'document.querySelector("[data-t3-layer-native]")?.shadowRoot?.querySelector("[data-project-home]")';
+  const homeShown = async label => {
+    await until(async () => (await layerState())?.key === `home:${deskBase}/r/atelier` && (await layerState()).shown, label);
+    await until(() => evaluate(`${homePage}?.dataset.projectHome === 'shown'`), `${label}: drawn from the Desk's reads`);
+    assert.equal(await evaluate('document.querySelectorAll("[data-t3-layer] iframe").length'), 0, `${label}: the project home opened a frame`);
+  };
   await evaluate('document.querySelector("[data-t3-more-row] button").click()');
-  await until(async () => (await layerState())?.key === `home:${deskBase}/r/atelier` && (await layerState()).shown, 'Project home from N more missions');
-  assert.equal(await layerSrc(), `${deskBase}/embed/home/atelier`);
+  await homeShown('Project home from N more missions');
+  assert.equal(await evaluate(`${homePage}.querySelector('h1').textContent`), fixture.repo);
+  assert.deepEqual(await evaluate(`[...${homePage}.querySelectorAll('[data-lane]')].map(lane => [lane.dataset.lane, [...lane.querySelectorAll('[data-mission-row]')].map(row => row.dataset.missionRow)])`), [['now', [mission.id]], ['next', [fixture.quietMission.id]], ['later', []]]);
   assert.equal(await evaluate('document.querySelector("[data-t3-more-row]").getAttribute("aria-pressed")'), 'true');
-  await evaluate('document.querySelector("[data-t3-layer-close]").click()');
-  await until(async () => !(await layerState()), 'Project home closed');
-  // The project's name in T3's breadcrumb opens the project home instead of starting a thread.
+  // Now's mission is folded open to its items, read from the mission's page, with the holder of the one started on its branch.
+  await until(() => evaluate(`Boolean(${homePage}.querySelector('[data-items="${mission.id}"] [data-item-row="${fixture.items.started.id}"]'))`), 'The mission\'s items under Now');
+  for (const read of [`/api/repos/${fixture.repo}/missions`, `/api/roadmap?repo=${fixture.repo}`, `/api/history?repo=${fixture.repo}&days=7`, `/api/repos/${fixture.repo}/missions/${mission.id}`]) assert(deskRequests.includes(read), `the project home did not read ${read} through the injector`);
+  // An item opens its Desk page framed, with Back to the project home.
+  await evaluate(`${homePage}.querySelector('[data-item-row="${fixture.items.waiting.id}"]').click()`);
+  await until(async () => (await layerState())?.key === `item:${deskBase}/${fixture.repo}/${fixture.items.waiting.id}`, 'An item framed from the project home');
+  assert.equal(await layerSrc(), `${deskBase}/embed/r/${fixture.repo}/item/${fixture.items.waiting.id}`);
+  assert.equal(await evaluate('document.querySelector("[data-t3-layer-back]").title'), 'Back to the project home');
+  await evaluate('document.querySelector("[data-t3-layer-back]").click()');
+  await homeShown('Back to the project home from an item');
+  // An agreed mission's title opens the mission page.
+  await evaluate(`${homePage}.querySelector('[data-mission-row="${mission.id}"] [data-action="mission"]').click()`);
+  await until(async () => (await layerState())?.key === `mission:${missionKey}` && await evaluate(`Boolean(${nativePage})`), 'The mission page from the project home');
+  await evaluate(`${nativePage}.querySelector('[data-action="close"]').click()`);
+  await until(async () => !(await layerState()), 'The mission page closed');
+  // The project's name in T3's breadcrumb opens the project home instead of starting a thread. A
+  // proposed plan is under Later, and its title opens its record page framed, with Back to the home.
+  firstDesk.proposed = fixture.quietMission.id;
   await evaluate('document.querySelector("#crumb-project").click()');
-  await until(async () => (await layerState())?.shown, 'Project home layer');
-  assert.equal(await layerSrc(), `${deskBase}/embed/home/atelier`);
+  await homeShown('Project home from the breadcrumb');
   assert.equal(await evaluate('globalThis.crumbStartedThread ?? false'), false, 'T3 started a new thread as well');
-  await evaluate('document.querySelector("[data-t3-layer-close]").click()');
-  console.log('PASS: a mission\'s title opens the mission page in the layer with no frame, selected and focused, its items framed with Back to it, and a proposed plan\'s title its record page framed; "N more missions" and the breadcrumb\'s project open the project home and T3 starts no thread');
+  await until(() => evaluate(`Boolean(${homePage}.querySelector('[data-lane="later"] [data-mission-row="${fixture.quietMission.id}"]'))`), 'The proposed plan under Later');
+  await evaluate(`${homePage}.querySelector('[data-lane="later"] [data-mission-row="${fixture.quietMission.id}"] [data-action="mission"]').click()`);
+  await until(async () => (await layerState())?.shown && (await layerSrc()) === `${deskBase}/embed/r/${fixture.repo}/mission/${fixture.quietMission.id}`, 'The proposed plan framed from the project home');
+  assert.equal(await evaluate(`Boolean(${nativePage}) || Boolean(${homePage})`), false, 'a proposed plan drew a native page');
+  await evaluate('document.querySelector("[data-t3-layer-back]").click()');
+  await homeShown('Back to the project home from a proposed plan');
+  delete firstDesk.proposed;
+  await evaluate('document.querySelector("#crumb-project").click()');
+  await until(async () => !(await layerState()), 'The breadcrumb again closes the project home');
+  assert(!deskRequests.some(url => url.startsWith('/embed/home')), 'the Desk\'s project home was asked for');
+  console.log('PASS: a mission\'s title opens the mission page in the layer with no frame, selected and focused, its items framed with Back to it, and a proposed plan\'s title its record page framed; "N more missions" and the breadcrumb\'s project open the project home with no frame and T3 starts no thread; from it an item and a proposed plan open framed with Back, and an agreed mission the mission page');
 
   // The project strip under the new-thread composer, from /api/launch.
   await evaluate('location.hash = "/draft/draft-a"');
@@ -747,10 +782,17 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   assert.equal(await evaluate('globalThis.fixtureSent ?? null'), null, 'the composer was sent');
   // In motion opens the item in the layer when T3 does not know its holder; Waiting opens the inbox;
   // the project's name opens its home.
-  for (const [label, click, src] of [['an item held elsewhere', `[...${strip}.shadowRoot.querySelectorAll('[data-t3-card="motion"] [data-t3-card-row]')][1].click()`, `${deskBase}/embed/r/atelier/item/atelier-x2`], ['Waiting on you', `${strip}.shadowRoot.querySelector('[data-t3-card="waiting"] [data-t3-card-head]').click()`, `${deskBase}/embed/inbox`], ['the project name', `${strip}.shadowRoot.querySelector('[data-t3-strip-project]').click()`, `${deskBase}/embed/home/atelier`]]) {
+  for (const [label, click, src] of [['an item held elsewhere', `[...${strip}.shadowRoot.querySelectorAll('[data-t3-card="motion"] [data-t3-card-row]')][1].click()`, `${deskBase}/embed/r/atelier/item/atelier-x2`], ['Waiting on you', `${strip}.shadowRoot.querySelector('[data-t3-card="waiting"] [data-t3-card-head]').click()`, `${deskBase}/embed/inbox`], ['the project name', `${strip}.shadowRoot.querySelector('[data-t3-strip-project]').click()`, null]]) {
     await evaluate(click);
-    await until(async () => (await layerState())?.shown && (await layerSrc()) === src, `Strip: ${label} opens the layer`);
-    await evaluate('document.querySelector("[data-t3-layer-close]").click()');
+    if (src) {
+      await until(async () => (await layerState())?.shown && (await layerSrc()) === src, `Strip: ${label} opens the layer`);
+      await evaluate('document.querySelector("[data-t3-layer-close]").click()');
+    } else {
+      // The project's name opens the project home, drawn with no frame.
+      await homeShown(`Strip: ${label} opens the project home`);
+      await evaluate(`${homePage}.querySelector('[data-action="close"]').click()`);
+    }
+    await until(async () => !(await layerState()), `Strip: the layer from ${label} closed`);
   }
   // Under 700px of composer width the In motion card goes.
   await evaluate('document.querySelector("[data-chat-canvas]").style.width = "640px"');

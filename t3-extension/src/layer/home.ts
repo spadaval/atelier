@@ -1,6 +1,6 @@
-// Project home: the project's name in T3's thread breadcrumb opens the Desk's project home in the
-// layer instead of starting a new thread, for a project with a Desk repository. The page stays
-// framed until atelier-wvst draws it natively.
+// Project home: the project's name in T3's thread breadcrumb opens the project home in the layer
+// instead of starting a new thread, for a project with a Desk repository. The extension draws the
+// page itself (src/home/ProjectHome.tsx).
 import type { Extension } from "../core/extension";
 import { expectHostDom, hostSelectors } from "../host/adapter";
 import { layerTargets, type Layer } from "./layer";
