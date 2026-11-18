@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-wvst
 title: Draw the project home natively over T3's main area
-status: approved
+status: in_review
 mission: atelier-osel
 labels: []
 priority: medium
@@ -100,7 +100,10 @@ the home opens in the browser at the Desk's `/home/<repo>`, as the mission
 page opens the Desk's mission route. Deleting that page needs that fallback
 changed too: `layerTargets.home` in `t3-extension/src/layer/layer.tsx`.
 
+**Round 3.** I merged master (`673d6cc45`), which brought in This thread (atelier-9l8h). The one conflict was `t3-extension/README.md`, where both items added a paragraph on their test; I kept both. All 7 tests in `run-tests.mjs` pass on the merged tree.
+
 ### Responses
 
 - 1-pz1g.1: fixed in 02981c85b. A failed refresh of the items in no mission, the week or an open mission's items keeps what it gave with a note "could not be read again, so they are as of <time>". With no earlier answer, the first two still say "left out". `test-home.mjs` checks each case: one successful read, then a failure.
 - 1-pz1g.2: fixed in 02981c85b. Items in no mission show the Desk's three priority bars, critical in the warning colour. The fixtures now use critical, high and low, and `test-home.mjs` checks each.
+- 2-s41o.3: fixed in dcb137872. `docs/architecture/desk.md` now separates a first read that fails (part left out) from a refresh that fails (last answer kept, with an as-of note).
