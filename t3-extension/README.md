@@ -327,8 +327,9 @@ drawn by the extension (`src/mission/`) with T3's components through
 `mountReact`, from the Desk's reads through the injector: the mission, its
 history, each thread T3 lists in full and, once done, each merged item's page.
 Running, it says in one sentence how the mission stands, lists under *Needs
-you* each item labelled needs-human and each thread waiting on a person or
-quiet for 30 minutes, with a button that opens it, lists the other live
+you* each item labelled needs-human and each thread waiting on a person
+(T3 says `waiting`, or the thread has a request such as an approval pending)
+or quiet for 30 minutes, with a button that opens it, lists the other live
 threads under *At work* with their latest line, and folds *Not started*,
 *Merged* and *Outcome and success criteria* to a line each. Done, it shows
 the Result as written, a lane per item over time and the merged items, most

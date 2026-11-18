@@ -37,8 +37,8 @@ function item(id: string, title: string, status: ItemRow["status"], more: Partia
 function agent(identity: string, role: Agent["role"], itemId: string | null, live: boolean): Agent {
   return { identity, role, item: itemId, thread: live ? { title: identity, status: "running", provider: "claudeAgent", model: "claude-opus-5-5", link: null } : null };
 }
-function thread(id: string, title: string, status: string, changedMinutesAgo: number, startedMinutesAgo: number, lastLine: string): ThreadInfo {
-  return { id, title, status, updated_at: minutes(changedMinutesAgo), parent: null, model: "claude-opus-5-5", live: true, started_at: minutes(startedMinutesAgo), last_line: lastLine };
+function thread(id: string, title: string, status: string, changedMinutesAgo: number, startedMinutesAgo: number, lastLine: string, pendingRequests = 0): ThreadInfo {
+  return { id, title, status, updated_at: minutes(changedMinutesAgo), parent: null, model: "claude-opus-5-5", live: true, started_at: minutes(startedMinutesAgo), last_line: lastLine, pending_requests: pendingRequests };
 }
 const sections = [
   { heading: "Why", markdown: "The page wasted its space." },
@@ -147,6 +147,19 @@ export const scenarios: Record<string, Scenario> = {
     ),
     [event("atelier-rm02", "merged", 100)],
     [thread("thread:asks", "Implement atelier-w001", "waiting", 1, 20, "Which Desk should the page read?")],
+  ),
+  // An implementer stopped on a shell command's approval: T3 Code's list and its full read both say
+  // `running`, and the full read says one request of the human is pending.
+  approval: scenario(
+    mission(
+      "atelier-rm05",
+      "Read the Desk through the gate",
+      "open",
+      [item("atelier-a001", "Run the Desk's tests", "building", { holder: "thread:approval" })],
+      [agent("thread:approval", "implementer", "atelier-a001", true)],
+    ),
+    [event("atelier-rm05", "merged", 100)],
+    [thread("thread:approval", "Implement atelier-a001", "running", 2, 20, "Bash: Run the Desk's tests", 1)],
   ),
   // Nothing needs the human: one thread at work, still changing.
   calm: scenario(
