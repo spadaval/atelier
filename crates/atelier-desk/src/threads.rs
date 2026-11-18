@@ -154,6 +154,7 @@ impl Threads {
                 live: true,
                 started_at: None,
                 last_line: None,
+                pending_requests: None,
             });
         }
         self.read_thread(id, false)
@@ -339,6 +340,10 @@ fn thread_info(id: &str, read: &serde_json::Value, live: bool, full: bool) -> Op
         live,
         started_at,
         last_line,
+        pending_requests: Some(
+            (thread.get("pendingRequestCount").and_then(|n| n.as_u64()))
+                .map_or(0, |n| u32::try_from(n).unwrap_or(u32::MAX)),
+        ),
     })
 }
 

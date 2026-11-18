@@ -602,6 +602,8 @@ async fn any_thread_is_read_by_its_identity_live_or_ended() {
         (&json!(ODD), &json!("Implement demo-a001"), &json!(true))
     );
     assert_eq!(live["status"], "running");
+    // T3 Code's list does not say whether a request of the human is pending.
+    assert_eq!(live["pending_requests"], Value::Null);
     assert!(reads(&world).is_empty());
 
     // An ended one is read from T3 Code once, then kept.
@@ -610,7 +612,8 @@ async fn any_thread_is_read_by_its_identity_live_or_ended() {
         info,
         json!({"id": ended, "title": "Review demo-a001", "status": "completed",
             "updated_at": "2026-11-16T15:35:16.317Z", "parent": "c6689ff2-b6ae-4865-afe4-a3533c8cfa80",
-            "model": "gpt-6.1-sol", "live": false, "started_at": null, "last_line": null})
+            "model": "gpt-6.1-sol", "live": false, "started_at": null, "last_line": null,
+            "pending_requests": 0})
     );
     world.get(&query(ended)).await;
     assert_eq!(reads(&world).len(), 1);
@@ -644,4 +647,28 @@ async fn any_thread_is_read_by_its_identity_live_or_ended() {
         .await
         .unwrap();
     assert_eq!(reads(&world).len(), 3);
+}
+
+#[tokio::test]
+async fn a_full_read_says_how_many_requests_of_the_human_are_pending() {
+    let world = World::new(None, true).await;
+    world.list(four());
+    world.poll().await;
+    // The list says running; the thread itself waits on an approval.
+    let mut read: Value =
+        serde_json::from_str(include_str!("fixtures/t3_thread_read.json")).unwrap();
+    read["thread"]["threadId"] = json!(ODD);
+    read["thread"]["status"] = json!("running");
+    read["thread"]["pendingRequestCount"] = json!(1);
+    world.standin.reads.lock().unwrap().insert(ODD.into(), read);
+    let query = format!(
+        "/api/thread?id={}&full=1",
+        ODD.replace('%', "%25").replace('/', "%2F")
+    );
+    let full = world.get(&query).await;
+    assert_eq!(
+        (&full["status"], &full["live"]),
+        (&json!("running"), &json!(true))
+    );
+    assert_eq!(full["pending_requests"], 1);
 }

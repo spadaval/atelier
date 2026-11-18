@@ -483,7 +483,10 @@ Its model is `t3-extension/src/mission/model.ts`.
   live thread waiting on a person or quiet, each with a button that opens
   the item's Desk page, framed, or the thread. A thread is live when T3
   Code lists it, says it is live and its status is not an ended one; it is
-  waiting when T3 Code says `waiting`, listed at once whatever its age, and
+  waiting when T3 Code says `waiting` or its full read has a request of
+  the human pending (`pending_requests`), such as an approval, whatever
+  status T3 Code gives it (one stopped on an approval is `running`),
+  listed at once whatever its age, and
   quiet when its `updated_at` is 30 minutes old, This thread's rule, so a
   long stage with a thread still changing is not quiet. A thread both
   waiting and quiet is one row. A thread whose read fails keeps its last
@@ -892,6 +895,7 @@ configured or cannot be read, is `404`.
 | `live` | Whether the last poll listed it |
 | `started_at` | With `full=1`: the `startedAt` of its newest run (`recentRuns`), else its `createdAt`; otherwise `null` |
 | `last_line` | With `full=1`: its newest assistant message or tool call in one line of at most 160 characters, a tool call as `<tool>: <description, command, path, pattern, query, prompt or URL>`; reasoning and messages sent to it are passed over. Otherwise `null` |
+| `pending_requests` | How many requests of the human, such as approvals, it has pending: `pendingRequestCount` of `t3_thread_read`, 0 where T3 Code omits it. `null` for a live thread answered from the last poll, since `t3_thread_list` does not give it; `full=1` always reads the thread |
 
 ### `GET /api/sidebar`
 
