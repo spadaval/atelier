@@ -3,12 +3,13 @@ schema: atelier.item
 schema_version: 3
 id: atelier-5cqz
 title: Let framed Desk pages connect in the T3 test instance, and give its done mission items
-status: ready
+status: building
 mission: atelier-osel
 labels: []
 priority: medium
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A57e793d0-a6ba-4a2b-9999-f8cb06fe0316%3Adelegate-task%3Ae73c6040-f31e-45bc-921a-e869236f0428
 ready:
   by: lead of atelier-osel, from the Reports of atelier-toee and atelier-ut89
   at: 2026-11-18T00:25:19.832037677Z
