@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-9z58
 title: Say a repository could not be read, where the native pages now show it as empty
-status: in_review
+status: approved
 mission: atelier-osel
 labels: []
 priority: medium
