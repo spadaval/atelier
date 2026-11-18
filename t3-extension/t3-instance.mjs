@@ -1,7 +1,8 @@
 // A T3 Code test instance on this Linux host, so an agent can see the extension in the real T3 Code
 // without the Windows test machine. It runs a pinned T3 Code Nightly on a virtual display, isolated
 // from the T3 Code server this host runs, with a project, a thread answered by a free OpenCode model,
-// a new-thread draft, a fixture Desk naming that thread, and the injector attached with the built
+// a new-thread draft, a second thread kept live waiting on an approval, a fixture Desk naming both
+// that T3 may frame and that reads this T3's threads, and the injector attached with the built
 // extension. See "A test instance (Linux)" in README.md.
 //
 //   node t3-instance.mjs start [--model opencode/beam-free] [--port 9333] [--backend-port 47331]
@@ -254,12 +255,65 @@ async function makeThread(port, project) {
   } finally { t3.close(); }
 }
 
+// --- T3's MCP server ------------------------------------------------------------------------------
+
+// Calls one tool of the instance's T3 MCP server with a token its own `t3` command issues, and
+// revokes the token after. Returns the tool's structured answer, or throws with T3's message.
+async function callT3(t3Command, url, tool, args) {
+  const env = { PATH: process.env.PATH, HOME: home };
+  const issued = JSON.parse(execFileSync(t3Command, ['auth', 'session', 'issue', '--subject', 'mcp-client', '--scope', 'orchestration:operate', '--ttl', '15m', '--label', 't3-instance', '--json'], { encoding: 'utf8', env, timeout: 60000, stdio: ['ignore', 'pipe', 'pipe'] }));
+  let session = null; let id = 0;
+  const rpc = async (method, params, notification = false) => {
+    const headers = { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: `Bearer ${issued.token}`, 'mcp-protocol-version': '2025-06-18', ...(session ? { 'mcp-session-id': session } : {}) };
+    const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify({ jsonrpc: '2.0', method, params, ...(notification ? {} : { id: ++id }) }) });
+    session = response.headers.get('mcp-session-id') ?? session;
+    const text = await response.text();
+    if (notification) return null;
+    if (!response.ok) throw new Error(`${method} at ${url}: HTTP ${response.status}: ${text.slice(0, 300)}`);
+    // An answer is JSON, or server-sent events whose last data line holds it.
+    const body = JSON.parse(text.trimStart().startsWith('{') ? text : text.split('\n').filter(line => line.startsWith('data:')).at(-1).slice(5));
+    if (body.error) throw new Error(`${method} at ${url}: ${body.error.message}`);
+    return body.result;
+  };
+  try {
+    await rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't3-instance', version: '1' } });
+    await rpc('notifications/initialized', {}, true);
+    const result = await rpc('tools/call', { name: tool, arguments: args });
+    if (result.isError) throw new Error(`${tool}: ${result.content?.map(part => part.text).join(' ')}`);
+    return result.structuredContent;
+  } finally {
+    try { execFileSync(t3Command, ['auth', 'session', 'revoke', issued.sessionId], { stdio: 'ignore', env, timeout: 30000 }); } catch {}
+  }
+}
+
+// A second thread of the project that stays live: in approval-required mode, asked to run a shell
+// command, it waits on that approval until the instance stops. The fixture names it as the
+// implementer of the building item, so the running mission page has a thread at work to list (it
+// lists only threads T3 says are live, and the first thread's run has ended). Returns its ID once T3
+// says it has a pending request; a model that answers without the tool fails the start, by name.
+async function makeWaitingThread(t3Command, url, project, model) {
+  const projects = await callT3(t3Command, url, 't3_project_list', {});
+  const projectId = projects.projects.find(entry => entry.workspaceRoot === project && !entry.deletedAt)?.id;
+  if (!projectId) throw new Error(`T3 lists no project at ${project}: ${projects.projects.map(entry => entry.workspaceRoot).join(', ')}`);
+  const launched = await callT3(t3Command, url, 't3_thread_launch', {
+    projectId, title: 'Implement the first item', runtimeMode: 'approval-required',
+    message: 'Run the shell command `ls` in the project folder with your shell tool, then reply with its output.',
+  });
+  await until(`thread ${launched.threadId} to wait on its shell command's approval (it may have answered without the tool; try another --model)`, async () => {
+    const { thread } = await callT3(t3Command, url, 't3_thread_read', { threadId: launched.threadId });
+    if (thread.status === 'completed' || thread.status === 'failed') throw new Error(`Thread ${launched.threadId} (${model}) ended with ${thread.status} instead of waiting on its shell command's approval`);
+    return thread.pendingRequestCount > 0;
+  }, 120000);
+  return launched.threadId;
+}
+
 // --- Commands --------------------------------------------------------------------------------------
 
 function describe(state) {
   const lines = [
     `T3 Code test instance running: T3 Code Nightly ${state.release}, debugging port ${state.port}.`,
     `  Thread ${state.thread.environmentId}/${state.thread.threadId}, draft ${state.draft}, model ${state.model}.`,
+    `  Thread ${state.waitingThread}, waiting on a shell command's approval: the implementer of ${fixture.items.started.id}.`,
     `  Check the hooks: node test-contract.mjs --port ${state.port} --thread ${state.thread.environmentId}/${state.thread.threadId} --draft ${state.draft}`,
     `  Fixture Desk ${state.desk}; injector home ${state.extension}; display ${state.display}${state.vnc ? ` (VNC on 127.0.0.1:${state.vnc})` : ''}.`,
     `  Look: node t3-instance.mjs shot. Stop: node t3-instance.mjs stop. Logs: ${dir}.`,
@@ -335,10 +389,23 @@ async function startLocked({ quiet = false } = {}) {
     await save();
     if (!quiet) log(`Thread ${made.threadId} answered: ${JSON.stringify(made.answer.slice(0, 80))}`);
 
-    // The fixture Desk, naming this thread as the lead of its open mission and the implementer of its building item.
+    // T3's `t3` command, which this T3 wrote into its own home at its first start: it issues tokens
+    // from the instance's T3CODE_HOME, never the human's.
+    const t3Command = path.join(home, '.t3', 'bin', 't3');
+    const mcp = `http://127.0.0.1:${backendPort}/mcp`;
+    await until(`T3 Code to write its t3 command at ${t3Command}`, () => fsSync.existsSync(t3Command), 15000);
+    state.waitingThread = await makeWaitingThread(t3Command, mcp, project, model);
+    await save();
+
+    // The fixture Desk, naming the first thread as the lead of its open mission and the waiting one
+    // as the implementer of its building item. T3's pages may frame it (their origin is
+    // t3code://app), and it reads this instance's threads through the same command.
     const deskDir = path.join(dir, 'desk');
-    // T3 Code's page is t3code://app, which the Desk must allow to frame it.
-    const { binary, args } = await writeFixtureDesk(deskDir, { ...fixture.threads, lead: made.threadId, implementer: made.threadId }, ['t3code://app']);
+    const { binary, args } = await writeFixtureDesk(deskDir, {
+      threads: { ...fixture.threads, lead: made.threadId, implementer: state.waitingThread },
+      embedOrigins: ['t3code://app'],
+      t3: { command: t3Command, url: mcp },
+    });
     state.processes.desk = await launch('desk', binary, args, { PATH: process.env.PATH, HOME: home });
     await save();
     state.desk = await until(`the fixture Desk (${path.join(dir, 'desk.log')})`, async () => {
@@ -506,7 +573,7 @@ async function isolation() {
   const removed = [...before].filter(file => !fsSync.existsSync(file));
   // Fresh random IDs, written nowhere but by the instance: its folder's path is not one, since the
   // command that runs this check names it, and the host's T3 logs that command.
-  const marks = [state.thread.threadId, state.thread.environmentId];
+  const marks = [state.thread.threadId, state.thread.environmentId, state.waitingThread];
   for (const file of [...changed, ...removed]) {
     const inName = marks.find(mark => file.includes(mark));
     if (inName) problems.push(`${file} names the instance (${inName})`);
@@ -521,7 +588,7 @@ async function isolation() {
   for (const folder of read) problems.push(`The instance's OpenCode used ${folder} (${logs})`);
   const held = credentials();
   if (held !== 'No authenticated integrations') problems.push(`The instance's OpenCode holds credentials: ${held}`);
-  console.log(`After the start, a thread and the stop, ${changed.length} entries under the guarded folders were changed or added and ${removed.length} removed; the instance's thread ${state.thread.threadId} and environment ${state.thread.environmentId} were looked for in each name and file.`);
+  console.log(`After the start, its threads and the stop, ${changed.length} entries under the guarded folders were changed or added and ${removed.length} removed; the instance's threads ${state.thread.threadId} and ${state.waitingThread} and environment ${state.thread.environmentId} were looked for in each name and file.`);
   if (changed.length || removed.length) console.log(`Changed while the check ran, by the host's own T3 server unless named below:\n${[...changed, ...removed].slice(0, 15).map(file => `  ${file}`).join('\n')}${changed.length + removed.length > 15 ? `\n  … and ${changed.length + removed.length - 15} more` : ''}`);
   console.log(`The instance's OpenCode, asked for its credentials (opencode auth list): ${held}`);
   if (problems.length) { console.error(`Isolation broken:\n${problems.map(problem => `  ${problem}`).join('\n')}`); process.exitCode = 1; }

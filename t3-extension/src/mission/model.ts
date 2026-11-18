@@ -68,8 +68,9 @@ export function listedIdentities(page: MissionPage): string[] {
 
 /**
  * The mission's live threads. A thread is live when T3 Code's list, as the mission's read gives it,
- * has it and its run is not over. It is waiting when T3 Code says so, and quiet when its `updated_at` is 30 minutes old or
- * more, whatever the stage of its item: a thread still changing is never quiet.
+ * has it and its run is not over. It is waiting when T3 Code says so, or when its full read says a request of the human,
+ * such as an approval, is pending, whatever status T3 Code gives it (a thread stopped on an approval is `running`). It is
+ * quiet when its `updated_at` is 30 minutes old or more, whatever the stage of its item: a thread still changing is never quiet.
  */
 export function liveWorkers(page: MissionPage, infos: Map<string, ThreadInfo>, now: number): Worker[] {
   const seen = new Set<string>();
@@ -81,7 +82,7 @@ export function liveWorkers(page: MissionPage, infos: Map<string, ThreadInfo>, n
     // The mission's own read carries T3 Code's live list, which the Desk polls more often than it
     // refreshes a thread's full answer, and a full answer may be the last one before a failed read.
     // So the list says whether the thread is live and what it is doing; the full answer gives its
-    // latest line and times. Either saying `waiting` is enough to list it at once.
+    // latest line, times and pending requests. Either saying `waiting` is enough to list it at once.
     const status = agent.thread.status;
     if (ENDED.has(status)) continue;
     const changed = info ? Date.parse(info.updated_at) : NaN;
@@ -91,7 +92,7 @@ export function liveWorkers(page: MissionPage, infos: Map<string, ThreadInfo>, n
       role: agent.role,
       item: page.items.find((i) => i.id === agent.item) ?? null,
       info,
-      waiting: status === "waiting" || info?.status === "waiting",
+      waiting: status === "waiting" || info?.status === "waiting" || (info?.pending_requests ?? 0) > 0,
       quiet: changedMs !== null && changedMs >= QUIET_MS,
       unknown: info === null,
       changedMs,

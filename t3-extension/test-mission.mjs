@@ -170,6 +170,17 @@ try {
     assert.equal(await read(`text(p.querySelector('[data-action="lead"]'))`), 'PlannerL');
   });
 
+  await open('approval');
+  await check('running, with a thread T3 Code calls running that waits on an approval: it is listed under Needs you, not At work', async () => {
+    assert.deepEqual(await rows('needs-you'), ['thread:thread:approval']);
+    assert.match(await read(`text(p.querySelector('[data-row="thread:thread:approval"]'))`), /Implementer is waiting on you\. Last: Bash: Run the Desk's testsOpen implementer$/);
+    assert.equal(await read(`text(p.querySelector('[data-summary]'))`), 'One item is being built. One thread waits on you.');
+    assert.deepEqual(await rows('at-work'), []);
+    await calls();
+    await click('[data-row="thread:thread:approval"] button');
+    assert.deepEqual(await calls(), [['thread', 'thread:approval']]);
+  });
+
   await open('calm');
   await check('running, with nothing needing the human: no Needs you section, and the sentence says so', async () => {
     assert.equal(await read(`p.querySelector('[data-section="needs-you"]')`), null);

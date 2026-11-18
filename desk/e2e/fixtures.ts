@@ -830,19 +830,20 @@ export class World {
 
 /** Threads T3 Code knows that are no longer live, for `/api/thread`. */
 export const ended: Record<string, ThreadInfo> = {
-  "thread:gone": { id: "thread:gone", title: "Implement atelier-u1ko", status: "completed", updated_at: ago(5 * 3600), parent: "thread:orchestrator", model: "claude-opus-5-5", live: false, started_at: null, last_line: null },
-  "planner-thread": { id: "planner-thread", title: "Plan the Desk", status: "completed", updated_at: ago(30 * 3600), parent: null, model: "claude-fable-5-2", live: false, started_at: null, last_line: null },
-  "thread:child-quiet": { id: "thread:child-quiet", title: "Look into the flaky e2e test", status: "running", updated_at: ago(2 * 3600), parent: thread, model: "gpt-6.1-sol", live: false, started_at: null, last_line: null },
+  "thread:gone": { id: "thread:gone", title: "Implement atelier-u1ko", status: "completed", updated_at: ago(5 * 3600), parent: "thread:orchestrator", model: "claude-opus-5-5", live: false, started_at: null, last_line: null, pending_requests: 0 },
+  "planner-thread": { id: "planner-thread", title: "Plan the Desk", status: "completed", updated_at: ago(30 * 3600), parent: null, model: "claude-fable-5-2", live: false, started_at: null, last_line: null, pending_requests: 0 },
+  "thread:child-quiet": { id: "thread:child-quiet", title: "Look into the flaky e2e test", status: "running", updated_at: ago(2 * 3600), parent: thread, model: "gpt-6.1-sol", live: false, started_at: null, last_line: null, pending_requests: 0 },
 };
 
 /** `/api/thread`: a live thread from the list, else one that has ended; in full, with its latest run and line. */
 export function threadInfo(id: string, full: boolean): ThreadInfo | null {
   const listed = Object.values(live).find((t) => t.id === id);
   const found: ThreadInfo | null = listed
-    ? { id, title: listed.title, status: listed.status, updated_at: listed.updated_at, parent: listed.parent, model: listed.model, live: true, started_at: null, last_line: null }
+    ? { id, title: listed.title, status: listed.status, updated_at: listed.updated_at, parent: listed.parent, model: listed.model, live: true, started_at: null, last_line: null, pending_requests: null }
     : (ended[id] ?? null);
   if (!found || !full) return found;
-  return { ...found, started_at: ago(40 * 60), last_line: found.live ? "Bash: cargo nextest run -p atelier-desk" : "Merged and pushed." };
+  // A full read reads the thread, which says how many requests are pending; the list does not.
+  return { ...found, started_at: ago(40 * 60), last_line: found.live ? "Bash: cargo nextest run -p atelier-desk" : "Merged and pushed.", pending_requests: found.pending_requests ?? 0 };
 }
 
 /** The items in no mission, for `/api/roadmap`. */

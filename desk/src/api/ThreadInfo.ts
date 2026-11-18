@@ -25,4 +25,12 @@ started_at: string | null,
  * With `full=1`: its latest tool call or message, in one line of at
  * most 160 characters.
  */
-last_line: string | null, };
+last_line: string | null,
+/**
+ * How many requests of the human, such as approvals, T3 Code has
+ * pending on it, whatever its status: `pendingRequestCount` of
+ * `t3_thread_read`, 0 where T3 Code omits it. `null` when the answer
+ * came from T3 Code's thread list, which does not give it; a full
+ * read always reads the thread.
+ */
+pending_requests: number | null, };
