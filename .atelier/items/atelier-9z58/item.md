@@ -3,13 +3,14 @@ schema: atelier.item
 schema_version: 3
 id: atelier-9z58
 title: Say a repository could not be read, where the native pages now show it as empty
-status: ready
+status: building
 mission: atelier-osel
 labels: []
 priority: medium
 blocked_by:
 - atelier-wvst
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A7aabecbe-fbf4-40c7-b97b-a453084bded8%3Adelegate-task%3A735d65ac-63bf-41cb-b025-4838112805f2
 ready:
   by: lead of atelier-osel, from deferred finding atelier-9l8h/1-wi75.3
   at: 2026-11-18T02:11:47.307276428Z
