@@ -611,9 +611,11 @@ proposed plan's its record page framed, and an item its Desk page framed,
 each framed page with a way back to the project home. *This week*
 is a strip of the last seven days, each listing the items started and
 merged, plans agreed and missions closed that day, from
-`GET /api/history?days=7`, so it is as approximate as the progress log. A
-read of the items in no mission or of the week that fails leaves its part
-out with a note naming the failure.
+`GET /api/history?days=7`, so it is as approximate as the progress log. In
+the extension, a read of the items in no mission or of the week that fails
+before it has answered leaves its part out, with a note naming the failure.
+One that fails after answering, as can a mission's items, keeps what it last
+gave, with a note saying it is as of that read.
 
 **The inbox**, embedded in a frame wider than one comfortable column, flows
 its repositories into columns of at least 560 pixels, up to three, each
