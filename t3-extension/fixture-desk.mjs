@@ -29,8 +29,13 @@ export const fixture = {
   mission: { id: 'atelier-fm01', title: 'Fixture mission' },
   // Open, with one needs-human item and no threads: the sidebar's "1 more mission".
   quietMission: { id: 'atelier-fm03', title: 'Quiet mission' },
-  // Done: resolved by GET /api/records but not in the sidebar.
+  // Done: resolved by GET /api/records but not in the sidebar. It has a Result, and its two items
+  // were merged after one review round and after two, so its page has lanes and merged items.
   closedMission: { id: 'atelier-fm02', title: 'Closed fixture mission' },
+  closedItems: {
+    once: { id: 'atelier-fd01', title: 'Reviewed once' },
+    twice: { id: 'atelier-fd02', title: 'Reviewed twice' },
+  },
   items: {
     started: { id: 'atelier-fi01', title: 'First item' },
     waiting: { id: 'atelier-fi02', title: 'Second item' },
@@ -44,17 +49,36 @@ export const fixture = {
 };
 
 const created = '2026-11-01T09:00:00Z';
+// Thread identities are written as quoted strings: T3 names a thread started over MCP `mcp:<uuid>`.
 
-function mission({ id, title }, status, lead) {
-  return `---\nschema: atelier.mission\nschema_version: 3\nid: ${id}\ntitle: ${title}\nstatus: ${status}\nlabels: []\nlead: ${lead ?? 'null'}\nplanners: []\ncreated_at: ${created}\n---\n\n## Why\n\nThe extension's tests need one.\n\n## Outcome\n\nThey pass.\n`;
+function mission({ id, title }, status, lead, result) {
+  return `---\nschema: atelier.mission\nschema_version: 3\nid: ${id}\ntitle: ${title}\nstatus: ${status}\nlabels: []\nlead: ${lead ? JSON.stringify(lead) : 'null'}\nplanners: []\ncreated_at: ${created}\n---\n\n## Why\n\nThe extension's tests need one.\n\n## Outcome\n\nThey pass.\n${result ? `\n## Result\n\n${result}\n` : ''}`;
 }
+
+// The closed mission's steps, as the commit subjects Atelier writes and at fixed times, oldest first:
+// the Desk reads a mission's history from them (`GET /api/history`), and the done page draws its
+// lanes and counts review rounds from that history.
+const closedSteps = ({ closedMission: m, closedItems: { once, twice } }) => [
+  ['2026-11-02T09:00:00Z', `Merge ${m.id}`],
+  ['2026-11-02T09:30:00Z', `Start ${once.id}`],
+  ['2026-11-02T10:00:00Z', `Start ${twice.id}`],
+  ['2026-11-02T12:00:00Z', `Submit ${once.id}`],
+  ['2026-11-02T13:00:00Z', `Review ${once.id}, round 1: approved`],
+  ['2026-11-02T13:30:00Z', `Merge ${once.id}`],
+  ['2026-11-02T14:00:00Z', `Submit ${twice.id}`],
+  ['2026-11-02T15:00:00Z', `Review ${twice.id}, round 1: changes requested`],
+  ['2026-11-02T17:00:00Z', `Submit ${twice.id}`],
+  ['2026-11-02T18:00:00Z', `Review ${twice.id}, round 2: approved`],
+  ['2026-11-02T18:30:00Z', `Merge ${twice.id}`],
+  ['2026-11-02T19:00:00Z', `Close ${m.id}`],
+];
 
 function item({ id, title }, { status, mission = 'null', labels = '[]', implementers = '[]' }) {
   return `---\nschema: atelier.item\nschema_version: 3\nid: ${id}\ntitle: ${title}\nstatus: ${status}\nmission: ${mission}\nlabels: ${labels}\npriority: medium\nblocked_by: []\nimplementers: ${implementers}\nready: null\ntrivial: null\ncaused_by: null\ncreated_at: ${created}\n---\n\n## Goal\n\nBe ${title.toLowerCase()}.\n\n## Done when\n\n- [ ] It is there.\n`;
 }
 
 function review(reviewer) {
-  return `---\nschema: atelier.review\nschema_version: 3\nround: 1\ncommit: 0000000000000000000000000000000000000000\nreviewers:\n- ${reviewer}\nmodel: fixture\nverdict: approve\ncreated_at: ${created}\n---\n\n## Summary\n\nThe fixture plan.\n`;
+  return `---\nschema: atelier.review\nschema_version: 3\nround: 1\ncommit: 0000000000000000000000000000000000000000\nreviewers:\n- ${JSON.stringify(reviewer)}\nmodel: fixture\nverdict: approve\ncreated_at: ${created}\n---\n\n## Summary\n\nThe fixture plan.\n`;
 }
 
 async function write(root, file, text) {
@@ -64,11 +88,13 @@ async function write(root, file, text) {
 
 // The repository at `root`: on master, the mission open with its three items (one ready, one ready
 // and needs-human, one done), the quiet mission open with one needs-human item, the closed mission
-// and the reference item; on branch atelier-fi01, its item building, held by the implementer.
+// with its two done items and their steps, and the reference item; on branch atelier-fi01, its item
+// building, held by the implementer.
 // `threads` names the lead and the implementer; the test instance passes its own thread for both.
 export async function writeFixtureRepository(root, threads = fixture.threads) {
-  const { mission: open, quietMission, closedMission, items } = fixture;
+  const { mission: open, quietMission, closedMission, closedItems, items } = fixture;
   const git = (...args) => execFileSync('git', ['-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid', ...args], { cwd: root, stdio: 'pipe' });
+  const dated = (at, ...args) => execFileSync('git', ['-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid', ...args], { cwd: root, stdio: 'pipe', env: { ...process.env, GIT_AUTHOR_DATE: at, GIT_COMMITTER_DATE: at } });
   await fs.mkdir(root, { recursive: true });
   git('init', '-q', '-b', 'master');
   git('remote', 'add', 'origin', fixture.origin);
@@ -76,16 +102,18 @@ export async function writeFixtureRepository(root, threads = fixture.threads) {
   await write(root, `.atelier/missions/${open.id}/mission.md`, mission(open, 'open', threads.lead));
   await write(root, `.atelier/missions/${open.id}/reviews/1-fx01.md`, review(threads.reviewer));
   await write(root, `.atelier/missions/${quietMission.id}/mission.md`, mission(quietMission, 'open'));
-  await write(root, `.atelier/missions/${closedMission.id}/mission.md`, mission(closedMission, 'done'));
+  await write(root, `.atelier/missions/${closedMission.id}/mission.md`, mission(closedMission, 'done', null, 'Both items merged. The second needed a second review round for a missing check.'));
+  for (const done of Object.values(closedItems)) await write(root, `.atelier/items/${done.id}/item.md`, item(done, { status: 'done', mission: closedMission.id }));
   await write(root, `.atelier/items/${items.started.id}/item.md`, item(items.started, { status: 'ready', mission: open.id }));
   await write(root, `.atelier/items/${items.waiting.id}/item.md`, item(items.waiting, { status: 'ready', mission: open.id, labels: '[needs-human]' }));
   await write(root, `.atelier/items/${items.done.id}/item.md`, item(items.done, { status: 'done', mission: open.id }));
   await write(root, `.atelier/items/${items.quiet.id}/item.md`, item(items.quiet, { status: 'ready', mission: quietMission.id, labels: '[needs-human]' }));
   await write(root, `.atelier/items/${items.reference.id}/item.md`, item(items.reference, { status: 'ready' }));
   git('add', '-A');
-  git('commit', '-qm', 'Fixture records');
+  dated(created, 'commit', '-qm', 'Fixture records');
+  for (const [at, subject] of closedSteps(fixture)) dated(at, 'commit', '-q', '--allow-empty', '-m', subject);
   git('switch', '-qc', items.started.id);
-  await write(root, `.atelier/items/${items.started.id}/item.md`, item(items.started, { status: 'building', mission: open.id, implementers: `[${threads.implementer}]` }));
+  await write(root, `.atelier/items/${items.started.id}/item.md`, item(items.started, { status: 'building', mission: open.id, implementers: `[${JSON.stringify(threads.implementer)}]` }));
   git('commit', '-qam', `Start ${items.started.id}`);
   git('switch', '-q', 'master');
 }
@@ -107,13 +135,16 @@ export async function deskBuild() {
 
 // Writes the fixture repository and a Desk configuration serving it on a free loopback port under
 // `dir`, and returns the command that serves it: run `binary` with `args`, and read the address from
-// its "serving on" line (`servingUrl`).
-export async function writeFixtureDesk(dir, threads = fixture.threads) {
+// its "serving on" line (`servingUrl`). `embedOrigins` are the pages that may frame it, and `t3`, as
+// `{ command, url }`, the T3 Code whose threads it reads; without one it reads no threads.
+export async function writeFixtureDesk(dir, { threads = fixture.threads, embedOrigins = [], t3 = null } = {}) {
   const { binary, app } = await deskBuild();
   await writeFixtureRepository(path.join(dir, 'repos', fixture.repo), threads);
   const config = path.join(dir, 'desk.toml');
   const toml = value => JSON.stringify(value);
-  await fs.writeFile(config, [`caller = "fixture"`, `roots = [${toml(path.join(dir, 'repos'))}]`, `state = ${toml(path.join(dir, 'state'))}`, `app = ${toml(app)}`, 'fetch_seconds = 0', `listen = ["127.0.0.1:0"]`, ''].join('\n'));
+  const lines = [`caller = "fixture"`, `roots = [${toml(path.join(dir, 'repos'))}]`, `state = ${toml(path.join(dir, 'state'))}`, `app = ${toml(app)}`, 'fetch_seconds = 0', `listen = ["127.0.0.1:0"]`, `embed_origins = ${toml(embedOrigins)}`];
+  if (t3) lines.push('', '[t3]', `command = ${toml(t3.command)}`, `url = ${toml(t3.url)}`);
+  await fs.writeFile(config, [...lines, ''].join('\n'));
   return { binary, args: ['--config', config] };
 }
 
