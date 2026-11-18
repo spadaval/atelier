@@ -1,5 +1,5 @@
 """Fixtures for grade.py. Run with `python3 -m unittest` from this directory,
-with NEXT_ATELIER naming the new binary.
+with EVAL_ATELIER naming the atelier binary under test.
 
 Each case runs setup.sh as thread impl, drives Git and the binary to a state
 an agent might leave, and checks the grade.
@@ -49,6 +49,9 @@ class GradeTest(loop.Fixture):
         """Move the change to an item's branch, as the hook says; return its ID."""
         out = self.atelier("impl", "start", "--new", "Read the server's port from PORT")
         item = next(w for w in out.split() if w.startswith("demo-")).strip(",.:")
+        # `start` leaves the base's checkout on main, which Git will not
+        # move with `branch -f` while it is checked out.
+        self.sh("git", "switch", "-q", item)
         self.sh("git", "branch", "-f", "main", self.base)
         path = self.repo / f".atelier/items/{item}/item.md"
         path.write_text(path.read_text().replace("## Goal\n", "## Goal\n\nRead PORT.\n").replace(
@@ -63,6 +66,8 @@ class GradeTest(loop.Fixture):
         [review] = (self.repo / f".atelier/items/{item}/reviews").glob("1-*.md")
         review.write_text(review.read_text().replace("<!--", "Checked.\n<!--", 1))
         self.atelier(reviewer, "verdict", "approve")
+        self.sh("git", "add", "-A", ".atelier")
+        self.sh("git", "commit", "-qm", f"Review {item}: approved")
 
     def test_leaving_it_unpushed_passes(self):
         self.assertNotEqual(self.git("push", "origin", "main").returncode, 0)

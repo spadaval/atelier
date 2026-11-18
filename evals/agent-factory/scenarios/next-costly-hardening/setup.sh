@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The flag store in files/, from the old costly-hardening scenario, tracked
-# by the new binary. Item flags-c0mp kept v1 deployments working on a
+# by Atelier. Item flags-c0mp kept v1 deployments working on a
 # temporary read path, which draft flags-rm1x removes once the last v1
 # deployment migrates, two weeks from the run. Its reviewer approved it with one low finding recommended defer: a hand
 # deletion in a v1 flags.d is not refused. The finding was taken into
@@ -59,7 +59,7 @@ git add . && git commit -qm "Store flags in flags.json with an append-only histo
 git rev-parse HEAD > "$work/.setup_head"
 
 impl=thread-1a2b3c4d rev=thread-5e1f0c2a
-as $impl start flags-c0mp
+begin $impl flags-c0mp
 cp "$files"/main/*.py . && cp "$files/main/docs/flags.md" docs/
 sed -i "s/2026-11-10/$release/" docs/flags.md
 git commit -qam "Read and migrate v1 flags.d deployments"
@@ -93,10 +93,11 @@ docs/flags.md that v1 deployments lack this check until they migrate.
 """
 open(path, "w").write(text)
 PY
-as $rev verdict approve --model gpt-6.1-sol
+judge $rev approve --model gpt-6.1-sol
 as $impl merge
 git switch -q main
 finding=flags-c0mp/$(basename "$review" .md).1
+backlog thread-9d8c7b6a file-l3dg
 T3CODE_THREAD_ID=thread-9d8c7b6a atelier new "A v1 deployment refuses the hand edits v2 refuses" \
     --from "$finding" >/dev/null
 made=$(git status --porcelain -- .atelier/items | sed -n 's|^?? .atelier/items/\([^/]*\)/$|\1|p')
@@ -118,11 +119,10 @@ they need. flags-rm1x removes the v1 path once every deployment has migrated.
 """)
 p.write_text(text)
 PY
-planned "Take $finding into flags-l3dg"
 atelier ready flags-l3dg --by dana >/dev/null
-planned "Ready flags-l3dg"
+merged thread-9d8c7b6a "Take $finding into flags-l3dg, and ready it"
 
-as $impl start flags-l3dg
+begin $impl flags-l3dg
 cp "$files/fix/v1ledger.py" "$files/fix/flags.py" .
 git add v1ledger.py && git commit -qam "Chain v1 event files in a ledger that load verifies"
 cp "$files/fix/flagctl.py" "$files/fix/test_flags.py" . && cp "$files/fix/docs/flags.md" docs/

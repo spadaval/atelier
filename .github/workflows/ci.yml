@@ -28,6 +28,7 @@ jobs:
       rust: ${{ steps.jobs.outputs.rust }}
       desk: ${{ steps.jobs.outputs.desk }}
       extension: ${{ steps.jobs.outputs.extension }}
+      evals: ${{ steps.jobs.outputs.evals }}
     env:
       BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
     steps:
@@ -81,6 +82,28 @@ jobs:
       - name: atelier check
         run: target/debug/atelier check
       - run: cargo nextest run --locked
+
+  # Agent Factory's eval fixtures and harness tests
+  # (evals/agent-factory/test.sh) against the atelier built from this
+  # commit: each scenario's setup and grader walks, with no model called, on
+  # the runner's own python3. A change to the binary or the skill that
+  # breaks a scenario fails here.
+  evals:
+    needs: changes
+    if: needs.changes.outputs.evals == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          build-warnings: warn
+      # The harness tests make repositories and commits.
+      - run: |
+          git config --global user.name "Atelier CI"
+          git config --global user.email "ci@atelier.invalid"
+      - run: cargo build --locked -p atelier-cli
+      - run: evals/agent-factory/test.sh target/debug/atelier
 
   # The Desk's app (desk/): typecheck, Vitest, the build, then Playwright on
   # the built app with the API answered from fixtures. It builds no Rust.

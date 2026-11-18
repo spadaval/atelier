@@ -75,6 +75,54 @@ class CanaryTest(unittest.TestCase):
         self.assertIn(str(Path.home() / ".claude" / "CLAUDE.md"), message)
 
 
+class CodexCanaryTest(CanaryTest):
+    """Under Codex the canary reads what the session record gave the model."""
+
+    def canary(self, reply, extra_dirs=()):
+        def fake(cmd, cwd, env, transcript, timeout):
+            agents_md = (Path(cwd) / "AGENTS.md").read_text()
+            blocks = [(Path(cwd), agents_md)] + [(Path(d), "# Elsewhere\n") for d in extra_dirs]
+            day = Path(env["CODEX_HOME"]) / "sessions" / "2026" / "11" / "17"
+            day.mkdir(parents=True)
+            (day / "rollout-root.jsonl").write_text("\n".join(json.dumps(e) for e in [
+                {"type": "session_meta", "payload": {"id": "root"}}] + [
+                {"type": "response_item", "payload": {"type": "message", "role": "user",
+                 "content": [{"type": "input_text", "text":
+                              f"# AGENTS.md instructions for {d}\n\n<INSTRUCTIONS>\n{text}"
+                              "\n</INSTRUCTIONS>"}]}} for d, text in blocks]))
+            transcript.write_text("\n".join(json.dumps(e) for e in [
+                {"type": "thread.started", "thread_id": "root"},
+                {"type": "item.completed", "item": {"type": "agent_message",
+                                                    "text": reply(Path(cwd), "")}},
+                {"type": "turn.completed"}]) + "\n")
+            return 0
+        run.run_claude = fake
+        try:
+            run.check_isolation(self.tmp / "root", "high", self.tmp, "codex")
+        except SystemExit as exc:
+            return str(exc.code)
+        return None
+
+    def test_a_reply_that_drops_the_heading_passes_on_the_record(self):
+        # gpt-6-luna's reply of 2026-11-17, with the file in its input.
+        self.assertIsNone(self.canary(lambda repo, _: f"{repo}/AGENTS.md | NONE"))
+
+    def test_another_instruction_file_in_the_record_fails(self):
+        why = self.canary(lambda repo, _: f"{repo}/AGENTS.md | NONE", extra_dirs=["/srv"])
+        self.assertIn("/srv/AGENTS.md", why)
+
+    def test_a_foreign_path_in_the_reply_still_fails(self):
+        why = self.canary(lambda repo, _: f"{repo}/AGENTS.md | x\n/etc/AGENTS.md | y")
+        self.assertIn("/etc/AGENTS.md", why)
+
+    # CanaryTest's own cases fake a Claude Code transcript.
+    test_reports_its_own_agents_md = None
+    test_a_path_in_the_repository_is_not_its_contents = None
+    test_a_bold_foreign_path_is_foreign = None
+    test_a_run_offered_an_agent_tool_fails_the_canary = None
+    test_a_home_relative_path_is_foreign = None
+
+
 class AgentEnvTest(unittest.TestCase):
     def test_atelier_update_check_is_off(self):
         # Its notice names the host's own skill checkout, not the staged one.
@@ -133,17 +181,17 @@ class StageTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def test_the_new_skill_is_staged_for_claude_code_under_the_live_name(self):
-        run.stage_for("claude", "HEAD", self.tmp, "skills/agent-factory-next")
+    def test_the_skill_is_staged_for_claude_code_in_the_workspace(self):
+        run.stage_for("claude", "HEAD", self.tmp, "skills/agent-factory")
         skill = self.tmp / "repo" / ".claude" / "skills" / "agent-factory"
         self.assertIn("name: agent-factory", (skill / "SKILL.md").read_text())
         self.assertTrue((skill / "roles" / "reviewer.md").is_file())
         self.assertIn(".claude/", (self.tmp / "repo/.git/info/exclude").read_text())
 
     def test_the_skill_is_staged_for_codex_in_its_scratch_home(self):
-        run.stage_for("codex", "HEAD", self.tmp, "skills/agent-factory-next")
+        run.stage_for("codex", "HEAD", self.tmp, "skills/agent-factory")
         skill = self.tmp / "home" / ".codex" / "skills" / "agent-factory"
-        self.assertTrue((skill / "roles" / "decider.md").is_file())
+        self.assertTrue((skill / "roles" / "implementer.md").is_file())
         self.assertFalse((self.tmp / "repo" / ".claude").exists())
 
     def test_maintainers_is_left_out(self):
@@ -262,9 +310,10 @@ class LimitTest(unittest.TestCase):
         self.assertIn("plugins = false", config)
 
     def test_jobs_above_two_and_threads_above_one_are_refused(self):
-        self.assertIn("above 2", run.check_jobs(3, ["vacuous-test-review"]))
-        self.assertIsNone(run.check_jobs(2, ["vacuous-test-review", "next-decide"]))
-        self.assertIn("--jobs 1", run.check_jobs(2, ["vacuous-test-review", "next-loop"]))
+        self.assertIn("above 2", run.check_jobs(3, ["next-vacuous-test-review"]))
+        self.assertIsNone(run.check_jobs(2, ["next-vacuous-test-review",
+                                             "next-costly-hardening"]))
+        self.assertIn("--jobs 1", run.check_jobs(2, ["next-vacuous-test-review", "next-loop"]))
         self.assertIsNone(run.check_jobs(1, ["next-loop"]))
         refused = subprocess.run([sys.executable, str(HERE / "run.py"), "next-loop",
                                   "--jobs", "2", "--out", str(self.tmp / "out")],
@@ -295,7 +344,7 @@ class CodexPromptTest(unittest.TestCase):
 
     def given(self, threads):
         env = run.agent_env(self.tmp, "codex", threads)
-        run.stage_for("codex", "HEAD", self.tmp, "skills/agent-factory-next")
+        run.stage_for("codex", "HEAD", self.tmp, "skills/agent-factory")
         subprocess.run(["git", "init", "-q", str(self.tmp / "repo")], check=True)
         out = subprocess.run(["codex", "debug", "prompt-input", "-c", 'model="gpt-6-luna"',
                               "hi"], cwd=self.tmp / "repo", env=env, stdin=subprocess.DEVNULL,
@@ -373,6 +422,30 @@ class DelegateTest(unittest.TestCase):
 
 
 class CodexThreadsTest(unittest.TestCase):
+    def turn(self, kind, second):
+        return {"timestamp": f"2026-11-17T23:{second // 60:02d}:{second % 60:02d}Z",
+                "type": "event_msg", "payload": {"type": kind}}
+
+    def test_a_subagent_idle_between_turns_is_not_alive_then(self):
+        # Run ed72 of 2026-11-17: the implementer's first turn ended at 88 s,
+        # the reviewer ran 91 to 128 s, and a follow-up gave the implementer
+        # a second turn at 131 s. Its record spans 13 to 142 s.
+        implementer = [{"type": "session_meta", "timestamp": "2026-11-17T23:00:13Z"},
+                       self.turn("task_started", 13), self.turn("task_complete", 88),
+                       self.turn("task_started", 131), self.turn("task_complete", 142)]
+        reviewer = [self.turn("task_started", 91), self.turn("task_complete", 128)]
+        start = run.epoch("2026-11-17T23:00:00Z")
+        turns = [{"start": a, "end": b} for a, b in run.codex_turns(implementer, start + 150)
+                 + run.codex_turns(reviewer, start + 150)]
+        self.assertEqual([(t["start"] - start, t["end"] - start) for t in turns],
+                         [(13, 88), (131, 142), (91, 128)])
+        self.assertEqual(run.peak([{"start": start, "end": start + 150}] + turns), 2)
+
+    def test_a_turn_with_no_end_runs_until_the_first_agent_ended(self):
+        start = run.epoch("2026-11-17T23:00:00Z")
+        self.assertEqual(run.codex_turns([self.turn("task_started", 10)], start + 60),
+                         [(start + 10, start + 60)])
+
     def test_a_subagent_record_becomes_a_transcript_the_graders_read(self):
         tmp = Path(tempfile.mkdtemp(prefix="af-codex-threads-"))
         try:
@@ -384,6 +457,8 @@ class CodexThreadsTest(unittest.TestCase):
             (day / "rollout-b-kid.jsonl").write_text("\n".join(json.dumps(e) for e in [
                 {"timestamp": "2026-11-11T05:00:05Z", "type": "session_meta",
                  "payload": {"id": "kid", "parent_thread_id": "root"}},
+                {"timestamp": "2026-11-11T05:00:05Z", "type": "event_msg",
+                 "payload": {"type": "task_started"}},
                 {"timestamp": "2026-11-11T05:00:07Z", "type": "event_msg", "payload": {
                     "type": "item_completed", "item": {
                         "type": "CommandExecution", "exit_code": 1,
@@ -392,9 +467,11 @@ class CodexThreadsTest(unittest.TestCase):
                 {"timestamp": "2026-11-11T05:00:09Z", "type": "event_msg", "payload": {
                     "type": "item_completed", "item": {
                         "type": "AgentMessage", "content": [{"type": "Text", "text": "Done"}]}}},
+                {"timestamp": "2026-11-11T05:00:09Z", "type": "event_msg",
+                 "payload": {"type": "task_complete"}},
             ]) + "\n")
             (tmp / "run").mkdir()
-            [agent] = run.codex_threads(tmp / "home", tmp / "run")
+            [agent] = run.codex_threads(tmp / "home", tmp / "run", 0)
             self.assertEqual((agent["thread"], agent["end"] - agent["start"]), ("codex-kid", 4))
             spec = importlib.util.spec_from_file_location(
                 "loop", HERE.parent / "scenarios" / "next-loop" / "grade.py")

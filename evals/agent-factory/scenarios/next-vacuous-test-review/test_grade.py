@@ -1,5 +1,5 @@
 """Fixtures for grade.py. Run with `python3 -m unittest` from this directory,
-with NEXT_ATELIER naming the new binary.
+with EVAL_ATELIER naming the atelier binary under test.
 
 Each case runs setup.sh, drives the binary as the reviewer, thread rev, to a
 state an agent might leave, and checks the grade.
@@ -45,7 +45,7 @@ class GradeTest(loop.Fixture):
         [review] = (self.repo / f".atelier/items/{ID}/reviews").glob("1-*.md")
         review.write_text(review.read_text().replace("<!--", "Ran it.\n<!--", 1) + findings)
         if verdict:
-            self.atelier("rev", "verdict", verdict)
+            self.verdict("rev", verdict)
 
     def test_a_finding_that_the_test_cannot_fail_passes(self):
         self.review(CANNOT_FAIL, "changes")

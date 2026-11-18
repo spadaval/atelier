@@ -149,12 +149,11 @@ const base = `http://127.0.0.1:${server.address().port}`;
 // fixture's origin, so the real app talks the host contract to the fixture page. Each records every
 // path it is asked for. /spoof is a page that posts Desk messages to its parent. The first Desk
 // answers 404 for the mission's record, so it resolves on the second, which serves the same
-// repositories; slowEmbed holds the first Desk's /api/embed answer back.
+// repositories.
 function deskProxyServer(requests, options) {
   return http.createServer(async (request, response) => {
     requests.push(request.url);
     if (request.url === '/api/embed') {
-      if (options.slowEmbed) await delay(options.slowEmbed);
       response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify({ origins: [base] })); return;
     }
     // inboxError adds a repository the Desk reports it could not read, as GET /api/inbox does.
@@ -191,7 +190,7 @@ function deskProxyServer(requests, options) {
 }
 const deskRequests = [];
 const secondDeskRequests = [];
-const firstDesk = { slowEmbed: 0, missing: [`/api/records/${missionId}`], launch: launchFixture };
+const firstDesk = { missing: [`/api/records/${missionId}`], launch: launchFixture };
 const deskProxy = deskProxyServer(deskRequests, firstDesk);
 const secondDeskProxy = deskProxyServer(secondDeskRequests, { sidebar: { repos: [] } });
 await new Promise(resolve => secondDeskProxy.listen(0, '127.0.0.1', resolve));
@@ -240,9 +239,13 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   console.log(`PASS: real discovery found every hook in ${discovery.modules.length} declared modules and never ran the worker script in the window`);
   await evaluate('document.querySelector("[data-t3-desk-launch]").click()');
   await until(() => evaluate('Boolean(document.querySelector("[data-right-panel-surface-content] > [data-t3-desk-mount]:not([hidden])"))'), 'Docked Desk');
-  // The frame loads once every Desk has listed its repositories.
-  const iframeSrc = await until(() => evaluate('document.querySelector("[data-t3-desk-mount]").shadowRoot.querySelector("iframe").src'), 'Desk iframe address');
-  assert.equal(iframeSrc, deskBase + '/embed/', 'the panel loads the embedded mode and leaves the page to the Desk');
+  const shadow = 'document.querySelector("[data-t3-desk-mount]").shadowRoot';
+  // This thread, drawn by the extension in its own shadow root inside the panel's.
+  const thisThread = `${shadow}.querySelector("[data-t3-this-thread]").shadowRoot.querySelector("[data-this-thread]")`;
+  // It is drawn once every Desk has listed its repositories, for the thread T3 shows, with no frame.
+  await until(() => evaluate(`${thisThread}?.dataset.thisThread === 'holds'`), 'This thread drawn natively');
+  assert.equal(await evaluate(`${shadow}.querySelector("iframe")`), null, 'the panel holds an iframe beside This thread');
+  assert.equal(await evaluate('__t3Custom.diagnostics().panelView'), 'this-thread');
   assert.equal(await evaluate('__t3Custom.diagnostics().selectedRepository'), 'atelier');
   assert(await evaluate('document.querySelector("#native-content").inert'));
   const geometry = await evaluate('(()=>{const host=document.querySelector("[data-right-panel-surface-content]").getBoundingClientRect();const frame=document.querySelector("[data-t3-desk-mount]").getBoundingClientRect();return {hostWidth:host.width,frameWidth:frame.width,hostLeft:host.left,frameLeft:frame.left}})()');
@@ -250,13 +253,32 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   await evaluate('document.querySelector("[data-workspace-area=panel]").style.width="900px"');
   assert.equal(await evaluate('document.querySelector("[data-t3-desk-mount]").getBoundingClientRect().width'), 900);
   assert.equal(await evaluate('document.querySelector("#t3-custom-root").shadowRoot.querySelector("#extension-settings")'), null, 'no floating gear');
-  console.log('PASS: Desk uses the real panel content slot, matches the project by the identity the Desk reports with no repository table, loads /embed, and resizes with the host');
+  console.log('PASS: the panel uses the real panel content slot, matches the project by the identity the Desk reports with no repository table, draws This thread with no iframe, and resizes with the host');
 
+  // This thread for thread-a, from what the extension knows: the thread T3 shows, the child T3 lists
+  // for it and the record its conversation names. The Desk is read for each, and for nothing framed.
+  const started = fixture.items.started.id;
+  await until(() => deskRequests.includes('/api/ties?thread=thread-a') && deskRequests.includes('/api/ties?thread=thread-child') && deskRequests.includes(`/api/records/${referenceId}`), 'This thread read the thread, its child and the record it names');
+  await until(() => evaluate(`Boolean(${thisThread}.querySelector('[data-card="item:${started}"]'))`), 'This thread shows the item thread-a implements');
+  assert.deepEqual(await evaluate('__t3Custom.diagnostics().thisThread'), { desk: deskBase, repository: 'atelier', thread: 'thread-a', children: ['thread-child'], mentioned: [referenceId] });
+  assert(!deskRequests.some(url => url.startsWith('/embed')), `the panel loaded a Desk page nobody asked for: ${deskRequests.filter(url => url.startsWith('/embed')).join(', ')}`);
+  assert.equal(await evaluate('document.querySelector("[data-t3-desk-label]").textContent'), 'This thread');
+  assert.equal(await evaluate('document.querySelector("[data-t3-desk-external]").href'), `${deskBase}/r/atelier`);
+  console.log('PASS: This thread shows what thread-a implements, from the thread, children and mentions the extension holds; the tab says This thread and Open externally opens the project');
+
+  // An item's title in This thread opens its Desk page framed in the panel, with Back to This thread,
+  // which then reads nothing.
+  await evaluate(`${thisThread}.querySelector('[data-card="item:${started}"] [data-title]').click()`);
+  const startedPath = `/r/atelier/item/${started}`;
+  await until(() => evaluate(`${shadow}.querySelector("iframe")?.src === '${deskBase}/embed${startedPath}'`), 'An item title in This thread opens its page framed');
+  assert.equal(await evaluate('__t3Custom.diagnostics().panelView'), 'frame');
+  assert(await evaluate(`${shadow}.querySelector("[data-t3-this-thread]").hidden`), 'This thread is shown beside the frame');
+  assert.equal(await evaluate('__t3Custom.diagnostics().thisThread'), null, 'This thread is still drawn, and reads, behind the frame');
+  assert.equal(await evaluate(`${shadow}.querySelector("[data-t3-desk-back]").closest(".back").hidden`), false, 'no Back to This thread');
   const iframeTarget = await until(async () => (await (await fetch(`http://127.0.0.1:${debugPort}/json/list`)).json()).find(target => target.type === 'iframe' && target.url.startsWith(deskBase)), 'Real Desk iframe');
   const child = await page.call('Target.attachToTarget', { targetId: iframeTarget.id, flatten: true });
   await until(async () => (await page.call('Runtime.evaluate', { expression: 'document.readyState === "complete" && document.body.innerText.includes("atelier") && !document.querySelector(".skel")', returnByValue: true }, child.sessionId)).result.value, 'Real Desk application rendering');
   const inFrame = async expression => (await page.call('Runtime.evaluate', { expression, returnByValue: true }, child.sessionId)).result.value;
-  const shadow = 'document.querySelector("[data-t3-desk-mount]").shadowRoot';
   // Theme: sent on desk:ready from T3's custom properties, as computed colours.
   await until(async () => (await inFrame('document.documentElement.style.getPropertyValue("--bg")')) === 'rgb(32, 33, 36)', 'host:theme on desk:ready');
   assert.equal(await inFrame('document.documentElement.style.getPropertyValue("--ink")'), 'rgb(238, 238, 238)');
@@ -264,18 +286,12 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   assert.equal(await inFrame('document.documentElement.style.getPropertyValue("--you")'), 'rgb(155, 188, 255)');
   assert.match(await inFrame('document.documentElement.style.getPropertyValue("--sans")'), /Georgia/);
   assert.equal(await inFrame('document.documentElement.dataset.theme ?? "dark"'), 'dark');
-  // host:thread on desk:ready: the real Desk opens its "this thread" page for the thread, and reads
-  // the thread, the ties of the child T3 lists for it (children) and the record its conversation
-  // names (mentioned), so the whole message reached it.
-  await until(() => deskRequests.includes('/api/ties?thread=thread-a'), 'host:thread on desk:ready');
-  await until(async () => (await inFrame('location.pathname')) === '/embed/t', 'Desk follows the thread to /embed/t');
-  await until(() => deskRequests.includes('/api/ties?thread=thread-child') && deskRequests.includes(`/api/records/${referenceId}`), 'The Desk read the children and mentioned of host:thread');
   // Title: the tab shows the Desk's page title from desk:navigated; Open externally is not embedded.
   const deskTitle = await until(async () => { const title = await inFrame('document.title'); return title && await evaluate('document.querySelector("[data-t3-desk-label]").textContent') === title && title; }, 'Tab label from desk:navigated');
   assert.notEqual(deskTitle, 'Desk');
   assert.equal(await evaluate(`${shadow}.querySelector("header")`), null, 'no doubled header in the panel');
-  await until(async () => (await evaluate('document.querySelector("[data-t3-desk-external]").href')) === deskBase + '/t', 'Open externally follows desk:navigated');
-  console.log(`PASS: embedded Desk gets T3's theme and thread-a on ready and opens its page; the tab shows "${deskTitle}" from desk:navigated; Open externally uses the normal address`);
+  await until(async () => (await evaluate('document.querySelector("[data-t3-desk-external]").href')) === deskBase + startedPath, 'Open externally follows desk:navigated');
+  console.log(`PASS: the framed Desk page gets T3's theme on ready; the tab shows "${deskTitle}" from desk:navigated; Open externally uses the normal address`);
   // A theme change on T3's root element is sent again.
   await evaluate('document.documentElement.classList.remove("dark"); document.documentElement.style.setProperty("--background", "#fafafa"); document.documentElement.style.setProperty("--foreground", "#111111")');
   await until(async () => (await inFrame('document.documentElement.style.getPropertyValue("--bg")')) === 'rgb(250, 250, 250)', 'host:theme after a theme change');
@@ -297,8 +313,6 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   console.log('PASS: Desk messages from the Desk origin in another window are ignored');
   // desk:open-thread navigates T3 to the thread's route, or says it is in no connected environment.
   const post = message => inFrame(`parent.postMessage(${JSON.stringify(message)}, location.ancestorOrigins[0])`);
-  // From here every host:thread the Desk frame receives is recorded.
-  await inFrame(`window.hostThreads = []; window.hostMessages = []; addEventListener('message', event => { if (event.data?.type === 'host:thread') { hostThreads.push(event.data.thread); hostMessages.push(event.data); } })`);
   await post({ type: 'desk:open-thread', thread: 'thread-unknown' });
   await until(() => evaluate(`${shadow}.querySelector(".notice:not([hidden])")?.textContent.includes("thread-unknown is not in any connected T3 environment")`), 'Notice for an unknown thread');
   assert.equal(await evaluate('location.hash'), hashBefore);
@@ -306,99 +320,113 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   await until(async () => (await evaluate('location.hash')) === '#/env/thread-b', 'desk:open-thread navigation');
   await evaluate('location.hash = "/env/thread-a"');
   await until(() => evaluate('!document.querySelector("[data-t3-desk-mount]").hidden'), 'Desk back on thread-a');
-  console.log('PASS: desk:open-thread opens the fixture route #/env/thread-b; an unknown thread is reported in the panel');
-  // host:thread on each switch to another thread; a thread's mentions may follow as an update.
-  const switches = () => inFrame('hostThreads.filter((thread, n, all) => thread !== all[n - 1])');
-  await until(async () => JSON.stringify(await switches()) === '["thread-b","thread-a"]', 'host:thread on thread switches');
-  assert(deskRequests.includes('/api/ties?thread=thread-b'));
-  await delay(1000);
-  const sentBeforeSettings = await inFrame('hostMessages.length');
-  await evaluate('location.hash = "/settings/general"');
-  await until(() => evaluate('Boolean(document.querySelector("#t3-custom-settings"))'), 'Settings between threads');
+  // The page the human opened stayed through both switches.
+  assert.equal(await evaluate(`${shadow}.querySelector("iframe").src`), `${deskBase}/embed${startedPath}`, 'the framed page moved when T3 showed another thread');
+  console.log('PASS: desk:open-thread opens the fixture route #/env/thread-b; an unknown thread is reported in the panel; the framed page stays through the switches');
+  // The Desk iframe's own window with another origin: the frame is sent to a page of the second
+  // Desk, which posts the same messages. Refresh brings the Desk back.
+  await page.call('Runtime.evaluate', { expression: `location.href = '${secondDeskBase}/spoof'` }, child.sessionId).catch(() => {});
+  await until(() => secondDeskRequests.includes('/spoof'), 'Desk frame sent to another origin');
+  await spoofed('the Desk window with another origin');
+  await evaluate('document.querySelector("[data-t3-desk-controls] [aria-label=\'Refresh Desk\']").click()');
+  await until(() => evaluate('__t3Custom.diagnostics().frame.ready && __t3Custom.diagnostics().frame.title !== ""'), 'Desk back after Refresh');
+  assert.equal(await evaluate('__t3Custom.diagnostics().frame.path'), startedPath);
+  console.log('PASS: Desk messages from the Desk iframe window with another origin are ignored; Refresh reloads the framed page');
+  // Back returns to This thread, and the frame goes.
+  await evaluate(`${shadow}.querySelector("[data-t3-desk-back]").click()`);
+  await until(() => evaluate(`${thisThread}?.dataset.thisThread === 'holds' && !${shadow}.querySelector("iframe")`), 'Back to This thread');
+  assert.equal(await evaluate('document.querySelector("[data-t3-desk-label]").textContent'), 'This thread');
+  console.log('PASS: Back returns from a framed page to This thread, with no iframe');
+
+  // From here each change of what This thread follows is recorded: the thread T3 shows, its
+  // repository, its children and the IDs its conversation names. The panel draws it with these while
+  // it is open on that thread (thisThread in the diagnostics), and it is open here on thread-a.
+  // It records once at once, so the state before the first switch is in the log.
+  await evaluate(`window.drawnLog = []; window.drawnLast = ''; window.recordDrawn = () => { const drawn = __t3Custom.diagnostics().thread; const text = JSON.stringify(drawn); if (drawn && text !== drawnLast) { drawnLast = text; drawnLog.push(drawn); } }; recordDrawn(); window.drawnRecorder = setInterval(recordDrawn, 10)`);
+  await evaluate('location.hash = "/env/thread-b"');
+  // Until the recorder has logged it, not only the diagnostics: switching on at once could miss it.
+  await until(() => evaluate('drawnLog.at(-1)?.thread === "thread-b"'), 'This thread follows thread-b');
   await evaluate('location.hash = "/env/thread-a"');
-  await until(() => evaluate('!document.querySelector("[data-t3-desk-mount]").hidden && __t3Custom.diagnostics().context?.threadId === "thread-a"'), 'Back on thread-a from Settings');
-  await delay(1000);
-  assert.equal(await inFrame('hostMessages.length'), sentBeforeSettings, 'the same message was sent again after Settings and back');
-  // host:thread names the project's repository, the threads this one started in T3 (lineage.parentThreadId
+  // This thread for each thread T3 shows; a thread's mentions may follow as it is scanned.
+  const switches = () => evaluate('drawnLog.map(drawn => drawn.thread).filter((thread, n, all) => thread !== all[n - 1])');
+  await until(async () => JSON.stringify(await switches()) === '["thread-a","thread-b","thread-a"]', 'This thread follows thread switches');
+  assert(deskRequests.includes('/api/ties?thread=thread-b'));
+  // Each thread is drawn with the project's repository, the threads it started in T3 (lineage.parentThreadId
   // for thread-a's subagent, delegatedFrom for the thread a linked environment started from thread-b) and
-  // the IDs its conversation names, and is sent again when either list changes.
-  // Each thread's message names only what its own conversation names: thread-b's never carries
+  // the IDs its conversation names, and drawn again when either list changes.
+  // Each thread is drawn with only what its own conversation names: thread-b's never carries
   // thread-a's list, and thread-a's never carries thread-b's.
-  // thread-b, never scanned before, is sent at once with no mentions; any later message carries its
-  // own (it was shown only briefly here), never thread-a's.
-  const threadBMessages = await inFrame('hostMessages.filter(message => message.thread === "thread-b")');
-  assert.deepEqual(threadBMessages[0], { type: 'host:thread', thread: 'thread-b', repository: 'atelier', children: ['thread-delegated'], mentioned: [] });
-  assert(threadBMessages.every(message => message.mentioned.length === 0 || JSON.stringify(message.mentioned) === JSON.stringify([referenceId, threadBReference])), JSON.stringify(threadBMessages));
-  assert.deepEqual(await inFrame('hostMessages.filter(message => message.thread === "thread-a").map(message => message.mentioned)'), [[referenceId]]);
-  const lastMessage = () => inFrame('hostMessages.at(-1)');
-  assert.deepEqual(await lastMessage(), { type: 'host:thread', thread: 'thread-a', repository: 'atelier', children: ['thread-child'], mentioned: [referenceId] });
+  // thread-b, never scanned before, is drawn at once with no mentions; later, with its own.
+  const threadBDrawn = await evaluate('drawnLog.filter(drawn => drawn.thread === "thread-b")');
+  assert.deepEqual(threadBDrawn[0], { thread: 'thread-b', repository: 'atelier', children: ['thread-delegated'], mentioned: [] });
+  assert(threadBDrawn.every(drawn => drawn.mentioned.length === 0 || JSON.stringify(drawn.mentioned) === JSON.stringify([referenceId, threadBReference])), JSON.stringify(threadBDrawn));
+  assert.deepEqual(await evaluate('drawnLog.filter(drawn => drawn.thread === "thread-a").map(drawn => drawn.mentioned)'), [[referenceId], [referenceId]]);
+  const lastDrawn = () => evaluate('drawnLog.at(-1)');
+  assert.deepEqual(await lastDrawn(), { thread: 'thread-a', repository: 'atelier', children: ['thread-child'], mentioned: [referenceId] });
+  // thread-a's panel is open, so This thread is drawn with what it follows.
+  assert.deepEqual(await evaluate('__t3Custom.diagnostics().thisThread'), { desk: deskBase, ...(await lastDrawn()) });
   await evaluate(`(()=>{const p=document.createElement('p');p.id='mention-change';p.textContent='${missionId}';document.querySelector('[data-workspace-area=conversation]').append(p)})()`);
-  await until(async () => JSON.stringify((await lastMessage()).mentioned) === JSON.stringify([missionId, referenceId].sort()), 'host:thread again when an ID is mentioned');
+  await until(async () => JSON.stringify((await lastDrawn()).mentioned) === JSON.stringify([missionId, referenceId].sort()), 'This thread again when an ID is mentioned');
+  // The panel draws it again, which reads the newly named record.
+  await until(() => evaluate(`JSON.stringify(__t3Custom.diagnostics().thisThread?.mentioned) === '${JSON.stringify([missionId, referenceId].sort())}'`), 'This thread drawn again with the new mention');
+  await until(() => deskRequests.includes(`/api/records/${missionId}`), 'The newly mentioned record is read');
   await evaluate('document.querySelector("#mention-change").remove()');
-  await until(async () => JSON.stringify((await lastMessage()).mentioned) === JSON.stringify([referenceId]), 'host:thread again when a mention goes');
+  await until(async () => JSON.stringify((await lastDrawn()).mentioned) === JSON.stringify([referenceId]), 'This thread again when a mention goes');
   await evaluate(`fixtureSnapshot.threads.push({ id: 'thread-new-child', projectId: 'project-a', title: 'New child', status: 'running', lineage: { parentThreadId: 'thread-a' } })`);
-  await until(async () => JSON.stringify((await lastMessage()).children) === '["thread-child","thread-new-child"]', 'host:thread again when a child appears', 10000);
+  await until(async () => JSON.stringify((await lastDrawn()).children) === '["thread-child","thread-new-child"]', 'This thread again when a child appears', 10000);
+  await until(() => deskRequests.includes('/api/ties?thread=thread-new-child'), 'The new child\'s records are read');
   await evaluate('fixtureSnapshot.threads.pop()');
-  await until(async () => JSON.stringify((await lastMessage()).children) === '["thread-child"]', 'host:thread again when a child goes', 10000);
+  await until(async () => JSON.stringify((await lastDrawn()).children) === '["thread-child"]', 'This thread again when a child goes', 10000);
   // With reference links off nothing is scanned: the thread shown and the next one mention nothing.
   const referencesToggle = 'document.querySelector("#t3-custom-settings").shadowRoot.querySelector(\'[data-setting="references"]\')';
   await evaluate('location.hash = "/settings/general"');
   await until(() => evaluate(`Boolean(${referencesToggle})`), 'Settings section for the references toggle');
   await evaluate(`${referencesToggle}.click()`);
   await evaluate('location.hash = "/env/thread-a"');
-  await until(async () => { const last = await lastMessage(); return last.thread === 'thread-a' && last.mentioned.length === 0; }, 'No mentions with references off');
+  await until(async () => { const last = await lastDrawn(); return last.thread === 'thread-a' && last.mentioned.length === 0; }, 'No mentions with references off');
   await evaluate('location.hash = "/env/thread-b"');
-  await until(async () => (await lastMessage()).thread === 'thread-b', 'thread-b with references off');
-  assert.deepEqual((await lastMessage()).mentioned, [], 'a thread kept mentions with references off');
+  await until(async () => (await lastDrawn()).thread === 'thread-b', 'thread-b with references off');
+  assert.deepEqual((await lastDrawn()).mentioned, [], 'a thread kept mentions with references off');
   await evaluate('location.hash = "/settings/general"');
   await until(() => evaluate(`Boolean(${referencesToggle})`), 'Settings section again');
   await evaluate(`${referencesToggle}.click()`);
   await evaluate('location.hash = "/env/thread-a"');
-  await until(async () => { const last = await lastMessage(); return last.thread === 'thread-a' && JSON.stringify(last.mentioned) === JSON.stringify([referenceId]); }, 'Mentions back with references on');
-  console.log('PASS: host:thread carries the repository, children by lineage and by delegatedFrom, and the mentioned IDs of its own conversation only (none with references off), and is sent again when they change');
+  await until(async () => { const last = await lastDrawn(); return last.thread === 'thread-a' && JSON.stringify(last.mentioned) === JSON.stringify([referenceId]); }, 'Mentions back with references on');
+  console.log('PASS: This thread is drawn with the repository, children by lineage and by delegatedFrom, and the mentioned IDs of its own conversation only (none with references off), and again when they change');
   // T3 can show the previous thread's conversation for a while after a switch; a scan of it is not
   // credited to the new thread. First by the thread its assistant messages name (thread-b, then thread-a)...
-  const messagesSince = async (count, thread) => (await inFrame(`hostMessages.slice(${count})`)).filter(message => message.thread === thread);
+  const drawnSince = async (count, thread) => (await evaluate(`drawnLog.slice(${count})`)).filter(drawn => drawn.thread === thread);
   await evaluate('location.hash = "/env/thread-b"');
-  await until(async () => { const last = await lastMessage(); return last.thread === 'thread-b' && last.mentioned.includes(threadBReference); }, 'thread-b scanned');
-  let sentSoFar = await inFrame('hostMessages.length');
+  await until(async () => { const last = await lastDrawn(); return last.thread === 'thread-b' && last.mentioned.includes(threadBReference); }, 'thread-b scanned');
+  let drawnSoFar = await evaluate('drawnLog.length');
   await evaluate('globalThis.fixtureRenderDelay = 1200; location.hash = "/env/thread-a"');
   await delay(2500);
-  assert.deepEqual((await messagesSince(sentSoFar, 'thread-a')).map(message => message.mentioned), [[referenceId]], 'thread-b\'s conversation was credited to thread-a');
+  assert.deepEqual((await drawnSince(drawnSoFar, 'thread-a')).map(drawn => drawn.mentioned), [[referenceId]], 'thread-b\'s conversation was credited to thread-a');
   // ...then, with no assistant message, while its root and first row are the nodes last scanned for
   // the previous thread (thread-c, then other:thread-a).
   await evaluate('globalThis.fixtureRenderDelay = 0; location.hash = "/env/thread-c"');
-  await until(async () => { const last = await lastMessage(); return last.thread === 'thread-c' && JSON.stringify(last.mentioned) === JSON.stringify([referenceId]); }, 'thread-c scanned');
-  sentSoFar = await inFrame('hostMessages.length');
+  await until(async () => { const last = await lastDrawn(); return last.thread === 'thread-c' && JSON.stringify(last.mentioned) === JSON.stringify([referenceId]); }, 'thread-c scanned');
+  drawnSoFar = await evaluate('drawnLog.length');
   await evaluate('globalThis.fixtureRenderDelay = 1200; location.hash = "/env/other:thread-a"');
-  await until(async () => (await messagesSince(sentSoFar, 'other:thread-a')).some(message => message.mentioned.includes(otherReference)), 'other:thread-a scanned once T3 rendered it', 8000);
-  assert.deepEqual((await messagesSince(sentSoFar, 'other:thread-a')).map(message => message.mentioned), [[], [otherReference, referenceId].sort()], 'thread-c\'s conversation was credited to other:thread-a');
-  // A thread that streams is announced at once, and its mentions follow while it still streams.
+  await until(async () => (await drawnSince(drawnSoFar, 'other:thread-a')).some(drawn => drawn.mentioned.includes(otherReference)), 'other:thread-a scanned once T3 rendered it', 8000);
+  assert.deepEqual((await drawnSince(drawnSoFar, 'other:thread-a')).map(drawn => drawn.mentioned), [[], [otherReference, referenceId].sort()], 'thread-c\'s conversation was credited to other:thread-a');
+  // A thread that streams is drawn at once, and its mentions follow while it still streams.
   await evaluate('globalThis.fixtureRenderDelay = 0; globalThis.streamer = setInterval(() => document.querySelector("#stream").append(document.createTextNode(" more")), 100)');
-  sentSoFar = await inFrame('hostMessages.length');
+  drawnSoFar = await evaluate('drawnLog.length');
   await evaluate('location.hash = "/env/thread-child"');
-  await until(async () => (await messagesSince(sentSoFar, 'thread-child')).length > 0, 'host:thread for a thread that streams', 2000);
-  await until(async () => (await messagesSince(sentSoFar, 'thread-child')).some(message => message.mentioned.includes(childReference)), 'Mentions of a thread while it streams', 4000);
+  await until(async () => (await drawnSince(drawnSoFar, 'thread-child')).length > 0, 'This thread for a thread that streams', 2000);
+  await until(async () => (await drawnSince(drawnSoFar, 'thread-child')).some(drawn => drawn.mentioned.includes(childReference)), 'Mentions of a thread while it streams', 4000);
   assert(await evaluate('Boolean(globalThis.streamer)'), 'the stream stopped before the check');
   await evaluate('clearInterval(globalThis.streamer); globalThis.streamer = null; document.querySelector("#stream").textContent = ""; location.hash = "/env/thread-a"');
-  await until(async () => (await lastMessage()).thread === 'thread-a', 'Back on thread-a');
-  console.log('PASS: a scan of the previous thread\'s conversation is not credited to the next, by the thread its messages name or by its nodes; a streaming thread is sent at once and its mentions follow while it streams');
-  // When T3 re-renders its panel slot the mount moves and the iframe reloads: the fresh Desk is told the thread again.
-  const tiesBefore = deskRequests.filter(url => url === '/api/ties?thread=thread-a').length;
+  await until(async () => (await lastDrawn()).thread === 'thread-a', 'Back on thread-a');
+  console.log('PASS: a scan of the previous thread\'s conversation is not credited to the next, by the thread its messages name or by its nodes; a streaming thread is drawn at once and its mentions follow while it streams');
+  // When T3 re-renders its panel slot the mount moves, and This thread is drawn in it again.
   await evaluate('document.querySelector("[data-t3-desk-mount]").remove()');
-  await until(() => deskRequests.filter(url => url === '/api/ties?thread=thread-a').length === tiesBefore + 1, 'host:thread to a Desk reloaded by a re-rendered slot');
+  await until(() => evaluate(`document.querySelector("[data-t3-desk-mount]")?.isConnected && ${thisThread}?.dataset.thisThread === 'holds'`), 'This thread in a re-rendered slot');
   assert.equal(await evaluate('__t3Custom.error'), null);
-  console.log('PASS: host:thread is sent on ready, on each thread switch and to a reloaded Desk, never twice to the same Desk for the same thread');
-  // The Desk iframe's own window with another origin: the frame is sent to a page of the second
-  // Desk, which posts the same messages. Refresh brings the Desk back.
-  const reloadedFrame = await until(async () => (await (await fetch(`http://127.0.0.1:${debugPort}/json/list`)).json()).find(target => target.type === 'iframe' && target.url.startsWith(deskBase)), 'Reloaded Desk iframe');
-  const reloadedSession = (await page.call('Target.attachToTarget', { targetId: reloadedFrame.id, flatten: true })).sessionId;
-  await page.call('Runtime.evaluate', { expression: `location.href = '${secondDeskBase}/spoof'` }, reloadedSession).catch(() => {});
-  await until(() => secondDeskRequests.includes('/spoof'), 'Desk frame sent to another origin');
-  await spoofed('the Desk window with another origin');
-  await evaluate('document.querySelector("[data-t3-desk-controls] [aria-label=\'Refresh Desk\']").click()');
-  await until(() => evaluate('__t3Custom.diagnostics().frame.ready && __t3Custom.diagnostics().frame.title !== ""'), 'Desk back after Refresh');
-  console.log('PASS: Desk messages from the Desk iframe window with another origin are ignored');
+  await evaluate('clearInterval(drawnRecorder)');
+  assert(!(await fs.readFile(path.join(root, 'dist/custom.js'), 'utf8')).includes('host:thread'), 'the built extension still sends host:thread');
+  console.log('PASS: This thread is drawn again in a re-rendered slot, and the extension sends no host:thread');
 
   // Real backend data is checked through the same allow-listed bridge as hovercards.
   const record = await (await fetch(`${realDesk}/api/records/${referenceId}`)).json();
@@ -461,23 +489,22 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   await until(() => evaluate('Boolean(document.querySelector("#t3-custom-root").shadowRoot.querySelector("#atelier-hovercard button"))'), 'Cached hovercard');
   await evaluate('document.querySelector("#t3-custom-root").shadowRoot.querySelector("#atelier-hovercard button").click()');
   await until(() => evaluate(`document.querySelector('[data-t3-desk-mount]').shadowRoot.querySelector('iframe').src === '${deskBase}/embed/r/atelier/item/${referenceId}'`), 'Reference opens in Desk');
-  // The record stays: the reloaded Desk is not sent the same thread, so it does not move to the thread's page.
+  // The record stays where it was opened: nothing moves the frame to another page.
   await until(() => evaluate(`__t3Custom.diagnostics().frame.ready && __t3Custom.diagnostics().frame.title !== ''`), 'Desk ready on the record');
   await delay(1500);
   assert.equal(await evaluate('__t3Custom.diagnostics().frame.path'), `/r/atelier/item/${referenceId}`);
-  // Open the reference again and switch to thread-b before the Desk is ready: thread-b is still sent.
-  const tiesB = deskRequests.filter(url => url === '/api/ties?thread=thread-b').length;
-  firstDesk.slowEmbed = 2500;
-  await evaluate('(()=>{const link=document.querySelector("#t3-custom-root").shadowRoot.querySelector("[data-atelier-id]");link.blur();link.focus()})()');
-  await until(() => evaluate('Boolean(document.querySelector("#t3-custom-root").shadowRoot.querySelector("#atelier-hovercard button"))'), 'Hovercard before a slow load');
-  await evaluate('document.querySelector("#t3-custom-root").shadowRoot.querySelector("#atelier-hovercard button").click()');
-  await until(() => evaluate('__t3Custom.diagnostics().frame.ready === false'), 'Reference load started');
-  await evaluate('location.hash = "/env/thread-b"');
-  await until(() => evaluate('__t3Custom.diagnostics().context?.threadId === "thread-b"'), 'Switched to thread-b during the load');
-  assert.equal(await evaluate('__t3Custom.diagnostics().frame.ready'), false, 'the Desk was ready before the switch; the check proves nothing');
-  firstDesk.slowEmbed = 0;
-  await until(() => deskRequests.filter(url => url === '/api/ties?thread=thread-b').length === tiesB + 1, 'host:thread for a thread switched to during a reference load');
-  console.log('PASS: a switch to another thread while a reference loads is sent when the Desk is ready');
+  // It stays where it is when T3 shows another thread: the frame is neither reloaded nor replaced, and This thread is not drawn.
+  const embedLoads = deskRequests.filter(url => url.startsWith('/embed')).length;
+  await evaluate('globalThis.recordFrame = document.querySelector("[data-t3-desk-mount]").shadowRoot.querySelector("iframe"); location.hash = "/env/thread-c"');
+  await until(() => evaluate('__t3Custom.diagnostics().context?.threadId === "thread-c"'), 'Switched to thread-c with a record framed');
+  await evaluate('location.hash = "/env/thread-a"');
+  await until(() => evaluate('__t3Custom.diagnostics().context?.threadId === "thread-a" && !document.querySelector("[data-t3-desk-mount]").hidden'), 'Back on thread-a with the record framed');
+  await delay(1000);
+  assert.equal(await evaluate('__t3Custom.diagnostics().frame.path'), `/r/atelier/item/${referenceId}`);
+  assert(await evaluate('document.querySelector("[data-t3-desk-mount]").shadowRoot.querySelector("iframe") === globalThis.recordFrame'), 'the frame was replaced');
+  assert.equal(deskRequests.filter(url => url.startsWith('/embed')).length, embedLoads, 'the framed record was reloaded by a thread switch');
+  assert.equal(await evaluate('__t3Custom.diagnostics().thisThread'), null, 'This thread was drawn behind the framed record');
+  console.log('PASS: a framed record stays where it is, unreloaded, when T3 shows another thread and comes back');
   console.log('PASS: references by the Desk repository names, inline code, real hovercards, click-through, and streaming without text rewriting');
 
   await evaluate('globalThis.keptFrame=document.querySelector("[data-t3-desk-mount]").shadowRoot.querySelector("iframe");location.hash="/env/thread-b"');
@@ -874,8 +901,8 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   assert(!stored.includes('mappings') && stored.includes('openThreads'), `localStorage holds only view state: ${stored}`);
   await evaluate('location.hash="/env/thread-c"');
   // The mount must exist: the reapplied extension may not have drawn it yet, and a missing mount is
-  // not a shown Desk.
-  await until(() => evaluate('document.querySelector("[data-t3-desk-mount]")?.shadowRoot.querySelector("iframe")?.hidden === false'), 'Explicit project mapping');
+  // not a shown Desk. The reapplied panel starts on This thread, drawn for the mapped repository.
+  await until(() => evaluate('document.querySelector("[data-t3-desk-mount]")?.shadowRoot.querySelector("[data-t3-this-thread]")?.hidden === false && __t3Custom.diagnostics().thisThread?.repository === "atelier" && __t3Custom.diagnostics().thisThread?.thread === "thread-c"'), 'Explicit project mapping');
   await evaluate('document.querySelector("#native-tab").click()');
   await until(() => evaluate('document.querySelector("[data-t3-desk-mount]").hidden && !document.querySelector("#native-content").inert'), 'Native tab restoration');
   console.log('PASS: Customizations names a failed release lookup and offers a newer release; automatic updates are off by default');
@@ -902,9 +929,8 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   assert.equal(await evaluate('document.querySelector("#t3-custom-settings").shadowRoot.querySelector("#project-mapping").disabled'), false);
   await evaluate('location.hash="/env/thread-c"');
   await delay(500); await evaluate('document.querySelector("[data-t3-desk-launch]").click()');
-  const finalFrame = await until(async () => (await (await fetch(`http://127.0.0.1:${debugPort}/json/list`)).json()).find(target => target.type === 'iframe' && target.url.startsWith(deskBase)), 'Reinjected Desk iframe');
-  const finalChild = await page.call('Target.attachToTarget', { targetId: finalFrame.id, flatten: true });
-  await until(async () => (await page.call('Runtime.evaluate', { expression: 'document.readyState === "complete" && document.body.innerText.includes("atelier") && !document.querySelector(".skel")', returnByValue: true }, finalChild.sessionId)).result.value, 'Reinjected Desk rendering');
+  // The reinjected panel draws This thread for thread-c, natively, from the Desk's reads.
+  await until(() => evaluate(`["holds", "empty"].includes(${thisThread}?.dataset.thisThread)`), 'Reinjected This thread');
   await fs.mkdir(path.join(root, 'artifacts'), { recursive: true });
   const screenshot = await page.call('Page.captureScreenshot', { format: 'png' });
   await fs.writeFile(path.join(root, 'artifacts/extension-docked.png'), Buffer.from(screenshot.data, 'base64'));

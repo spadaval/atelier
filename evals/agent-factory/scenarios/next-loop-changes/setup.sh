@@ -3,19 +3,18 @@
 # thread (T3CODE_THREAD_ID) started slug-k3fa and submitted a change that
 # trims hyphens only at the end, and another thread's round-1 review asks,
 # in one fix-now finding, for the leading ones too. The real binary drives
-# every step, so the records are what it writes. NEXT_ATELIER names it, and
+# every step, so the records are what it writes. EVAL_ATELIER names it, and
 # next-loop's setup leaves the grader main's first commit in .setup_head.
 set -euo pipefail
 work=$1
 : "${T3CODE_THREAD_ID:?set T3CODE_THREAD_ID to the thread the agent runs as}"
 bash "$(dirname "$0")/../next-loop/setup.sh" "$work"
 impl=$T3CODE_THREAD_ID
-unset ATELIER_SKIP CLAUDE_CODE_SESSION_ID CODEX_SESSION_ID
+source "$(dirname "$0")/../next-loop/lib.sh"
 export PATH="$work/bin:$PATH"
 cd "$work/repo"
-as() { T3CODE_THREAD_ID=$1 atelier "${@:2}" >/dev/null; }
 
-as "$impl" start slug-k3fa
+begin "$impl" slug-k3fa
 cat > slug.py <<'PY'
 """Turn titles into URL slugs."""
 import re
@@ -73,4 +72,4 @@ is ticked.
 """
 open(path, "w").write(text)
 PY
-as thread-5e1f0c2a verdict changes --model gpt-6.1-sol
+judge thread-5e1f0c2a changes --model gpt-6.1-sol
