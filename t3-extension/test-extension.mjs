@@ -714,19 +714,19 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   // The project strip under the new-thread composer, from /api/launch.
   await evaluate('location.hash = "/draft/draft-a"');
   const strip = 'document.querySelector("[data-t3-strip]")';
-  await until(() => evaluate(`Boolean(${strip}) && !${strip}.hidden && Boolean(${strip}.querySelector('[data-t3-card="next"]'))`), 'Project strip');
-  assert.deepEqual(await evaluate(`[...${strip}.querySelectorAll('[data-t3-card]')].map(card => [card.dataset.t3Card, card.querySelector('[data-t3-card-head]').textContent, [...card.querySelectorAll('[data-t3-card-row]')].map(row => row.textContent)])`), [
+  await until(() => evaluate(`Boolean(${strip}) && !${strip}.hidden && Boolean(${strip}.shadowRoot.querySelector('[data-t3-card="next"]'))`), 'Project strip');
+  assert.deepEqual(await evaluate(`[...${strip}.shadowRoot.querySelectorAll('[data-t3-card]')].map(card => [card.dataset.t3Card, card.querySelector('[data-t3-card-head]').textContent, [...card.querySelectorAll('[data-t3-card-row]')].map(row => row.textContent)])`), [
     ['waiting', 'Waiting on you5', ['Waiting one', 'Waiting two', '3 more']],
     ['motion', 'In motion2', ['atelier-x1Held by thread Bstarted · 2hThread B', 'atelier-x2Held elsewherereview · 1dRemote holder']],
     ['next', 'Next up4', ['atelier-r1Ready one, with a title long enough to be cut short in its card', 'atelier-r2Ready two', 'atelier-r3; rm -rf /Not an item ID']],
   ]);
-  assert.equal(await evaluate(`${strip}.querySelector('[data-t3-strip-project]').textContent`), 'atelier');
+  assert.equal(await evaluate(`${strip}.shadowRoot.querySelector('[data-t3-strip-project]').textContent`), 'atelier');
   // The strip's box is placed in whole pixels.
   const stripBox = await evaluate(`(()=>{const s=${strip}.getBoundingClientRect();const c=document.querySelector('[data-chat-composer-stack]').getBoundingClientRect();return {strip:[s.left,s.top,s.width,s.height],composer:[c.left,c.bottom,c.width]}})()`);
   const [left, top, width, height] = stripBox.strip; const [composerLeft, composerBottom, composerWidth] = stripBox.composer;
   assert(Math.abs(width - composerWidth) <= 1 && Math.abs(left - composerLeft) <= 1 && top >= composerBottom - 1 && height === 176, `the strip is not as wide as the composer, under it, 176px high: ${JSON.stringify(stripBox)}`);
   // A Next up row fills the composer and nothing is sent; an ID not of Atelier's form makes no prompt.
-  const nextRow = n => `[...${strip}.querySelectorAll('[data-t3-card="next"] [data-t3-card-row]')][${n}]`;
+  const nextRow = n => `[...${strip}.shadowRoot.querySelectorAll('[data-t3-card="next"] [data-t3-card-row]')][${n}]`;
   // A plain contenteditable keeps a trailing space as a no-break space; T3's ProseMirror does not.
   const composerText = async () => (await evaluate('document.querySelector("[data-testid=composer-editor]").textContent')).replace(/ /g, ' ');
   await evaluate(`${nextRow(0)}.click()`);
@@ -742,23 +742,23 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   assert.equal(await evaluate('fixtureDraftState.draftsByThreadKey["draft-a"]?.prompt'), 'Start atelier-r1: run `atelier start atelier-r1` in a fresh checkout and follow what it prints.');
   await evaluate('globalThis.fixtureEditorDraft = undefined; __t3Custom.error = null; document.querySelector("[data-testid=composer-editor]").textContent = "Start atelier-r1: run `atelier start atelier-r1` in a fresh checkout and follow what it prints."');
   assert.equal(await evaluate(`${nextRow(2)}.disabled`), true, 'a prompt can be made from an ID that is not an item ID');
-  await evaluate(`${strip}.querySelector('[data-t3-strip-plan]').click()`);
+  await evaluate(`${strip}.shadowRoot.querySelector('[data-t3-strip-plan]').click()`);
   assert.equal(await composerText(), 'Let\'s plan a mission for ');
   assert.equal(await evaluate('globalThis.fixtureSent ?? null'), null, 'the composer was sent');
   // In motion opens the item in the layer when T3 does not know its holder; Waiting opens the inbox;
   // the project's name opens its home.
-  for (const [label, click, src] of [['an item held elsewhere', `[...${strip}.querySelectorAll('[data-t3-card="motion"] [data-t3-card-row]')][1].click()`, `${deskBase}/embed/r/atelier/item/atelier-x2`], ['Waiting on you', `${strip}.querySelector('[data-t3-card="waiting"] [data-t3-card-head]').click()`, `${deskBase}/embed/inbox`], ['the project name', `${strip}.querySelector('[data-t3-strip-project]').click()`, `${deskBase}/embed/home/atelier`]]) {
+  for (const [label, click, src] of [['an item held elsewhere', `[...${strip}.shadowRoot.querySelectorAll('[data-t3-card="motion"] [data-t3-card-row]')][1].click()`, `${deskBase}/embed/r/atelier/item/atelier-x2`], ['Waiting on you', `${strip}.shadowRoot.querySelector('[data-t3-card="waiting"] [data-t3-card-head]').click()`, `${deskBase}/embed/inbox`], ['the project name', `${strip}.shadowRoot.querySelector('[data-t3-strip-project]').click()`, `${deskBase}/embed/home/atelier`]]) {
     await evaluate(click);
     await until(async () => (await layerState())?.shown && (await layerSrc()) === src, `Strip: ${label} opens the layer`);
     await evaluate('document.querySelector("[data-t3-layer-close]").click()');
   }
   // Under 700px of composer width the In motion card goes.
   await evaluate('document.querySelector("[data-chat-canvas]").style.width = "640px"');
-  await until(() => evaluate(`${strip}.hasAttribute('data-narrow') && ${strip}.querySelector('[data-t3-card="motion"]').getBoundingClientRect().width === 0 && ${strip}.getBoundingClientRect().width === 600`), 'Narrow strip');
+  await until(() => evaluate(`${strip}.hasAttribute('data-narrow') && ${strip}.shadowRoot.querySelector('[data-t3-card="motion"]').getBoundingClientRect().width === 0 && ${strip}.getBoundingClientRect().width === 600`), 'Narrow strip');
   await evaluate('document.querySelector("[data-chat-canvas]").style.width = ""');
   await until(() => evaluate(`!${strip}.hasAttribute('data-narrow')`), 'Wide strip again');
   // In motion opens its holder's thread when T3 knows it.
-  await evaluate(`[...${strip}.querySelectorAll('[data-t3-card="motion"] [data-t3-card-row]')][0].click()`);
+  await evaluate(`[...${strip}.shadowRoot.querySelectorAll('[data-t3-card="motion"] [data-t3-card-row]')][0].click()`);
   await until(async () => (await evaluate('location.hash')) === '#/env/thread-b', 'Strip: a holder T3 knows opens its thread');
   // Nothing for a project with no Desk repository.
   await evaluate('location.hash = "/draft/draft-c"');
