@@ -39,9 +39,12 @@ that started it or to an item labelled `needs-human`, as its role file says.
 ## Independent Review
 
 Every non-trivial change is reviewed before it merges by a thread that did
-not write it. No thread approves its own work or settles a finding on it. A
-change is trivial only when its correctness is evident from the diff alone,
-such as a typo; rewording a document is not trivial.
+not write it. A change is trivial only when its correctness is evident from
+the diff alone, such as a typo; rewording a document is not trivial. No
+thread approves its own work or settles a finding on it, and an implementer
+passes no rule on its own work: a kept finding is fixed or taken to the
+mission's lead. The lead settles it, and may depart from any of this, a
+review included, with its reason on the command.
 
 ## Starting Another Thread
 

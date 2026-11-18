@@ -99,7 +99,7 @@ pub fn condition_text(id: &str, condition: &Condition) -> String {
             format!("Finding {finding} (fix now): {title}")
         }
         Condition::NoResponse { finding, title, rebutted: true } => format!(
-            "Finding {finding} (fix now): {title} (a reviewer kept its rebuttal, and a rebuttal gets one try: fix it)"
+            "Finding {finding} (fix now): {title} (a reviewer kept its rebuttal, and a rebuttal gets one try: fix it, or take it to your mission's lead)"
         ),
         Condition::FormerImplementer => format!("You have never implemented {id}"),
         Condition::Decided(finding) => format!(
@@ -261,7 +261,7 @@ pub fn handoff(who: &str, tasks: &[String], then: &str) -> String {
 /// `leads`, is not offered the item.
 pub fn visiting(id: &str, leads: Option<&str>, offer: &str) -> String {
     match leads {
-        Some(mission) => format!("You lead mission {mission}, which {id} is in: its implementer builds it, so you do not take it over.\n"),
+        Some(mission) => format!("You lead mission {mission}, which {id} is in: its implementer builds it, and you take it over only with your reason in its Report.\n"),
         None => offer.to_string(),
     }
 }

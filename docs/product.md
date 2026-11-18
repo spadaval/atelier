@@ -476,8 +476,10 @@ record is committed on the base.
   finding, keeps it, or, when the finding is right but not for this item,
   keeps it at defer or no action with a line that says why. A rebuttal gets
   one try.
-- **The implementer cannot dismiss a finding.** Only a reviewer settles one
-  without a fix, by withdrawing it or lowering it, and nothing else can.
+- **The implementer cannot dismiss a finding.** A reviewer settles one
+  without a fix, by withdrawing it or lowering it, and so does the mission's
+  lead, who rules on a kept finding either way and records the ruling. The
+  implementer passes no rule on its own work.
 - **A question is advice.** An implementer that cannot settle something asks
   the thread that started it, or an advisor, as a working model asks a
   stronger one at a decision point and carries on. Nothing records the
@@ -487,9 +489,10 @@ record is committed on the base.
   `rebutted` Response with the next round's judgment of it, and a plan-review
   round whose reviewers differ. `list --disputed` prints them, `show
   <mission>` and the lead's `status` give a lead its mission's, and the
-  gardener reads them first. Nothing blocks on them. A lead steps in with the
-  lever it owns: it moves the disputed work out of the item's Scope into an
-  item of its own.
+  gardener reads them first. Nothing blocks on them. A lead settles one either
+  way: it merges past the finding with its ruling as the skip's reason, has
+  the implementer fix it, or moves the disputed work out of the item's
+  Scope into an item of its own.
 - **The skill applies two of these rules:** a rebuttal's one try and the
   fresh reviewer for a rebuttal. The tool refuses neither; `status` shows the
   round and the one-try rule.

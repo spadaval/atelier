@@ -928,12 +928,12 @@ fn later_rounds_carry_each_open_finding_under_its_latest_name_until_it_closes() 
     assert_eq!(verdict(&root, "t3", &["verdict", "changes"]).code, 0);
 
     // The open finding now goes by its round-2 name, and its rebuttal has
-    // had its one try: a fix is left.
+    // had its one try: a fix or the lead is left.
     let status = atelier(&root, "t1", &["status"]).stdout;
     assert!(
         status.contains(&format!(
             "  [ ] Finding {second}.1 (fix now): No period (a reviewer kept its rebuttal, and a \
-             rebuttal gets one try: fix it)\n"
+             rebuttal gets one try: fix it, or take it to your mission's lead)\n"
         )),
         "{status}"
     );

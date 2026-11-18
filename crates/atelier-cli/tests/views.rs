@@ -350,7 +350,7 @@ fn on_an_items_branch_a_thread_holding_nothing_is_offered_the_take_over_unless_i
     // The mission's lead is not offered the item.
     assert_eq!(planned(&root, "lead1", &["lead", "demo-m1ss"]).code, 0);
     let leads = "You lead mission demo-m1ss, which demo-d4dd is in: its implementer builds it, \
-                 so you do not take it over.\n";
+                 and you take it over only with your reason in its Report.\n";
     let status = stdout(&second, "lead1", &["status"]);
     assert!(
         status.ends_with(&format!("Status: building\n{leads}")),
