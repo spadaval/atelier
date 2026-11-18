@@ -3,12 +3,13 @@ schema: atelier.item
 schema_version: 3
 id: atelier-9f7b
 title: Put a thread waiting on an approval under Needs you on the mission page
-status: ready
+status: building
 mission: atelier-osel
 labels: []
 priority: medium
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A57e793d0-a6ba-4a2b-9999-f8cb06fe0316%3Adelegate-task%3A52a6bc15-f78f-4837-b60d-c62ae23a4219
 ready:
   by: lead of atelier-osel, from deferred finding atelier-5cqz/1-uejn.1
   at: 2026-11-18T00:47:42.106818405Z
