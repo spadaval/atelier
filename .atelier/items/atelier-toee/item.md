@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-toee
 title: Rewrite the panel, the Desk tab, record links and the settings section as typed modules
-status: changes_requested
+status: in_review
 mission: atelier-osel
 labels: []
 priority: medium
@@ -190,3 +190,8 @@ happens with the old code too. To see the panel connect, I ran a second Desk
 over the same fixture with `embed_origins = ["t3code://app"]` and pointed the
 instance's injector at it. Adding that line to the instance's `desk.toml`
 would fix it for every later item.
+
+### Responses
+
+- 1-0ypk.1: fixed in 295604369. Disposal drops the open card without drawing it after its root unmounted, and `Extension` runs each part's cleanup on its own, so one failure no longer skips the rest. `test-extension.mjs` now stops the extension with a card open and checks that everything goes; that check fails on the previous code ("Full extension removal timed out").
+- 1-0ypk.2: fixed in 295604369. The card reads the record's address when it draws, after resolution has set its Desk and kind. `test-extension.mjs` opens the card of `atelier-fm02`, a mission only the second Desk serves, before anything resolved it, and checks its Open externally link is `<second Desk>/r/atelier/mission/atelier-fm02`; that check fails on the previous code.
