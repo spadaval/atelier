@@ -137,3 +137,13 @@ thread. `writeFixtureDesk` now takes the origins to allow, and
 says. I looked at the views in light mode only. `test-components.mjs` checks
 T3's components as the extension draws them in light and dark, but nothing
 looked at the strip in dark.
+
+**Responses, round 1.**
+
+- Finding 1 (the third In motion row is cut off): fixed. Each row was 38px:
+  the button's 1px transparent border added 2px, and baseline alignment of
+  the 11px ID beside the 13px title made the line 18px. A row is now 34px
+  (no border, a centred line, 13px text on 16px) under a 20px head, and
+  three fit with 5px to spare. `test-extension.mjs` adds a third held item
+  and asserts no row or holder line ends below the card. It failed before
+  the fix and passes now; `node run-tests.mjs` passes all 5 tests.
