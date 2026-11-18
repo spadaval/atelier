@@ -337,7 +337,8 @@ async function startLocked({ quiet = false } = {}) {
 
     // The fixture Desk, naming this thread as the lead of its open mission and the implementer of its building item.
     const deskDir = path.join(dir, 'desk');
-    const { binary, args } = await writeFixtureDesk(deskDir, { ...fixture.threads, lead: made.threadId, implementer: made.threadId });
+    // T3 Code's page is t3code://app, which the Desk must allow to frame it.
+    const { binary, args } = await writeFixtureDesk(deskDir, { ...fixture.threads, lead: made.threadId, implementer: made.threadId }, ['t3code://app']);
     state.processes.desk = await launch('desk', binary, args, { PATH: process.env.PATH, HOME: home });
     await save();
     state.desk = await until(`the fixture Desk (${path.join(dir, 'desk.log')})`, async () => {

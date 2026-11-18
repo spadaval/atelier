@@ -107,13 +107,14 @@ export async function deskBuild() {
 
 // Writes the fixture repository and a Desk configuration serving it on a free loopback port under
 // `dir`, and returns the command that serves it: run `binary` with `args`, and read the address from
-// its "serving on" line (`servingUrl`).
-export async function writeFixtureDesk(dir, threads = fixture.threads) {
+// its "serving on" line (`servingUrl`). `embedOrigins` are the pages allowed to frame its embedded
+// mode: without the host's origin there, a framed page never connects to it (desk:ready).
+export async function writeFixtureDesk(dir, threads = fixture.threads, embedOrigins = []) {
   const { binary, app } = await deskBuild();
   await writeFixtureRepository(path.join(dir, 'repos', fixture.repo), threads);
   const config = path.join(dir, 'desk.toml');
   const toml = value => JSON.stringify(value);
-  await fs.writeFile(config, [`caller = "fixture"`, `roots = [${toml(path.join(dir, 'repos'))}]`, `state = ${toml(path.join(dir, 'state'))}`, `app = ${toml(app)}`, 'fetch_seconds = 0', `listen = ["127.0.0.1:0"]`, ''].join('\n'));
+  await fs.writeFile(config, [`caller = "fixture"`, `roots = [${toml(path.join(dir, 'repos'))}]`, `state = ${toml(path.join(dir, 'state'))}`, `app = ${toml(app)}`, 'fetch_seconds = 0', `listen = ["127.0.0.1:0"]`, `embed_origins = ${toml(embedOrigins)}`, ''].join('\n'));
   return { binary, args: ['--config', config] };
 }
 
