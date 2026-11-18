@@ -133,17 +133,17 @@ class StageTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def test_the_new_skill_is_staged_for_claude_code_under_the_live_name(self):
-        run.stage_for("claude", "HEAD", self.tmp, "skills/agent-factory-next")
+    def test_the_skill_is_staged_for_claude_code_in_the_workspace(self):
+        run.stage_for("claude", "HEAD", self.tmp, "skills/agent-factory")
         skill = self.tmp / "repo" / ".claude" / "skills" / "agent-factory"
         self.assertIn("name: agent-factory", (skill / "SKILL.md").read_text())
         self.assertTrue((skill / "roles" / "reviewer.md").is_file())
         self.assertIn(".claude/", (self.tmp / "repo/.git/info/exclude").read_text())
 
     def test_the_skill_is_staged_for_codex_in_its_scratch_home(self):
-        run.stage_for("codex", "HEAD", self.tmp, "skills/agent-factory-next")
+        run.stage_for("codex", "HEAD", self.tmp, "skills/agent-factory")
         skill = self.tmp / "home" / ".codex" / "skills" / "agent-factory"
-        self.assertTrue((skill / "roles" / "decider.md").is_file())
+        self.assertTrue((skill / "roles" / "implementer.md").is_file())
         self.assertFalse((self.tmp / "repo" / ".claude").exists())
 
     def test_maintainers_is_left_out(self):
@@ -262,9 +262,10 @@ class LimitTest(unittest.TestCase):
         self.assertIn("plugins = false", config)
 
     def test_jobs_above_two_and_threads_above_one_are_refused(self):
-        self.assertIn("above 2", run.check_jobs(3, ["vacuous-test-review"]))
-        self.assertIsNone(run.check_jobs(2, ["vacuous-test-review", "next-decide"]))
-        self.assertIn("--jobs 1", run.check_jobs(2, ["vacuous-test-review", "next-loop"]))
+        self.assertIn("above 2", run.check_jobs(3, ["next-vacuous-test-review"]))
+        self.assertIsNone(run.check_jobs(2, ["next-vacuous-test-review",
+                                             "next-costly-hardening"]))
+        self.assertIn("--jobs 1", run.check_jobs(2, ["next-vacuous-test-review", "next-loop"]))
         self.assertIsNone(run.check_jobs(1, ["next-loop"]))
         refused = subprocess.run([sys.executable, str(HERE / "run.py"), "next-loop",
                                   "--jobs", "2", "--out", str(self.tmp / "out")],
@@ -295,7 +296,7 @@ class CodexPromptTest(unittest.TestCase):
 
     def given(self, threads):
         env = run.agent_env(self.tmp, "codex", threads)
-        run.stage_for("codex", "HEAD", self.tmp, "skills/agent-factory-next")
+        run.stage_for("codex", "HEAD", self.tmp, "skills/agent-factory")
         subprocess.run(["git", "init", "-q", str(self.tmp / "repo")], check=True)
         out = subprocess.run(["codex", "debug", "prompt-input", "-c", 'model="gpt-6-luna"',
                               "hi"], cwd=self.tmp / "repo", env=env, stdin=subprocess.DEVNULL,
