@@ -3,14 +3,16 @@ schema: atelier.item
 schema_version: 3
 id: atelier-oiwy
 title: Try four passages back in the skill, each as an arm of its own, and keep what changes an outcome
-status: draft
+status: ready
 mission: atelier-kw8u
 labels: []
 priority: medium
 blocked_by:
 - atelier-id3v
 implementers: []
-ready: null
+ready:
+  by: 'the human, in conversation on 2026-11-18: put the mission together and then run it'
+  at: 2026-11-18T23:49:47.284668623Z
 trivial: null
 caused_by: null
 created_at: 2026-11-18T21:03:01.247579892Z

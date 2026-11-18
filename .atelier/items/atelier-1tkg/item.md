@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-1tkg
 title: 'Add two cases of a lead ruling on a kept finding: one the reviewer has wrong, one it has right'
-status: draft
+status: ready
 mission: atelier-kw8u
 labels: []
 priority: medium
@@ -11,7 +11,9 @@ blocked_by:
 - atelier-b9o6
 - atelier-xfsn
 implementers: []
-ready: null
+ready:
+  by: 'the human, in conversation on 2026-11-18: put the mission together and then run it'
+  at: 2026-11-18T23:49:47.284668623Z
 trivial: null
 caused_by: null
 created_at: 2026-11-18T20:28:22.312049575Z
