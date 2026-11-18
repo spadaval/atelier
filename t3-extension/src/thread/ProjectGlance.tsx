@@ -1,7 +1,8 @@
 // The project at a glance, which This thread shows for a thread that holds, started and names
 // nothing (desk/src/components/Glance.tsx, ProjectGlance): what waits on the human, the agreed
 // missions, the items in motion and what can start next. A read that fails leaves its blocks out
-// and is named.
+// and is named, as does a repository the Desk answers it could not read (HTTP 200 with the
+// repository's `error` set and its lists empty).
 import { GitPullRequestArrow, Target } from "lucide-react";
 import type { ReactNode } from "react";
 import type { Agent } from "../../../desk/src/api/Agent";
@@ -50,6 +51,12 @@ export function ProjectGlance({ desk, repo, now, actions }: { desk: string; repo
     }),
   ];
 
+  // The repository's own failures inside reads that answered: its lists are empty, not known to be.
+  const unreadable = [
+    ["what is in motion", m.paths.motion(), moving?.error],
+    ["what waits on you", m.paths.inbox(), waiting?.error],
+  ].filter((entry): entry is [string, string, string] => !!entry[2]);
+
   const active = (missionsRead.data?.missions ?? []).filter((mission) => mission.state === "open").sort((a, b) => Number(b.in_progress) - Number(a.in_progress));
   const needs = (waiting?.needs_human ?? []).flatMap((g) => g.items);
   const ready = (moving?.ready ?? []).filter((r) => !r.needs_human);
@@ -67,6 +74,11 @@ export function ProjectGlance({ desk, repo, now, actions }: { desk: string; repo
           </p>
         ) : null,
       )}
+      {unreadable.map(([what, path, error]) => (
+        <p key={path} className="text-destructive-foreground text-xs" data-note="">
+          The Desk could not read {what} in {repo} (GET {path}): {error}
+        </p>
+      ))}
       {inboxRead.data && waits > 0 ? (
         <Block name="waiting" title="Waiting on you" count={waits} warn>
           {plans.map((mission) => (
@@ -100,7 +112,7 @@ export function ProjectGlance({ desk, repo, now, actions }: { desk: string; repo
           ))}
         </Block>
       ) : null}
-      {motionRead.data ? (
+      {motionRead.data && !moving?.error ? (
         <>
           <Block name="motion" title="In motion" count={moved.length}>
             {moved.length === 0 ? <p className="px-1.5 text-muted-foreground text-xs">Nothing is started.</p> : null}

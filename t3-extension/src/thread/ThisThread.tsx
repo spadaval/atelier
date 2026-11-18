@@ -131,7 +131,10 @@ export function ThisThread(props: ThisThreadProps) {
   ];
   const loading = !ownTies || !inboxAnswer;
   const pending = essential.some(([, , answer]) => !answer);
-  const failed = essential.flatMap(([what, path, answer, notFound]) => failure(what, path, answer, notFound) ?? []);
+  // A repository the Desk could not read answers in the inbox with its error and empty lists, so
+  // what waits there is unknown: named, and counted as a failed read like the inbox's own.
+  const unreadable = (inbox?.repos ?? []).flatMap((r) => (r.error ? [`the repository ${r.repo}, for what waits on you (GET ${m.paths.inbox()}): ${r.error}`] : []));
+  const failed = [...essential.flatMap(([what, path, answer, notFound]) => failure(what, path, answer, notFound) ?? []), ...unreadable];
   // The cards' own reads: a failed one leaves its details out, and is named too.
   const detailFailures = [
     ...itemTies.map((t) => failure(`The page of ${t.id}`, m.paths.item(t.repo, t.id), items.get(m.paths.item(t.repo, t.id)))),

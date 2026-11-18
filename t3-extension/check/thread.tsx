@@ -1,7 +1,8 @@
 // The page script of test-thread.mjs: draws This thread for `?scenario=` (check/thread-fixtures.ts)
 // through mountThisThread, as the panel does, at `?width=` pixels, with a stand-in injector that
-// answers the fixture's reads (failing `?fail=<path>` on request), and records what the page asks
-// to open in `threadCalls`.
+// answers the fixture's reads (failing `?fail=<path>` on request, and answering `?unreadable=<path>`
+// as the Desk does for a repository it could not read: HTTP 200 with that repository's `error` set and
+// its lists empty), and records what the page asks to open in `threadCalls`.
 import type { HostApi } from "../src/react/desk";
 import { mountThisThread } from "../src/thread/mount";
 import { missing, NOW, REPO, scenarios } from "./thread-fixtures";
@@ -24,7 +25,15 @@ const api = {
     if (path === params.get("fail")) return Promise.reject(Object.assign(new Error(`GET ${path}: HTTP 502: the fixture failed it`), { status: 502 }));
     if (missing.has(path)) return Promise.reject(Object.assign(new Error(`GET ${path}: HTTP 404: no record`), { status: 404 }));
     if (action !== "desk-get" || !chosen || !(path in chosen.answers)) return Promise.reject(new Error(`GET ${path}: the fixture has no answer`));
-    return Promise.resolve(structuredClone(chosen.answers[path]));
+    const answer = structuredClone(chosen.answers[path]) as { repos?: Record<string, unknown>[] };
+    if (path === params.get("unreadable")) {
+      for (const repo of answer.repos ?? []) {
+        if (repo.repo !== REPO) continue;
+        for (const [key, value] of Object.entries(repo)) if (Array.isArray(value)) repo[key] = [];
+        repo.error = "fixture repository unreadable";
+      }
+    }
+    return Promise.resolve(answer);
   }) as HostApi["request"],
   onCleanup: () => {},
   reportError: (error: unknown) => errors.push(String(error)),

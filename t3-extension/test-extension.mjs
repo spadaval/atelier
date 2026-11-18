@@ -156,11 +156,16 @@ function deskProxyServer(requests, options) {
     if (request.url === '/api/embed') {
       response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify({ origins: [base] })); return;
     }
-    // inboxError adds a repository the Desk reports it could not read, as GET /api/inbox does.
-    if (request.url === '/api/inbox' && options.inboxError) {
+    // unreadable adds a repository the Desk reports it could not read, as GET /api/inbox and GET /api/sidebar do.
+    if (request.url === '/api/inbox' && options.unreadable) {
       const inbox = await (await fetch(realDesk + request.url)).json();
       inbox.repos.push({ repo: 'unreadable', commit: null, error: 'git: not a repository', needs_human: [], proposed: [], threads: [] });
       response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(inbox)); return;
+    }
+    if (request.url === '/api/sidebar' && options.unreadable) {
+      const sidebar = await (await fetch(realDesk + request.url)).json();
+      sidebar.repos.push({ repo: 'unreadable', missions: [], error: 'git: not a repository' });
+      response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(sidebar)); return;
     }
     // proposed marks a mission of the real Desk's sidebar, and of its repository's missions, as a proposed plan.
     if (request.url === '/api/sidebar' && options.proposed) {
@@ -550,15 +555,18 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   await evaluate('document.dispatchEvent(new Event("visibilitychange"))');
   await until(() => reads('/api/inbox') > inboxReads && reads('/api/sidebar') > sidebarReads, 'Inbox and missions read again when the window is shown');
   // A repository the Desk could not read is not a clean count: "!" beside what could be read, the error in the tooltip.
-  firstDesk.inboxError = true;
+  // The missions under the Inbox row name it too, as they name a Desk they could not read.
+  firstDesk.unreadable = true;
   await evaluate('document.dispatchEvent(new Event("visibilitychange"))');
   const readable = 2 * inboxCountOf(await (await fetch(`${realDesk}/api/inbox`)).json());
   await until(async () => (await evaluate('document.querySelector("[data-t3-inbox-count]").textContent')) === `${readable} !`, 'Inbox count marked for an unreadable repository');
   assert(await evaluate('document.querySelector("[data-t3-inbox-count]").hasAttribute("data-error")'));
   assert.match(await evaluate('document.querySelector("[data-t3-inbox-row]").title'), new RegExp(`${readable} waiting in what could be read; ${deskBase} could not read unreadable: git: not a repository`));
-  firstDesk.inboxError = false;
+  await until(async () => (await evaluate('document.querySelector("[data-t3-missions-note][data-error]:not([hidden])")?.textContent')) === `${deskBase} could not read unreadable (GET /api/sidebar): git: not a repository`, 'Missions name the unreadable repository');
+  firstDesk.unreadable = false;
   await evaluate('document.dispatchEvent(new Event("visibilitychange"))');
   await until(async () => (await evaluate('document.querySelector("[data-t3-inbox-count]").textContent')) === String(readable), 'Clean inbox count again');
+  await until(() => evaluate('document.querySelector("[data-t3-missions-note][data-error]").hidden'), 'No missions note once the repository reads');
   const openInbox = async () => {
     await evaluate('document.querySelector("[data-t3-inbox-row]").click()');
     await until(async () => (await layerState())?.shown, 'Inbox layer open');
