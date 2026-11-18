@@ -128,3 +128,7 @@ follow-up item.
 extension tests leave there), so command output to Claude Code's temp folder
 failed. I ran everything with `TMPDIR` and `CARGO_TARGET_DIR` under my home
 folder and deleted nothing of others'.
+
+### Responses
+
+- 1-8ha7.1: fixed in e6bb31940
