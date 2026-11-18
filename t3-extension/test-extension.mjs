@@ -493,7 +493,8 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   await delay(500); await evaluate('document.querySelector("[data-t3-desk-launch]").click()');
   await until(() => evaluate('document.querySelector("[data-t3-desk-mount]").shadowRoot.querySelector("iframe").hidden'), 'Unmapped project empty state');
   console.log('PASS: same-project thread switches preserve Desk navigation; unmapped projects hide stale repository content');
-  await evaluate('document.querySelector("#t3-custom-root").shadowRoot.querySelector("[data-atelier-id]").focus()');
+  // The link still has focus from opening the record above, so it is blurred first, or no card would open.
+  await evaluate('(()=>{const link=document.querySelector("#t3-custom-root").shadowRoot.querySelector("[data-atelier-id]");link.blur();link.focus()})()');
   await until(() => evaluate('Boolean(document.querySelector("#t3-custom-root").shadowRoot.querySelector("#atelier-hovercard h3"))'), 'Reference in unmapped project');
   await evaluate('document.querySelector("#t3-custom-root").shadowRoot.querySelector("#atelier-hovercard button").click()');
   await until(() => evaluate('!document.querySelector("[data-t3-desk-mount]").shadowRoot.querySelector("iframe").hidden'), 'Cross-project reference override');
