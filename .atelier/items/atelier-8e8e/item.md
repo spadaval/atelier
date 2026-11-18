@@ -3,12 +3,13 @@ schema: atelier.item
 schema_version: 3
 id: atelier-8e8e
 title: Run a matrix in a named setup, a model and an effort per role, and report time and tokens per cell
-status: ready
+status: building
 mission: atelier-kw8u
 labels: []
 priority: medium
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A15ed7340-46a6-4e3a-b0c2-fdc0661b938f%3Adelegate-task%3A4aecee6c-0370-419a-9f62-26c766c86207
 ready:
   by: 'the human, in conversation on 2026-11-18: put the mission together and then run it'
   at: 2026-11-18T23:49:47.284668623Z
