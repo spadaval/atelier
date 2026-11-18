@@ -86,7 +86,11 @@ export function createSidebarMissions(ext: Extension, layer: Layer): SidebarMiss
     await Promise.all(
       deskUrls.map(async (desk) => {
         try {
-          for (const repo of (await deskGet<SidebarResponse>(api, desk, "/api/sidebar")).repos) repos.push({ ...repo, desk });
+          for (const repo of (await deskGet<SidebarResponse>(api, desk, "/api/sidebar")).repos) {
+            // A repository the Desk could not read comes with its error and no missions.
+            if (repo.error) errors.push(`${desk} could not read ${repo.repo} (GET /api/sidebar): ${repo.error}`);
+            repos.push({ ...repo, desk });
+          }
         } catch (error) {
           errors.push(`GET ${desk}/api/sidebar: ${messageOf(error)}`);
         }

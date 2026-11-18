@@ -1,7 +1,8 @@
 // Checks This thread (src/thread) against fixture threads (check/thread-fixtures.ts): a thread that
 // implements an item, one that leads a mission, one with children and mentions only, one that
 // planned a mission still proposed, and one with nothing, which shows its project; what each lists,
-// what its rows and titles open, and that a failed read is named and never read as "holds nothing".
+// what its rows and titles open, and that a failed read, or a repository the Desk answers it could
+// not read, is named and never read as "holds nothing", "nothing is started" or "nothing is ready".
 // It builds check/thread.tsx with the extension's own Vite config and draws it in a page that
 // carries T3 Code's stylesheet, as last copied, for T3's colours, in light and dark. Screenshots go
 // to artifacts/thread-*.png.
@@ -57,8 +58,9 @@ try {
 
   // Opens a scenario at a width and waits until the page has drawn from its reads.
   // `fail` names a path the stand-in injector fails (check/thread.tsx).
-  const open = async (scenario, width = 520, appearance = 'light', fail = null) => {
-    const url = `${base}/?${new URLSearchParams({ scenario, width, appearance, ...(fail ? { fail } : {}) })}`;
+  // `unreadable` names a path answered as the Desk answers for a repository it could not read.
+  const open = async (scenario, width = 520, appearance = 'light', fail = null, unreadable = null) => {
+    const url = `${base}/?${new URLSearchParams({ scenario, width, appearance, ...(fail ? { fail } : {}), ...(unreadable ? { unreadable } : {}) })}`;
     await page.call('Page.navigate', { url });
     await until(() => page.evaluate(`location.href === ${JSON.stringify(url)} && document.readyState === 'complete' && document.querySelector('#thread')?.shadowRoot?.querySelector('[data-this-thread]')?.dataset.thisThread !== 'loading'`), `${scenario} drawn`);
     // The fixture answers at once; the reads that follow the ties (pages, chips, the glance) are in by then.
@@ -207,6 +209,20 @@ try {
     assert.equal(await read('p.dataset.thisThread'), 'holds');
     assert.doesNotMatch(await read('text(p)'), /holds nothing/);
     assert.match((await notes())[0], /^Could not read the inbox, for what waits on you \(GET \/api\/inbox\)/);
+  });
+  await check('with nothing, a repository the inbox could not read is named, and the page does not say the thread holds nothing', async () => {
+    await open('nothing', 520, 'light', null, '/api/inbox');
+    assert.equal(await read('p.dataset.thisThread'), 'holds');
+    assert.doesNotMatch(await read('text(p)'), /holds nothing/);
+    assert.deepEqual(await sections(), []);
+    assert.deepEqual(await notes(), ['Could not read the repository atelier, for what waits on you (GET /api/inbox): fixture repository unreadable']);
+  });
+  await check('the glance names a repository the Desk could not read for what is in motion, and does not say nothing is started or ready', async () => {
+    await open('nothing', 520, 'light', null, '/api/motion');
+    assert.equal(await read('p.dataset.thisThread'), 'empty');
+    assert.deepEqual(await sections(), ['waiting', 'missions']);
+    assert.doesNotMatch(await read('text(p)'), /Nothing is started|Nothing is ready/);
+    assert.deepEqual(await notes(), ['The Desk could not read what is in motion in atelier (GET /api/motion): fixture repository unreadable']);
   });
 
   for (const appearance of ['light', 'dark']) {

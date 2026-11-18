@@ -252,8 +252,8 @@ export function Customizations({ ext, actions, placed }: CustomizationsProps) {
                 ? "reading…"
                 : "error" in state
                   ? `unreachable: ${messageOf(state.error)}`
-                  : `reachable, ${state.repos.length} repositories: ${state.repos.map((repo) => `${repo.name} (${repo.identity ?? "no identity"})`).join(", ")}`;
-            return { text: `${desk}: ${text}`, missing: Boolean(state && "error" in state) };
+                  : `reachable, ${state.repos.length} repositories: ${state.repos.map((repo) => `${repo.name} (${repo.error ? `could not be read: ${repo.error}` : (repo.identity ?? "no identity")})`).join(", ")}`;
+            return { text: `${desk}: ${text}`, missing: Boolean(state && ("error" in state || ("repos" in state && state.repos.some((repo) => repo.error)))) };
           })}
         />
       </Section>
