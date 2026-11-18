@@ -5,7 +5,7 @@ id: atelier-kw8u
 title: 'Put the lead in charge and measure the loop: departures said on the record, and evals that grade what came out, run as the hosts run'
 status: open
 labels: []
-lead: null
+lead: 0b3307d5-85cd-4102-be6c-51da3b535c89
 planners:
 - 0b3307d5-85cd-4102-be6c-51da3b535c89
 created_at: 2026-11-18T20:03:47.624288179Z
