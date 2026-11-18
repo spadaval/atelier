@@ -55,7 +55,14 @@ export class Extension {
     }
     api.onCleanup(() => {
       clearTimeout(this.domFrame);
-      for (const dispose of this.disposers.reverse()) dispose();
+      // One part failing to clean up must not leave the others' changes to T3's page in place.
+      for (const dispose of this.disposers.reverse()) {
+        try {
+          dispose();
+        } catch (error) {
+          console.error("[T3 Custom] Cleanup failed", error);
+        }
+      }
     });
   }
 

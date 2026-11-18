@@ -116,7 +116,7 @@ export function createReferences(ext: Extension, panel: DeskPanel): References {
           reference={active}
           resolve={resolve}
           readDetails={readDetails}
-          externalUrl={referenceUrl(active)}
+          externalUrl={referenceUrl}
           onOpen={(ref) => void activate(ref)}
           onReload={(ref) => {
             forget(ref);
@@ -330,7 +330,9 @@ export function createReferences(ext: Extension, panel: DeskPanel): References {
     clearTimeout(hoverTimer);
     clearTimeout(dismissTimer);
     cancelAnimationFrame(rectFrame);
-    hideCard();
+    // The card's React root unmounts with the extension (mountReact), possibly before this runs, so
+    // the card is dropped without drawing again.
+    active = null;
     layer.remove();
     style.remove();
     CSS.highlights?.delete("t3-atelier-refs");

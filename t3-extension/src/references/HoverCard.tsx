@@ -10,7 +10,8 @@ export type HoverCardProps = {
   reference: Reference;
   resolve(ref: Reference): Promise<ResolvedRecord>;
   readDetails(record: ResolvedRecord): Promise<RecordDetails>;
-  externalUrl: string;
+  /** The record's normal address on its Desk; read again once it is resolved, which may name another Desk or kind. */
+  externalUrl(ref: Reference): string;
   /** Opens the record in the Desk. */
   onOpen(ref: Reference): void;
   /** Forgets what was read of it and shows the card again. */
@@ -71,6 +72,8 @@ export function HoverCard({ reference, resolve, readDetails, externalUrl, onOpen
   // The ID's place in the conversation; Base UI follows it as the conversation scrolls.
   const anchor = useMemo(() => ({ getBoundingClientRect: () => reference.range.getBoundingClientRect(), contextElement: reference.node.parentElement ?? undefined }), [reference]);
 
+  // Resolving fills in the reference's Desk and kind, so the address is read after it.
+  const external = externalUrl(reference);
   let body;
   if (!record) {
     body = (
@@ -122,7 +125,7 @@ export function HoverCard({ reference, resolve, readDetails, externalUrl, onOpen
           <Button size="xs" variant="outline" onClick={() => onReload(reference)}>
             Refresh
           </Button>
-          <Button size="xs" variant="link" render={<a href={externalUrl} target="_blank" rel="noopener noreferrer" />}>
+          <Button size="xs" variant="link" render={<a href={external} target="_blank" rel="noopener noreferrer" />}>
             Open externally ↗
           </Button>
         </div>

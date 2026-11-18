@@ -482,6 +482,11 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   assert((await evaluate('globalThis.keptFrame.src')).endsWith('/item/' + referenceId));
   await evaluate(`(()=>{const p=document.createElement('p');p.id='mission-reference';p.textContent='${missionId}';document.querySelector('[data-workspace-area=conversation]').append(p)})()`);
   await until(() => evaluate(`Boolean(document.querySelector("#t3-custom-root").shadowRoot.querySelector("[data-atelier-id=${missionId}]"))`), 'Mission reference scanning');
+  // Its card, opened before the mission was ever resolved, links to it on the Desk that answered, as a mission.
+  await evaluate(`(()=>{const link=document.querySelector("#t3-custom-root").shadowRoot.querySelector("[data-atelier-id=${missionId}]");link.blur();link.focus()})()`);
+  await until(() => evaluate('Boolean(document.querySelector("#t3-custom-root").shadowRoot.querySelector("#atelier-hovercard h3"))'), 'Mission card');
+  await until(async () => (await evaluate('[...document.querySelector("#t3-custom-root").shadowRoot.querySelectorAll("#atelier-hovercard a")].find(a => a.textContent.startsWith("Open externally"))?.href')) === `${secondDeskBase}/r/atelier/mission/${missionId}`, 'The mission card links to the Desk that answered');
+  await evaluate(`document.querySelector("#t3-custom-root").shadowRoot.querySelector("[data-atelier-id=${missionId}]").blur()`);
   await evaluate(`(()=>{document.getSelection().removeAllRanges();const p=document.querySelector('#mission-reference');const range=document.createRange();range.selectNodeContents(p);const r=range.getBoundingClientRect();p.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,clientX:r.left+3,clientY:r.top+3}))})()`);
   await until(() => evaluate(`globalThis.keptFrame.src.includes("/embed/r/atelier/mission/${missionId}")`), 'Direct mission reference click');
   // The first Desk has no such record; the second, which also serves atelier, answered, so it opens there.
@@ -898,6 +903,11 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   const probeList = await evaluate('document.querySelector("#t3-custom-settings").shadowRoot.textContent');
   for (const line of ['Inbox row in the sidebar: off, missing dom:sidebarSearch', 'Missions in T3\'s thread list: off (T3\'s list is left as T3 drew it), missing layout:threadList', 'Desk layer over T3\'s main area: on', 'Project strip on the new-thread screen: on', 'Project home from the breadcrumb: on', 'dom:composerStack', 'dom:threadItem', 'state:thread-origin', 'module:composer-draft-store']) assert(probeList.includes(line), `the settings section does not say "${line}"`);
   console.log('PASS: a renamed panel slot turns the Desk panel off by name and reference clicks open Desk externally');
+  // Stopped with a card open: everything still goes.
+  await evaluate('location.hash="/env/thread-a"');
+  await until(() => evaluate('__t3Custom.diagnostics().context?.threadId === "thread-a"'), 'A thread before stopping');
+  await evaluate('(()=>{const link=document.querySelector("#t3-custom-root").shadowRoot.querySelector("[data-atelier-id]");link.blur();link.focus()})()');
+  await until(() => evaluate('Boolean(document.querySelector("#t3-custom-root").shadowRoot.querySelector("#atelier-hovercard h3"))'), 'A card open before stopping');
   await control('stop');
   await until(() => evaluate('!document.querySelector("#t3-custom-root") && !document.querySelector("[data-t3-desk-mount]") && !document.querySelector("[data-t3-desk-launch]") && !document.querySelector("[data-t3-ext-sidebar], [data-t3-layer], [data-t3-strip], [data-t3-list-row], [data-t3-mission-layout]")'), 'Full extension removal');
   assert.equal(await evaluate('document.querySelector("#native-content").inert'), false);
