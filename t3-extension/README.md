@@ -747,9 +747,19 @@ an instance under `~` would read yours. The instance has:
 - a project made through T3's palette, a Git repository whose origin gives it
   the fixture's identity, and in it a thread that a first message makes and the
   model answers, and a new-thread draft. T3's boring sidebar is on;
-- the fixture Desk (`fixture-desk.mjs`), whose records name that thread as the
-  lead of the open mission `atelier-fm01` and the implementer of
-  `atelier-fi01`, with the closed mission `atelier-fm02`;
+- a second thread of the project, started over T3's MCP server in
+  approval-required mode and asked to run `ls`, which stays live waiting on that
+  approval until the instance stops. The mission page lists only threads T3
+  says are live, and the first thread's run has ended;
+- the fixture Desk (`fixture-desk.mjs`), whose records name the first thread as
+  the lead of the open mission `atelier-fm01` and the waiting one as the
+  implementer of `atelier-fi01`. Its closed mission `atelier-fm02` has a
+  Result and two merged items, reviewed once and twice, with their steps as
+  dated commits, so its page has lanes. T3's pages may frame it
+  (`embed_origins = ["t3code://app"]`), so a framed inbox or item page
+  connects, and its `[t3]` table reads the instance's threads through the
+  `t3` command T3 writes into the instance's home, at the instance's backend
+  port;
 - the injector, in a home of its own, attached with the built extension and
   reading that Desk.
 
