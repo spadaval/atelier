@@ -110,3 +110,10 @@ inbox's thread list does not carry `pending_requests`, so T3 reports it as
 Atelier's own stale folders and nothing else was deleted. My test runs used
 `TMPDIR` under `~/.cache`; the two `/tmp/atelier-thread-test-*` folders from my
 first runs are removed.
+
+In round 1 the review deferred its third finding, which is inherited from the Desk's own glance; once this item is done `atelier list --deferred` lists it for `atelier new --from`. The fixes for round 1 also make `test-extension.mjs` wait until its recorder has logged thread-b before switching back, which made the switch check fail about one run in four; `node run-tests.mjs` passes all six files, and `test-extension.mjs` passed three more runs in a row.
+
+### Responses
+
+- 1-wi75.1: fixed in 12bd1fced. Each thread-info read (the thread's own title and status, each child, each thread on an item of its missions, and each holder in the project at a glance) now names a failure with its path and error. Only the Desk's 404 means T3 Code does not know the thread; a child whose read failed says "Could not be read" and a chip says "not read", and a failed read keeps its last answer beside the note. Four new checks in `test-thread.mjs` inject a 502 into the child, chip, own-title and holder reads; the fixture's unknown child now answers 404, as the Desk does, and is still said to be unknown with no notice.
+- 1-wi75.2: fixed in 12bd1fced. The README's "The sidebar and the layer" section is restored from `master`, unchanged; nothing in it describes the panel.
