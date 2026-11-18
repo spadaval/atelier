@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-rt3o
 title: Make the agent-factory evals run on master and keep them from rotting again
-status: building
+status: in_review
 mission: null
 labels: []
 priority: medium
