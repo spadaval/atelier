@@ -757,6 +757,16 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   await until(() => evaluate(`${strip}.hasAttribute('data-narrow') && ${strip}.shadowRoot.querySelector('[data-t3-card="motion"]').getBoundingClientRect().width === 0 && ${strip}.getBoundingClientRect().width === 600`), 'Narrow strip');
   await evaluate('document.querySelector("[data-chat-canvas]").style.width = ""');
   await until(() => evaluate(`!${strip}.hasAttribute('data-narrow')`), 'Wide strip again');
+  // Three held items fill In motion, the most it shows: every row and its holder line stay inside the card.
+  launchFixture.in_motion.push({ id: 'atelier-x3', title: 'Held third', stage: 'building', age_seconds: 600, holder: { identity: 'third-holder', title: 'Third holder' } });
+  await evaluate('document.dispatchEvent(new Event("visibilitychange"))');
+  const motionCard = `${strip}.shadowRoot.querySelector('[data-t3-card="motion"]')`;
+  await until(() => evaluate(`${motionCard}.querySelectorAll('[data-t3-card-row]').length === 3`), 'Three rows in motion');
+  const clipped = await evaluate(`(()=>{const card=${motionCard};const bottom=card.getBoundingClientRect().bottom-parseFloat(getComputedStyle(card).borderBottomWidth);return [...card.querySelectorAll('[data-t3-card-row]')].flatMap(row=>[row,...row.children]).filter(node=>node.getBoundingClientRect().bottom>bottom+0.5).map(node=>node.textContent)})()`);
+  assert.deepEqual(clipped, [], 'an In motion row or its holder line is cut off by its card');
+  launchFixture.in_motion.pop();
+  await evaluate('document.dispatchEvent(new Event("visibilitychange"))');
+  await until(() => evaluate(`${motionCard}.querySelectorAll('[data-t3-card-row]').length === 2`), 'Two rows in motion again');
   // In motion opens its holder's thread when T3 knows it.
   await evaluate(`[...${strip}.shadowRoot.querySelectorAll('[data-t3-card="motion"] [data-t3-card-row]')][0].click()`);
   await until(async () => (await evaluate('location.hash')) === '#/env/thread-b', 'Strip: a holder T3 knows opens its thread');

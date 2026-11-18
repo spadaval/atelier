@@ -107,9 +107,9 @@ function Card({ name, title, count, empty, onHeader, hidden, rows }: { name: str
       </Badge>
     </>
   );
-  const headClass = "h-6 shrink-0 justify-start gap-1.5 px-1.5 font-medium text-xs";
+  const headClass = "h-5 shrink-0 justify-start gap-1.5 px-1.5 font-medium text-xs";
   return (
-    <div data-t3-card={name} className={`${hidden ? "hidden" : "flex"} min-h-0 min-w-0 flex-col gap-px overflow-hidden rounded-xl border bg-card px-1.5 py-2`}>
+    <div data-t3-card={name} className={`${hidden ? "hidden" : "flex"} min-h-0 min-w-0 flex-col gap-px overflow-hidden rounded-xl border bg-card px-1.5 py-1.5`}>
       {onHeader ? (
         <Button variant="ghost-muted" size="xs" className={headClass} data-t3-card-head="" onClick={onHeader}>
           {head}
@@ -124,10 +124,16 @@ function Card({ name, title, count, empty, onHeader, hidden, rows }: { name: str
   );
 }
 
-/** A card's row: a button, disabled when it does nothing. */
+/**
+ * A card's row: a button, disabled when it does nothing. The strip is 176px high, so a card holds
+ * its head and three two-line rows (In motion's, with the holder) only at these sizes: rows of
+ * 4 + 16 + 14px under a 20px head, inside 6px of padding. The row has no border (a ghost button's
+ * is transparent anyway), and its line is centred: baseline alignment of the 11px ID beside the
+ * 13px title makes the line 18px, not 16.
+ */
 function Row({ title, onClick, children }: { title: string; onClick?: () => void; children: ReactNode }) {
   return (
-    <Button variant="ghost" size="sm-multiline" className="h-auto min-h-0 w-full min-w-0 shrink-0 flex-col items-stretch justify-center gap-0 px-1.5 py-1 text-start font-normal leading-tight sm:min-h-0" data-t3-card-row="" title={title} disabled={!onClick} onClick={onClick}>
+    <Button variant="ghost" size="sm-multiline" className="h-auto min-h-0 w-full min-w-0 shrink-0 flex-col items-stretch justify-center gap-0 border-0 px-1.5 py-0.5 text-start font-normal text-[13px] leading-4 sm:min-h-0 sm:text-[13px]" data-t3-card-row="" title={title} disabled={!onClick} onClick={onClick}>
       {children}
     </Button>
   );
@@ -135,7 +141,7 @@ function Row({ title, onClick, children }: { title: string; onClick?: () => void
 
 function Line({ id, title, meta }: { id: string; title: string; meta?: string }) {
   return (
-    <span className="flex min-w-0 items-baseline gap-1.5">
+    <span className="flex min-w-0 items-center gap-1.5">
       <code className="shrink-0 text-[11px] text-muted-foreground">{id}</code>
       <span className="min-w-0 flex-1 truncate">{title}</span>
       {meta ? <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">{meta}</span> : null}
@@ -143,7 +149,7 @@ function Line({ id, title, meta }: { id: string; title: string; meta?: string })
   );
 }
 
-const Faint = ({ children }: { children: ReactNode }) => <span className="truncate text-[11px] text-muted-foreground">{children}</span>;
+const Faint = ({ children }: { children: ReactNode }) => <span className="truncate text-[11px] text-muted-foreground leading-3.5">{children}</span>;
 
 function Note({ error, children }: { error: boolean; children: ReactNode }) {
   return (
