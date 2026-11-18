@@ -705,6 +705,85 @@ in the browser); the project strip the draft store, `route:draft`,
 - The layer and the strip always use the first Desk in `desk.urls` for the
   inbox.
 
+## A test instance (Linux)
+
+An agent on a Linux host can see the extension in the real T3 Code without
+the Windows test machine. One command starts a T3 Code test instance, with
+everything a check needs, and prints its debugging port:
+
+```sh
+node t3-instance.mjs start   # prints the port, the thread, the draft and the contract command
+node t3-instance.mjs status
+node t3-instance.mjs shot    # artifacts/test-instance/t3-light.png and t3-dark.png
+node t3-instance.mjs stop
+```
+
+It runs T3 Code Nightly `v0.1.11-nightly.20261117.4851` (named at the top of
+`t3-instance.mjs`), fetched once from `pingdotgg/t3code`'s releases and
+unpacked into `/var/tmp/atelier-t3-test-<user>/apps/` (`T3_TEST_ROOT` moves
+it). It needs Node.js 22, `opencode` on `PATH`, `Xvnc` or `Xvfb`, the built
+extension (`pnpm build`), `atelier-desk` and the Desk's app (as for the tests
+below). Each start makes a fresh instance in `instance/` beside it. The root
+must be outside your home folder, and `start` refuses one inside it: OpenCode
+looks for configuration and skills (`.opencode`, `.claude/skills`,
+`.agents/skills`, `opencode.json`) in every folder above the one it runs in, so
+an instance under `~` would read yours. The instance has:
+
+- a virtual display of its own (`Xvnc`, which also serves VNC on
+  `127.0.0.1:59<display>` to watch it, else `Xvfb`);
+- T3 Code with its own `HOME`, `T3CODE_HOME`, `XDG_CONFIG_HOME`,
+  `XDG_DATA_HOME`, `XDG_CACHE_HOME` and `XDG_STATE_HOME`, all inside the
+  instance, its own backend port (47331, `--backend-port`) and debugging port
+  (9333, `--port`), and auto-update off. Its Chromium profile is
+  `XDG_CONFIG_HOME/t3code-v2`. It gets only an allowlist of the caller's
+  environment, so no API key and no `T3CODE_*` variable of the host's T3 (one
+  of which turns on Tailscale serve) reach it;
+- only OpenCode enabled, on a free model (`opencode/beam-free`, `--model`).
+  OpenCode runs from the instance's home and project, with nothing of the
+  human's linked or copied in and none of their folders above it, so it holds
+  no credential and can reach only OpenCode Zen's free
+  models. A model the instance's OpenCode does not list without a credential
+  is refused by name;
+- a project made through T3's palette, a Git repository whose origin gives it
+  the fixture's identity, and in it a thread that a first message makes and the
+  model answers, and a new-thread draft. T3's boring sidebar is on;
+- the fixture Desk (`fixture-desk.mjs`), whose records name that thread as the
+  lead of the open mission `atelier-fm01` and the implementer of
+  `atelier-fi01`, with the closed mission `atelier-fm02`;
+- the injector, in a home of its own, attached with the built extension and
+  reading that Desk.
+
+So `node test-contract.mjs --port 9333 --thread <…> --draft <…>`, with the
+values `start` prints, runs every hook against it. Starting while one runs
+prints the running one and starts nothing; a start while another is still
+starting waits for it (`start.lock` in the root). `stop` stops each process the
+instance started, by process ID checked against its start time, never by a
+name pattern: those `state.json` names, their descendants, and any process
+whose `HOME` is the instance's (OpenCode's background service detaches
+itself).
+
+**Chromium's sandbox is off** in the test instance (`--no-sandbox`): on this
+host its SUID helper is not installed as root, and Chromium aborts without it.
+Fixing that needs `sudo`. The instance loads only T3 Code's own pages and the
+fixture Desk, from loopback.
+
+`node t3-instance.mjs isolation` checks that the instance cannot touch the
+host's T3 Code: it starts an instance, makes its thread and stops it. While it
+runs, no instance process may have a file under `~/.t3`,
+`~/.config/opencode` or `~/.local/share/opencode` open, and each must run
+with the instance's `HOME`, `T3CODE_HOME` and `XDG_*` folders. Afterwards it
+lists what changed in those folders since it began, and fails if any changed
+path names, or any changed file holds, the instance's thread or environment ID,
+and if OpenCode's log names any folder in your home it watched or ran in.
+The host's own T3 server writes under `~/.t3` every few seconds, so those
+folders are never unchanged; the check names what changed. It then asks the
+instance's OpenCode for its credentials (`opencode auth list`) and fails if
+there are any. The checkout running it is left out, since it may be under
+`~/.t3/worktrees`.
+
+Linux is a stand-in: Windows is still checked once before a release, with the
+test instance below.
+
 ## A test instance (Windows)
 
 A second instance of the installed T3 can run beside the daily one with its own
@@ -898,9 +977,10 @@ not. On Windows set `BROWSER` if Edge is elsewhere; on Linux it defaults to
 `/usr/bin/google-chrome`.
 
 `node test-contract.mjs --port 9333 --thread <environmentId>/<threadId>` checks
-every hook against a running T3 (use a test instance), with the adapter of the
-built `dist/custom.js` (`pnpm build` first), which exports it as
-`T3Custom.adapter` without starting the extension: it opens the thread, the
+every hook against a running T3 (use a test instance; on Linux `node t3-instance.mjs
+start` prints this command with its values), with the adapter of the built
+`dist/custom.js` (`pnpm build` first), which exports it as `T3Custom.adapter`
+without starting the extension: it opens the thread, the
 workspace panel, a new-thread screen (the first draft that names a project, or
 `--draft <id>`) and Settings, prints each probe, and exits non-zero naming each
 broken hook, or if discovery imported a script that is not a declared renderer
