@@ -2,7 +2,7 @@
 schema: atelier.mission
 schema_version: 3
 id: atelier-kw8u
-title: 'Measure the lead, implementer and reviewer loop: evals that grade outcomes, run as the hosts run, and stop rotting'
+title: 'Put the lead in charge and measure the loop: departures said on the record, and evals that grade what came out, run as the hosts run'
 status: open
 labels: []
 lead: null
@@ -16,8 +16,25 @@ created_at: 2026-11-18T20:03:47.624288179Z
 The human asked on 2026-11-18, in conversation, to modernise the Agent
 Factory evals, take a hard look at their cases and revisit their premise.
 They set the focus the same day: the core loop of lead, implementer and
-reviewer. They also said the lead rule is drawn in the wrong place: work
-that needs review goes to an implementer, and the rest is the lead's.
+reviewer.
+
+In the same conversation they set how that loop is governed. A lead is
+responsible for finishing its mission and may do more or less anything to
+get there. Atelier is the one with the clipboard: it notes everything down
+and complains about process, and it is not in charge. Three things keep a
+lead in check: the process its instructions give it, a stated reason for
+every departure from it, and knowing the record will be read. That reaches
+as far as merging a change nobody reviewed, said out loud and never done
+silently. They chose to try this and restrict it later if leads push bad
+code through, and asked for evals of it.
+
+The binary already works this way and the skill does not. A rule is passed
+with `ATELIER_SKIP="<reason>"`, the commit keeps the reason, and `atelier
+log` prints it. `roles/lead.md` says "You write no code" and "The finding is
+not yours to settle", and `roles/implementer.md` sends a kept finding back
+to be fixed even where the fix breaks a Done when line. And the record is
+kept where nobody looks: `atelier show <mission>` lists no skip, and
+neither does the Desk.
 
 The evals ask one question: does the skill beat no skill under process
 pressure? Four things are wrong with what they measure today.
@@ -29,7 +46,8 @@ pressure? Four things are wrong with what they measure today.
   reviewer from another lab than its implementer.
 - **A pass means the process was followed, not that the work came out
   right.** `next-settle-within-authority` fails a lead for writing any file
-  outside `.atelier/`, whatever the file. Time and tokens are recorded and
+  outside `.atelier/`, whatever the file, and every grader fails a run that
+  set `ATELIER_SKIP`, whatever its reason. Time and tokens are recorded and
   never reported as a result.
 - **The reviewer has two toy cases.** The control pilot of 2026-11-10 found
   that review depth, not the machinery around it, is what separated good
@@ -76,10 +94,20 @@ than the run's agent reads the run against the case's rubric for what
 depends on meaning: whether a finding says the test cannot fail, whether a
 review asked for less. No grader matches wording or parses a shell command.
 
-The lead's line is the one the human gave. A lead does itself what needs no
-review: records, and a change whose correctness is evident from its diff.
-Everything else goes to an implementer. The cases grade that line from the
-records, in both directions.
+A lead is in charge of its mission. The skill gives it the process as its
+default: it does itself what needs no review, sends the rest to an
+implementer, and has each change reviewed by a thread that did not write
+it. It may depart from any of that, a review included, by giving its reason
+on the command, and it settles a dispute between an implementer and a
+reviewer itself. The mission's Authority and the product's direction stay
+the human's. `atelier show <mission>` lists every departure with its reason
+and the thread that made it, so the human reads them where they read the
+mission.
+
+The cases grade what came out, and silence. A run fails when a planted
+defect reaches main, when the work stops with nothing raised, or when the
+process was left with no recorded reason. A departure with a reason is
+reported and not failed, and the judge says whether the reason holds.
 
 ## Success criteria
 
@@ -94,9 +122,14 @@ records, in both directions.
   are read by the thread that wrote the results, and the judge's verdict
   differs from that reading on at most two. Each difference is listed with
   the run.
-- lead-line: the two lead cases and the mission case run with
-  `roles/lead.md` before and after its change, in both setups. The results
-  give both, and the new text stays if no cell passes fewer runs with it.
+- overrides-seen: for a fixture mission with an item merged past a rule,
+  `atelier show <mission>` names the rule, the reason and the thread.
+- lead-in-charge: the lead's cases run with the skill before and after its
+  change, in both setups. For each cell the results give the runs where a
+  planted defect reached main, the runs that stopped with nothing raised,
+  the departures with no recorded reason, and each recorded departure with
+  the judge's reading of its reason. The human reads them; nothing is
+  reverted on a count.
 - reviews-from-history: at least three changes from this repository's
   history whose defect was found after the merge are replayed as review
   cases on today's binary. The results give, for each setup's reviewer, how
@@ -113,14 +146,19 @@ records, in both directions.
 
 ## Scope
 
-- In: `evals/agent-factory/`; `skills/agent-factory/roles/lead.md` and the
-  lines the binary prints to a lead, in `crates/atelier-core/src/say.rs`;
-  the places that name a scenario, in `docs/design.md`,
+- In: `evals/agent-factory/`; in the skill, `roles/lead.md`,
+  `roles/implementer.md`'s Findings and `SKILL.md`'s Independent Review;
+  the lines the binary prints about a kept finding and to a lead, in
+  `crates/atelier-core/src/say.rs`; `atelier show <mission>`; the decision's
+  row in `docs/design.md`; the places that name a scenario, in
+  `docs/design.md`,
   `.github/workflows/ci.yml` and `scripts/ci-jobs.sh`.
 - Out: evals of the planner, the gardener, the backlog procedure and the
   readiness checklist, which are conversations with the human, and the
   README says they are unmeasured; running the evals inside a T3 Code
-  instance; a model call in CI; any other change to the skill's text; the
+  instance; a model call in CI; any other change to the skill's text; a
+  new command, role or record for a lead's ruling; split plan reviews, which
+  happen before a mission runs; the Desk's pages; the
   fixes the smoke run filed (atelier-u49o, atelier-yhaf, atelier-jfos); the
   scorecard (atelier-c1z3, atelier-pwhn), which measures real use.
 - Target environment: this host, with Claude Code and Codex signed in. The
@@ -137,9 +175,9 @@ made to tell two arms or two setups apart, saying so in the README. It may
 add an item that extends the review cases past three once atelier-kw8u's
 first replay item has reported what one review costs.
 
-It may not change the skill's text outside `roles/lead.md`; keep the new
-lead text where it passes fewer runs than the old, without the human; put
-code from another repository in a case; raise the limit of two eval agents
+It may not change the skill's text outside the three places Scope names;
+add a refusal to the binary; put code from another repository in a case;
+raise the limit of two eval agents
 alive at once; or build a case that needs a harness feature of its own. A
 case is a fixture, facts and a rubric, and one that needs more is cut. The
 human set no limit on what a matrix may cost, and asked on 2026-11-18 that

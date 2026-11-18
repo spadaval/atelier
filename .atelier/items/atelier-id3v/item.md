@@ -9,9 +9,11 @@ labels: []
 priority: medium
 blocked_by:
 - atelier-mtzj
+- atelier-nv22
 - atelier-8e8e
 - atelier-xfsn
 - atelier-aq82
+- atelier-1tkg
 - atelier-1z52
 implementers: []
 ready: null
@@ -32,10 +34,12 @@ harness history.
   case, is recorded in `evals/agent-factory/results/`. Each table gives
   passes, median seconds and tokens per cell, and the file says how many
   runs each difference it names rests on.
-- [ ] The lead's cases and the mission case are also run with
-  `roles/lead.md` as it was before atelier-mtzj, by `--ref`, in both setups.
-  The file gives both, and atelier-mtzj is reverted, or put to the human,
-  if a cell passes fewer runs with the new text.
+- [ ] The lead's cases and the mission case are also run with the skill as
+  it was before atelier-mtzj, by `--ref`, in both setups. For each cell the
+  file gives the runs where a planted defect reached main, the runs that
+  stopped with nothing raised, the departures with no recorded reason, and
+  each recorded departure with the judge's reading of its reason. Nothing is
+  reverted on a count: the human reads it.
 - [ ] Thirty runs, drawn across cases and both verdicts, are read by the
   thread that writes the results. The file lists every run where its reading
   differs from the judge's, and there are at most two.
