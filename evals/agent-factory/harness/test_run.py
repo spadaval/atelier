@@ -373,6 +373,30 @@ class DelegateTest(unittest.TestCase):
 
 
 class CodexThreadsTest(unittest.TestCase):
+    def turn(self, kind, second):
+        return {"timestamp": f"2026-11-17T23:{second // 60:02d}:{second % 60:02d}Z",
+                "type": "event_msg", "payload": {"type": kind}}
+
+    def test_a_subagent_idle_between_turns_is_not_alive_then(self):
+        # Run ed72 of 2026-11-17: the implementer's first turn ended at 88 s,
+        # the reviewer ran 91 to 128 s, and a follow-up gave the implementer
+        # a second turn at 131 s. Its record spans 13 to 142 s.
+        implementer = [{"type": "session_meta", "timestamp": "2026-11-17T23:00:13Z"},
+                       self.turn("task_started", 13), self.turn("task_complete", 88),
+                       self.turn("task_started", 131), self.turn("task_complete", 142)]
+        reviewer = [self.turn("task_started", 91), self.turn("task_complete", 128)]
+        start = run.epoch("2026-11-17T23:00:00Z")
+        turns = [{"start": a, "end": b} for a, b in run.codex_turns(implementer, start + 150)
+                 + run.codex_turns(reviewer, start + 150)]
+        self.assertEqual([(t["start"] - start, t["end"] - start) for t in turns],
+                         [(13, 88), (131, 142), (91, 128)])
+        self.assertEqual(run.peak([{"start": start, "end": start + 150}] + turns), 2)
+
+    def test_a_turn_with_no_end_runs_until_the_first_agent_ended(self):
+        start = run.epoch("2026-11-17T23:00:00Z")
+        self.assertEqual(run.codex_turns([self.turn("task_started", 10)], start + 60),
+                         [(start + 10, start + 60)])
+
     def test_a_subagent_record_becomes_a_transcript_the_graders_read(self):
         tmp = Path(tempfile.mkdtemp(prefix="af-codex-threads-"))
         try:
@@ -384,6 +408,8 @@ class CodexThreadsTest(unittest.TestCase):
             (day / "rollout-b-kid.jsonl").write_text("\n".join(json.dumps(e) for e in [
                 {"timestamp": "2026-11-11T05:00:05Z", "type": "session_meta",
                  "payload": {"id": "kid", "parent_thread_id": "root"}},
+                {"timestamp": "2026-11-11T05:00:05Z", "type": "event_msg",
+                 "payload": {"type": "task_started"}},
                 {"timestamp": "2026-11-11T05:00:07Z", "type": "event_msg", "payload": {
                     "type": "item_completed", "item": {
                         "type": "CommandExecution", "exit_code": 1,
@@ -392,9 +418,11 @@ class CodexThreadsTest(unittest.TestCase):
                 {"timestamp": "2026-11-11T05:00:09Z", "type": "event_msg", "payload": {
                     "type": "item_completed", "item": {
                         "type": "AgentMessage", "content": [{"type": "Text", "text": "Done"}]}}},
+                {"timestamp": "2026-11-11T05:00:09Z", "type": "event_msg",
+                 "payload": {"type": "task_complete"}},
             ]) + "\n")
             (tmp / "run").mkdir()
-            [agent] = run.codex_threads(tmp / "home", tmp / "run")
+            [agent] = run.codex_threads(tmp / "home", tmp / "run", 0)
             self.assertEqual((agent["thread"], agent["end"] - agent["start"]), ("codex-kid", 4))
             spec = importlib.util.spec_from_file_location(
                 "loop", HERE.parent / "scenarios" / "next-loop" / "grade.py")

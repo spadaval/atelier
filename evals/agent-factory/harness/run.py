@@ -54,10 +54,12 @@ start one is `delegate`, which holds a lock while its child runs, so a second
 `delegate` waits for the first child to end, and which a child may not call.
 When the first agent ends, any child still running is killed. Under Codex the
 only way is spawn_agent, capped by agents.max_threads = 1, which counts every
-live subagent of the session, grandchildren included, so a child can start
-none while it lives; `delegate` is not installed. Each run records when each
-of its agents started and ended (a Codex subagent from its own session
-record), and the matrix prints the most agents alive at once.
+subagent of the session with a turn running, grandchildren included, so a
+child can start none while it runs, and a parent cannot start a second child
+or give the first a follow-up while either runs; `delegate` is not installed.
+Each run records when each of its agents ran (each turn of a Codex subagent,
+from its own session record, since it idles between turns), and the matrix
+prints the most agents running at once.
 
 Claude Code loads instruction files (CLAUDE.md, AGENTS.md, .claude/CLAUDE.md,
 .claude/rules/ and the like) from every directory above its working directory,
@@ -182,8 +184,9 @@ def codex_config(threads: bool) -> str:
     """The scratch config.toml. Codex 0.167 runs gpt-6 models on multi-agent
     v2 whatever features.multi_agent says, and there disable_native_tools
     removes spawn_agent and the other collaboration tools. agents.max_threads
-    caps live subagents across the session, so with 1 a child can start no
-    grandchild; max_depth is v1's, set for a model on v1."""
+    caps the subagents with a turn running across the session, so with 1 a
+    child can start no grandchild, and a parent no second child while the
+    first runs; max_depth is v1's, set for a model on v1."""
     return (
         "[features]\nplugins = false\nremote_plugin = false\napps = false\n\n"
         "[features.multi_agent_v2]\n"
@@ -404,9 +407,30 @@ def epoch(stamp: str) -> float:
     return datetime.datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp()
 
 
-def codex_threads(home: Path, run_dir: Path) -> list:
+def codex_turns(events: list, ended: float) -> list:
+    """Each turn of a session record as (start, end): from its task_started
+    to the next task_complete or turn_aborted. A subagent idles between
+    turns, when a parent's follow-up starts its next one, and an idle
+    subagent runs nothing and does not count against agents.max_threads, so
+    the span of its whole record is not when it was alive. A turn with no end
+    in the record ends at `ended`, when the run's first agent ended."""
+    turns, start = [], None
+    for e in events:
+        kind = (e.get("payload") or {}).get("type") if e.get("type") == "event_msg" else None
+        if kind == "task_started" and start is None:
+            start = epoch(e["timestamp"])
+        elif kind in ("task_complete", "turn_aborted") and start is not None:
+            turns.append((start, epoch(e["timestamp"])))
+            start = None
+    if start is not None:
+        turns.append((start, max(ended, start)))
+    return turns
+
+
+def codex_threads(home: Path, run_dir: Path, ended: float) -> list:
     """Write each subagent's transcript to threads/ and its raw record to
-    sessions/; return each one's (thread, start, end) from its own record."""
+    sessions/; return each of its turns as (thread, start, end), from its
+    own record (codex_turns)."""
     agents = []
     for meta, events, path in rollouts(home):
         if not meta.get("parent_thread_id"):
@@ -417,9 +441,8 @@ def codex_threads(home: Path, run_dir: Path) -> list:
         (run_dir / "threads" / f"{thread}.jsonl").write_text(
             "".join(json.dumps(e) + "\n" for e in codex_thread_events(events)))
         shutil.copy(path, run_dir / "sessions" / path.name)
-        stamps = [epoch(e["timestamp"]) for e in events if e.get("timestamp")]
-        if stamps:
-            agents.append({"thread": thread, "start": min(stamps), "end": max(stamps)})
+        agents += [{"thread": thread, "start": start, "end": end}
+                   for start, end in codex_turns(events, ended)]
     return agents
 
 
@@ -600,7 +623,7 @@ def run_one(scenario: str, arm: str, ref: str, model: str, effort: str,
     info = read_transcript(transcript)
     if agent == "codex":
         home = work / "home" / ".codex"
-        agents += codex_threads(home, run_dir)
+        agents += codex_threads(home, run_dir, agents[0]["end"])
         if info["init"] is not None:
             info["init"].update(codex_session(home))
     (run_dir / "final.md").write_text((info["result"] or {}).get("result") or "")
