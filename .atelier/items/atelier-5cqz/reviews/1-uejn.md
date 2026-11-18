@@ -34,6 +34,7 @@ The committed screenshots match the independently observed pages. Windows was no
 
 ## Finding 1: Approval-waiting threads appear under At work instead of Needs you
 Recommendation: defer
+Taken: atelier-9f7b by thread:delegated-task:command%3Amcp%3Ad12574ac-fe2d-4335-bf72-c30aa232c7f3%3Adelegate-task%3A968c2e4c-7db7-40ce-813d-afb0b4162b34
 
 The Report's limitation is real. The fixture waits for `pendingRequestCount > 0` in `t3-extension/t3-instance.mjs:302-305`, but the mission API reports that thread as running and the mission page places it under At work. `T3Thread` in `crates/atelier-desk/src/t3.rs:60-72` discards pendingRequestCount, and `liveWorkers` in `t3-extension/src/mission/model.ts:94` recognises waiting only from a status string. The committed running screenshot and the independently started instance both show the mismatch.
 
