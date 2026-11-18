@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-9l8h
 title: Draw This thread natively in T3's panel
-status: in_review
+status: approved
 mission: atelier-osel
 labels: []
 priority: medium
