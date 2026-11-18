@@ -56,8 +56,9 @@ try {
   await fs.mkdir(path.join(root, 'artifacts'), { recursive: true });
 
   // Opens a scenario at a width and waits until the page has drawn from its reads.
-  const open = async (scenario, width = 1000, appearance = 'light', fail = null) => {
-    const url = `${base}/?${new URLSearchParams({ scenario, width, appearance, ...(fail ? { fail } : {}) })}`;
+  // `fail` names a path the stand-in injector answers `after` times and then fails (check/home.tsx).
+  const open = async (scenario, width = 1000, appearance = 'light', fail = null, after = 0) => {
+    const url = `${base}/?${new URLSearchParams({ scenario, width, appearance, ...(fail ? { fail, after } : {}) })}`;
     await page.call('Page.navigate', { url });
     await until(() => page.evaluate(`location.href === ${JSON.stringify(url)} && document.readyState === 'complete' && !['loading', undefined].includes(document.querySelector('#home')?.shadowRoot?.querySelector('[data-project-home]')?.dataset.projectHome)`), `${scenario} drawn`);
     // The fixture answers at once; the reads that follow the missions' (each open mission's items) are in by then.
@@ -83,6 +84,9 @@ try {
     ]);
     assert.match(await read(`text(p.querySelector('[data-lane="now"]'))`), /^Now2missions in progress, and started work in no mission/);
     assert.match(await read(`text(p.querySelector('[data-mission-row="atelier-nm01"]'))`), /^Draw the project home nativelyatelier-nm011 need you1\/5/);
+    // Each item in no mission shows its priority, as the Desk's page does; a mission's items do not.
+    assert.deepEqual(await read(`[...p.querySelectorAll('[data-loose] [data-item-row]')].map(r => [r.dataset.itemRow, r.querySelector('[data-priority]')?.dataset.priority, r.querySelectorAll('[data-priority] i.bg-border').length])`), [['atelier-l001', 'critical', 0], ['atelier-l002', 'high', 0], ['atelier-l003', 'low', 2]]);
+    assert.equal(await read(`p.querySelector('[data-items] [data-priority]')`), null);
     assert.deepEqual(await page.evaluate('homeErrors'), []);
   });
   await check('a mission folds open to its items, open work first, each with who holds it; Now\'s and, with nothing under Now, Next\'s start open, Later\'s folded', async () => {
@@ -168,6 +172,21 @@ try {
     assert.deepEqual(await lanes(), [['now', ['atelier-nm01'], []], ['next', ['atelier-xm01'], []], ['later', ['atelier-lm01'], []]]);
     assert.match(await read(`text(p.querySelector('[data-note]'))`), /items in no mission could not be read.*HTTP 502/);
   });
+  // A read that answered and then fails keeps what it gave, said to be as of then, never silently.
+  for (const [failing, label, where, kept] of [
+    ['/api/roadmap?repo=atelier', 'the items in no mission', `p`, `p.querySelectorAll('[data-loose] [data-item-row]').length === 3`],
+    ['/api/history?repo=atelier&days=7', 'the week', `p`, `p.querySelectorAll('[data-entry]').length === 3`],
+    ['/api/repos/atelier/missions/atelier-nm01', 'an open mission\'s items', `p.querySelector('[data-mission-row="atelier-nm01"]')`, `p.querySelectorAll('[data-items="atelier-nm01"] [data-item-row]').length === 5`],
+  ]) {
+    await open('full', 1000, 'light', failing, 1);
+    await check(`${label} answer and then fail: they stay, with a note saying they are as of the last read`, async () => {
+      assert.equal(await read(`${where}.querySelector('[data-note]')`), null);
+      await page.evaluate('document.dispatchEvent(new Event("visibilitychange"))');
+      await until(() => read(`Boolean(${where}.querySelector('[data-note]'))`), `The failed read of ${failing} noted`);
+      assert.match(await read(`text(${where}.querySelector('[data-note]'))`), /could not be read again, so .* as of .*HTTP 502/);
+      assert.equal(await read(kept), true, 'what the read gave before is gone');
+    });
+  }
   await open('full', 1000, 'light', '/api/repos/atelier/missions');
   await check('the missions cannot be read: the page says so, naming the Desk and the failure, and draws no lanes', async () => {
     assert.equal(await read(`p.dataset.projectHome`), 'error');

@@ -81,9 +81,9 @@ const nextItems = [item("atelier-x001", "Write the plan's first item", "ready"),
 const nextMission = row("atelier-xm01", "Agreed, not started", "open", nextItems);
 const laterMission = row("atelier-lm01", "A proposed plan", "proposed", []);
 const loose = [
-  item("atelier-l001", "A loose item being built", "building", { holder: "thread:loose" }),
-  item("atelier-l002", "A loose ready item", "ready"),
-  item("atelier-l003", "A loose draft", "draft"),
+  item("atelier-l001", "A loose item being built", "building", { holder: "thread:loose", priority: "critical" }),
+  item("atelier-l002", "A loose ready item", "ready", { priority: "high" }),
+  item("atelier-l003", "A loose draft", "draft", { priority: "low" }),
 ];
 const threads: Agent[] = [
   { identity: "thread:impl", role: "implementer", item: "atelier-n002", thread: { title: "Implement the fold", status: "running", provider: "claudeAgent", model: "claude-opus-5-5", link: null } },

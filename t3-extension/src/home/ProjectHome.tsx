@@ -63,9 +63,9 @@ export function ProjectHome({ desk, repo, onClose, openMission, openItem, now: c
           </p>
         ) : (
           <>
-            {missions.error ? <Note>{`The missions could not be read again from ${desk}, so they are as of ${missions.readAt?.toLocaleTimeString() ?? "the last read"}: ${missions.error.message}`}</Note> : null}
-            {roadmap.error ? <Note>{`The items in no mission could not be read, so they are left out: ${roadmap.error.message}`}</Note> : null}
-            {history.error ? <Note>{`The records' history could not be read, so the last seven days are left out: ${history.error.message}`}</Note> : null}
+            {missions.error ? <Note>{`The missions could not be read again from ${desk}, so they are ${asOf(missions.readAt)}: ${missions.error.message}`}</Note> : null}
+            {roadmap.error ? <Note>{`The items in no mission could not be read${roadmap.data ? ` again, so they are ${asOf(roadmap.readAt)}` : ", so they are left out"}: ${roadmap.error.message}`}</Note> : null}
+            {history.error ? <Note>{`The records' history could not be read${history.data ? ` again, so the last seven days are ${asOf(history.readAt)}` : ", so the last seven days are left out"}: ${history.error.message}`}</Note> : null}
             <div className="flex flex-col gap-5">
               {all.map((lane) => (
                 <section key={lane.name} data-lane={lane.name} className="mt-3">
@@ -95,6 +95,9 @@ export function ProjectHome({ desk, repo, onClose, openMission, openItem, now: c
     </div>
   );
 }
+
+/** `as of 14:02:11`: when a read kept beside a failed one last answered. */
+const asOf = (at: Date | null) => `as of ${at?.toLocaleTimeString() ?? "the last read"}`;
 
 function Note({ children }: { children: ReactNode }) {
   return (
@@ -212,9 +215,22 @@ function MissionItems({ desk, repo, id, openItem }: { desk: string; repo: string
     );
   }
   const { items, threads } = page.data;
-  if (items.length === 0) return <p className={`${pad} text-muted-foreground text-xs`}>No items yet.</p>;
+  // A read that fails after one that answered keeps the items it gave, said to be as of then.
+  const stale = page.error ? (
+    <p className={`${pad} text-destructive-foreground text-xs`} data-note="">
+      {`The items of ${id} could not be read again, so they are ${asOf(page.readAt)}: ${page.error.message}`}
+    </p>
+  ) : null;
+  if (items.length === 0)
+    return (
+      <>
+        {stale}
+        <p className={`${pad} text-muted-foreground text-xs`}>No items yet.</p>
+      </>
+    );
   return (
     <div className={`flex flex-col ${pad}`} data-items={id}>
+      {stale}
       {h.sortItems(items).map((row) => (
         <ItemLine key={row.id} row={row} holder={h.holderLine(row, threads)} stage openItem={openItem} />
       ))}
@@ -222,7 +238,21 @@ function MissionItems({ desk, repo, id, openItem }: { desk: string; repo: string
   );
 }
 
-function ItemLine({ row, holder, stage, openItem }: { row: ItemRow; holder: string | null; stage: boolean; openItem(id: string): void }) {
+/** An item's priority as three bars, the Desk's (desk/src/components/ui.tsx, Priority): one for low, three for high, three in the warning colour for critical. */
+const LEVELS: Record<ItemRow["priority"], number> = { low: 1, medium: 2, high: 3, critical: 3 };
+function Priority({ priority }: { priority: ItemRow["priority"] }) {
+  const level = LEVELS[priority];
+  const on = priority === "critical" ? "bg-warning-foreground" : "bg-foreground/70";
+  return (
+    <span className="inline-flex h-3 items-end gap-[1.5px]" title={`${priority} priority`} role="img" aria-label={`${priority} priority`} data-priority={priority}>
+      {[1, 2, 3].map((n) => (
+        <i key={n} className={`w-[3px] rounded-[1px] ${n <= level ? on : "bg-border"}`} style={{ height: 4 + n * 2.6 }} />
+      ))}
+    </span>
+  );
+}
+
+function ItemLine({ row, holder, stage, priority, openItem }: { row: ItemRow; holder: string | null; stage: boolean; priority?: boolean; openItem(id: string): void }) {
   const blocked = h.blockedLine(row);
   return (
     <button
@@ -244,6 +274,7 @@ function ItemLine({ row, holder, stage, openItem }: { row: ItemRow; holder: stri
         ) : null}
         {row.needs_human ? <span className="text-warning-foreground">Needs you</span> : null}
         {stage ? <span>{h.statusWord(row.status)}</span> : null}
+        {priority ? <Priority priority={row.priority} /> : null}
       </span>
     </button>
   );
@@ -257,7 +288,7 @@ function LooseItems({ rows, limit, openItem }: { rows: ItemRow[]; limit: number;
     <div className="flex flex-col pt-1.5 pb-2" data-loose="">
       <div className="px-1.5 py-1 font-semibold text-muted-foreground text-xs">In no mission</div>
       {shown.map((row) => (
-        <ItemLine key={row.id} row={row} holder={null} stage={h.started(row)} openItem={openItem} />
+        <ItemLine key={row.id} row={row} holder={null} stage={h.started(row)} priority openItem={openItem} />
       ))}
       {rows.length > shown.length ? (
         <button type="button" onClick={() => setAll(true)} className={`cursor-pointer self-start px-1.5 py-0.5 text-muted-foreground text-xs ${rowClass}`}>

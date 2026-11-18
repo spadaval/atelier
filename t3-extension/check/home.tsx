@@ -1,6 +1,6 @@
 // The page script of test-home.mjs: draws the project home of `?scenario=` (check/home-fixtures.ts)
 // through mountNativeLayer, as the layer does, at `?width=` pixels, with a stand-in injector that
-// answers the fixture's reads (failing one path on `?fail=`), and records what the page asks to
+// answers the fixture's reads (failing `?fail=<path>` after its first `?after=<n>` reads), and records what the page asks to
 // open in `homeCalls`.
 import { ProjectHome } from "../src/home/ProjectHome";
 import { mountNativeLayer } from "../src/layer/native";
@@ -22,7 +22,7 @@ const api = {
   request: ((action: string, payload?: unknown) => {
     const { path } = payload as { desk: string; path: string };
     reads.push(path);
-    if (path === params.get("fail")) return Promise.reject(new Error(`GET ${path}: HTTP 502: the fixture failed it`));
+    if (path === params.get("fail") && reads.filter((read) => read === path).length > Number(params.get("after") ?? 0)) return Promise.reject(new Error(`GET ${path}: HTTP 502: the fixture failed it`));
     if (action !== "desk-get" || !(path in answers)) return Promise.reject(new Error(`GET ${path}: the fixture has no answer`));
     return Promise.resolve(structuredClone(answers[path]));
   }) as HostApi["request"],
