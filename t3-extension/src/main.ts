@@ -5,7 +5,7 @@ import { Extension } from "./core/extension";
 import type { ExtensionApi } from "./host/api";
 import { createHostAdapter, hostDomExpected, hostImportedModules, hostProbes, useHostApi } from "./host/adapter";
 import { createProjectHome } from "./layer/home";
-import { createLayer } from "./layer/layer";
+import { createLayer, layerTargets } from "./layer/layer";
 import { createDeskPanel } from "./panel/panel";
 import { createReferences } from "./references/references";
 import { createSettingsSection } from "./settings/mount";
@@ -27,7 +27,8 @@ export async function start(api: ExtensionApi): Promise<void> {
   const { repositories } = ext;
   // The DOM pass runs the parts' syncs in this order: the panel, the settings section, the project
   // strip, the project home, the sidebar with its missions, then the layer, which marks their rows.
-  const panel = createDeskPanel(ext, () => settings.open());
+  // The panel opens the mission page in the layer, which is made after it.
+  const panel = createDeskPanel(ext, { openSettings: () => settings.open(), openMission: (desk, repo, id) => layer.open(layerTargets.mission(desk, repo, id)) });
   const settings = createSettingsSection(ext, {
     showDesk: () => void panel.show(),
     changed: () => references.queueScan(),
@@ -77,7 +78,7 @@ export async function start(api: ExtensionApi): Promise<void> {
     ext.scheduleDOM();
     if (document.hidden) return;
     sidebar.read();
-    panel.tellThread();
+    panel.drawThread();
   });
   ext.listen(window, "resize", () => ext.scheduleDOM());
   ext.watchRoute();

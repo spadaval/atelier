@@ -112,7 +112,14 @@ settled on in a spike on 2026-11-16:
   leads with every item and the threads on each, the other threads it
   started, the records its conversation names, and what of all that waits
   on them. A thread that holds, started and names nothing shows its project
-  at a glance instead. It follows them from thread to thread.
+  at a glance instead. It follows them from thread to thread. The T3
+  extension draws it itself, in React with T3 Code's own components, from
+  the Desk's reads and what T3 Code tells it of the thread. An item, the
+  inbox or a proposed plan opened from it shows as that Desk page in the
+  panel, with a way back, and stays there while they move between threads;
+  an agreed or done mission opens the mission page. The Desk's own This
+  thread page stays until the release that draws it natively is installed
+  (atelier-yy4j).
 - **The mission page**, over T3 Code's main area, for one agreed or done
   mission. The T3 extension draws it itself, in React with T3 Code's own
   components, from the Desk's reads; it replaces mission control, which the

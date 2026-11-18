@@ -10,9 +10,9 @@ import { paths } from "../src/mission/model";
 
 export const NOW = Date.parse("2026-11-17T12:00:00Z");
 export const REPO = "atelier";
-const minutes = (n: number) => new Date(NOW - n * 60_000).toISOString();
+export const minutes = (n: number) => new Date(NOW - n * 60_000).toISOString();
 
-function item(id: string, title: string, status: ItemRow["status"], more: Partial<ItemRow> = {}): ItemRow {
+export function item(id: string, title: string, status: ItemRow["status"], more: Partial<ItemRow> = {}): ItemRow {
   return {
     id,
     title,
@@ -34,7 +34,7 @@ function item(id: string, title: string, status: ItemRow["status"], more: Partia
     ...more,
   };
 }
-function agent(identity: string, role: Agent["role"], itemId: string | null, live: boolean): Agent {
+export function agent(identity: string, role: Agent["role"], itemId: string | null, live: boolean): Agent {
   return { identity, role, item: itemId, thread: live ? { title: identity, status: "running", provider: "claudeAgent", model: "claude-opus-5-5", link: null } : null };
 }
 function thread(id: string, title: string, status: string, changedMinutesAgo: number, startedMinutesAgo: number, lastLine: string, pendingRequests = 0): ThreadInfo {
@@ -45,7 +45,7 @@ const sections = [
   { heading: "Outcome", markdown: "The mission page says what needs you.\n\n- It has **no** progress log.\n- Its rows open `threads` and items." },
   { heading: "Success criteria", markdown: "- needs-you-first: the page lists what needs the human first." },
 ];
-function mission(id: string, title: string, status: MissionPage["mission"]["status"], items: ItemRow[], threads: Agent[], more: Partial<MissionPage> = {}): MissionPage {
+export function mission(id: string, title: string, status: MissionPage["mission"]["status"], items: ItemRow[], threads: Agent[], more: Partial<MissionPage> = {}): MissionPage {
   const counts = [...new Set(items.map((i) => i.status))].map((s) => ({ status: s, count: items.filter((i) => i.status === s).length }));
   return {
     commit: "0".repeat(40),
