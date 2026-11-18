@@ -3,12 +3,13 @@ schema: atelier.item
 schema_version: 3
 id: atelier-mtzj
 title: 'Put the lead in charge in the skill: the process as its default, and any departure said with its reason'
-status: ready
+status: building
 mission: atelier-kw8u
 labels: []
 priority: medium
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A15ed7340-46a6-4e3a-b0c2-fdc0661b938f%3Adelegate-task%3A96c8fe21-678c-4553-9659-a7cabe5c18ed
 ready:
   by: 'the human, in conversation on 2026-11-18: put the mission together and then run it'
   at: 2026-11-18T23:49:47.284668623Z
