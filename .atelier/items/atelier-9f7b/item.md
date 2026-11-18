@@ -128,4 +128,3 @@ follow-up item.
 extension tests leave there), so command output to Claude Code's temp folder
 failed. I ran everything with `TMPDIR` and `CARGO_TARGET_DIR` under my home
 folder and deleted nothing of others'.
-
