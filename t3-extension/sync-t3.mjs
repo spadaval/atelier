@@ -19,7 +19,7 @@ const checkout = path.resolve(process.argv[2] ?? process.env.T3 ?? path.join(os.
 const web = path.join(checkout, 'apps/web/src');
 const out = path.join(root, 'src/t3');
 // The components the extension draws. A new one is a new name here; its imports must map below.
-const components = ['badge', 'kbd', 'tooltip', 'collapsible-section-header', 'button'];
+const components = ['badge', 'kbd', 'tooltip', 'collapsible-section-header', 'button', 'switch', 'select', 'preview-card'];
 
 function fail(message) {
   console.error(`sync-t3: ${message}. Nothing was written.`);
@@ -90,12 +90,23 @@ const imports = [
   [/(["'])(?:~\/|(?:\.\.\/)+)lib\/utils\1/g, '"../cn"'],
   [/(["'])~\/lib\/windowControlsOverlay\1/g, '"../../react/windowControlsOverlay"'],
 ];
-// Base UI portals a tooltip to <body>, outside the shadow root its styles live in; the mount
-// gives each portal a container inside it (src/react/mount.tsx, usePortalContainer).
+// Base UI portals a popup (a tooltip, a select's list, a preview card) to <body>, outside the
+// shadow root its styles live in; the mount gives each portal a container inside it
+// (src/react/mount.tsx, usePortalContainer).
+const portal = primitive => [
+  [`    <${primitive}.Portal>\n`, `    <${primitive}.Portal container={usePortalContainer()}>\n`],
+  ['import { cn } from "../cn";\n', 'import { cn } from "../cn";\nimport { usePortalContainer } from "../../react/portal";\n'],
+];
 const rewrites = {
-  tooltip: [
-    ['    <TooltipPrimitive.Portal>\n', '    <TooltipPrimitive.Portal container={usePortalContainer()}>\n'],
-    ['import { cn } from "../cn";\n', 'import { cn } from "../cn";\nimport { usePortalContainer } from "../../react/portal";\n'],
+  tooltip: portal('TooltipPrimitive'),
+  select: portal('SelectPrimitive'),
+  // A record link's card is placed at an ID in T3's conversation, a Range and not an element
+  // React draws, so the popup passes Base UI's anchor to its positioner, as T3's SelectPopup does.
+  'preview-card': [
+    ...portal('PreviewCardPrimitive'),
+    ['  sideOffset = 6,\n  ...props\n', '  sideOffset = 6,\n  anchor,\n  ...props\n'],
+    ['  sideOffset?: PreviewCardPrimitive.Positioner.Props["sideOffset"];\n}) {', '  sideOffset?: PreviewCardPrimitive.Positioner.Props["sideOffset"];\n  anchor?: PreviewCardPrimitive.Positioner.Props["anchor"];\n}) {'],
+    ['        align={align}\n', '        align={align}\n        anchor={anchor}\n'],
   ],
 };
 for (const name of components) {

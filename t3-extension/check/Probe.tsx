@@ -4,6 +4,9 @@ import { Badge } from "../src/t3/ui/badge";
 import { Button } from "../src/t3/ui/button";
 import { CollapsibleSectionHeader, SectionHeaderStatus } from "../src/t3/ui/collapsible-section-header";
 import { Kbd, KbdGroup } from "../src/t3/ui/kbd";
+import { PreviewCard, PreviewCardPopup, PreviewCardTrigger } from "../src/t3/ui/preview-card";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../src/t3/ui/select";
+import { Switch } from "../src/t3/ui/switch";
 import { Tooltip, TooltipPopup, TooltipProvider, TooltipTrigger } from "../src/t3/ui/tooltip";
 
 const badgeVariants = ["default", "destructive", "error", "info", "outline", "secondary", "success", "warning", "label"] as const;
@@ -12,6 +15,11 @@ const buttonVariants = ["default", "destructive", "destructive-outline", "ghost"
 const buttonSizes = ["compact", "default", "icon", "icon-lg", "icon-micro", "icon-tiny", "icon-sm", "icon-sm-pill", "icon-xl", "icon-xs", "lg", "micro", "multiline", "sm", "sm-pill", "sm-multiline", "xl", "xs"] as const;
 const tones = ["muted", "emphasized", "accent"] as const;
 const tooltipVariants = ["default", "glass", "code"] as const;
+const selectSizes = ["compact", "default", "lg", "sm", "xs"] as const;
+const selectItems = [
+  { value: "automatic", label: "Automatic: atelier" },
+  { value: "", label: "Not linked" },
+];
 
 /** The tree; `hover` adds a closed tooltip whose trigger the check hovers to open it. */
 export function Probe() {
@@ -74,12 +82,52 @@ export function Probe() {
             </TooltipPopup>
           </Tooltip>
         ))}
+        {[false, true].map((checked) =>
+          (["default", "sm"] as const).map((size) => <Switch key={`${checked}-${size}`} checked={checked} size={size} data-probe={`switch-${size}-${checked ? "on" : "off"}`} />),
+        )}
+        <Switch disabled data-probe="switch-disabled" />
+        {selectSizes.map((size) => (
+          <Select key={size} items={selectItems} value="automatic">
+            <SelectTrigger size={size} data-probe={`select-trigger-${size}`}>
+              <SelectValue />
+            </SelectTrigger>
+          </Select>
+        ))}
+        <Select items={selectItems} value="automatic" disabled>
+          <SelectTrigger data-probe="select-trigger-disabled">
+            <SelectValue />
+          </SelectTrigger>
+        </Select>
         <Tooltip>
           <TooltipTrigger render={<span />} data-probe="tooltip-hover-trigger">
             hover
           </TooltipTrigger>
           <TooltipPopup data-probe="tooltip-hover">Opened by hovering</TooltipPopup>
         </Tooltip>
+      </div>
+      {/* Open popups, in a row of their own, so none covers the tooltip the check hovers. */}
+      <div className="relative flex items-start gap-40 p-4 pt-10">
+        {/* An open list: its popup, with one item selected and one not. Not modal, so the page
+            stays hoverable for the tooltip check. */}
+        <Select items={selectItems} value="automatic" open modal={false}>
+          <SelectTrigger data-probe="select-trigger-open">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectPopup data-probe="select-popup">
+            {selectItems.map((item) => (
+              <SelectItem key={item.value} value={item.value}>
+                {item.label}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+        <PreviewCard open>
+          <PreviewCardTrigger render={<span />}>card</PreviewCardTrigger>
+          <PreviewCardPopup data-probe="preview-card" className="w-60 p-3">
+            <strong>atelier-toee</strong>
+            <p>A record&apos;s card</p>
+          </PreviewCardPopup>
+        </PreviewCard>
       </div>
     </TooltipProvider>
   );

@@ -19,12 +19,28 @@ Three layers:
   reloads on file change. It knows nothing about Atelier. Launching, process
   detection, dialogs and the control channel differ per platform, all in its
   `platform` object.
-- `src/host-adapter.js`: the only code coupled to T3 internals.
-- `src/custom.js`: the Atelier extension, written against the adapter and Desk's HTTP
-  API. The Desk panel is an iframe showing the Desk's embedded mode, and the two
-  talk over the Desk's host contract
-  ([docs/architecture/desk.md](../docs/architecture/desk.md), "The embedded
-  mode" and "The host contract").
+- `src/host/adapter.ts`: the only code coupled to T3 internals, with a type for
+  each part of T3 it reads. `src/host/api.ts` types what the loader gives the
+  extension and what each injector request answers.
+- The Atelier extension, written against the adapter and the Desk's HTTP API,
+  whose types come from `desk/src/api`:
+  - `src/core/`: what the parts share (settings, the thread T3 shows, one DOM
+    pass each part adds its sync to) and `element` for DOM nodes.
+  - `src/repositories.ts`: the Desks' repositories and which one each T3
+    project maps to.
+  - `src/panel/`: the Desk panel, an iframe showing the Desk's embedded mode,
+    which talks over the Desk's host contract
+    ([docs/architecture/desk.md](../docs/architecture/desk.md), "The embedded
+    mode" and "The host contract"), and the Desk tab with its controls.
+  - `src/references/`: record links in a conversation, and their hover card.
+  - `src/settings/`: the Customizations section.
+  - `src/mission/`: the mission page.
+  - `src/custom.js`: the views not yet typed: the sidebar, the layer and the
+    project strip.
+
+  What sits inside T3's own DOM (the Desk tab, record links, sidebar rows) is
+  DOM code; the extension's own pages, the hover card and the Customizations
+  section are React, drawn with T3's components.
 
 The adapter and the extension are modules under `src/`, which Vite builds
 (`pnpm build`) into one classic script, `dist/custom.js`, from the entry
@@ -391,7 +407,9 @@ own existing user-authorized actions.
 
 ## Settings
 
-The Customizations section (Settings → General) shows:
+The Customizations section (Settings → General) is drawn as T3 draws its own
+settings, with T3's `Button`, `Badge`, `Switch` and `Select` (see
+[Drawing with T3 Code's components](#drawing-with-t3-codes-components)). It shows:
 
 - each Desk URL, whether it is reachable, and which repositories it claims, with
   their identities;
@@ -402,10 +420,8 @@ The Customizations section (Settings → General) shows:
 - the current project's repository, Automatic (by identity, naming the match) or
   a manual override, and the list of overrides with a Remove button each,
   including any `desk.repositories` entries;
-- the installed release, in T3's own `Badge` (the extension's first part drawn
-  with T3's components, see
-  [Drawing with T3 Code's components](#drawing-with-t3-codes-components)), the
-  last release check and an Update button (see [Updates](#updates));
+- the installed release, in T3's own `Badge`, the last release check and an
+  Update button (see [Updates](#updates));
 - injector status and errors, Reload scripts, Refresh status (also rereads the
   Desks), Open customization folder, Open Desk, each view with whether it is on
   or which hooks it lacks, and every T3 hook probe.
@@ -579,7 +595,7 @@ network-facing debugging listener is enabled.
 
 ## T3 hooks
 
-`src/host-adapter.js` names each private hook and probes it at startup:
+`src/host/adapter.ts` names each private hook and probes it at startup:
 
 - `module:workspace-panel-store`, `module:atom-registry`,
   `module:thread-snapshot-atom`, `module:environment-atoms`,
@@ -837,11 +853,16 @@ theme mapping, utilities and the base-layer defaults they rely on
 (`src/t3/theme.css`), its whole stylesheet for the check below
 (`src/t3/index.css`), its MIT licence (`src/t3/LICENSE`) and the commit copied
 from (`src/t3/SOURCE`). Nothing in `src/t3/` is edited by hand. The components
-are `badge`, `kbd`, `tooltip`, `collapsible-section-header` and `button`; a page
-that needs another adds its name to `components` in `sync-t3.mjs`.
+are `badge`, `kbd`, `tooltip`, `collapsible-section-header`, `button`, `switch`,
+`select` and `preview-card`; a page that needs another adds its name to
+`components` in `sync-t3.mjs`, and to `check/Probe.tsx` for the check below.
+`PreviewCardPopup` gains one prop in the copy, `anchor`, as T3's `SelectPopup`
+has: a record link's card is placed at an ID in T3's conversation, which React
+does not draw.
 
 A React tree is drawn by `mountReact(host, api)` (`src/react/mount.tsx`) in a
-shadow root of its own, which adopts the built stylesheet, so T3's page and the
+shadow root of its own, or in the extension's own root (the hover card), which
+adopts the built stylesheet, so T3's page and the
 extension cannot restyle each other. The colours are T3's variables, inherited
 from its page, so a theme or Appearance change in T3 reaches them. Three things
 make a shadow root draw as T3 does, each done once and checked below:
@@ -852,9 +873,9 @@ make a shadow root draw as T3 does, each done once and checked below:
 - Tailwind's `@property` rules, which give its shadow and ring variables their
   initial values, do nothing in a shadow root; `mountReact` registers them on the
   document once and removes them when the extension goes.
-- Base UI portals a tooltip to `<body>`, outside the stylesheet. `mountReact`
-  gives each tree a portal container inside its shadow root, and `sync-t3.mjs`
-  points T3's `TooltipPopup` at it. T3's tooltip also reads its title bar height
+- Base UI portals a popup (a tooltip, a select's list, a preview card) to
+  `<body>`, outside the stylesheet. `mountReact` gives each tree a portal
+  container inside its shadow root, and `sync-t3.mjs` points T3's popups at it. T3's tooltip also reads its title bar height
   from T3's app; `src/react/windowControlsOverlay.ts` restates that hook.
 
 T3's plain `@theme` (its font variables, which Settings → Appearance changes on
@@ -957,7 +978,9 @@ not. On Windows set `BROWSER` if Edge is elsewhere; on Linux it defaults to
 
 `node test-contract.mjs --port 9333 --thread <environmentId>/<threadId>` checks
 every hook against a running T3 (use a test instance; on Linux `node t3-instance.mjs
-start` prints this command with its values): it opens the thread, the
+start` prints this command with its values), with the adapter of the built
+`dist/custom.js` (`pnpm build` first), which exports it as `T3Custom.adapter`
+without starting the extension: it opens the thread, the
 workspace panel, a new-thread screen (the first draft that names a project, or
 `--draft <id>`) and Settings, prints each probe, and exits non-zero naming each
 broken hook, or if discovery imported a script that is not a declared renderer

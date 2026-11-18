@@ -482,6 +482,11 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   assert((await evaluate('globalThis.keptFrame.src')).endsWith('/item/' + referenceId));
   await evaluate(`(()=>{const p=document.createElement('p');p.id='mission-reference';p.textContent='${missionId}';document.querySelector('[data-workspace-area=conversation]').append(p)})()`);
   await until(() => evaluate(`Boolean(document.querySelector("#t3-custom-root").shadowRoot.querySelector("[data-atelier-id=${missionId}]"))`), 'Mission reference scanning');
+  // Its card, opened before the mission was ever resolved, links to it on the Desk that answered, as a mission.
+  await evaluate(`(()=>{const link=document.querySelector("#t3-custom-root").shadowRoot.querySelector("[data-atelier-id=${missionId}]");link.blur();link.focus()})()`);
+  await until(() => evaluate('Boolean(document.querySelector("#t3-custom-root").shadowRoot.querySelector("#atelier-hovercard h3"))'), 'Mission card');
+  await until(async () => (await evaluate('[...document.querySelector("#t3-custom-root").shadowRoot.querySelectorAll("#atelier-hovercard a")].find(a => a.textContent.startsWith("Open externally"))?.href')) === `${secondDeskBase}/r/atelier/mission/${missionId}`, 'The mission card links to the Desk that answered');
+  await evaluate(`document.querySelector("#t3-custom-root").shadowRoot.querySelector("[data-atelier-id=${missionId}]").blur()`);
   await evaluate(`(()=>{document.getSelection().removeAllRanges();const p=document.querySelector('#mission-reference');const range=document.createRange();range.selectNodeContents(p);const r=range.getBoundingClientRect();p.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,clientX:r.left+3,clientY:r.top+3}))})()`);
   await until(() => evaluate(`globalThis.keptFrame.src.includes("/embed/r/atelier/mission/${missionId}")`), 'Direct mission reference click');
   // The first Desk has no such record; the second, which also serves atelier, answered, so it opens there.
@@ -493,7 +498,8 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   await delay(500); await evaluate('document.querySelector("[data-t3-desk-launch]").click()');
   await until(() => evaluate('document.querySelector("[data-t3-desk-mount]").shadowRoot.querySelector("iframe").hidden'), 'Unmapped project empty state');
   console.log('PASS: same-project thread switches preserve Desk navigation; unmapped projects hide stale repository content');
-  await evaluate('document.querySelector("#t3-custom-root").shadowRoot.querySelector("[data-atelier-id]").focus()');
+  // The link still has focus from opening the record above, so it is blurred first, or no card would open.
+  await evaluate('(()=>{const link=document.querySelector("#t3-custom-root").shadowRoot.querySelector("[data-atelier-id]");link.blur();link.focus()})()');
   await until(() => evaluate('Boolean(document.querySelector("#t3-custom-root").shadowRoot.querySelector("#atelier-hovercard h3"))'), 'Reference in unmapped project');
   await evaluate('document.querySelector("#t3-custom-root").shadowRoot.querySelector("#atelier-hovercard button").click()');
   await until(() => evaluate('!document.querySelector("[data-t3-desk-mount]").shadowRoot.querySelector("iframe").hidden'), 'Cross-project reference override');
@@ -777,8 +783,8 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   const refreshUntil = (expression, label) => until(() => evaluate(`(${expression})||(${settingsQuery('#refresh-status')}.click(),false)`), label);
   await refreshUntil(`${settingsQuery('#release-error')}.textContent === "Release check failed: Looking up releases: GET ${base}/releases: HTTP 503 Service Unavailable"`, 'The failed release lookup in Customizations');
   assert.match(await evaluate(`${settingsQuery('#release-status')}.textContent`), /^checked /);
-  // The installed release is T3's Badge, drawn by React in a shadow root of its own (src/react/settings.tsx).
-  const badge = `${settingsQuery('#release-badge')}.shadowRoot.querySelector('[data-slot="badge"]')`;
+  // The installed release is T3's Badge, drawn by React with the section (src/settings/Customizations.tsx).
+  const badge = settingsQuery('#release-badge [data-slot="badge"]');
   assert.equal(await evaluate(`${badge}?.textContent`), 'development');
   assert.notEqual(await evaluate(`getComputedStyle(${badge}).borderTopStyle`), 'none', 'the release Badge is drawn without its stylesheet');
   assert.equal(await evaluate(`${settingsQuery('#update-release')}.hidden`), true, 'an update was offered after a failed lookup');
@@ -787,8 +793,12 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   await refreshUntil(`${settingsQuery('#release-status')}.textContent.startsWith("release 0.5.0 is available · ")`, 'The newer release in Customizations');
   assert.equal(await evaluate(`${settingsQuery('#release-error')}.hidden`), true);
   assert.equal(await evaluate(`${settingsQuery('#update-release')}.hidden ? null : ${settingsQuery('#update-release')}.textContent`), 'Update to 0.5.0');
-  assert.equal(await evaluate(`${settingsQuery('[data-setting="autoUpdate"]')}.checked`), false, 'automatic updates are on by default');
-  await evaluate(`(()=>{const select=document.querySelector("#t3-custom-settings").shadowRoot.querySelector("#project-mapping");select.value="${deskBase}/r/atelier";select.dispatchEvent(new Event("change"))})()`);
+  // The settings are T3's Switch (role switch, aria-checked) and Select (a list opened on mousedown).
+  assert.equal(await evaluate(`${settingsQuery('[data-setting="autoUpdate"]')}.getAttribute("aria-checked") === "true"`), false, 'automatic updates are on by default');
+  await evaluate(`${settingsQuery('#project-mapping')}.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }))`);
+  const mappingItem = settingsQuery(`[data-slot="select-item"][data-value="${deskBase}/r/atelier"]`);
+  await until(() => evaluate(`Boolean(${mappingItem})`), 'The project mapping list open');
+  await evaluate(`${mappingItem}.click()`);
   // The views toggle was saved earlier; wait for this mapping.
   const saved = await until(async () => { const settings = JSON.parse(await fs.readFile(path.join(temp, 'config.json'), 'utf8')).settings; return settings?.mappings?.['env:project-c'] && settings; }, 'Settings written to config.json');
   assert.deepEqual(saved.mappings, { 'env:project-c': `${deskBase}/r/atelier` });
@@ -824,13 +834,13 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   await until(() => evaluate('Boolean(document.querySelector("#t3-custom-settings"))'), 'Settings remount');
   // A folded mission, as a fold saves it, stays folded after reinjection.
   await evaluate(`localStorage.setItem("t3-custom:atelier:missions:v1", ${JSON.stringify(JSON.stringify({ folded: { [`${deskBase}/${fixture.repo}/${fixture.mission.id}`]: true } }))})`);
-  await until(() => evaluate('Boolean(document.querySelector("#t3-custom-settings").shadowRoot.querySelector("#release-badge").shadowRoot.querySelector("[data-slot=badge]"))'), 'The release Badge before reinjection');
-  await evaluate('globalThis.previousBadge=document.querySelector("#t3-custom-settings").shadowRoot.querySelector("#release-badge").shadowRoot;globalThis.adoptedBefore=document.adoptedStyleSheets.length');
+  await until(() => evaluate('Boolean(document.querySelector("#t3-custom-settings").shadowRoot.querySelector("#release-badge [data-slot=badge]"))'), 'The release Badge before reinjection');
+  await evaluate('globalThis.previousBadge=document.querySelector("#t3-custom-settings").shadowRoot;globalThis.adoptedBefore=document.adoptedStyleSheets.length');
   await evaluate('globalThis.previousRoot=document.querySelector("#t3-custom-root");document.querySelector("#t3-custom-settings").shadowRoot.querySelector("#reload-scripts").click()');
   await until(() => evaluate('Boolean(document.querySelector("#t3-custom-root")) && document.querySelector("#t3-custom-root") !== globalThis.previousRoot'), 'Settings reinjection control');
   // The old extension's React root is unmounted, and Tailwind's @property rules are on the document once.
   assert.equal(await evaluate('globalThis.previousBadge.querySelector("[data-react-root]")'), null, 'the release Badge of the disposed extension is still mounted');
-  await until(() => evaluate('Boolean(document.querySelector("#t3-custom-settings")?.shadowRoot.querySelector("#release-badge").shadowRoot?.querySelector("[data-slot=badge]"))'), 'The release Badge after reinjection');
+  await until(() => evaluate('Boolean(document.querySelector("#t3-custom-settings")?.shadowRoot.querySelector("#release-badge [data-slot=badge]"))'), 'The release Badge after reinjection');
   assert.equal(await evaluate('document.adoptedStyleSheets.length'), await evaluate('globalThis.adoptedBefore'), 'reinjection left a second copy of the @property rules on the document');
   assert.equal(await evaluate('performance.timeOrigin'), timeOrigin);
   assert.equal(await evaluate('fixtureListeners.size'), 1);
@@ -893,6 +903,11 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   const probeList = await evaluate('document.querySelector("#t3-custom-settings").shadowRoot.textContent');
   for (const line of ['Inbox row in the sidebar: off, missing dom:sidebarSearch', 'Missions in T3\'s thread list: off (T3\'s list is left as T3 drew it), missing layout:threadList', 'Desk layer over T3\'s main area: on', 'Project strip on the new-thread screen: on', 'Project home from the breadcrumb: on', 'dom:composerStack', 'dom:threadItem', 'state:thread-origin', 'module:composer-draft-store']) assert(probeList.includes(line), `the settings section does not say "${line}"`);
   console.log('PASS: a renamed panel slot turns the Desk panel off by name and reference clicks open Desk externally');
+  // Stopped with a card open: everything still goes.
+  await evaluate('location.hash="/env/thread-a"');
+  await until(() => evaluate('__t3Custom.diagnostics().context?.threadId === "thread-a"'), 'A thread before stopping');
+  await evaluate('(()=>{const link=document.querySelector("#t3-custom-root").shadowRoot.querySelector("[data-atelier-id]");link.blur();link.focus()})()');
+  await until(() => evaluate('Boolean(document.querySelector("#t3-custom-root").shadowRoot.querySelector("#atelier-hovercard h3"))'), 'A card open before stopping');
   await control('stop');
   await until(() => evaluate('!document.querySelector("#t3-custom-root") && !document.querySelector("[data-t3-desk-mount]") && !document.querySelector("[data-t3-desk-launch]") && !document.querySelector("[data-t3-ext-sidebar], [data-t3-layer], [data-t3-strip], [data-t3-list-row], [data-t3-mission-layout]")'), 'Full extension removal');
   assert.equal(await evaluate('document.querySelector("#native-content").inert'), false);

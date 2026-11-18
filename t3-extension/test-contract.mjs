@@ -1,4 +1,6 @@
-// Checks every T3 hook src/host-adapter.js relies on against a running T3 build.
+// Checks every T3 hook the adapter (src/host/adapter.ts) relies on against a running T3 build.
+// It runs the adapter of the built extension, dist/custom.js (pnpm build), which exports it as
+// T3Custom.adapter, so it checks the code that ships.
 // Usage: node test-contract.mjs [--port 9333] [--thread <environmentId>/<threadId>] [--draft <draftId>]
 // It shows a thread, the workspace panel, a new-thread screen (the first draft
 // with a project, or --draft) and Settings in that T3 window, then restores the
@@ -11,11 +13,13 @@ const option = (name, fallback) => { const index = process.argv.indexOf(name); r
 const port = Number(option('--port', 9333));
 const thread = option('--thread', null);
 const draft = option('--draft', null);
-// The adapter's source, run inline as a script: its exports are plain declarations here.
-const adapter = (await fs.readFile(new URL('./src/host-adapter.js', import.meta.url), 'utf8')).replace(/^export /gm, '');
+// The built extension, run inline as a script: it defines T3Custom and starts nothing.
+const built = new URL('./dist/custom.js', import.meta.url);
+const bundle = await fs.readFile(built, 'utf8').catch(error => { throw new Error(`Reading ${built.pathname}: ${error.message}. Build the extension first: pnpm install && pnpm build`); });
 const page = await connectPage(port);
 const { probes, imported, declared } = await page.evaluate(`(async api => {
-  ${adapter}
+  ${bundle}
+  const { useHostApi, createHostAdapter, observeHostDom, hostProbes, hostSelectors, hostListProblem, readHostTheme, hostImportedModules } = T3Custom.adapter;
   useHostApi(api);
   // Resolves to whether check() came true within ms.
   const wait = async (check, ms = 10000) => { const end = Date.now() + ms; while (!check() && Date.now() < end) await new Promise(r => setTimeout(r, 100)); observeHostDom(); return Boolean(check()); };
@@ -82,7 +86,7 @@ const { probes, imported, declared } = await page.evaluate(`(async api => {
     const declared = [...document.querySelectorAll('script[type="module"][src], link[rel="modulepreload"][href]')].map(node => node.src || node.href);
     return { probes: hostProbes, imported: hostImportedModules, declared };
   } finally { location.hash = original; }
-})({ signal: new AbortController().signal })`, 90000);
+})({ signal: new AbortController().signal, reportProbes() {} })`, 90000);
 page.close();
 
 // Worker chunks must never be imported into the window: their top-level code would run there.

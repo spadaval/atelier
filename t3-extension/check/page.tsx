@@ -3,7 +3,7 @@
 // extension draws it.
 import { createRoot } from "react-dom/client";
 import { mountReact } from "../src/react/mount";
-import { useDeskRead } from "../src/react/desk";
+import { type HostApi, useDeskRead } from "../src/react/desk";
 import { PortalContainer } from "../src/react/portal";
 import { Probe } from "./Probe";
 
@@ -23,7 +23,7 @@ createRoot(reference).render(
 const host = document.body.appendChild(document.createElement("div"));
 host.id = "extension";
 const api = {
-  request: (action: string) => Promise.reject(new Error(`${action}: the check has no injector`)),
+  request: ((action: string) => Promise.reject(new Error(`${action}: the check has no injector`))) as HostApi["request"],
   onCleanup: () => {},
   reportError: (error: unknown) => errors.push(String(error)),
   signal: new AbortController().signal,
@@ -35,12 +35,12 @@ mountReact(host, api).render(<Probe />);
 const reads: Record<string, number> = {};
 const readApi = {
   ...api,
-  request: (_action: string, payload?: unknown) => {
+  request: ((_action: string, payload?: unknown) => {
     const { path } = payload as { desk: string; path: string };
     reads[path] = (reads[path] ?? 0) + 1;
     if (path === "/api/inbox" || reads[path] > 2) return Promise.reject(new Error(`GET ${path}: HTTP 503: down`));
     return Promise.resolve({ reads: reads[path] });
-  },
+  }) as HostApi["request"],
 };
 function ShowRead({ path }: { path: string }) {
   const read = useDeskRead<{ reads: number }>("http://desk.invalid", path, 50);

@@ -15,14 +15,15 @@ function propertyRules(text: string): string {
 }
 
 /**
- * Draws React trees in a new shadow root of `host`: `render(node)` draws or redraws one, and
+ * Draws React trees in a new shadow root of `host`, or in `host` itself when it is a shadow root
+ * already (the extension's own root, api.root): `render(node)` draws or redraws one, and
  * `unmount()` removes it, which also happens when the extension is reloaded or disposed
  * (api.onCleanup). The shadow root adopts the built stylesheet; Base UI's portals go to a container
  * inside it (portal.ts); hooks reach the injector through `api` (desk.ts). Tailwind's `@property`
  * rules, which give its shadow and ring variables their initial values, are registered on the
  * document once, until the extension goes.
  */
-export function mountReact(host: Element, api: HostApi): { render(node: ReactNode): void; unmount(): void } {
+export function mountReact(host: Element | ShadowRoot, api: HostApi): { render(node: ReactNode): void; unmount(): void } {
   if (!sheet) {
     sheet = new CSSStyleSheet();
     sheet.replaceSync(css);
@@ -37,8 +38,9 @@ export function mountReact(host: Element, api: HostApi): { render(node: ReactNod
       if (properties === registered) properties = null;
     });
   }
-  const shadow = host.attachShadow({ mode: "open" });
-  shadow.adoptedStyleSheets = [sheet];
+  const shadow = host instanceof ShadowRoot ? host : host.attachShadow({ mode: "open" });
+  const adopted = sheet;
+  if (!shadow.adoptedStyleSheets.includes(adopted)) shadow.adoptedStyleSheets = [...shadow.adoptedStyleSheets, adopted];
   const mount = shadow.appendChild(document.createElement("div"));
   mount.dataset.reactRoot = "";
   const portal = shadow.appendChild(document.createElement("div"));
@@ -51,6 +53,7 @@ export function mountReact(host: Element, api: HostApi): { render(node: ReactNod
     root.unmount();
     mount.remove();
     portal.remove();
+    if (host instanceof ShadowRoot) host.adoptedStyleSheets = host.adoptedStyleSheets.filter((sheet) => sheet !== adopted);
   };
   api.onCleanup(unmount);
   return {
