@@ -134,5 +134,6 @@ thread. `writeFixtureDesk` now takes the origins to allow, and
 `t3-instance.mjs` passes `t3code://app`. This is its own commit, dae1c5420.
 
 **Not done.** The project home and This thread stay framed, as the scope
-says. I saw the views in light mode only. Dark mode is covered by the
-fixture tests and by `test-components.mjs`.
+says. I looked at the views in light mode only. `test-components.mjs` checks
+T3's components as the extension draws them in light and dark, but nothing
+looked at the strip in dark.
