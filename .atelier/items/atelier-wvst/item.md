@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-wvst
 title: Draw the project home natively over T3's main area
-status: in_review
+status: changes_requested
 mission: atelier-osel
 labels: []
 priority: medium
