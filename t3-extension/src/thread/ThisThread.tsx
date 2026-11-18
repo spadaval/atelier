@@ -57,6 +57,17 @@ function useNow(clock: () => number): number {
   return now;
 }
 
+/** Whether a thread-info read was answered, by T3 Code's thread (a failed read keeps its last), by "no such thread" (404), or failed. */
+type ThreadRead = { info: ThreadInfo | null; state: "read" | "pending" | "unknown" | "failed" };
+function threadRead(answer: DeskAnswer<ThreadInfo> | undefined): ThreadRead {
+  const info = answer?.data ?? null;
+  if (!answer) return { info, state: "pending" };
+  if (!answer.error) return { info, state: "read" };
+  return { info, state: (answer.error as RequestError).status === 404 ? "unknown" : "failed" };
+}
+/** What the page says of a thread whose own read gave nothing to show. */
+const unread = (state: ThreadRead["state"]) => ({ read: "", pending: "Not read yet", unknown: "T3 Code does not know it", failed: "Could not be read" })[state];
+
 /** A read that failed, as the page names it, unless it is a 404 the page reads as "none". */
 function failure(what: string, path: string, answer: DeskAnswer<unknown> | undefined, notFoundIsNone = false): string | null {
   const error = answer?.error;
@@ -125,6 +136,12 @@ export function ThisThread(props: ThisThreadProps) {
   const detailFailures = [
     ...itemTies.map((t) => failure(`The page of ${t.id}`, m.paths.item(t.repo, t.id), items.get(m.paths.item(t.repo, t.id)))),
     ...missionTies.map((t) => failure(`The page of ${t.id}`, m.paths.mission(t.repo, t.id), missionReads.get(m.paths.mission(t.repo, t.id)))),
+    // T3 Code's word on this thread, the threads it started and those on its missions' items. A
+    // thread T3 Code does not know (404) is said to be so on its row, not named here; one whose read
+    // failed shows its last answer, if any, and is named.
+    failure("This thread's title and status", m.paths.thread(thread), infos.get(m.paths.thread(thread)), true),
+    ...children.map((child) => failure(`T3 Code's status of ${m.shortName(child)}, a thread it started`, m.paths.thread(child), infos.get(m.paths.thread(child)), true)),
+    ...agents.map((agent) => failure(`T3 Code's status of ${m.shortName(agent)}, a thread on an item of its missions`, m.paths.thread(agent), agentInfos.get(m.paths.thread(agent)), true)),
   ].filter((line): line is string => line !== null);
 
   const self = infos.get(m.paths.thread(thread))?.data;
@@ -147,7 +164,7 @@ export function ThisThread(props: ThisThreadProps) {
         </header>
         {arranged.earlier ? <p className="text-muted-foreground text-xs">Earlier it {arranged.earlier}.</p> : null}
         {[...failed, ...detailFailures].map((line) => (
-          <Note key={line}>{`Could not read ${line.charAt(0).toLowerCase()}${line.slice(1)}`}</Note>
+          <Note key={line}>{`Could not read ${/^[A-Z][a-z]/.test(line) ? line.charAt(0).toLowerCase() + line.slice(1) : line}`}</Note>
         ))}
         {loading ? (
           <p className="text-muted-foreground text-xs">Reading what this thread holds…</p>
@@ -209,7 +226,7 @@ export function ThisThread(props: ThisThreadProps) {
               <section data-section="started">
                 <Heading count={arranged.others.length}>Other threads it started</Heading>
                 {arranged.others.map(({ id, ties }) => (
-                  <ChildRow key={id} id={id} info={infos.get(m.paths.thread(id))?.data ?? null} ties={ties} now={now} openThread={props.openThread} />
+                  <ChildRow key={id} id={id} read={threadRead(infos.get(m.paths.thread(id)))} ties={ties} now={now} openThread={props.openThread} />
                 ))}
               </section>
             ) : null}
@@ -351,8 +368,9 @@ function MissionHold({ tie, page, proposed, actions }: { tie: Tie; page: Mission
 }
 
 /** One implementer or reviewer thread on an item, as a chip that opens it in T3 Code. */
-function ThreadChip({ agent, info, openThread }: { agent: Agent; info: ThreadInfo | undefined; openThread(identity: string): void }) {
-  const status = agent.thread?.status ?? info?.status ?? "unknown";
+function ThreadChip({ agent, read, openThread }: { agent: Agent; read: ThreadRead; openThread(identity: string): void }) {
+  const info = read.info;
+  const status = agent.thread?.status ?? info?.status ?? (read.state === "failed" ? "not read" : read.state === "pending" ? "…" : "unknown");
   const title = agent.thread?.title ?? info?.title ?? m.shortName(agent.identity);
   const model = agent.thread?.model ?? info?.model ?? null;
   return (
@@ -363,7 +381,7 @@ function ThreadChip({ agent, info, openThread }: { agent: Agent; info: ThreadInf
       title={`${title}\n${agent.role}, ${status}${model ? `, ${model}` : ""}`}
       data-chip={agent.identity}
     >
-      <span className={`size-1.5 rounded-full ${m.ENDED.has(status) || status === "unknown" ? "bg-muted-foreground/50" : status === "waiting" ? "bg-warning" : "bg-success"}`} aria-hidden />
+      <span className={`size-1.5 rounded-full ${m.ENDED.has(status) || !(agent.thread ?? info) ? "bg-muted-foreground/50" : status === "waiting" ? "bg-warning" : "bg-success"}`} aria-hidden />
       {agent.role === "implementer" ? "impl" : "review"}
       <span>{status.replaceAll("_", " ")}</span>
       {model ? <span className="font-mono">{model.replace(/^claude-|^gpt-/, "")}</span> : null}
@@ -402,7 +420,7 @@ function MissionWork({ tie, page, proposed, infos, actions }: { tie: Tie; page: 
             {agents.length > 0 ? (
               <div className="flex flex-wrap gap-1 pb-1 pl-7">
                 {agents.map((a, at) => (
-                  <ThreadChip key={`${a.identity}${at}`} agent={a} info={infos.get(m.paths.thread(a.identity))?.data} openThread={actions.openThread} />
+                  <ThreadChip key={`${a.identity}${at}`} agent={a} read={threadRead(infos.get(m.paths.thread(a.identity)))} openThread={actions.openThread} />
                 ))}
               </div>
             ) : null}
@@ -413,7 +431,8 @@ function MissionWork({ tie, page, proposed, infos, actions }: { tie: Tie; page: 
   );
 }
 
-function ChildRow({ id, info, ties, now, openThread }: { id: string; info: ThreadInfo | null; ties: Tie[]; now: number; openThread(identity: string): void }) {
+function ChildRow({ id, read, ties, now, openThread }: { id: string; read: ThreadRead; ties: Tie[]; now: number; openThread(identity: string): void }) {
+  const info = read.info;
   const ended = info ? m.ENDED.has(info.status) : false;
   const changed = info?.updated_at ? Date.parse(info.updated_at) : NaN;
   const quiet = !ended && info !== null && !Number.isNaN(changed) && now - changed > m.QUIET_MS;
@@ -431,7 +450,7 @@ function ChildRow({ id, info, ties, now, openThread }: { id: string; info: Threa
       <span className="flex min-w-0 flex-col">
         <span className="truncate">{info ? info.title : <span className="font-mono">{m.shortName(id)}</span>}</span>
         <span className="flex min-w-0 gap-2 text-muted-foreground text-xs">
-          <span className={info?.status === "waiting" ? "text-warning-foreground" : undefined}>{info ? m.threadStatus(info.status) : "T3 Code does not know it"}</span>
+          <span className={info?.status === "waiting" ? "text-warning-foreground" : undefined}>{info ? m.threadStatus(info.status) : unread(read.state)}</span>
           {info?.model ? <span className="font-mono">{info.model}</span> : null}
           {line ? <span className="truncate">{line}</span> : null}
         </span>

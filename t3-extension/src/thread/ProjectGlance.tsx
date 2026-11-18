@@ -39,11 +39,16 @@ export function ProjectGlance({ desk, repo, now, actions }: { desk: string; repo
 
   if ((missionsRead?.error as RequestError | undefined)?.status === 404) return <p className="text-muted-foreground text-xs">The Desk does not serve a repository named {repo}.</p>;
   if (!missionsRead || !motionRead || !inboxRead) return <p className="text-muted-foreground text-xs">Reading {repo}…</p>;
-  const failed = [
+  const failed: (readonly [string, string, { error: Error | null }])[] = [
     ["the missions", m.paths.missions(repo), missionsRead],
     ["what is in motion", m.paths.motion(), motionRead],
     ["the inbox", m.paths.inbox(), inboxRead],
-  ] as const;
+    // A holder's title: a thread T3 Code does not know (404) keeps its short name and is not a failure.
+    ...unlisted.flatMap((identity) => {
+      const read = infos.get(m.paths.thread(identity));
+      return read?.error && (read.error as RequestError).status !== 404 ? [[`the title of ${m.shortName(identity)}`, m.paths.thread(identity), read] as const] : [];
+    }),
+  ];
 
   const active = (missionsRead.data?.missions ?? []).filter((mission) => mission.state === "open").sort((a, b) => Number(b.in_progress) - Number(a.in_progress));
   const needs = (waiting?.needs_human ?? []).flatMap((g) => g.items);

@@ -149,5 +149,5 @@ export const scenarios: Record<string, Scenario> = {
   },
 };
 
-/** Paths the Desk answers 404, as it does for an ID on no repository it serves. */
-export const missing = new Set([paths.record("atelier-tm09")]);
+/** Paths the Desk answers 404, as it does for an ID on no repository it serves and a thread T3 Code does not know. */
+export const missing = new Set([paths.record("atelier-tm09"), paths.thread("thread:c-gone")]);

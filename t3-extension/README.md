@@ -265,6 +265,83 @@ thread's while its root node and first row node (`data-timeline-row-id`) are the
 ones the last credited scan read, and as the current thread's once either has
 changed.
 
+## The sidebar and the layer
+
+**Inbox** is one row under T3's sidebar search, drawn like T3's rows, with the
+count of what waits on the human across every Desk in `desk.urls`: needs-human
+items, proposed plans and waiting threads, from `GET /api/inbox`. A failed read
+shows `!`, with the Desk and error in the row's tooltip.
+
+**Missions sit in T3's own thread list**, around T3's own thread rows, so there
+is one list. They need T3's boring sidebar (Settings → Labs → Boring sidebar),
+which draws one flat list: a header per project folder with that folder's
+thread rows after it, then the Snoozed and Settled shelves. In each open
+folder whose threads include mission threads, the list reads:
+
+- the folder's header;
+- per open mission (from each Desk's `GET /api/sidebar`, in the Desks' order)
+  with a thread in this folder: a header with a progress ring, the title, items
+  done of total and a chevron, then those threads, indented on a guide line,
+  each with its role after it (`lead`, `plan`, `build`, `review`, `decide`).
+  Threads T3 started from a mission's threads, by `lineage.parentThreadId` or
+  `delegatedFrom.threadId`, go under that mission too, with no role;
+- one **N more missions** row for the repository's other open missions, with a
+  dot when one of them waits on the human; it opens the project home;
+- the folder's other threads, in T3's order.
+
+The pinned rows, other folders and the shelves stay as T3 draws them. A
+mission's title opens the mission page (see [The mission page](#the-mission-page)),
+or a proposed plan's title its record page; its chevron folds it, hiding its
+threads, and a folded mission shows how many of its threads are here, and a dot
+when something in it waits on the human. Which missions are folded is kept in
+localStorage (`t3-custom:atelier:missions:v1`); a mission starts open. A closed
+folder (its button's `aria-expanded="false"`) shows no mission rows; the one
+row T3 keeps under it, the open thread's, stays a plain row. A mission
+thread T3 does not list in the folder (unknown to this window, or pinned,
+snoozed or settled) is simply not under its mission.
+
+The extension never moves, removes or edits T3's nodes. It appends its own
+`li` rows to T3's list and sets a CSS `order` on every child, read from T3's own
+DOM order each time T3 changes the list (before the browser paints), and a
+generated stylesheet keyed on `data-thread-item` indents, labels and folds the
+mission threads. When T3 draws a new list (a search, a route change), the rows
+move to it. With the boring sidebar off (no folders) nothing is reordered, and
+a note under Inbox says how to turn it on; the extension does not change T3's
+setting.
+
+The Desks are read when the extension starts, every minute, and whenever the T3
+window is shown again (a covered window throttles timers); T3's threads are read
+again every 3 seconds.
+
+**Gestures that take a run of rows.** Two of T3's gestures act on every row
+between two others, in T3's own order, which is no longer the order drawn:
+dragging from a row's Settle button settles them, and Shift-click selects them,
+for bulk Settle, Snooze, Delete or a drag to the composer. While a mission is
+placed, both are stopped before T3 sees them: a press on Settle, and every
+click with Shift held on a thread row, whatever other key is held, since which
+of those T3 takes as a range depends on the platform. A plain click on Settle
+still settles that one thread, and a click and Ctrl- or Cmd-click on a row still
+open and select it.
+
+T3 fades a row it removes by appending a copy of it, and does so for the
+extension's rows too. The extension removes copies of its own rows as they
+appear, when the view turns off and when it stops.
+
+**The layer.** The Inbox row, a mission's title and N more missions open a
+page over T3's main area, leaving the sidebar usable; the row shows as
+selected. A mission's title draws the extension's own mission page there, with
+no frame. The others open the Desk in one frame filling the main area
+(`/embed/inbox`, `/embed/home/<repo>`, and a proposed plan's record page
+`/embed/r/<repo>/mission/<id>`), with a close button and nothing else of the
+extension's; a Desk page opened from the mission page, such as an item, adds a
+**Back** button to it. The frame takes focus as the layer appears, so the
+Desk's keys work at once. It closes on Escape in T3,
+`desk:key {key: "Escape"}` from the Desk (Escape pressed inside its frame), the
+close button, its row again, a click on a thread row in T3's sidebar, any route
+change, and `desk:open-thread`, which also navigates T3. It speaks the same host
+contract as the panel (`host:theme` on `desk:ready` and on theme changes), and a
+message counts only from the layer frame's own window with its Desk's origin.
+
 ## The mission page
 
 A mission's title in the sidebar opens the mission page over T3's main area,

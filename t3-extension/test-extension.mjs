@@ -339,7 +339,8 @@ T3Custom.start = api => { globalThis.fixtureApi = api; return startExtension(api
   // It records once at once, so the state before the first switch is in the log.
   await evaluate(`window.drawnLog = []; window.drawnLast = ''; window.recordDrawn = () => { const drawn = __t3Custom.diagnostics().thread; const text = JSON.stringify(drawn); if (drawn && text !== drawnLast) { drawnLast = text; drawnLog.push(drawn); } }; recordDrawn(); window.drawnRecorder = setInterval(recordDrawn, 10)`);
   await evaluate('location.hash = "/env/thread-b"');
-  await until(() => evaluate('__t3Custom.diagnostics().thread?.thread === "thread-b"'), 'This thread follows thread-b');
+  // Until the recorder has logged it, not only the diagnostics: switching on at once could miss it.
+  await until(() => evaluate('drawnLog.at(-1)?.thread === "thread-b"'), 'This thread follows thread-b');
   await evaluate('location.hash = "/env/thread-a"');
   // This thread for each thread T3 shows; a thread's mentions may follow as it is scanned.
   const switches = () => evaluate('drawnLog.map(drawn => drawn.thread).filter((thread, n, all) => thread !== all[n - 1])');

@@ -149,6 +149,30 @@ try {
     assert.match((await notes())[0], /^Could not read atelier-tmm1, which its conversation names \(GET \/api\/records\/atelier-tmm1\)/);
   });
 
+  await check('a failed read of a child\'s status is named, and its row says it could not be read, not that T3 Code does not know it', async () => {
+    await open('children-and-mentions', 520, 'light', '/api/thread?id=thread%3Ac-quiet');
+    assert.match(await read(`text(p.querySelector('[data-row="thread:thread:c-quiet"]'))`), /Could not be read/);
+    assert.doesNotMatch(await read(`text(p.querySelector('[data-row="thread:thread:c-quiet"]'))`), /does not know/);
+    // The thread T3 Code does not know (404) is still said to be so, and is not a failure.
+    assert.match(await read(`text(p.querySelector('[data-row="thread:thread:c-gone"]'))`), /T3 Code does not know it/);
+    assert.deepEqual(await notes(), ["Could not read T3 Code's status of thread …-quiet, a thread it started (GET /api/thread?id=thread%3Ac-quiet): GET /api/thread?id=thread%3Ac-quiet: HTTP 502: the fixture failed it"]);
+  });
+  await check('a failed read of a thread on a mission\'s item is named, and its chip says not read', async () => {
+    await open('leads-mission', 520, 'light', '/api/thread?id=thread%3Atl-impl2');
+    assert.equal(await read(`text(p.querySelector('[data-chip="thread:tl-impl2"]'))`), 'implnot read');
+    assert.match((await notes())[0], /^Could not read T3 Code's status of thread …-impl2, a thread on an item of its missions \(GET \/api\/thread\?id=thread%3Atl-impl2\)/);
+  });
+  await check('a failed read of the thread\'s own title is named', async () => {
+    await open('implements-item', 520, 'light', '/api/thread?id=thread%3Aimpl');
+    assert.equal(await read(`text(p.querySelector('h1'))`), 'This thread');
+    assert.match((await notes())[0], /^Could not read this thread's title and status \(GET \/api\/thread\?id=thread%3Aimpl\)/);
+  });
+  await check('a failed read of a holder\'s title in the project at a glance is named', async () => {
+    await open('nothing', 520, 'light', '/api/thread?id=thread%3Atl-impl2');
+    assert.equal(await read('p.dataset.thisThread'), 'empty');
+    assert.match((await notes())[0], /^Could not read the title of thread …-impl2 \(GET \/api\/thread\?id=thread%3Atl-impl2\)/);
+  });
+
   await open('planned-proposed');
   await check('a thread that planned a mission still proposed: the plan waits on you, and every title of it opens its record page', async () => {
     assert.deepEqual(await sections(), ['waiting', 'holds', 'work']);
