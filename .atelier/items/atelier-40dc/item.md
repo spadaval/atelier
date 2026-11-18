@@ -3,13 +3,14 @@ schema: atelier.item
 schema_version: 3
 id: atelier-40dc
 title: Rewrite the sidebar missions, the Inbox row, the project strip and the layer as typed modules, and delete the old script
-status: ready
+status: building
 mission: atelier-osel
 labels: []
 priority: medium
 blocked_by:
 - atelier-toee
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A57e793d0-a6ba-4a2b-9999-f8cb06fe0316%3Adelegate-task%3A28060ad7-31da-41e0-a0d3-63a0480b28fe
 ready:
   by: 'sumeet, in conversation on 2026-11-17: looks good, start up a lead'
   at: 2026-11-17T21:31:50.834606783Z
