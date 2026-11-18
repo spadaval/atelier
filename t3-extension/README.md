@@ -193,16 +193,37 @@ restores native content. This is an injected surface adapter, not a registered
 public T3 plugin type. Existing native surfaces remain in T3's state; their DOM
 is left mounted and is hidden/inert only while Desk occupies the slot.
 
-The panel holds only the Desk, opened at `/embed/` of the project's Desk (for
-example `http://buildbot:3780/embed/`), so the Desk draws no sidebar, theme
-toggle or footer of its own, and the Desk chooses the page (see Following the
-thread below). The Desk tab looks like T3's own tabs: a close icon,
-then the title of the Desk page shown, from the Desk's `desk:navigated` message.
-Three icon buttons follow T3's tab list while the Desk is shown: Refresh (reloads
-the Desk page shown), Open externally (the same page at its normal, non-embedded
-address) and Customizations (opens **Settings → General → Customizations**).
+The panel shows **This thread** for the thread T3 shows, drawn by the
+extension (`src/thread/`) in React with T3's components through `mountReact`,
+with no frame: what the thread holds, the missions it planned or leads with the
+threads on each item, the other threads it started, the records its
+conversation names, and what of that waits on the human. A thread that holds,
+started and names nothing shows its project at a glance. What it shows and why
+is in [docs/architecture/desk.md](../docs/architecture/desk.md) ("This
+thread"). It reads, through the injector's gate, the thread and its children
+(`GET /api/thread`), their ties (`GET /api/ties`), the inbox, each named record
+(`GET /api/records/{id}`), the page of each item and mission it holds, planned
+or leads, and for the project at a glance its missions and what is in motion,
+each every 30 seconds while it is shown. A read that fails is named in a line
+at the top, its part is left out, and the page then does not say the thread
+holds nothing; a named record the Desk does not have (404) is simply not shown.
 
-On `desk:ready` the extension sends `host:theme` with T3's colours, font and
+A link on it to an item or the inbox, or the title of a proposed plan, opens
+that Desk page framed in the panel, at `/embed` of the project's Desk (for
+example `http://buildbot:3780/embed/r/atelier/item/atelier-x1`), so the Desk
+draws no sidebar, theme toggle or footer of its own. A bar above the frame has
+**This thread**, which goes back. The title of an agreed or done mission opens
+the mission page over T3's main area; a thread opens in T3. A reference in the
+conversation opens its record framed the same way. A framed page stays where it
+is when T3 shows another thread, until Back, a reference or the close of the
+panel. The Desk tab looks like T3's own tabs: a close icon, then *This thread*,
+or the title of the framed Desk page from the Desk's `desk:navigated` message.
+Three icon buttons follow T3's tab list while the panel is shown: Refresh (reads
+This thread afresh, or reloads the framed page), Open externally (the project's
+Desk page, or the framed page at its normal, non-embedded address) and
+Customizations (opens **Settings → General → Customizations**).
+
+On `desk:ready` the extension sends a framed page `host:theme` with T3's colours, font and
 scheme, and sends it again whenever T3's theme changes; the Desk restyles without
 reloading. The colours are T3's `--background`, `--foreground`, `--card`
 (surface), `--border`, `--muted-foreground` (muted) and `--primary` (accent),
@@ -211,26 +232,28 @@ when T3's root has its `dark` class. Messages are posted with the Desk's origin
 as the target, and a message counts only when it comes from the Desk iframe's
 window with the Desk's origin.
 
-When the Desk asks to open a thread (`desk:open-thread`, such as a thread link on
-an item), T3 goes to `#/<environment>/<thread>` for the connected environment
-whose threads include it. A thread in no connected environment opens nothing, and
-the panel says so in a line at its top for 8 seconds.
+When the Desk or This thread asks to open a thread (`desk:open-thread`, such as a
+thread link on an item), T3 goes to `#/<environment>/<thread>` for the connected
+environment whose threads include it. A thread in no connected environment opens
+nothing, and the panel says so in a line at its top for 8 seconds.
 
-**Following the thread.** The extension sends `host:thread` as
-`{thread, repository, children, mentioned}`: `thread` is T3's thread ID, whole,
-as in the route; `repository` names the project's Desk repository (absent for an
-unmapped project), so a thread that holds nothing shows its project and not the
-system inbox; `children` lists the threads this one started that T3 knows, in
-any connected environment, by `lineage.parentThreadId` (a `delegate_task`
-subagent) or `delegatedFrom.threadId` (work a linked environment's agent started
-here); `mentioned` lists the item and mission IDs the reference scanner finds in
-that thread's own conversation (none while reference links are off). It is sent
-after each `desk:ready`; at once when T3's route changes to another thread, with
-the mentions last scanned for that thread (none if it was never scanned); and
-when `children` or `mentioned` change (T3's thread list is read again every 3
-seconds). The conversation is scanned 250 ms after it stops changing, and at
-least once a second while it keeps changing, so a thread that streams is
-scanned too.
+**Following the thread.** This thread is drawn for `{thread, repository,
+children, mentioned}`, which the extension knows itself: `thread` is T3's
+thread ID, whole, as in the route; `repository` is the project's Desk
+repository (an unmapped project shows how to link one instead); `children`
+lists the threads this one started that T3 knows, in any connected environment,
+by `lineage.parentThreadId` (a `delegate_task` subagent) or
+`delegatedFrom.threadId` (work a linked environment's agent started here);
+`mentioned` lists the item and mission IDs the reference scanner finds in that
+thread's own conversation (none while reference links are off). It is drawn at
+once when T3's route changes to another thread, with the mentions last scanned
+for that thread (none if it was never scanned), and again when `children` or
+`mentioned` change (T3's thread list is read again every 3 seconds). It is not
+drawn, and reads nothing, while the panel is closed or shows a framed page. The
+extension sends the Desk no thread: until atelier-yy4j removes them, the Desk's
+own This thread page and its `host:thread` message are only for other hosts.
+The conversation is scanned 250 ms after it stops changing, and at least once a
+second while it keeps changing, so a thread that streams is scanned too.
 
 A scan is credited only to the thread whose conversation it read, since T3 can
 show the previous thread's conversation for a while after a switch. T3 wraps each
@@ -240,90 +263,7 @@ when the conversation has one, a scan counts only if it names the current
 thread. A conversation with no assistant message is taken as the previous
 thread's while its root node and first row node (`data-timeline-row-id`) are the
 ones the last credited scan read, and as the current thread's once either has
-changed. The same message
-is never sent twice in a row to the same Desk, so a page the human moves to in
-the Desk stays until something changes. Every `desk:ready` is a fresh Desk that
-knows no thread, so it is told again, including when T3 re-renders its panel slot
-and moving the iframe reloads it. Two loads keep their page instead: a reference
-clicked in the conversation opens that record, and Refresh reloads the page
-shown; the Desk is not told the current thread on those, only the next change.
-
-## The sidebar and the layer
-
-**Inbox** is one row under T3's sidebar search, drawn like T3's rows, with the
-count of what waits on the human across every Desk in `desk.urls`: needs-human
-items, proposed plans and waiting threads, from `GET /api/inbox`. A failed read
-shows `!`, with the Desk and error in the row's tooltip.
-
-**Missions sit in T3's own thread list**, around T3's own thread rows, so there
-is one list. They need T3's boring sidebar (Settings → Labs → Boring sidebar),
-which draws one flat list: a header per project folder with that folder's
-thread rows after it, then the Snoozed and Settled shelves. In each open
-folder whose threads include mission threads, the list reads:
-
-- the folder's header;
-- per open mission (from each Desk's `GET /api/sidebar`, in the Desks' order)
-  with a thread in this folder: a header with a progress ring, the title, items
-  done of total and a chevron, then those threads, indented on a guide line,
-  each with its role after it (`lead`, `plan`, `build`, `review`, `decide`).
-  Threads T3 started from a mission's threads, by `lineage.parentThreadId` or
-  `delegatedFrom.threadId`, go under that mission too, with no role;
-- one **N more missions** row for the repository's other open missions, with a
-  dot when one of them waits on the human; it opens the project home;
-- the folder's other threads, in T3's order.
-
-The pinned rows, other folders and the shelves stay as T3 draws them. A
-mission's title opens the mission page (see [The mission page](#the-mission-page)),
-or a proposed plan's title its record page; its chevron folds it, hiding its
-threads, and a folded mission shows how many of its threads are here, and a dot
-when something in it waits on the human. Which missions are folded is kept in
-localStorage (`t3-custom:atelier:missions:v1`); a mission starts open. A closed
-folder (its button's `aria-expanded="false"`) shows no mission rows; the one
-row T3 keeps under it, the open thread's, stays a plain row. A mission
-thread T3 does not list in the folder (unknown to this window, or pinned,
-snoozed or settled) is simply not under its mission.
-
-The extension never moves, removes or edits T3's nodes. It appends its own
-`li` rows to T3's list and sets a CSS `order` on every child, read from T3's own
-DOM order each time T3 changes the list (before the browser paints), and a
-generated stylesheet keyed on `data-thread-item` indents, labels and folds the
-mission threads. When T3 draws a new list (a search, a route change), the rows
-move to it. With the boring sidebar off (no folders) nothing is reordered, and
-a note under Inbox says how to turn it on; the extension does not change T3's
-setting.
-
-The Desks are read when the extension starts, every minute, and whenever the T3
-window is shown again (a covered window throttles timers); T3's threads are read
-again every 3 seconds.
-
-**Gestures that take a run of rows.** Two of T3's gestures act on every row
-between two others, in T3's own order, which is no longer the order drawn:
-dragging from a row's Settle button settles them, and Shift-click selects them,
-for bulk Settle, Snooze, Delete or a drag to the composer. While a mission is
-placed, both are stopped before T3 sees them: a press on Settle, and every
-click with Shift held on a thread row, whatever other key is held, since which
-of those T3 takes as a range depends on the platform. A plain click on Settle
-still settles that one thread, and a click and Ctrl- or Cmd-click on a row still
-open and select it.
-
-T3 fades a row it removes by appending a copy of it, and does so for the
-extension's rows too. The extension removes copies of its own rows as they
-appear, when the view turns off and when it stops.
-
-**The layer.** The Inbox row, a mission's title and N more missions open a
-page over T3's main area, leaving the sidebar usable; the row shows as
-selected. A mission's title draws the extension's own mission page there, with
-no frame. The others open the Desk in one frame filling the main area
-(`/embed/inbox`, `/embed/home/<repo>`, and a proposed plan's record page
-`/embed/r/<repo>/mission/<id>`), with a close button and nothing else of the
-extension's; a Desk page opened from the mission page, such as an item, adds a
-**Back** button to it. The frame takes focus as the layer appears, so the
-Desk's keys work at once. It closes on Escape in T3,
-`desk:key {key: "Escape"}` from the Desk (Escape pressed inside its frame), the
-close button, its row again, a click on a thread row in T3's sidebar, any route
-change, and `desk:open-thread`, which also navigates T3. It speaks the same host
-contract as the panel (`host:theme` on `desk:ready` and on theme changes), and a
-message counts only from the layer frame's own window with its Desk's origin.
+changed.
 
 ## The mission page
 
@@ -574,8 +514,8 @@ Reload scripts forces reinjection even when files did not change. A T3 reload
 reruns the registered script after refreshing the document. Syntax errors keep
 the last working customization. Script runtime errors appear in diagnostics.
 `window.__t3Custom.diagnostics()` reports the hook probes, current project,
-selected repository, reference override, panel selection, the last `host:thread`
-sent, the layer's state and each view's missing hooks, without exposing
+selected repository, reference override, panel selection, what This thread
+follows (`thread`) and is drawn with (`thisThread`, null while it is not shown), the layer's state and each view's missing hooks, without exposing
 connection credentials.
 
 ```sh
@@ -950,6 +890,14 @@ one with a merged item whose pull request is not known. It checks the
 sentence, the rows and what each button and key opens, the folds, the lanes
 and merged items, the reads it makes, and the layout at 500, 728, 1,100 and
 1,400 pixels, and writes screenshots to `artifacts/mission-*.png`.
+`test-thread.mjs` draws This thread the same way from the fixture threads in
+`check/thread-fixtures.ts`: one that implements an item, one that leads a
+mission, one with children and mentions only, one that planned a mission still
+proposed, and one with nothing, which shows its project at a glance. It checks
+what each lists and what each row and title opens (the proposed plan's titles
+ask for its record page), that no `iframe` is drawn, and that a failed read of
+the ties, the inbox, an item's page or a named record is named and never read
+as holding nothing; it writes screenshots to `artifacts/thread-*.png`.
 `test-update.mjs` needs no browser or Desk, but needs
 `python3`: it builds release bundles from this folder and its build, installs
 one into an empty home with a stand-in for T3 Code's app, and runs the installed
@@ -1037,8 +985,14 @@ It checks:
 
 - discovery, docking and resizing, and that the project is matched by the
   identity the Desk reports;
-- the `/embed` prefix on the iframe and the normal address on Open externally,
-  following `desk:navigated`; no header row in the panel and no floating gear;
+- This thread drawn in the panel for the thread T3 shows, with no `iframe` and
+  no Desk page loaded: it reads the thread, its child's ties and the mentioned
+  record, and shows the item the thread implements; the tab says *This thread*
+  and Open externally opens the project's Desk page;
+- an item's title on it opening the item's Desk page framed, at `/embed` and
+  the normal address on Open externally, following `desk:navigated`; Back
+  returning to This thread with no frame; no header row in the panel and no
+  floating gear;
 - `host:theme` on `desk:ready` (colours, font, scheme) and again after a change
   of the fixture's root class and custom properties;
 - the tab label from `desk:navigated`;
@@ -1046,15 +1000,14 @@ It checks:
   second frame loaded from the Desk), and from the Desk iframe's own window with
   another origin (the frame sent to a page of the second Desk); each check
   fails if only that half of the window-and-origin test is removed;
-- `host:thread` on `desk:ready` (the real Desk opens `/embed/t` and reads the
-  thread, its child's ties and the mentioned record), on each switch to another
-  thread, again to a Desk reloaded because its mount was moved, never twice in a
-  row with the same content (Settings and back), and for a thread switched to
-  while a reference was still loading (the first Desk holds back its
-  `/api/embed` answer to make the window wide);
-- the whole `host:thread` message: the repository, children by lineage and by
-  `delegatedFrom`, the mentioned IDs, and that it is sent again when a mention
-  or a child comes or goes;
+- a framed page staying where it is, the same frame and unreloaded, through
+  switches to other threads and back, with This thread not drawn behind it;
+- what This thread follows: the repository, children by lineage and by
+  `delegatedFrom`, the mentioned IDs of its own conversation only, drawn again
+  when a mention or a child comes or goes and reading what came; none with
+  references off; a scan of the previous thread's conversation never credited
+  to the next; drawn again when T3 re-renders the panel slot; and no
+  `host:thread` anywhere in the built extension;
 - `desk:open-thread` going to `#/env/thread-b`, and the notice for an unknown
   thread;
 - the bridge's allow-list: each read the native pages make reaches the Desk

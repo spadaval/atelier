@@ -378,7 +378,7 @@ Without one it links to T3 Code's web address in a new tab, as before.
 | `type` | Fields | What the Desk does |
 | --- | --- | --- |
 | `host:theme` | `colors`: any of `background`, `foreground`, `surface`, `border`, `muted` (secondary text) and `accent`, each a CSS colour; `font`: a CSS font family list; `scheme`: `light` or `dark` | Sets its tokens from them, without a reload |
-| `host:thread` | `thread`: the identity of the thread the host is showing, as the records hold it (the form `desk:open-thread` sends); `repository`, optional: the name of the Desk repository the host's project maps to, as `GET /api/repos` names it; `children`, optional: the identities of the threads it started; `mentioned`, optional: the record IDs its conversation names | Opens "This thread" (`/t`, below) when it names another thread than the last `host:thread` did; otherwise shows what is new on that page where it is open |
+| `host:thread` | `thread`: the identity of the thread the host is showing, as the records hold it (the form `desk:open-thread` sends); `repository`, optional: the name of the Desk repository the host's project maps to, as `GET /api/repos` names it; `children`, optional: the identities of the threads it started; `mentioned`, optional: the record IDs its conversation names | Opens "This thread" (`/t`, below) when it names another thread than the last `host:thread` did; otherwise shows what is new on that page where it is open. The T3 extension no longer sends it: it draws This thread itself, so a page framed in its panel stays where it is |
 
 The theme maps onto the tokens at the top of `desk/src/styles.css`:
 `background` to `--bg`, `foreground` to `--ink`, `surface` to `--panel`,
@@ -430,9 +430,22 @@ and the inbox laid out for a wide frame (atelier-cdxg, from a spike the human
 settled on 2026-11-16). Each is an ordinary route under `/embed`; nothing in
 them writes or acts.
 
-**This thread** (`/t`, `desk/src/pages/ThisThread.tsx`), in the host's
-panel beside a thread, 400 to 750 pixels wide. Before the host names a
-thread it says it is waiting for one. Then, from the host's `host:thread`:
+**This thread** is drawn by the T3 extension, not the Desk
+(`t3-extension/src/thread/`), in T3 Code's panel beside a thread, 400 to
+750 pixels wide, in React with T3 Code's own components and no frame. The
+thread, the threads it started (T3's lineage) and the record IDs its
+conversation names (the extension's reference scanner) come from the
+extension's own state, so it sends no `host:thread`; the records come from
+the Desk's reads through the injector's gate, each every 30 seconds while
+the page is shown. A link on it to an item or the inbox, or a proposed
+plan's title, opens that Desk page framed in the panel
+(`/embed/r/{repo}/item/{id}`, `/embed/inbox`,
+`/embed/r/{repo}/mission/{id}`), with a bar whose **This thread** goes
+back; the framed page stays where it is when T3 shows another thread. The
+title of an agreed or done mission opens the mission page. The Desk's own
+page (`/t`, `desk/src/pages/ThisThread.tsx`) and `host:thread` stay for
+other hosts until atelier-yy4j removes them. Before the host names a thread
+that page says it is waiting for one. Both show, for the thread:
 
 - The thread's title, from `GET /api/thread`, and, when it holds nothing
   now, what it did before ("Earlier it implemented ...").
@@ -445,20 +458,27 @@ thread it says it is waiting for one. Then, from the host's `host:thread`:
   plans or reviews the plan of, with its open items.
 - *Work under this thread*: each mission it planned or leads, open or done,
   with every item and a chip for each implementer and reviewer thread,
-  which opens that thread in the host. Its title opens mission control.
+  which opens that thread in the host. Its title opens mission control on
+  the Desk's page, and the mission page, or a proposed plan's record page,
+  in the extension's.
 - *Other threads it started*: the `children` no record names, each with its
   status, model and age from `GET /api/thread`, marked quiet when it has
   not changed in 30 minutes while it says it runs.
 - *Mentioned*: each record in `mentioned` that it does not hold, read with
   `GET /api/records/{id}`, the done and dropped ones folded after four.
-- With none of these, the project at a glance for the message's
+- With none of these, the project at a glance for the project's
   `repository` (what waits on them, open missions, items in motion, what
-  can start next), or, with no repository, one line saying the thread
-  holds nothing.
+  can start next). On the Desk's page with no repository it is one line
+  saying the thread holds nothing; the extension shows how to link the
+  project instead.
 
 A read that fails leaves its part out and the page still draws: ties that
 cannot be read are named in a banner, and the page then does not claim the
-thread holds nothing.
+thread holds nothing. The extension's page names each read that failed, the
+path and the error, and claims the thread holds nothing only when the ties
+of the thread and of each child, the inbox and each named record were all
+read; a named record the Desk does not have (404) is not one it names
+(`t3-extension/src/thread/model.ts`, `holdsNothing`).
 
 **The mission page** is drawn by the T3 extension, not the Desk
 (`t3-extension/src/mission/`), over T3 Code's main area, in React with T3

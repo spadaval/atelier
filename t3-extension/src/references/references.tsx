@@ -212,7 +212,7 @@ export function createReferences(ext: Extension, panel: DeskPanel): References {
     if (!settings.references || !pattern || !conversation) {
       hideCard();
       layer.replaceChildren();
-      panel.tellThread();
+      panel.drawThread();
       return;
     }
     const existing = new Map<Node, Map<string, Reference>>();
