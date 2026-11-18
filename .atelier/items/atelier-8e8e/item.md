@@ -31,11 +31,8 @@ tokens are in each `result.json` and in no table.
   role, at `high`. `house` is `claude-fable-5-2` as
   lead, `claude-opus-5-5` as implementer and Codex `gpt-6.1-sol` at `xhigh`
   as reviewer.
-- [ ] Each case names the role of its first agent. A thread starts another
-  for a role and gets that role's agent, model and effort. Where the role's
-  agent is the thread's own kind it starts it as today: `spawn_agent` under
-  Codex, `delegate` under Claude Code. Where it is the other kind it starts
-  it with `delegate`, which stands in for T3 Code's `delegate_task`.
+- [ ] Each case names the role of its first agent, and a thread it starts
+  for a role runs as that role's agent, model and effort.
 - [ ] A setup of one model in every role can be given on the command line,
   for a new model's first run.
 - [ ] At most two eval agents are alive at once in a setup that mixes Claude

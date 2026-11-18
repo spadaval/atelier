@@ -67,10 +67,7 @@ one it answers.
   suite of its own.
 
 A matrix runs in a named setup, a model and an effort for each role. Two
-setups are kept: `sol`, the work host's, and `house`, this host's. A thread
-starts another of its own provider with that provider's tool, as T3 Code
-tells it to: under Codex, `spawn_agent`. It starts one of another provider
-with `delegate`, the harness's stand-in for T3 Code's `delegate_task`. Each
+setups are kept: `sol`, the work host's, and `house`, this host's. Each
 result gives passes, time and tokens for every cell.
 
 A grade has two parts. Code reads facts from the records and the tree: what
