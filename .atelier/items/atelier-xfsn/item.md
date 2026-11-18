@@ -22,8 +22,8 @@ Bring the other kept cases to the new grading, and remove what no longer
 tests anything: the `next-` prefix, which the README says means nothing, and
 one case. `next-done-when-rewrite`'s 50 ms line can hold, and every model
 since 2026-11-11 has met it with an index. `next-rebuttal-kept` tests
-nothing as an implementer's case either, and this item leaves it as it is:
-atelier-1tkg turns its fixture into a lead's case.
+nothing as an implementer's case either, and this item keeps its fixture
+and what it grades: atelier-1tkg turns it into a lead's case.
 
 ## Done when
 
@@ -44,14 +44,17 @@ atelier-1tkg turns its fixture into a lead's case.
   and no longer sends a run to a hand read for naming the hooks in a shell
   call.
 - [ ] `next-done-when-rewrite` is deleted, and the README says why in a
-  line. `next-rebuttal-kept` is left untouched for atelier-1tkg, and the
-  README says so.
+  line. `next-rebuttal-kept` keeps its name, its fixture and what it
+  grades, for atelier-1tkg, and the README says so. It builds on
+  `next-loop` and `next-loop-changes`, so this item changes the paths it
+  sources and imports and its calls into the shared grader, and nothing
+  else in it.
 - [ ] No other case, file or document names a scenario with the `next-`
   prefix, except the dated files in `results/`, and the README maps old
   names to new.
 - [ ] No other `grade.py` holds a regular expression over wording or parses
   a shell command to learn what it wrote. `test.sh` and CI's `evals` job
-  pass.
+  pass with every case in them, `next-rebuttal-kept` included.
 
 ## Scope
 
