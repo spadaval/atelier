@@ -35,12 +35,17 @@ Three layers:
   - `src/references/`: record links in a conversation, and their hover card.
   - `src/settings/`: the Customizations section.
   - `src/mission/`: the mission page.
-  - `src/custom.js`: the views not yet typed: the sidebar, the layer and the
-    project strip.
+  - `src/layer/`: the layer over T3's main area, holding the mission page or a
+    framed Desk page, and the project home the breadcrumb opens.
+  - `src/sidebar/`: the Inbox row and its count, and missions in T3's thread
+    list with their folding.
+  - `src/strip/`: the project strip under the new-thread composer.
+  - `src/views.ts`: which of these views are on, by the hooks each needs.
 
-  What sits inside T3's own DOM (the Desk tab, record links, sidebar rows) is
-  DOM code; the extension's own pages, the hover card and the Customizations
-  section are React, drawn with T3's components.
+  What sits inside T3's own DOM (the Desk tab, record links, sidebar rows, the
+  layer's frame and buttons) is DOM code; the extension's own pages, the hover
+  card, the project strip and the Customizations section are React, drawn with
+  T3's components.
 
 The adapter and the extension are modules under `src/`, which Vite builds
 (`pnpm build`) into one classic script, `dist/custom.js`, from the entry

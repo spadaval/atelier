@@ -1,4 +1,4 @@
-// The layer's native page (custom.js): the mission page drawn in a shadow root of `host` with T3's
+// The layer's native page (src/layer/layer.ts): the mission page drawn in a shadow root of `host` with T3's
 // components. `show` draws a mission, `hide` draws nothing, so a hidden page stops reading the Desk.
 import type { HostApi } from "../react/desk";
 import { mountReact } from "../react/mount";

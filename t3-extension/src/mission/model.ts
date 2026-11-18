@@ -39,7 +39,7 @@ export const paths = {
   thread: (identity: string) => `/api/thread?id=${seg(identity)}&full=1`,
 };
 
-/** Where a mission stands on the page. A proposed plan never reaches it (custom.js opens its record page). */
+/** Where a mission stands on the page. A proposed plan never reaches it (the sidebar opens its record page, src/sidebar/missions.ts). */
 export type PageState = "running" | "agreed" | "done" | "dropped";
 export function pageState(page: MissionPage): PageState {
   if (page.mission.status === "done") return "done";

@@ -2,12 +2,16 @@
 // T3Custom; the loader injects it and calls T3Custom.start(api) (t3-custom.mjs, buildBundle) and
 // reports what it throws.
 import { Extension } from "./core/extension";
-import { startViews } from "./custom.js";
 import type { ExtensionApi } from "./host/api";
-import { createHostAdapter, hostImportedModules, hostProbes, useHostApi } from "./host/adapter";
+import { createHostAdapter, hostDomExpected, hostImportedModules, hostProbes, useHostApi } from "./host/adapter";
+import { createProjectHome } from "./layer/home";
+import { createLayer } from "./layer/layer";
 import { createDeskPanel } from "./panel/panel";
 import { createReferences } from "./references/references";
 import { createSettingsSection } from "./settings/mount";
+import { createSidebar } from "./sidebar/sidebar";
+import { createProjectStrip } from "./strip/strip";
+import { viewMissing, views, type ViewName } from "./views";
 
 // test-contract.mjs runs the built adapter against a running T3 Code, without starting the extension.
 export * as adapter from "./host/adapter";
@@ -21,8 +25,8 @@ export async function start(api: ExtensionApi): Promise<void> {
   useHostApi(api);
   const ext = new Extension(api);
   const { repositories } = ext;
-  // The DOM pass runs the parts' syncs in this order: the panel, the settings section, then the
-  // views custom.js draws (the project strip, the project home, the sidebar and the layer).
+  // The DOM pass runs the parts' syncs in this order: the panel, the settings section, the project
+  // strip, the project home, the sidebar with its missions, then the layer, which marks their rows.
   const panel = createDeskPanel(ext, () => settings.open());
   const settings = createSettingsSection(ext, {
     showDesk: () => void panel.show(),
@@ -30,7 +34,18 @@ export async function start(api: ExtensionApi): Promise<void> {
     reloadRepositories: () => void loadRepositories(),
   });
   const references = createReferences(ext, panel);
-  const views = startViews(ext, { panel });
+  // Views outside the panel each need only their own hooks; a missing one turns off that view alone (views.ts).
+  const layer = createLayer(ext, (threadId) => panel.openThread(threadId));
+  createProjectStrip(ext, layer);
+  createProjectHome(ext, layer);
+  const sidebar = createSidebar(ext, layer);
+  ext.onDOM(layer.sync);
+  ext.diagnostics.views = () => ({ views: Object.fromEntries((Object.keys(views) as ViewName[]).map((name) => [name, viewMissing(name)])) });
+  // A DOM hook expected but not yet found is checked again each second until it is found or reported missing.
+  const expectTimer = setInterval(() => {
+    if (Object.keys(hostDomExpected).length) ext.scheduleDOM();
+  }, 1000);
+  ext.onDispose(() => clearInterval(expectTimer));
 
   async function loadRepositories() {
     await repositories.load();
@@ -56,11 +71,12 @@ export async function start(api: ExtensionApi): Promise<void> {
       );
   }
 
-  // A covered window throttles timers: when it is shown again, every view reads afresh.
+  // A covered window throttles timers: when it is shown again, every view reads afresh. The strip's
+  // and the mission page's reads follow visibility themselves (src/react/desk.ts).
   ext.listen(document, "visibilitychange", () => {
     ext.scheduleDOM();
     if (document.hidden) return;
-    views.refresh();
+    sidebar.read();
     panel.tellThread();
   });
   ext.listen(window, "resize", () => ext.scheduleDOM());

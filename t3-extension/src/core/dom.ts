@@ -1,5 +1,5 @@
-// Building and listening to the DOM the extension adds to T3's own: the Desk tab, record links and
-// the views custom.js still draws. Pages of the extension's own are React (src/react/mount.tsx).
+// Building the DOM the extension adds among T3's own nodes: the Desk tab, record links, the sidebar
+// rows and the layer. Pages of the extension's own are React (src/react/mount.tsx).
 
 type Attributes = Record<string, string | number | boolean> & { text?: string; class?: string; html?: string };
 
