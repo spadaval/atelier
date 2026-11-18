@@ -66,6 +66,16 @@ index. `next-rebuttal-kept` passes 3 of 3 with no skill on every model, its
 command was removed, and its pass (do not take the kept finding's fix)
 contradicts `roles/implementer.md`, which says to fix it.
 
+The skill may also have been cut too far. On 2026-11-11 a passage of the
+role files stayed only if it changed an outcome in the evals, and ten small
+cases at three runs each exercised little of it. The reviewer's "What to
+judge", the lead's "close against the Outcome, not the item count" and the
+implementer's lines on scope and on a Done when that cannot hold went with
+no case that could have shown their worth; the last was judged on
+`next-done-when-rewrite`, whose line could hold. The human said on
+2026-11-18 that the cut feels too extreme in retrospect, and that evals
+should decide what the skill holds.
+
 The fixtures themselves are sound again: item atelier-rt3o brought them to
 the branch model and CI's `evals` job sets up and grades each one with no
 model.
@@ -143,6 +153,11 @@ reported and not failed, and the judge says whether the reason holds.
   questions it answers and what its last result was in each setup. A case
   that passed every run of every cell is cut, or the README says what it
   guards.
+- passages-tried: each of four passages is run as an arm of its own on the
+  cases that can tell, in both setups: the three cut on 2026-11-11 that the
+  Why names, and one sentence that gives the lead the human's frame of a
+  captain far from mission control with the recorder running. The results
+  give each beside the skill without it.
 - cost-shown: every results table gives time and tokens per cell beside its
   passes.
 - still-gated: `evals/agent-factory/test.sh` sets up and grades every case,
@@ -179,7 +194,9 @@ made to tell two arms or two setups apart, saying so in the README. It may
 add an item that extends the review cases past three once atelier-kw8u's
 first replay item has reported what one review costs.
 
-It may not change the skill's text outside the three places Scope names;
+It may restore a passage that atelier-oiwy shows changing an outcome, as
+that item says. It may not otherwise change the skill's text outside the
+three places Scope names;
 add a refusal to the binary; put code from another repository in a case;
 raise the limit of two eval agents
 alive at once; or build a case that needs a harness feature of its own. A

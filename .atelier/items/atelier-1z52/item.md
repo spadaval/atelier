@@ -47,6 +47,10 @@ such review costs before building more.
   and tokens. It says what five runs of ten such cases would cost in each
   setup. Reviews that build with `cargo` run one at a time, each in its own
   target directory.
+- [ ] The Report says what its author saw that would help or block leaving
+  a replayed item ready for an implementer, or several ready under an open
+  mission, in place of in review. It is an observation: no code is written
+  for either.
 
 ## Scope
 
