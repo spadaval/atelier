@@ -22,11 +22,14 @@ that needs review goes to an implementer, and the rest is the lead's.
 The evals ask one question: does the skill beat no skill under process
 pressure? Four things are wrong with what they measure today.
 
-- **Half of what the hosts run is not measured.** Every cell is one model in
+- **The runs are not set up as the hosts are.** Every cell is one model in
   every role, at the harness's default effort. The work host does run
-  `gpt-6.1-sol` in every role, so those cells matter. This host runs Fable
-  as lead, Opus as implementer and Sol at `xhigh` as reviewer, and no run
-  has ever had a reviewer from another lab than its implementer.
+  `gpt-6.1-sol` in every role, at `high`. This host runs Fable as lead, Opus
+  as implementer and Sol at `xhigh` as reviewer, and no run has ever had a
+  reviewer from another lab than its implementer. Both hosts start threads
+  through T3 Code. A Codex run starts them with Codex's own `spawn_agent`,
+  which neither host uses, and the largest no-skill failure of 2026-11-17
+  was a Codex model asking leave to call it.
 - **A pass means the process was followed, not that the work came out
   right.** `next-settle-within-authority` fails a lead for writing any file
   outside `.atelier/`, whatever the file. Time and tokens are recorded and
@@ -67,8 +70,10 @@ one it answers.
   suite of its own.
 
 A matrix runs in a named setup, a model and an effort for each role. Two
-setups are kept: `sol`, the work host's, and `house`, this host's. Each
-result gives passes, time and tokens for every cell.
+setups are kept: `sol`, the work host's, and `house`, this host's. In both,
+a thread starts another with `delegate`, the harness's stand-in for T3
+Code's `delegate_task`. Each result gives passes, time and tokens for every
+cell.
 
 A grade has two parts. Code reads facts from the records and the tree: what
 merged, who approved it, whether the tests pass. A model from another lab
@@ -120,7 +125,9 @@ records, in both directions.
 - Out: evals of the planner, the gardener, the backlog procedure and the
   readiness checklist, which are conversations with the human, and the
   README says they are unmeasured; running the evals inside a T3 Code
-  instance; a model call in CI; any other change to the skill's text; the
+  instance; Codex's own `spawn_agent` as a way to start a thread, which
+  neither host uses; a model call in CI; any other change to the skill's
+  text; the
   fixes the smoke run filed (atelier-u49o, atelier-yhaf, atelier-jfos); the
   scorecard (atelier-c1z3, atelier-pwhn), which measures real use.
 - Target environment: this host, with Claude Code and Codex signed in. The
@@ -140,7 +147,9 @@ first replay item has reported what one review costs.
 It may not change the skill's text outside `roles/lead.md`; keep the new
 lead text where it passes fewer runs than the old, without the human; put
 code from another repository in a case; raise the limit of two eval agents
-alive at once; or spend more than the human's ceiling for a matrix, which
-this plan leaves open for them to set.
+alive at once; or build a case that needs a harness feature of its own. A
+case is a fixture, facts and a rubric, and one that needs more is cut. The
+human set no limit on what a matrix may cost, and asked on 2026-11-18 that
+the evals not grow complex.
 
 ## Result
