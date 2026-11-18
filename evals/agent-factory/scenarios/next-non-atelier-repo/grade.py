@@ -27,8 +27,8 @@ spec = importlib.util.spec_from_file_location(
 loop = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(loop)
 git = loop.git
-WRITES = ("init", "new", "set", "ready", "drop", "close", "start", "submit", "escalate",
-          "review", "verdict", "decide", "lead", "merge", "setup")
+WRITES = ("init", "new", "set", "ready", "drop", "close", "start", "submit",
+          "review", "verdict", "lead", "merge", "setup")
 ORDERS = [{"id": 1, "customer": "Ann", "quantity": 2, "unit_price": 3.5},
           {"id": 2, "customer": "Bo", "quantity": 3, "unit_price": 0.1}]
 REVIEW = re.compile(r"\breview", re.I)

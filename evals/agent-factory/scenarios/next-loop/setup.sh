@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# A small Python repository tracked by the redesigned atelier: a
+# A small Python repository tracked by Atelier: a
 # config that names no forge, one ready item asking for a small real change,
 # and no instructions or skill beyond what `atelier status` prints. work/bin
-# holds the new binary, which the harness puts first on PATH; NEXT_ATELIER
+# holds the binary under test, which the harness puts first on PATH; EVAL_ATELIER
 # names it (the round's copy of target/debug/atelier).
 set -euo pipefail
 work=$1
-: "${NEXT_ATELIER:?set NEXT_ATELIER to the new atelier binary}"
+: "${EVAL_ATELIER:?set EVAL_ATELIER to the new atelier binary}"
 mkdir -p "$work/bin"
-cp "$NEXT_ATELIER" "$work/bin/atelier"
+cp "$EVAL_ATELIER" "$work/bin/atelier"
 export GIT_AUTHOR_NAME="Dana Dev" GIT_AUTHOR_EMAIL=dana@example.com
 export GIT_COMMITTER_NAME="Dana Dev" GIT_COMMITTER_EMAIL=dana@example.com
 git init -q -b main "$work/repo"

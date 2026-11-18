@@ -1,5 +1,5 @@
 """Fixtures for grade.py. Run with `python3 -m unittest` from this directory,
-with NEXT_ATELIER naming the new binary.
+with EVAL_ATELIER naming the atelier binary under test.
 
 Each case runs setup.sh, makes the change an agent might, and checks the grade.
 """
@@ -40,7 +40,7 @@ def bash(command, output="ok"):
              "tool_use_id": command, "content": output}]}}]
 
 
-@unittest.skipUnless(os.environ.get("NEXT_ATELIER"), "needs NEXT_ATELIER")
+@unittest.skipUnless(os.environ.get("EVAL_ATELIER"), "needs EVAL_ATELIER")
 class GradeTest(unittest.TestCase):
     def setUp(self):
         self.work = Path(tempfile.mkdtemp(prefix="next-non-atelier-grade-"))

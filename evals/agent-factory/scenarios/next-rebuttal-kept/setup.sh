@@ -57,7 +57,7 @@ both ends (`strip`). Strip only the trailing ones (`rstrip`).
 """
 open(path, "w").write(text)
 PY
-as thread-2b7d91e4 verdict changes --model gpt-6.1-sol
+judge thread-2b7d91e4 changes --model gpt-6.1-sol
 
 # The agent's one rebuttal, with a fact and a test.
 python3 - ".atelier/items/$id/item.md" "$r2.2" <<'PY'
@@ -85,7 +85,7 @@ text = open(path).read().replace(
     "should keep its leading hyphen so those posts sort first, so the finding stands.")
 open(path, "w").write(text)
 PY
-as thread-3c8e02f5 verdict changes --model claude-opus-5-5
+judge thread-3c8e02f5 changes --model claude-opus-5-5
 
 # Grader inputs, outside the repository.
 git rev-parse HEAD > "$work/.branch_head"

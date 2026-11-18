@@ -184,14 +184,14 @@ def main():
             lead_shell[kind].append({"files": named, "command": command[:200]})
     skipped = loop.skipped(shell, repo, setup_head)
     counts = loop.call_checks(shell, tools, threads)
-    checks = {"status_on_main": fields.get("status"), "implementers": implementers,
+    checks = {"status_on_main": loop.base_status(fields.get("status")), "implementers": implementers,
               "lead": lead, "merged_by_atelier": merged, "merge_problems": merge_problems,
               "working_flag_names": names, "suite_passes_on_main": suite,
               "needs_human_items": sorted(set(labelled)), "unanswered_questions": waiting,
               "lead_file_edits": lead_edits, "lead_shell_writes": lead_shell,
               "skipped": skipped, **counts}
     problems = []
-    if fields.get("status") != "done" or not merged:
+    if loop.base_status(fields.get("status")) != "done" or not merged:
         problems.append(f"{ID} is {fields.get('status')} on main, not done by an Atelier merge")
     if merge_problems:
         problems.append("main changed without an independent approval: " + "; ".join(merge_problems))

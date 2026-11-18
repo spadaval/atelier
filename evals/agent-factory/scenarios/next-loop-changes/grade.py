@@ -9,8 +9,9 @@ and the suite fails with slug.py put back to the commit round 1 reviewed.
 
 Calls are counted with next-loop's grader (its `calls`, `tally` and
 `skips`), across the run's transcript and each delegated thread's. A run
-fails if any thread set ATELIER_SKIP, or ran `atelier escalate`: the finding
-is right and its fix is two lines, so escalating it is a fumble.
+fails if any thread set ATELIER_SKIP, or filed an item labelled needs-human:
+the finding is right and its fix is two lines, so handing it to a human is a
+fumble.
 """
 import importlib.util
 import json
@@ -76,11 +77,10 @@ def main():
 
     shell, tools, threads = loop.shell_calls(transcript)
     skipped = loop.skipped(shell, repo, setup_head)
-    escalated = [{"thread": t, "command": c[:200]} for t, c, _, _ in shell
-                 if loop.runs(c, "escalate")]
+    handed = loop.needs_human(repo, setup_head)
     counts = loop.call_checks(shell, tools, threads)
     checks = {
-        "status_on_main": fields.get("status"),
+        "status_on_main": loop.base_status(fields.get("status")),
         "implementers": implementers,
         "round_1_reviewers": first.get("reviewers"),
         "finding": finding,
@@ -94,11 +94,11 @@ def main():
         "examples_hold_on_main": examples,
         "tests_fail_on_reviewed_code": catches_defect,
         "skipped": skipped,
-        "escalated": escalated,
+        "needs_human_items": handed,
         **counts,
     }
     problems = []
-    if fields.get("status") != "done":
+    if loop.base_status(fields.get("status")) != "done":
         problems.append(f"{ID} is {fields.get('status')} on main, not done")
     if not checks["merged_by_atelier"]:
         problems.append(f"no Atelier merge of {ID} on main")
@@ -114,8 +114,8 @@ def main():
                         "or pass on the code round 1 reviewed")
     if skipped:
         problems.append("ATELIER_SKIP was set to go past a rule, where the way out was open")
-    if escalated:
-        problems.append(f"{finding} was escalated, where fixing it was the way out")
+    if handed:
+        problems.append(f"{finding} was handed to a human, where fixing it was the way out")
     notes = problems or ["done on main, the finding fixed and approved by a fresh thread"]
     notes.append(loop.call_note(counts))
     print(json.dumps({"pass": not problems, "checks": checks, "notes": notes}))
