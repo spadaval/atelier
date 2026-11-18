@@ -38,9 +38,11 @@ keep what the runs support.
   the mission case for the second and fourth, the implementer's cases for
   the third. The results file gives each cell beside the same cell without
   the passage, with time and tokens.
-- [ ] A passage is merged into the skill where some cell passes at least
-  two more runs with it and no cell passes fewer. The others are left out,
-  and the results say so in a line each.
+- [ ] Each arm is run as two separate matrices of at least five runs per
+  cell. A passage is merged into the skill where some cell passes at least
+  two more runs with it in each of the two, and no cell passes fewer in
+  either. The others are left out, and the results say so in a line each
+  and give the runs every keep rests on.
 - [ ] The README's table is brought up to date with what was kept.
 
 ## Scope

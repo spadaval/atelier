@@ -163,7 +163,9 @@ reported and not failed, and the judge says whether the reason holds.
   cases that can tell, in both setups: the three cut on 2026-11-11 that the
   Why names, and one sentence that gives the lead the human's frame of a
   captain far from mission control with the recorder running. The results
-  give each beside the skill without it.
+  give each beside the skill without it, from two separate matrices of at
+  least five runs per cell, and a passage is kept only on a gain that shows
+  in both.
 - cost-shown: every results table gives time and tokens per cell beside its
   passes.
 - still-gated: `evals/agent-factory/test.sh` sets up and grades every case,
