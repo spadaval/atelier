@@ -75,6 +75,54 @@ class CanaryTest(unittest.TestCase):
         self.assertIn(str(Path.home() / ".claude" / "CLAUDE.md"), message)
 
 
+class CodexCanaryTest(CanaryTest):
+    """Under Codex the canary reads what the session record gave the model."""
+
+    def canary(self, reply, extra_dirs=()):
+        def fake(cmd, cwd, env, transcript, timeout):
+            agents_md = (Path(cwd) / "AGENTS.md").read_text()
+            blocks = [(Path(cwd), agents_md)] + [(Path(d), "# Elsewhere\n") for d in extra_dirs]
+            day = Path(env["CODEX_HOME"]) / "sessions" / "2026" / "11" / "17"
+            day.mkdir(parents=True)
+            (day / "rollout-root.jsonl").write_text("\n".join(json.dumps(e) for e in [
+                {"type": "session_meta", "payload": {"id": "root"}}] + [
+                {"type": "response_item", "payload": {"type": "message", "role": "user",
+                 "content": [{"type": "input_text", "text":
+                              f"# AGENTS.md instructions for {d}\n\n<INSTRUCTIONS>\n{text}"
+                              "\n</INSTRUCTIONS>"}]}} for d, text in blocks]))
+            transcript.write_text("\n".join(json.dumps(e) for e in [
+                {"type": "thread.started", "thread_id": "root"},
+                {"type": "item.completed", "item": {"type": "agent_message",
+                                                    "text": reply(Path(cwd), "")}},
+                {"type": "turn.completed"}]) + "\n")
+            return 0
+        run.run_claude = fake
+        try:
+            run.check_isolation(self.tmp / "root", "high", self.tmp, "codex")
+        except SystemExit as exc:
+            return str(exc.code)
+        return None
+
+    def test_a_reply_that_drops_the_heading_passes_on_the_record(self):
+        # gpt-6-luna's reply of 2026-11-17, with the file in its input.
+        self.assertIsNone(self.canary(lambda repo, _: f"{repo}/AGENTS.md | NONE"))
+
+    def test_another_instruction_file_in_the_record_fails(self):
+        why = self.canary(lambda repo, _: f"{repo}/AGENTS.md | NONE", extra_dirs=["/srv"])
+        self.assertIn("/srv/AGENTS.md", why)
+
+    def test_a_foreign_path_in_the_reply_still_fails(self):
+        why = self.canary(lambda repo, _: f"{repo}/AGENTS.md | x\n/etc/AGENTS.md | y")
+        self.assertIn("/etc/AGENTS.md", why)
+
+    # CanaryTest's own cases fake a Claude Code transcript.
+    test_reports_its_own_agents_md = None
+    test_a_path_in_the_repository_is_not_its_contents = None
+    test_a_bold_foreign_path_is_foreign = None
+    test_a_run_offered_an_agent_tool_fails_the_canary = None
+    test_a_home_relative_path_is_foreign = None
+
+
 class AgentEnvTest(unittest.TestCase):
     def test_atelier_update_check_is_off(self):
         # Its notice names the host's own skill checkout, not the staged one.

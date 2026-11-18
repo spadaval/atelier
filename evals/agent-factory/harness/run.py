@@ -340,7 +340,7 @@ def codex_given(items: list, home: Path) -> dict:
     session record's payloads, or `codex debug prompt-input`): each skill
     and the root it loaded from, and whether spawn_agent was offered."""
     facts = {"skills": [], "foreign_skills": [], "agent_factory": False,
-             "spawn_agent": False}
+             "spawn_agent": False, "instructions": []}
     allowed = {str(home / r) for r in CODEX_SKILL_ROOTS}
     for item in items:
         if item.get("type") == "additional_tools":
@@ -349,6 +349,9 @@ def codex_given(items: list, home: Path) -> dict:
             continue
         for c in item.get("content") or []:
             text = (c.get("text") or "") if isinstance(c, dict) else ""
+            given = re.match(r"# AGENTS\.md instructions for (\S+)\n", text)
+            if given:
+                facts["instructions"].append({"dir": given.group(1), "text": text})
             if "<skills_instructions>" not in text:
                 continue
             roots = dict(re.findall(r"^- `(r\d+)` = `([^`]+)`", text, re.M))
@@ -508,6 +511,15 @@ def canary_verdict(reply: str, repo: Path, token: str):
     return own_seen, sorted(p for p in paths if not inside(Path(p), repo))
 
 
+def record_verdict(given: list, repo: Path, token: str):
+    """Whether a Codex session's record gave the model exactly the
+    repository's own AGENTS.md, with the token, and each other instruction
+    file it gave (codex_given's "instructions")."""
+    own = [g for g in given if Path(g["dir"]) == repo and f"canary {token}" in g["text"].lower()]
+    others = [f"{g['dir']}/AGENTS.md" for g in given if Path(g["dir"]) != repo]
+    return len(own) == 1 and len(given) == 1, others
+
+
 def check_isolation(work_root: Path, effort: str, out_root: Path,
                     agent: str = "claude") -> None:
     """Exit unless a run in this setup sees only its repository's own
@@ -534,6 +546,14 @@ def check_isolation(work_root: Path, effort: str, out_root: Path,
         info["init"].update(codex_session(work / "home" / ".codex"))
     reply = (info["result"] or {}).get("result") or ""
     own_seen, foreign = canary_verdict(reply, repo, token)
+    if agent == "codex" and info["init"] is not None:
+        # Codex records the instruction files it gave the model, so read
+        # them there rather than trust a cheap model to copy a heading back:
+        # gpt-6-luna once answered "<repo>/AGENTS.md | NONE" with the file in
+        # its input, and aborted a matrix. The reply still fails the canary
+        # if it names a file outside the repository.
+        own_seen, recorded = record_verdict(info["init"].pop("instructions"), repo, token)
+        foreign = sorted(set(foreign) | set(recorded))
     unbounded = invalid_reason("none", 0, info) if exit_code == 0 else None
     ok = exit_code == 0 and own_seen and not foreign and not unbounded
     print(json.dumps({"canary": "pass" if ok else "fail", "model": model,
