@@ -99,8 +99,12 @@ default: it does itself what needs no review, sends the rest to an
 implementer, and has each change reviewed by a thread that did not write
 it. It may depart from any of that, a review included, by giving its reason
 on the command, and it settles a dispute between an implementer and a
-reviewer itself. The mission's Authority and the product's direction stay
-the human's. `atelier show <mission>` lists every departure with its reason
+reviewer itself. It may do less than the plan asks: drop an item, or end
+the mission, when the work turns out much harder than the plan took it to
+be, with the reason in the mission's Result. It may not do more or other
+than the plan asks: what the Authority withholds and the product's
+direction stay the human's. `atelier show <mission>` lists every departure
+with its reason
 and the thread that made it, so the human reads them where they read the
 mission.
 
