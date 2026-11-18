@@ -131,7 +131,9 @@ Screenshots are in `~/tmp/atelier-40dc/look/` on buildbot.
 So no Desk page framed in T3 Code (`t3code://app`), in the panel or the
 layer, ever sent `desk:ready`: it loaded but was never themed or told the
 thread. `writeFixtureDesk` now takes the origins to allow, and
-`t3-instance.mjs` passes `t3code://app`. This is its own commit, dae1c5420.
+`t3-instance.mjs` passes `t3code://app`. This was its own commit, dae1c5420.
+Master made the same fix meanwhile, with more, so the merge of master keeps
+master's version of both files.
 
 **Not done.** The project home and This thread stay framed, as the scope
 says. I looked at the views in light mode only. `test-components.mjs` checks
