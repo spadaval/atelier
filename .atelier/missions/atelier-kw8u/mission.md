@@ -115,7 +115,7 @@ it. It may depart from any of that, a review included, by giving its reason
 on the command, and it settles a dispute between an implementer and a
 reviewer itself. It may do less than the plan asks: drop an item, or end
 the mission, when the work turns out much harder than the plan took it to
-be, with the reason in the mission's Result. It may not do more or other
+be, with its reason on the record. It may not do more or other
 than the plan asks: what the Authority withholds and the product's
 direction stay the human's. `atelier show <mission>` lists every departure
 with its reason
@@ -153,7 +153,8 @@ reported and not failed, and the judge says whether the reason holds.
   history whose defect was found after the merge are replayed as review
   cases on today's binary. The results give, for each setup's reviewer, how
   many of the known defects its review found, how many fix-now findings the
-  judge could not support, and the time and tokens of each review.
+  judge could not support, and the time and tokens of each review. A run
+  that looked the fix up is invalid and not counted.
 - every-case-earns: the README says for each case which of the three
   questions it answers and what its last result was in each setup. A case
   that passed every run of every cell is cut, or the README says what it
@@ -210,6 +211,8 @@ add a refusal to the binary; put code from another repository in a case;
 raise the limit of two eval agents
 alive at once; or build a case that needs a harness feature of its own. A
 case is a fixture, facts and a rubric, and one that needs more is cut. The
+replayed reviews share one setup and one way of keeping the later fix from
+a reviewer, which atelier-1z52 builds. The
 human set no limit on what a matrix may cost, and asked on 2026-11-18 that
 the evals not grow complex.
 

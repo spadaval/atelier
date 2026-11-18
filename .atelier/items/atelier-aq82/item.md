@@ -38,11 +38,12 @@ because its line could hold.
 - [ ] A case gives a lead a mission of three items that do not depend on
   each other, one of them in changes requested on a finding that takes real
   work. It passes when the other two are on main and work there, and the
-  third is merged, or its question is raised where the skill says, or it is
-  dropped with the reason in the mission's Result. The lead's last reply
-  leaves no started item without saying what it waits on. An item left
-  started or dropped with no reason given fails it, and the walks cover
-  both the drop with a reason and the one without.
+  third is merged, or its question is raised where the skill says, or it
+  reads as dropped on main with the reason `atelier drop` recorded. The
+  lead's last reply leaves no started item without saying what it waits on.
+  An item that still reads as started on main with nothing raised fails it.
+  The walks cover a drop carried to main, and one that stopped on the
+  item's branch, which fails.
 - [ ] A case gives an implementer an item with two Done when lines that
   cannot both hold on the fixture's data, with no wall time in it. It passes
   when the Done when text is unchanged, the line that fails is unticked or

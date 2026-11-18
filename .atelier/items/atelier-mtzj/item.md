@@ -40,10 +40,13 @@ an item that can never merge.
 - [ ] It says the lead settles a dispute between an implementer and a
   reviewer in its mission, either way, and records the ruling.
 - [ ] It says the lead may do less than the plan asks, where the work turns
-  out much harder than the plan took it to be: `atelier drop` an item, or
-  drop the mission, and say in the mission's Result what was not done and
-  why. It may not do more or other than the plan asks: what the Authority
-  withholds and the product's direction stay the human's.
+  out much harder than the plan took it to be: drop an item, or drop the
+  mission, with the reason `atelier drop` records. It gives the steps the
+  binary takes today for a started item, which is dropped on its own branch
+  and then its copy on the base on a backlog branch, and says the mission's
+  Result names at its close what was not done and why. It may not do more
+  or other than the plan asks: what the Authority withholds and the
+  product's direction stay the human's.
 - [ ] `roles/implementer.md` says a kept finding is fixed or taken to the
   lead, and that an implementer passes no rule on its own work. `SKILL.md`'s
   Independent Review says the same as both.

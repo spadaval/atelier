@@ -31,8 +31,17 @@ such review costs before building more.
 - [ ] A shared setup builds a fixture from a case file: this repository's
   tree at the change's base, tracked by today's binary with new records, and
   the change on an item's branch in review with the Goal and Done when it
-  had. The old records are not carried. The fixture's history ends at the
-  change and it has no remote, so the fix cannot be read from it.
+  had, under a new item ID. The old records are not carried, the fixture's
+  history ends at the change, it has no remote, and the case file stays
+  outside it.
+- [ ] A reviewer cannot grade by looking the fix up. The repository is
+  public and this host holds other checkouts of it, and today a run has the
+  network and `$HOME`. For each of three ways to the later fix (the
+  fixture, this host's other checkouts of this repository, and the network)
+  the Report says whether a replay run is kept from it or found out
+  afterwards from its transcript, and a run found out is invalid, not
+  graded. A test shows each one that is kept from: a command in a replay
+  run that tries it fails. The Report gives the invalid runs.
 - [ ] Three case files, each naming its row in `defects.md`, its base and
   change commits, the defect in a sentence and the commit that fixed it.
   They are chosen for a defect a reviewer could find from the change, and a
