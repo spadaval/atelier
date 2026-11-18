@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-5cqz
 title: Let framed Desk pages connect in the T3 test instance, and give its done mission items
-status: in_review
+status: approved
 mission: atelier-osel
 labels: []
 priority: medium
