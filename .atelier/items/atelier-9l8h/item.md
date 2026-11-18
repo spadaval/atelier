@@ -3,13 +3,14 @@ schema: atelier.item
 schema_version: 3
 id: atelier-9l8h
 title: Draw This thread natively in T3's panel
-status: ready
+status: building
 mission: atelier-osel
 labels: []
 priority: medium
 blocked_by:
 - atelier-40dc
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A57e793d0-a6ba-4a2b-9999-f8cb06fe0316%3Adelegate-task%3A7f50a589-3bae-4641-980f-d09f2b7ca370
 ready:
   by: 'sumeet, in conversation on 2026-11-17: looks good, start up a lead'
   at: 2026-11-17T21:31:50.834606783Z
