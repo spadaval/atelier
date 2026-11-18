@@ -1,7 +1,8 @@
 // The page script of test-mission.mjs: draws the mission page of `?scenario=` (check/mission-fixtures.ts)
-// through mountMissionLayer, as the layer does, at `?width=` pixels, with a stand-in injector that
+// through mountNativeLayer, as the layer does, at `?width=` pixels, with a stand-in injector that
 // answers the fixture's reads (failing one on request), and records what the page asks to open in `missionCalls`.
-import { mountMissionLayer } from "../src/mission/mount";
+import { mountNativeLayer } from "../src/layer/native";
+import { MissionPage } from "../src/mission/MissionPage";
 import type { HostApi } from "../src/react/desk";
 import { NOW, REPO, scenarios } from "./mission-fixtures";
 
@@ -33,13 +34,15 @@ const api = {
   reportError: (error: unknown) => errors.push(String(error)),
   signal: new AbortController().signal,
 };
-mountMissionLayer(host, api).show({
-  desk: "http://desk.invalid",
-  repo: REPO,
-  id: chosen?.id ?? "atelier-none",
-  now: () => NOW,
-  onClose: () => calls.push(["close"]),
-  openThread: (identity) => calls.push(["thread", identity]),
-  openItem: (id) => calls.push(["item", id]),
-  openUrl: (url) => calls.push(["url", url]),
-});
+mountNativeLayer(host, api).show(
+  <MissionPage
+    desk="http://desk.invalid"
+    repo={REPO}
+    id={chosen?.id ?? "atelier-none"}
+    now={() => NOW}
+    onClose={() => calls.push(["close"])}
+    openThread={(identity) => calls.push(["thread", identity])}
+    openItem={(id) => calls.push(["item", id])}
+    openUrl={(url) => calls.push(["url", url])}
+  />,
+);

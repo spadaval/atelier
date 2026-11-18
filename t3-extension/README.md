@@ -35,8 +35,10 @@ Three layers:
   - `src/references/`: record links in a conversation, and their hover card.
   - `src/settings/`: the Customizations section.
   - `src/mission/`: the mission page.
-  - `src/layer/`: the layer over T3's main area, holding the mission page or a
-    framed Desk page, and the project home the breadcrumb opens.
+  - `src/home/`: the project home.
+  - `src/layer/`: the layer over T3's main area, holding the mission page, the
+    project home or a framed Desk page, and the breadcrumb's way to the
+    project home.
   - `src/sidebar/`: the Inbox row and its count, and missions in T3's thread
     list with their folding.
   - `src/strip/`: the project strip under the new-thread composer.
@@ -329,12 +331,12 @@ appear, when the view turns off and when it stops.
 
 **The layer.** The Inbox row, a mission's title and N more missions open a
 page over T3's main area, leaving the sidebar usable; the row shows as
-selected. A mission's title draws the extension's own mission page there, with
-no frame. The others open the Desk in one frame filling the main area
-(`/embed/inbox`, `/embed/home/<repo>`, and a proposed plan's record page
-`/embed/r/<repo>/mission/<id>`), with a close button and nothing else of the
-extension's; a Desk page opened from the mission page, such as an item, adds a
-**Back** button to it. The frame takes focus as the layer appears, so the
+selected. A mission's title draws the extension's own mission page there, and
+N more missions its project home, each with no frame. The others open the Desk
+in one frame filling the main area (`/embed/inbox`, an item's page, and a
+proposed plan's record page `/embed/r/<repo>/mission/<id>`), with a close
+button and nothing else of the extension's; a Desk page opened from the mission
+page or the project home, such as an item, adds a **Back** button to it. The frame takes focus as the layer appears, so the
 Desk's keys work at once. It closes on Escape in T3,
 `desk:key {key: "Escape"}` from the Desk (Escape pressed inside its frame), the
 close button, its row again, a click on a thread row in T3's sidebar, any route
@@ -400,9 +402,22 @@ the width. A project with no Desk repository gets no strip.
 
 ## The project home
 
-The project's name in T3's thread breadcrumb opens the Desk's project home,
-`/embed/home/<repo>`, in the layer instead of starting a new thread, for a
-project with a Desk repository. For any other project T3's own action runs.
+The project's name in T3's thread breadcrumb opens the project home in the
+layer instead of starting a new thread, for a project with a Desk repository;
+for any other project T3's own action runs. The project's name in the strip
+and N more missions in the sidebar open it too. The extension draws it
+(`src/home/`) with T3's components, from three reads through the injector:
+`GET /api/repos/<repo>/missions`, `GET /api/roadmap?repo=<repo>` and
+`GET /api/history?repo=<repo>&days=7`, and each mission's page as it is folded
+open. It shows *Now*, *Next* and *Later*, each mission folding open to its
+items and who holds them, and *This week*, a strip of the last seven days,
+by the rules in [docs/architecture/desk.md](../docs/architecture/desk.md)
+("The project home"). An agreed or done mission's title opens the mission
+page; a proposed plan's title, under Later, opens its record page framed, and
+an item its Desk page framed, each with **Back** to the project home. `Esc`
+closes it. The Desk's own project home (`/embed/home/<repo>`) is no longer
+opened; with no main area for the layer, the page opens in the browser at the
+Desk's `/home/<repo>`.
 
 ## Project context
 
@@ -967,6 +982,14 @@ one with a merged item whose pull request is not known. It checks the
 sentence, the rows and what each button and key opens, the folds, the lanes
 and merged items, the reads it makes, and the layout at 500, 728, 1,100 and
 1,400 pixels, and writes screenshots to `artifacts/mission-*.png`.
+`test-home.mjs` does the same for the project home, from the repositories in
+`check/home-fixtures.ts`: one with a mission in each of Now, Next and Later,
+an item in no mission under each and steps on three days of the week, and one
+with nothing open. It checks the lanes, a mission folding open to its items
+and their holders, the week, what each row opens (the proposed plan saying it
+is one, so the layer frames its record page), the reads it makes, a read
+that fails, and the layout at the same widths, and writes screenshots to
+`artifacts/home-*.png`.
 `test-thread.mjs` draws This thread the same way from the fixture threads in
 `check/thread-fixtures.ts`: one that implements an item, one that leads a
 mission, one with children and mentions only, one that planned a mission still
@@ -1125,8 +1148,11 @@ It checks:
   opening the mission page in the layer with no iframe, from the Desk's read
   of the mission, selected and focused, an item of it opening framed with
   Back to it, and a proposed plan's title opening its record page framed; N
-  more missions the project home;
-- the breadcrumb's project opening the project home without T3's own action;
+  more missions opening the project home with no iframe, from the Desk's
+  reads, an item of it and a proposed plan under Later opening framed with
+  Back to it, and an agreed mission's title the mission page;
+- the breadcrumb's project opening the project home with no iframe, without
+  T3's own action;
 - the project strip: its three cards and their rows from the fixture's launch
   data, as wide as the composer and under it; a Next up row filling the
   composer, nothing sent, a row whose ID is not an item ID disabled; Plan a

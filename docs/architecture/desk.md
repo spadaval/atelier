@@ -590,16 +590,32 @@ What is approximate there:
   starts with the Desk's `caller` (from `GET /api/repos`), shown as one line
   per batch readied together. It knows of nothing else that waited on them.
 
-**The project home** (`/home/{repo}`, `desk/src/pages/ProjectHome.tsx`),
-over the host's main area: the project as a roadmap without dates. *Now*
+**The project home** is drawn by the T3 extension, not the Desk
+(`t3-extension/src/home/`), over T3 Code's main area, in React with T3 Code's
+own components and no frame, from the same reads through the injector's gate.
+The extension no longer opens the Desk's page (`/home/{repo}`,
+`desk/src/pages/ProjectHome.tsx`), which stays until atelier-yy4j removes it;
+both follow the rules here. The project's name in T3's thread breadcrumb, the
+project's name in its project strip and the "N more missions" row in its
+sidebar open it. It is the project as a roadmap without dates. *Now*
 holds each agreed mission with any item started or done, and started items
 in no mission; *Next*, agreed missions with nothing started, and ready
 items in no mission; *Later*, proposed plans and draft items in no mission
 (`GET /api/roadmap` gives the items in no mission). A mission folds open to
-its items with their holders; its title opens mission control. *This week*
+its items with their holders, read from its page
+(`GET /api/repos/{repo}/missions/{id}`) as it opens; those under *Now* start
+open, and those under *Next* too when *Now* has no mission and *Next* two at
+most. On the Desk's page a mission's title opens mission control; in the
+extension an agreed or done mission's title opens the mission page, a
+proposed plan's its record page framed, and an item its Desk page framed,
+each framed page with a way back to the project home. *This week*
 is a strip of the last seven days, each listing the items started and
 merged, plans agreed and missions closed that day, from
-`GET /api/history?days=7`, so it is as approximate as the progress log.
+`GET /api/history?days=7`, so it is as approximate as the progress log. In
+the extension, a read of the items in no mission or of the week that fails
+before it has answered leaves its part out, with a note naming the failure.
+One that fails after answering, as can a mission's items, keeps what it last
+gave, with a note saying it is as of that read.
 
 **The inbox**, embedded in a frame wider than one comfortable column, flows
 its repositories into columns of at least 560 pixels, up to three, each
@@ -621,8 +637,8 @@ identity never appears in a path: it can hold `/`, `:` and `%`, as
 | --- | --- | --- |
 | `GET /api/repos` | Repositories | Each repository with its counts |
 | `GET /api/embed` | Embedded mode | `origins`: the configuration's `embed_origins`, the origins the Desk talks to (The host contract) |
-| `GET /api/repos/{repo}/missions` | Mission rail | The repository's missions and loose work |
-| `GET /api/repos/{repo}/missions/{id}` | Mission | One mission, wherever it is read from: sections, documents, items, plan reviews, threads, its pull request and its stop |
+| `GET /api/repos/{repo}/missions` | Mission rail, the project home | The repository's missions and loose work |
+| `GET /api/repos/{repo}/missions/{id}` | Mission, the extension's mission page and project home | One mission, wherever it is read from: sections, documents, items, plan reviews, threads, its pull request and its stop |
 | `GET /api/repos/{repo}/missions/{id}/history` | Mission, Activity tab | The actions on the mission and its items (M5; 404 until it exists) |
 | `GET /api/repos/{repo}/doc?path=<path>&at=<commit>` | Mission, Documents tab | One Markdown file at the base's tip, or at `at` |
 | `GET /api/repos/{repo}/items/{id}` | Item | One item in full |
