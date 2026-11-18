@@ -20,10 +20,8 @@ created_at: 2026-11-18T20:05:51.873675436Z
 A matrix runs one model in every role at the harness's default effort. The
 work host does run `gpt-6.1-sol` in every role, at `high`. This host runs
 Fable as lead, Opus as implementer and Sol at `xhigh` as reviewer, and no
-run has had a reviewer from another lab than its implementer. Both hosts
-start threads through T3 Code, and a Codex run starts them with Codex's own
-`spawn_agent`, which neither host uses. Time and tokens are in each
-`result.json` and in no table.
+run has had a reviewer from another lab than its implementer. Time and
+tokens are in each `result.json` and in no table.
 
 ## Done when
 
@@ -34,11 +32,10 @@ start threads through T3 Code, and a Codex run starts them with Codex's own
   lead, `claude-opus-5-5` as implementer and Codex `gpt-6.1-sol` at `xhigh`
   as reviewer.
 - [ ] Each case names the role of its first agent. A thread starts another
-  for a role with `delegate`, under Codex as under Claude Code, and gets
-  that role's agent, model and effort, whichever agent it is itself.
-- [ ] `spawn_agent` is removed from every Codex run, and the code that
-  bounded, counted and transcribed Codex's own subagents is deleted. The
-  Report says to drop atelier-dytk, which was filed against that counting.
+  for a role and gets that role's agent, model and effort. Where the role's
+  agent is the thread's own kind it starts it as today: `spawn_agent` under
+  Codex, `delegate` under Claude Code. Where it is the other kind it starts
+  it with `delegate`, which stands in for T3 Code's `delegate_task`.
 - [ ] A setup of one model in every role can be given on the command line,
   for a new model's first run.
 - [ ] At most two eval agents are alive at once in a setup that mixes Claude
