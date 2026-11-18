@@ -1,5 +1,5 @@
 """Fixtures for grade.py. Run with `python3 -m unittest` from this directory,
-with NEXT_ATELIER naming the new binary (target/debug/atelier).
+with EVAL_ATELIER naming the atelier binary under test (target/debug/atelier).
 
 Each case runs setup.sh, drives the binary as two threads to the state an
 agent might leave, and checks the grade; a last case checks the counting of
@@ -34,7 +34,7 @@ class SlugifyTest(unittest.TestCase):
 '''
 
 
-@unittest.skipUnless(os.environ.get("NEXT_ATELIER"), "needs NEXT_ATELIER")
+@unittest.skipUnless(os.environ.get("EVAL_ATELIER"), "needs EVAL_ATELIER")
 class Fixture(unittest.TestCase):
     """A fresh setup.sh work directory, and the binary driven in it."""
 
@@ -67,8 +67,10 @@ class Fixture(unittest.TestCase):
         subprocess.run(cmd, cwd=self.repo, check=True, capture_output=True)
 
     def build(self, code=FIXED, tests=TESTS):
-        """Start, change, tick, report and submit as thread impl."""
+        """Start, change, tick, report and submit as thread impl, in the
+        repository's one checkout switched to the item's branch."""
         self.atelier("impl", "start", ID)
+        self.sh("git", "switch", "-q", ID)
         (self.repo / "slug.py").write_text(code)
         (self.repo / "test_slug.py").write_text(tests)
         item = self.repo / f".atelier/items/{ID}/item.md"
@@ -80,7 +82,31 @@ class Fixture(unittest.TestCase):
         self.atelier(reviewer, "review", ID)
         [review] = (self.repo / f".atelier/items/{ID}/reviews").glob("*.md")
         review.write_text(review.read_text().replace("<!--", "Checked.\n<!--", 1))
-        self.atelier(reviewer, "verdict", "approve")
+        self.verdict(reviewer, "approve")
+
+    def verdict(self, reviewer, verdict):
+        """Record `reviewer`'s verdict and commit it, as `verdict` says to."""
+        self.atelier(reviewer, "verdict", verdict)
+        self.sh("git", "add", "-A", ".atelier")
+        self.sh("git", "commit", "-qm", f"Review {ID}: {verdict}")
+
+    def needs_human(self, thread, title, back_to):
+        """File an item labelled needs-human on backlog/ask as `thread`, merge
+        it, and switch back to branch `back_to`."""
+        self.sh("git", "switch", "-q", "main")
+        self.atelier(thread, "start", "--backlog", "ask")
+        self.sh("git", "switch", "-q", "backlog/ask")
+        self.atelier(thread, "new", title)
+        new = self.repo / self.sh_out("git", "status", "--porcelain").split()[-1] / "item.md"
+        new.write_text(new.read_text().replace("labels: []", "labels:\n- needs-human"))
+        self.sh("git", "add", "-A", ".atelier")
+        self.sh("git", "commit", "-qm", f"Ask: {title}")
+        self.atelier(thread, "merge")
+        self.sh("git", "switch", "-q", back_to)
+
+    def sh_out(self, *cmd):
+        return subprocess.run(cmd, cwd=self.repo, check=True, capture_output=True,
+                              text=True).stdout
 
     def grade(self):
         out = subprocess.run([sys.executable, "-I", str(HERE / "grade.py"), str(self.work),
@@ -133,7 +159,7 @@ class GradeTest(Fixture):
         [review] = (self.repo / f".atelier/items/{ID}/reviews").glob("*.md")
         review.write_text(review.read_text().replace("- rev\n", "- impl\n- rev\n")
                           .replace("<!--", "Checked.\n<!--", 1))
-        self.atelier("rev", "verdict", "approve")
+        self.verdict("rev", "approve")
         self.atelier("impl", "merge")
         grade = self.grade()
         self.assertFalse(grade["pass"])
@@ -272,8 +298,10 @@ class RefusalTextTest(Fixture):
         import grade
         outcomes = [self.run_atelier("impl", "status"),
                     self.run_atelier("impl", "start", "slug-k3fa"),
-                    self.run_atelier("impl", "submit"),          # unticked: refused
-                    self.run_atelier("other", "submit")]         # not the holder: refused
+                    self.run_atelier("impl", "submit")]          # on main: refused
+        self.sh("git", "switch", "-q", ID)
+        outcomes += [self.run_atelier("impl", "submit"),         # unticked: refused
+                     self.run_atelier("other", "submit")]        # not the holder: refused
         self.build_after_start()
         outcomes += [self.run_atelier("impl", "submit"),
                      self.run_atelier("impl", "status"),
@@ -284,13 +312,15 @@ class RefusalTextTest(Fixture):
                      self.run_atelier("rev", "verdict", "aprove")]    # usage error
         [review] = (self.repo / f".atelier/items/{ID}/reviews").glob("*.md")
         review.write_text(review.read_text().replace("<!--", "Checked.\n<!--", 1))
-        outcomes += [self.run_atelier("rev", "verdict", "approve"),
-                     self.run_atelier("rev", "status"),
+        outcomes += [self.run_atelier("rev", "verdict", "approve")]
+        self.sh("git", "add", "-A", ".atelier")
+        self.sh("git", "commit", "-qm", "Review")
+        outcomes += [self.run_atelier("rev", "status"),
                      self.run_atelier("rev", "review", ID),      # after its verdict: refused
                      self.run_atelier("impl", "merge"),
                      self.run_atelier("impl", "status"),
                      self.run_atelier("impl", "start", "nope-0000")]  # no such item: refused
-        expected = [None, None, "refused", "refused", None, None, "refused", None, None,
+        expected = [None, None, "refused", "refused", "refused", None, None, "refused", None, None,
                     "refused", "errored", None, None, "refused", None, None, "refused"]
         got = ["refused" if grade.REFUSED.search(out) else
                "errored" if grade.ERRORED.search(out) else None for _, out in outcomes]

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# done-when-rewrite's catalogue search, tracked by the new binary. The agent's
+# done-when-rewrite's catalogue search, tracked by Atelier. The agent's
 # thread (T3CODE_THREAD_ID) holds shop-s3ch, building: search.py and its tests
 # are committed and the tests' Done when line is ticked, but the latency line
 # cannot hold as written (p95 is about 70 ms on bench/queries.txt against a
@@ -76,7 +76,7 @@ git add . && git commit -qm "Add the search benchmark, and track work in Atelier
 git rev-parse HEAD > "$work/.setup_head"
 
 impl=$T3CODE_THREAD_ID
-as "$impl" start shop-s3ch
+begin "$impl" shop-s3ch
 cat > search.py <<'PY'
 """Keyword search over the storefront catalogue."""
 import random

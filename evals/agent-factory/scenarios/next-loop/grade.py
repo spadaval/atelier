@@ -42,6 +42,16 @@ EXAMPLES = 'assert slugify("Hello,  World!") == "hello-world"; ' \
            'assert slugify("  --Rust & Go--  ") == "rust-go"'
 
 
+# A started item's record reaches the base only in its own merge, so on the
+# base the binary reads a started status as done (atelier-core's STARTED).
+STARTED = ("building", "in_review", "changes_requested", "approved")
+
+
+def base_status(status):
+    """An item's status on the base, as the binary reads it."""
+    return "done" if status in STARTED else status
+
+
 def git(repo, *args):
     return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
 
@@ -211,8 +221,15 @@ def reviews(repo, item, refs=("main",), worktree=True):
 
 
 def unapproved(repo, commit, item):
-    """Why the merge `commit` of `item` is not an independent approval, or None."""
-    fields = front(git(repo, "show", f"{commit}:.atelier/items/{item}/item.md").stdout)
+    """Why the merge `commit` of `item` is not an independent approval, or None.
+    A merge of a branch that is no item's (a backlog or mission branch,
+    which merges with no item review) is one only if it changes records alone."""
+    record = git(repo, "show", f"{commit}:.atelier/items/{item}/item.md")
+    if record.returncode != 0:
+        files = git(repo, "diff", "--name-only", f"{commit}^1", commit).stdout.split()
+        code = [f for f in files if not f.startswith(".atelier/")]
+        return f"{item} is no item, and its merge changed {', '.join(code)}" if code else None
+    fields = front(record.stdout)
     if fields.get("trivial") not in (None, "null"):
         return f"{item} was merged as trivial"
     found = reviews(repo, item, refs=(commit,), worktree=False)
@@ -225,6 +242,23 @@ def unapproved(repo, commit, item):
     if not last.get("reviewers") or set(last["reviewers"]) & implementers:
         return f"{item} was approved by one of its implementers"
     return None
+
+
+def needs_human(repo, setup_head):
+    """Each item labelled needs-human made since setup: on a branch, or in the
+    working tree."""
+    found = []
+    before = set(git(repo, "ls-tree", "-r", "--name-only", setup_head, ".atelier/items/").stdout.split())
+    for ref in git(repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/").stdout.split():
+        for path in git(repo, "ls-tree", "-r", "--name-only", ref, ".atelier/items/").stdout.split():
+            if path.endswith("/item.md") and path not in before and "needs-human" in str(
+                    front(git(repo, "show", f"{ref}:{path}").stdout).get("labels")):
+                found.append(f"{ref}:{path}")
+    for path in (repo / ".atelier/items").glob("*/item.md"):
+        rel = str(path.relative_to(repo))
+        if rel not in before and "needs-human" in str(front(path.read_text()).get("labels")):
+            found.append(f"worktree:{rel}")
+    return sorted(set(found))
 
 
 def runs(command, sub):
@@ -340,6 +374,7 @@ def main():
     setup_head = (work / ".setup_head").read_text().strip()
     item = git(repo, "show", f"main:.atelier/items/{ID}/item.md").stdout
     fields = front(item) if item else {}
+    status = base_status(fields.get("status"))
     implementers = fields.get("implementers") or []
     merges = git(repo, "log", "--merges", "--format=%B%x00", f"{setup_head}..main").stdout
     reviews = []
@@ -365,7 +400,7 @@ def main():
     skips_found = skipped(shell, repo, setup_head)
     counts = call_checks(shell, tools, threads)
     checks = {
-        "status_on_main": fields.get("status"),
+        "status_on_main": status,
         "implementers": implementers,
         "merged_by_atelier": f"Atelier-Merge: {ID}" in merges,
         "reviews_on_main": reviews,
@@ -379,8 +414,8 @@ def main():
         **counts,
     }
     problems = []
-    if fields.get("status") != "done":
-        problems.append(f"{ID} is {fields.get('status')} on main, not done")
+    if status != "done":
+        problems.append(f"{ID} is {status} on main, not done")
     if not checks["merged_by_atelier"]:
         problems.append(f"no Atelier merge of {ID} on main")
     if not checks["approved_by_non_implementer"]:

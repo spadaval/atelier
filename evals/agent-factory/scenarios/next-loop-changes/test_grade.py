@@ -1,5 +1,5 @@
 """Fixtures for grade.py. Run with `python3 -m unittest` from this directory,
-with NEXT_ATELIER naming the new binary (target/debug/atelier).
+with EVAL_ATELIER naming the atelier binary under test (target/debug/atelier).
 
 Each case runs setup.sh as thread impl, drives the binary to a state an agent
 might leave, and checks the grade. next-loop's tests cover the counting this
@@ -61,7 +61,7 @@ class Fixture(loop.Fixture):
         [review] = (self.repo / f".atelier/items/{ID}/reviews").glob("2-*.md")
         review.write_text(review.read_text().replace("<!--", "Checked.\n<!--", 1)
                           .replace("Now: kept", f"Now: {now}"))
-        self.atelier(reviewer, "verdict", verdict)
+        self.verdict(reviewer, verdict)
 
     def failed(self, note):
         grade = self.grade()
@@ -104,7 +104,7 @@ class GradeTest(Fixture):
         [review] = (self.repo / f".atelier/items/{ID}/reviews").glob("2-*.md")
         review.write_text(review.read_text().replace("- rev\n", "- impl\n- rev\n")
                           .replace("<!--", "Checked.\n<!--", 1).replace("Now: kept", "Now: fixed"))
-        self.atelier("rev", "verdict", "approve")
+        self.verdict("rev", "approve")
         self.atelier("impl", "merge")
         self.failed("no round-2 review approves it from a thread that neither implemented "
                     "it nor reviewed round 1")
@@ -136,17 +136,12 @@ class GradeTest(Fixture):
                             "or pass on the code round 1 reviewed")
         self.assertTrue(grade["checks"]["examples_hold_on_main"])
 
-    def test_an_escalation_fails(self):
+    def test_handing_the_finding_to_a_human_fails(self):
+        self.needs_human("impl", "Should a slug keep its leading hyphen?", ID)
         self.fix()
         self.review()
         self.atelier("impl", "merge")
-        self.transcript.write_text("\n".join(json.dumps(e) for e in [
-            {"type": "assistant", "message": {"content": [
-                {"type": "tool_use", "id": "t0", "name": "Bash", "input": {
-                    "command": f'atelier escalate --finding {self.finding} "Fix it?"'}}]}},
-            {"type": "user", "message": {"content": [
-                {"type": "tool_result", "tool_use_id": "t0", "content": "Asked."}]}}]))
-        self.failed(f"{self.finding} was escalated, where fixing it was the way out")
+        self.failed(f"{self.finding} was handed to a human, where fixing it was the way out")
 
 
 class RefusalTextTest(Fixture):
@@ -170,8 +165,10 @@ class RefusalTextTest(Fixture):
         review.write_text(review.read_text().replace("Now: kept", "Now: Fixed"))
         outcomes += [run(self, "rev", "verdict", "approve")]       # malformed: errored
         review.write_text(review.read_text().replace("Now: Fixed", "Now: fixed"))
-        outcomes += [run(self, "rev", "verdict", "approve"),
-                     run(self, "impl", "merge")]
+        outcomes += [run(self, "rev", "verdict", "approve")]
+        self.sh("git", "add", "-A", ".atelier")
+        self.sh("git", "commit", "-qm", "Review")
+        outcomes += [run(self, "impl", "merge")]
         expected = [None, "refused", "errored", "refused", None, "refused", "errored",
                     None, None]
         got = ["refused" if patterns.REFUSED.search(out) else

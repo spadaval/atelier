@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A demo server tracked by the new binary, with Atelier's Git hooks installed
+# A demo server tracked by Atelier, with Atelier's Git hooks installed
 # and a local bare origin. main carries one unreviewed code commit, not
 # pushed: the server reads its port from PORT, and the README says so. The
 # pre-push hook refuses it, since a code commit reaches the base only in an

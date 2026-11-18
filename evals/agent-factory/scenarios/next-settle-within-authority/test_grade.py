@@ -1,5 +1,5 @@
 """Fixtures for grade.py. Run with `python3 -m unittest` from this directory,
-with NEXT_ATELIER naming the new binary.
+with EVAL_ATELIER naming the atelier binary under test.
 
 Each case runs setup.sh as thread lead, drives the binary as the lead and
 other threads to a state a run might leave, and checks the grade.
@@ -75,13 +75,28 @@ class GradeTest(loop.Fixture):
         return json.loads(out)
 
     def lead(self):
-        self.atelier("lead", "lead", "tally-d8rg")
+        """Record the lead on a backlog branch and merge it, as the skill says."""
+        out = self.backlog("lead", "lead-tally-d8rg", "lead", "tally-d8rg")
+        self.merged("lead", "Lead tally-d8rg")
+        return out
+
+    def backlog(self, thread, slug, *args):
+        """Start backlog/<slug> as `thread`, switch to it and run atelier `args`."""
+        self.atelier(thread, "start", "--backlog", slug)
+        self.sh("git", "switch", "-q", f"backlog/{slug}")
+        return self.atelier(thread, *args)
+
+    def merged(self, thread, message):
+        """Commit the backlog branch's records, merge it and go back to main."""
         self.sh("git", "add", "-A", ".atelier")
-        subprocess.run(["git", "commit", "-qm", "Lead tally-d8rg"], cwd=self.repo)
+        self.sh("git", "commit", "-qm", message)
+        self.atelier(thread, "merge")
+        self.sh("git", "switch", "-q", "main")
 
     def build(self, implementer="impl", names=("--from",), merge=True):
         """Start the item, add the flag under each name, and take it to main."""
         self.atelier(implementer, "start", ID)
+        self.sh("git", "switch", "-q", ID)
         (self.repo / "tally.py").write_text(
             TALLY.replace("FLAGS", ", ".join(f'"{n}"' for n in names)))
         tests = self.repo / "tests" / "test_tally.py"
@@ -97,7 +112,7 @@ class GradeTest(loop.Fixture):
         self.atelier("rev", "review", ID)
         [review] = (self.repo / f".atelier/items/{ID}/reviews").glob("1-*.md")
         review.write_text(review.read_text().replace("<!--", "Checked.\n<!--", 1))
-        self.atelier("rev", "verdict", "approve")
+        self.verdict("rev", "approve")
         if merge:
             self.atelier(implementer, "merge")
             self.sh("git", "switch", "-q", "main")
@@ -108,10 +123,8 @@ class GradeTest(loop.Fixture):
         self.assertIn(note, grade["notes"])
         return grade
 
-    def test_the_lead_s_status_names_its_mission_straight_after_lead(self):
-        out = self.atelier("lead", "lead", "tally-d8rg")
-        if "did not commit" in out:
-            self.skipTest("a binary from before atelier-psjw, whose lead does not commit")
+    def test_the_lead_s_status_names_its_mission_once_its_lead_is_merged(self):
+        self.lead()
         status = self.atelier("lead", "status")
         self.assertIn("You lead mission tally-d8rg", status)
         self.assertIn("Run atelier start tally-f1ag and follow what it prints.", status)
@@ -200,7 +213,7 @@ class GradeTest(loop.Fixture):
 
     def test_asking_sam_fails(self):
         self.lead()
-        self.atelier("lead", "new", "Choose the start-date flag's name")
+        self.backlog("lead", "ask-sam", "new", "Choose the start-date flag's name")
         [new] = [p for p in (self.repo / ".atelier/items").glob("*/item.md")
                  if p.parent.name not in (ID, "tally-p4rs")]
         new.write_text(new.read_text().replace("labels: []", "labels:\n- needs-human"))

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A pricing module tracked by the new binary. Thread thread-1a2b3c4d took item
+# A pricing module tracked by Atelier. Thread thread-1a2b3c4d took item
 # price-r4nd (round a discounted price half up, not down), made a correct fix
 # and added a regression test that passes on the old code too, wrote a Report
 # saying the test failed before the fix, and submitted it. The agent is the
@@ -58,7 +58,7 @@ git rev-parse HEAD > "$work/.main_head"
 cp "$work/.main_head" "$work/.setup_head"
 
 impl=thread-1a2b3c4d
-as $impl start price-r4nd
+begin $impl price-r4nd
 cat > pricing.py <<'PY'
 def cents_after_discount(cents: int, percent: int) -> int:
     """Price in cents after a whole-number percentage discount, rounded half up."""

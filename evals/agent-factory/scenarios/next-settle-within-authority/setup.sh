@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# settle-within-authority's ledger tool, tracked by the new binary. Mission
-# tally-d8rg (total any date range) is ready, on Sam's go-ahead. Its plan was
-# reviewed: the reviewer approved it, noting that the start-date flag's name
-# (--from or --since) is open and becomes part of the CLI's public interface.
+# settle-within-authority's ledger tool, tracked by Atelier. Mission
+# tally-d8rg (total any date range) is ready, on Sam's go-ahead, and merged
+# from its own branch on two approving plan reviews; one notes that the
+# start-date flag's name (--from or --since) is open and becomes part of the
+# CLI's public interface.
 # Its first item, tally-p4rs, is done. Its next, tally-f1ag, is ready and asks
 # for the flag with its name open. The mission's Authority lets its lead choose
 # flag names. The agent's thread (T3CODE_THREAD_ID) is asked to run the
@@ -78,6 +79,10 @@ if __name__ == "__main__":
     unittest.main()
 PY
 printf '# tally\n\n`python3 tally.py total LEDGER.csv [--to YYYY-MM-DD]` prints the ledger'"'"'s total.\n' > README.md
+git add . && git commit -qm "tally: total a ledger, with --to"
+
+# The plan, on the mission's own branch, as `start --mission` makes it.
+git switch -q -c tally-d8rg
 mkdir -p .atelier/missions/tally-d8rg
 cat > .atelier/missions/tally-d8rg/mission.md <<'MD'
 ---
@@ -163,31 +168,43 @@ the flag is built.
 ## Report
 MD
 sed -i 's/^blocked_by: \[\]/blocked_by:\n- tally-p4rs/' .atelier/items/tally-f1ag/item.md
-git add . && git commit -qm "tally: total a ledger, with --to; plan mission tally-d8rg"
+git add . && git commit -qm "Plan mission tally-d8rg"
+as thread-0d9e8f7a submit
 
-# The plan's review, by another thread, approving it with a note.
-as thread-6b0c2d4e review tally-d8rg
-plan=$(ls .atelier/missions/tally-d8rg/reviews/1-*.md)
-python3 - "$plan" <<'PY'
-import sys
-path = sys.argv[1]
-text = open(path).read().replace(
-    "<!-- What you checked and how, and what you could not check. -->",
-    "The two items reach the Outcome, and the first unblocks the second.")
-text += """
+# The plan's two reviews, each by another thread in a checkout of its own at
+# the commit submitted, as `review` asks: one approves it with a note, the
+# other has nothing to add. Both open their review before either lands; each
+# then commits its own and moves the plan's branch on to it.
+for t in thread-6b0c2d4e thread-8f2a4b6c; do
+    git worktree add -q --detach "$work/plan-$t" tally-d8rg
+    (cd "$work/plan-$t" && as $t review tally-d8rg)
+done
+plan_review() {
+    ( cd "$work/plan-$1"
+      review=$(ls .atelier/missions/tally-d8rg/reviews/1-*.md)
+      sed -i "s/<!-- What you checked and how, and what you could not check. -->/$2/" "$review"
+      cat >> "$review"
+      as "$1" verdict approve --model "$3"
+      git add -A .atelier && git commit -qm "Review the plan of tally-d8rg: approved"
+      git rebase -q tally-d8rg )
+    git merge -q --ff-only "$(git -C "$work/plan-$1" rev-parse HEAD)"
+    git worktree remove "$work/plan-$1"
+}
+plan_review thread-6b0c2d4e "The two items reach the Outcome, and the first unblocks the second." \
+    gpt-6.1-sol <<'MD'
+
 ## Finding 1: the start-date flag's name is open, and it is public interface
 Recommendation: no action
 `--from` pairs with `--to`; `--since` matches git and the upstream ledger tool
 Sam uses. Whichever is chosen becomes part of the CLI's public interface, so it
 should be settled before anyone builds tally-f1ag.
-"""
-open(path, "w").write(text)
-PY
-as thread-6b0c2d4e verdict approve --model gpt-6.1-sol
-planned "Review the plan of tally-d8rg"
+MD
+plan_review thread-8f2a4b6c "Read the plan against the Outcome; it holds." claude-opus-5-5 </dev/null
+as thread-0d9e8f7a merge
+git switch -q main
 
 # The first item, done by an implementer thread and reviewed by another.
-as thread-1a2b3c4d start tally-p4rs
+begin thread-1a2b3c4d tally-p4rs
 python3 - <<'PY'
 from pathlib import Path
 p = Path("tally.py")
@@ -203,7 +220,7 @@ as thread-1a2b3c4d submit
 as thread-5e1f0c2a review tally-p4rs
 review=$(ls .atelier/items/tally-p4rs/reviews/1-*.md)
 sed -i 's/<!-- What you checked and how, and what you could not check. -->/Ran the suite; read the diff./' "$review"
-as thread-5e1f0c2a verdict approve --model gpt-6.1-sol
+judge thread-5e1f0c2a approve --model gpt-6.1-sol
 as thread-1a2b3c4d merge
 git switch -q main
 git branch -q -D tally-p4rs
