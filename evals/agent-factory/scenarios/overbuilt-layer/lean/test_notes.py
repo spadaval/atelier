@@ -52,3 +52,7 @@ class TagCliTest(CliCase):
         before = Path(self.file).read_text()
         self.assertEqual(self.run_cli("tag", "7", "work"), (1, "", "no note 7\n"))
         self.assertEqual(Path(self.file).read_text(), before)
+
+
+if __name__ == "__main__":
+    unittest.main()

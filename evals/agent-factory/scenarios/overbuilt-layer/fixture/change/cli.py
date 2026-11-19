@@ -33,7 +33,7 @@ def main(argv=None):
     if args.command == "add":
         print(notes.add(args.file, args.text))
     elif args.command == "list":
-        found = (make_service(args.file).with_tag(args.tag) if args.tag
+        found = (make_service(args.file).with_tag(args.tag) if args.tag is not None
                  else notes.load(args.file))
         for n in found:
             show(n)

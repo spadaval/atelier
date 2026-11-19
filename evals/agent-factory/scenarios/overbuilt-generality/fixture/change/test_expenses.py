@@ -41,9 +41,9 @@ class FormatTest(unittest.TestCase):
         self.assertEqual(run("report", "2026-10", "--format", "csv"),
                          run("report", "2026-10", "--csv"))
 
-    def test_csv_with_a_delimiter_and_no_header(self):
-        code, out = run("report", "2026-10", "--csv", "--delimiter", ";", "--no-header")
-        self.assertEqual(out.splitlines()[0], "rent;950.00")
+    def test_csv_with_no_header(self):
+        code, out = run("report", "2026-10", "--csv", "--no-header")
+        self.assertEqual(out.splitlines()[0], "rent,950.00")
 
     def test_json(self):
         code, out = run("report", "2026-10", "--format", "json")

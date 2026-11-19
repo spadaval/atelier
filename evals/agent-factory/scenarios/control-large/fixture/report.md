@@ -4,5 +4,7 @@
 counting repeats, and treats each file as its own import, so one at a time
 and together agree (`OnceTest`). Every file is read before the ledger is
 written, so a bad line, reported as `FILE:LINE: reason`, leaves it as it
-was (`BadLineTest`). The import prints `imported N, skipped M already in
-the ledger`. `python3 -m unittest`: 10 tests pass.
+was (`BadLineTest`): a bad date, amount, header or field count, bad CSV
+quoting, an unended or doubled QIF field, and a byte that is not UTF-8.
+The import prints `imported N, skipped M already in the ledger`.
+`python3 -m unittest`: 11 tests pass.

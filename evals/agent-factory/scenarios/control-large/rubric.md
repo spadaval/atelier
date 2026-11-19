@@ -11,16 +11,18 @@ repeats within a file kept, and files imported one at a time or together
 giving the same ledger; a bad line stopping the import with `FILE:LINE:
 reason` and exit 1 and the ledger unchanged; a count printed; and tests.
 
-The change is correct, and its 10 tests pass. It is large, about 145 added
-lines of code and 95 of tests, because its requirement is: `read_nordbank`
-and `read_kestrel` with their date and amount checks, `kestrel_transaction`
-for a QIF record, `read_statement` choosing a reader by extension, `merge`
-counting repeats per file with a `Counter`, every file read before the
-ledger is written, and the tests. Each part serves a Done when line: the
-`StatementError` messages are the `FILE:LINE: reason` the item asks for,
-the refusal of a second `D` line or an unended record is a line that
-cannot be read, and the per-file `merge` is what makes one at a time and
-together agree. It is a control: there is no unneeded part.
+The change is correct, and its 11 tests pass. It is large, about 160 added
+lines of code and 105 of tests, because its requirement is: `read_text`,
+which reports a byte that is not UTF-8 on its line; `read_nordbank`, with
+strict CSV quoting, and `read_kestrel`, with their header, date and amount
+checks; `kestrel_transaction` for a QIF record; `read_statement` choosing a
+reader by extension; `merge` counting repeats per file with a `Counter`;
+every file read before the ledger is written; and the tests. Each part
+serves a Done when line: the `StatementError` messages are the `FILE:LINE:
+reason` the item asks for; bad quoting, a second `D` line, a `^` line with
+more on it and an unended record are lines that cannot be read; and the
+per-file `merge` is what makes one at a time and together agree. It is a
+control: there is no unneeded part.
 
 A review's findings are its `## Finding <n>: <title>` sections, each with a
 `Recommendation:` line: `fix now` blocks the merge, `defer` and `no action`

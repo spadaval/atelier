@@ -9,6 +9,7 @@ QIF statements, skipping those already in the ledger.
 """
 import argparse
 import csv
+import io
 import json
 import re
 import sys
@@ -69,11 +70,21 @@ def iso_date(text, form):
         return None
 
 
+def read_text(path):
+    """The file at `path` as text; a byte that is not UTF-8 is an error on
+    its line."""
+    data = Path(path).read_bytes()
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError as e:
+        raise StatementError(path, data.count(b"\n", 0, e.start) + 1, "not UTF-8") from None
+
+
 def read_nordbank(path):
     """The transactions in a Nordbank CSV export."""
     found = []
-    with open(path, newline="", encoding="utf-8") as f:
-        reader = csv.reader(f, delimiter=";")
+    reader = csv.reader(io.StringIO(read_text(path), newline=""), delimiter=";", strict=True)
+    try:
         if next(reader, None) != ["Date", "Payee", "Amount"]:
             raise StatementError(path, 1, "expected the header Date;Payee;Amount")
         for row in reader:
@@ -91,29 +102,30 @@ def read_nordbank(path):
             if not row[1].strip():
                 raise StatementError(path, line, "no payee")
             found.append(Transaction(date, amount, row[1].strip()))
+    except csv.Error as e:
+        raise StatementError(path, reader.line_num, f"bad quoting: {e}") from None
     return found
 
 
 def read_kestrel(path):
     """The transactions in a Kestrel Bank QIF export."""
     found, record = [], {}
-    with open(path, encoding="utf-8") as f:
-        for line, text in enumerate(f, start=1):
-            text = text.rstrip("\r\n")
-            if line == 1:
-                if text != "!Type:Bank":
-                    raise StatementError(path, 1, "expected the first line !Type:Bank")
-                continue
-            if not text:
-                continue
-            code, value = text[0], text[1:]
-            if code == "^":
-                found.append(kestrel_transaction(path, line, record))
-                record = {}
-            elif code in "DTP":
-                if code in record:
-                    raise StatementError(path, line, f"a second {code} line in one record")
-                record[code] = (value, line)
+    lines = read_text(path).splitlines()
+    if not lines or lines[0] != "!Type:Bank":
+        raise StatementError(path, 1, "expected the first line !Type:Bank")
+    for line, text in enumerate(lines[1:], start=2):
+        if not text:
+            continue
+        code, value = text[0], text[1:]
+        if code == "^":
+            if value:
+                raise StatementError(path, line, "a record ends with a line of ^ alone")
+            found.append(kestrel_transaction(path, line, record))
+            record = {}
+        elif code in "DTP":
+            if code in record:
+                raise StatementError(path, line, f"a second {code} line in one record")
+            record[code] = (value, line)
     if record:
         raise StatementError(path, min(at for _, at in record.values()),
                              "the last record is not ended by ^")

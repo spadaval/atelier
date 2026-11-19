@@ -124,11 +124,22 @@ class BadLineTest(LedgerCase):
                 ("c.csv", NORDBANK + "07.10.2026;Grocer\n", "6: expected 3 fields, found 2"),
                 ("d.qif", "!Type:Bank\nD10/04/2026\nT-1.00\n^\n", "4: the record has no P (payee) line"),
                 ("e.qif", "!Type:Bank\nD10/04/2026\nT-1.00\nPX\n", "2: the last record is not ended by ^"),
-                ("f.qif", "!Type:Bank\nD10/04/2026\nD10/05/2026\n", "3: a second D line in one record")]:
+                ("f.qif", "!Type:Bank\nD10/04/2026\nD10/05/2026\n", "3: a second D line in one record"),
+                ("g.qif", "", "1: expected the first line !Type:Bank"),
+                ("h.qif", "!Type:Bank\nD10/04/2026\nT-1.00\nPX\n^X\n", "5: a record ends with a line of ^ alone"),
+                ("i.csv", 'Date;Payee;Amount\n01.10.2026;"Grocer"x;-1,00\n', "2: bad quoting"),
+                ("j.csv", "", "1: expected the header Date;Payee;Amount")]:
             with self.subTest(name=name):
                 path = self.file(name, text)
-                self.assertEqual(self.run_cli("import", path), (1, "", f"{path}:{error}\n"))
+                code, out, err = self.run_cli("import", path)
+                self.assertEqual((code, out), (1, ""))
+                self.assertTrue(err.startswith(f"{path}:{error}"), err)
                 self.assertFalse(self.ledger.exists())
+
+    def test_a_byte_that_is_not_utf8_names_its_line(self):
+        path = self.root / "oct.csv"
+        path.write_bytes(NORDBANK.encode() + b"07.10.2026;Caf\xe9;-1,00\n")
+        self.assertEqual(self.run_cli("import", str(path)), (1, "", f"{path}:6: not UTF-8\n"))
 
 
 if __name__ == "__main__":

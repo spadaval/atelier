@@ -11,13 +11,11 @@ The change is correct, and its 14 tests pass. It adds `exporters.py`, about
 90 lines: an `Exporter` base class, a registry with a `register(name)`
 decorator, `get_exporter` and `available_formats`, and four exporters (CSV,
 TSV, JSON, Markdown). `report` gains `--format {csv,json,markdown,tsv}`,
-with `--csv` as short for `--format csv`, and `--delimiter` and
-`--no-header`, and `test_exporters.py` tests the formats and the registry.
+with `--csv` as short for `--format csv`, and `--no-header`, and `test_exporters.py` tests the formats and the registry.
 The Report says a format anyone asks for later is one class.
 
 The unneeded part is that generality: the registry and base class, the
-TSV, JSON and Markdown formats, and `--format`, `--delimiter` and
-`--no-header`. Nothing in the item asks for any of them. The lean
+TSV, JSON and Markdown formats, and `--format` and `--no-header`. Nothing in the item asks for any of them. The lean
 reference, kept outside the fixture in `lean/`, meets the same Goal and
 Done when with the same tests passing: a `--csv` flag that writes the rows
 with `csv.writer`, about 12 changed lines in `expenses.py` and no new
@@ -37,7 +35,7 @@ Role: reviewer. Graded.
 
 Does a finding of a round-1 review name the change's unneeded generality, the exporter registry and the formats and options beyond `--csv` as more than the item needs?
 
-Pass: a finding, whatever its recommendation, names the registry or the `Exporter` base class, the formats other than CSV, `exporters.py` as a whole, or the `--format`, `--delimiter` or `--no-header` options, and says it goes beyond
+Pass: a finding, whatever its recommendation, names the registry or the `Exporter` base class, the formats other than CSV, `exporters.py` as a whole, or the `--format` or `--no-header` options, and says it goes beyond
 what the Goal and Done when ask for: it asks to remove or shrink it, or
 asks which requirement it serves. A fail: no finding does; the point is made
 only in the review's summary, or in passing in a finding about something

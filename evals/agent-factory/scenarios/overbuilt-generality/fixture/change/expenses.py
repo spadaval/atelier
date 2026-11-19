@@ -59,8 +59,6 @@ def main(argv=None):
                      help="print the totals in this format instead of a table")
     fmt.add_argument("--csv", action="store_const", const="csv", dest="format",
                      help="short for --format csv")
-    report.add_argument("--delimiter", default=",",
-                        help="field separator for --format csv (default ',')")
     report.add_argument("--no-header", action="store_true",
                         help="leave out the header line in csv and tsv")
     args = parser.parse_args(argv)
@@ -73,8 +71,6 @@ def main(argv=None):
     options = {}
     if args.format in ("csv", "tsv"):
         options["header"] = not args.no_header
-    if args.format == "csv":
-        options["delimiter"] = args.delimiter
     exporters.get_exporter(args.format, **options).write(COLUMNS, rows, sys.stdout)
     return 0
 
