@@ -34,8 +34,8 @@ harness history.
   case, is recorded in `evals/agent-factory/results/`. Each table gives
   passes, median seconds and tokens per cell, and the file says how many
   runs each difference it names rests on. A cell has five runs, and a
-  replayed review three, since those are read across the twelve cases. Only
-  one matrix runs on this host at a time.
+  replayed review three, since those are read across the twelve cases. Runs
+  go side by side within the caps atelier-u708 sets.
 - [ ] In `sol`, the cases whose first agent starts threads are also run
   with a third arm: a skill that holds only `SKILL.md`'s Starting Another
   Thread section, from a branch that is not merged. Codex adds a rule of its
