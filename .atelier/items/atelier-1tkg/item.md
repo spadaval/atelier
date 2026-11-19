@@ -55,6 +55,8 @@ once and kept, whose fix breaks a Done when example.
 `evals/agent-factory/scenarios/next-rebuttal-kept`, renamed, one new
 directory beside it, and the README's lines that name them.
 
+## Report
+
 A lead's ruling on a kept finding is now measured both ways. On
 `gpt-6.1-sol` under Codex, one run per cell, the skill passed both cases.
 The no-skill lead passed the case where the reviewer is wrong. In the case
