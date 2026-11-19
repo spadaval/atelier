@@ -877,6 +877,127 @@ fn a_verdict_needs_its_finding_state_and_commits_the_file_with_the_status() {
 }
 
 #[test]
+fn a_later_rounds_brief_says_what_the_round_is_for_and_puts_the_new_diff_first() {
+    let scratch = submitted();
+    let root = scratch.root();
+    let item = item_path(ID);
+    let whole_rule = "Review the change on branch the-id as someone who did not write it: \
+                      check that it meets each Done when line, that it is correct, and that the \
+                      Report's claims hold.";
+    let whole_rule = whole_rule.replace("the-id", ID);
+    let new_finding = "A new finding in code that did not change since the last round's review \
+                       blocks only if the work would come out wrong without it: record that one \
+                       as `fix now`, and any other as `defer`, for later work.\n";
+    let purpose = "reviewed the whole change before this one. This round checks the earlier \
+                   findings and what changed since the last round's review: judge each open \
+                   finding below, and check that the commits since then are correct, that the \
+                   change still meets each Done when line, and that the Report's claims hold.";
+
+    // Round 1: the brief as it has always been.
+    let round_1 = git(&root, &["rev-parse", "HEAD"]);
+    let run = atelier(&root, "t2", &["review", ID]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(
+        run.stdout.starts_with(&format!(
+            "You are the reviewer of {ID} (thread t2), round 1.\n{whole_rule} Read the code, run \
+             what proves it, and write down each problem you find. The author's reasoning is left \
+             out on purpose; judge what is there.\n\nItem {ID}: Say hello\n"
+        )),
+        "{}",
+        run.stdout
+    );
+    assert!(
+        run.stdout.contains(&format!(
+            "\nThe change, at commit {round_1}:\n  git diff main...{round_1}\n\nYour review file"
+        )),
+        "{}",
+        run.stdout
+    );
+    for absent in [
+        purpose,
+        new_finding,
+        "since the last round",
+        "The whole change",
+    ] {
+        assert!(
+            !run.stdout.contains(absent),
+            "`{absent}` in:\n{}",
+            run.stdout
+        );
+    }
+    let (first, path) = review_of(&root, 1);
+    append(&root, &path, NO_PERIOD);
+    assert_eq!(verdict(&root, "t2", &["verdict", "changes"]).code, 0);
+
+    // Round 2: one round before it, the new commits' diff first.
+    fs::write(root.join("hello.txt"), "hello.\n").unwrap();
+    git(&root, &["commit", "-qam", "Add the period"]);
+    let fix = git(&root, &["rev-parse", "--short", "HEAD"]);
+    append(
+        &root,
+        &item,
+        &format!("\n### Responses\n\n- {first}.1: fixed in {fix}\n"),
+    );
+    assert_eq!(atelier(&root, "t1", &["submit"]).code, 0);
+    let round_2 = git(&root, &["rev-parse", "HEAD"]);
+    let run = atelier(&root, "t3", &["review", ID]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(
+        run.stdout.starts_with(&format!(
+            "You are the reviewer of {ID} (thread t3), round 2.\nOne round has {purpose} Read the \
+             code, run what proves it, and write down each problem you find. The author's \
+             reasoning is left out on purpose; judge what is there.\n{new_finding}\nItem {ID}: \
+             Say hello\n"
+        )),
+        "{}",
+        run.stdout
+    );
+    assert!(!run.stdout.contains(&whole_rule), "{}", run.stdout);
+    assert!(
+        run.stdout.contains(&format!(
+            "\nWhat changed since the last round's review, at commit {round_2}:\n  git diff \
+             {round_1} {round_2}\nThe whole change:\n  git diff main...{round_2}\n"
+        )),
+        "{}",
+        run.stdout
+    );
+    let (second, path) = review_of(&root, 2);
+    let text = read(&root, &path).replace("Now: kept", "Now: fixed");
+    fs::write(
+        root.join(&path),
+        text + "\n## Finding 2: Too quiet\nRecommendation: fix now\n",
+    )
+    .unwrap();
+    assert_eq!(verdict(&root, "t3", &["verdict", "changes"]).code, 0);
+
+    // Round 3: two rounds before it, diffed from round 2's commit.
+    fs::write(root.join("hello.txt"), "Hello.\n").unwrap();
+    git(&root, &["commit", "-qam", "Capitalise the greeting"]);
+    let fix = git(&root, &["rev-parse", "--short", "HEAD"]);
+    append(&root, &item, &format!("- {second}.2: fixed in {fix}\n"));
+    assert_eq!(atelier(&root, "t1", &["submit"]).code, 0);
+    let round_3 = git(&root, &["rev-parse", "HEAD"]);
+    let run = atelier(&root, "t4", &["review", ID]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(
+        run.stdout.starts_with(&format!(
+            "You are the reviewer of {ID} (thread t4), round 3.\n2 rounds have {purpose}"
+        )),
+        "{}",
+        run.stdout
+    );
+    assert!(run.stdout.contains(new_finding), "{}", run.stdout);
+    assert!(
+        run.stdout.contains(&format!(
+            "\nWhat changed since the last round's review, at commit {round_3}:\n  git diff \
+             {round_2} {round_3}\nThe whole change:\n  git diff main...{round_3}\n"
+        )),
+        "{}",
+        run.stdout
+    );
+}
+
+#[test]
 fn later_rounds_carry_each_open_finding_under_its_latest_name_until_it_closes() {
     let scratch = submitted();
     let root = scratch.root();
@@ -912,7 +1033,10 @@ fn later_rounds_carry_each_open_finding_under_its_latest_name_until_it_closes() 
         read(&root, &path)
     );
     for part in [
-        format!("What changed since the last round's review:\n  git diff {round_1} {head}\n"),
+        format!(
+            "What changed since the last round's review, at commit {head}:\n  git diff {round_1} {head}\n\
+             The whole change:\n  git diff main...{head}\n"
+        ),
         format!(
             "{first}.1, carried as Finding 1: No period\n  As {first}.1:\n    Recommendation: fix now\n    \
              hello.txt says `hello`, without the Goal's period.\n  \
