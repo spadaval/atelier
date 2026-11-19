@@ -30,7 +30,7 @@ pub use disputed::{disputes, rebuttals, split_rounds, Disputes, Judged, Rebuttal
 pub use identity::identity;
 pub use log::{history, Happened, History, Logged, Move, PassedOver};
 pub use plan::{ready, Done};
-pub use repo::{Links, Repo};
+pub use repo::{Links, Repo, Walked};
 pub use review::{carried, carried_plan, Carried};
 pub use show::{annotate, annotate_all, item_view, mission_view, ItemView, MissionView};
 pub use skip::{refused, Refused, Skip, VARIABLE as SKIP_VARIABLE};

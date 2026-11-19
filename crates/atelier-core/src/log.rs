@@ -218,9 +218,12 @@ pub fn history(
     of: Option<&str>,
     since: Option<DateTime<Utc>>,
 ) -> Result<Option<History>> {
-    let tips: Vec<(String, String)> = git::branches(&repo.root)?
-        .into_iter()
-        .filter_map(|(name, tip)| Some((repo.config.record_of(&name)?, tip)))
+    // Every branch the convention names, local and remote-tracking, as
+    // `show` reads them: a mission's lookup by name reads the tip `show`
+    // reads, and the walk takes every tip, a backlog branch's included.
+    let walked = repo.walked()?;
+    let tips: Vec<(String, String)> = (walked.iter())
+        .filter_map(|branch| Some((branch.record.clone()?, branch.tip.clone())))
         .collect();
     let base_tip = repo.base_tip.clone();
     let mission = match of {
@@ -249,7 +252,11 @@ pub fn history(
     };
 
     let mut revisions = vec![base_tip.clone()];
-    revisions.extend(tips.iter().map(|(_, tip)| tip.clone()));
+    for tip in walked.iter().flat_map(|branch| &branch.tips) {
+        if !revisions.contains(tip) {
+            revisions.push(tip.clone());
+        }
+    }
     let commits = walk(&repo.root, &revisions)?;
     let mut walker = Walker {
         repo,

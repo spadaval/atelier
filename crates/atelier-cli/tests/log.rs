@@ -845,3 +845,90 @@ fn a_settlement_keeps_its_passed_rule_beside_the_item_its_commit_creates() {
         "{page}"
     );
 }
+
+#[test]
+fn a_proposed_mission_fetched_alone_or_ahead_of_its_local_branch_shows_its_passed_rules() {
+    let scratch = Scratch::new(&[(ID, "ready")]);
+    let root = scratch.root();
+    append(
+        &root,
+        ".atelier/config.toml",
+        "\n[forge]\nprovider = \"github\"\nremote = \"origin\"\n",
+    );
+    on_base(&root, "Configure the forge");
+    git(&root, &["switch", "-q", "-c", MISSION]);
+    write_mission(&root);
+    let path = format!(".atelier/missions/{MISSION}/mission.md");
+    fs::write(
+        root.join(&path),
+        read(&root, &path).replace("status: draft", "status: open"),
+    )
+    .unwrap();
+    git(&root, &["add", "-A"]);
+    git(&root, &["commit", "-qm", "Plan the mission"]);
+    let lead = "Lead the proposed mission now";
+    let run = skipping(&root, "p1", lead, &["lead", MISSION]);
+    run_then(&root, &run.stdout);
+    let led = short(&root, "HEAD");
+    let shows = |root: &Path| {
+        let page = show(root, MISSION);
+        let passed = rules_passed(&page);
+        assert_eq!(passed.len(), 1, "{page}");
+        assert!(
+            passed[0].starts_with(&format!("  {MISSION}, lead in {led}, by p1: "))
+                && passed[0].ends_with(&format!(": {lead}")),
+            "{page}"
+        );
+        let lines = actions(root, &log(root, &[MISSION]));
+        assert!(
+            lines
+                .iter()
+                .any(|line| line.starts_with(&format!("{MISSION} lead p1"))
+                    && line.ends_with(&format!(": {lead} (by p1)"))),
+            "{lines:?}"
+        );
+    };
+
+    // Only fetched: the remote-tracking branch alone holds it.
+    git(
+        &root,
+        &[
+            "update-ref",
+            &format!("refs/remotes/origin/{MISSION}"),
+            "HEAD",
+        ],
+    );
+    git(&root, &["checkout", "-q", "--detach", "main"]);
+    git(&root, &["branch", "-qD", MISSION]);
+    shows(&root);
+
+    // The local branch behind the fetched one, before the lead's commit.
+    git(
+        &root,
+        &["branch", "-q", MISSION, &format!("origin/{MISSION}~1")],
+    );
+    shows(&root);
+}
+
+#[test]
+fn a_rule_passed_on_a_backlog_branch_not_merged_yet_shows_on_the_missions_page() {
+    let scratch = Scratch::new(&[(ID, "ready")]);
+    let root = scratch.root();
+    write_mission(&root);
+    on_base(&root, "Add the mission");
+    ok(atelier(&root, "p1", &["start", "--backlog", "tidy"]));
+    let again = "Ada reconfirmed it";
+    let run = skipping(&root, "p1", again, &["ready", ID, "--by", "ada"]);
+    run_then(&root, &run.stdout);
+    let commit = short(&root, "HEAD");
+    git(&root, &["checkout", "-q", "--detach", "main"]);
+    let rule = format!("{ID} is draft (it is ready): {again}");
+    assert_eq!(
+        rules_passed(&show(&root, MISSION)),
+        [format!("  {ID}, change in {commit}, by p1: {rule}")]
+    );
+    assert_eq!(
+        actions(&root, &log(&root, &[MISSION])).last().unwrap(),
+        &format!("{ID} change p1 skip {rule} (by p1)")
+    );
+}

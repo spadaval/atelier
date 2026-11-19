@@ -1172,9 +1172,12 @@ holds:
 ### The walk
 
 One `git log` lists every commit that changed a file under
-`.atelier/items` or `.atelier/missions`, from the base's tip and the tip of
-every unmerged branch the reader reads, local and remote-tracking,
-parents before children, with its
+`.atelier/items` or `.atelier/missions`, from the base's tip and the tips
+of every branch the convention names, record and backlog branches, local
+and the forge's remote-tracking ones (`Repo::walked`), parents before
+children. A record found by its branch's name, as a proposed mission, is
+read at the tip `show` reads: the local or remote-tracking one that
+contains the other. Each commit is listed with its
 parents, committer time, trailers, and the old and new blob of each record
 it changed. The repository's one `git cat-file --batch` process reads those
 versions. An action is found by comparing a record's two versions across one

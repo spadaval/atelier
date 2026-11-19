@@ -160,23 +160,6 @@ pub fn remote_branches(repo: &Path, remote: &str) -> Result<Vec<(String, String)
         .collect())
 }
 
-/// Every local branch, with the commit it points at.
-pub fn branches(repo: &Path) -> Result<Vec<(String, String)>> {
-    let listed = run(
-        repo,
-        &[
-            "for-each-ref",
-            "--format=%(refname:strip=2) %(objectname)",
-            "refs/heads/",
-        ],
-    )?;
-    Ok(listed
-        .lines()
-        .filter_map(|line| line.rsplit_once(' '))
-        .map(|(name, tip)| (name.to_string(), tip.to_string()))
-        .collect())
-}
-
 /// Whether this clone has the commit `commit`.
 pub fn has_commit(repo: &Path, commit: &str) -> Result<bool> {
     let object = format!("{commit}^{{commit}}");
