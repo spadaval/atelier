@@ -114,8 +114,9 @@ when, Context and Report as they stood. They share one setup,
   material the judge lacks is answered unknown, not unsupported. The
   reviewer is told nothing.
 - A replay reviewer may build with cargo. Its crates are fetched into
-  `<work root>/cargo-home` first, it builds offline in its own `target/`,
-  and the cases run one at a time (`--jobs 1`).
+  `<work root>/cargo-home` first, it builds offline in its own `target/`
+  with four cargo jobs, and at most `--cargo-jobs` such runs (default 3)
+  go at once.
 
 Twelve of atelier's 15 after-merge rows in defects.md replay. Three do not:
 
@@ -231,7 +232,7 @@ sha=$(git rev-parse --short HEAD)
 mkdir -p /var/tmp/af-evals/bin && cp target/debug/atelier /var/tmp/af-evals/bin/atelier-$sha
 export EVAL_ATELIER=/var/tmp/af-evals/bin/atelier-$sha
 python3 evals/agent-factory/harness/run.py vacuous-test-review costly-hardening \
-  --setup house --arms none,skill --ref $sha --runs 3 --jobs 2 \
+  --setup house --arms none,skill --ref $sha --runs 3 \
   --out ~/.cache/af-evals/runs/<name>
 ```
 
@@ -251,32 +252,26 @@ names in `scenario.json` the `role` its first agent takes, and runs it as
 that role's agent, model and effort; a thread it starts for a role runs as
 that role's.
 
-Each setup's two arms, run once for the scenarios with threads (`--jobs 1`)
-and once for the others (`--jobs 2`):
+Each setup's two arms, every case in one matrix, whose runs go side by
+side (see Runs at once):
 
 ```bash
-threads="loop loop-changes non-atelier-repo settle-within-authority refused-push \
-  kept-finding-wrong kept-finding-right lead-looks-trivial lead-stalled-item done-when-conflict"
-single="vacuous-test-review costly-hardening"
-run=evals/agent-factory/harness/run.py
-for setup in sol house; do
-  python3 $run $threads --setup $setup --ref $sha --runs 3 --jobs 1 --out <out>
-  python3 $run $single --setup $setup --ref $sha --runs 3 --jobs 2 --out <out>
-done
-python3 evals/agent-factory/harness/table.py <out>
-```
-
-The replay cases run one at a time, since their reviewers may build with
-cargo:
-
-```bash
-replays="approval-follow-up base-record-commits base-done-claims merge-sync \
+cases="loop loop-changes non-atelier-repo settle-within-authority refused-push \
+  kept-finding-wrong kept-finding-right lead-looks-trivial lead-stalled-item done-when-conflict \
+  vacuous-test-review costly-hardening \
+  approval-follow-up base-record-commits base-done-claims merge-sync \
   brief-transitions hierarchy-rules project-slug quiet-tokens priority-contract \
   readiness-blockers after-merge-checks touched-claims"
+run=evals/agent-factory/harness/run.py
 for setup in sol house; do
-  python3 $run $replays --setup $setup --ref $sha --runs 1 --jobs 1 --out <out>
+  python3 $run $cases --setup $setup --ref $sha --runs 3 --out <out>/$setup
 done
+python3 evals/agent-factory/harness/table.py <out>/sol <out>/house
 ```
+
+If a matrix stops, or some of its runs end on a provider's limit, run the
+same command again: it makes only the runs missing from `--out` or invalid
+there, and keeps the others (see Runs at once).
 
 `harness/table.py` prints a table from `results.jsonl`: for each setup, case
 and arm, its passes out of the graded runs, the runs graded `null`, and the
@@ -293,33 +288,69 @@ its own when it ends.
   `ATELIER_NO_UPDATE_CHECK=1`, since `atelier`'s update notice names the
   host's own skill checkout; Claude Code runs use `--setting-sources
   project`.
-- **At most two eval agents are alive at once**, and an agent a run starts
-  counts. A scenario without threads is one agent: Claude Code's
+- **Runs at once.** A matrix makes its runs side by side, under a cap
+  for each kind of run. `--cargo-jobs` (default 3) caps the runs that build
+  Rust, which are the replayed reviews (`"cargo": true`): each builds with
+  four cargo jobs, and this host's 12 cores hold about three such builds
+  at once. `--jobs` (default 10) caps all the others, cases with threads
+  included: their agents mostly wait on their models, so what limits them
+  is the provider's capacity and not the host (under a matrix running
+  them one at a time, this host sat at load 0.5 on 12 cores). Ten is what the human's ChatGPT Pro plan
+  was said on 2026-11-18 to bear, and the cap to lower if capacity errors
+  appear. `judge.py` takes `--jobs` too, with the same default.
+  Until 2026-11-18 at most two eval agents were alive at once, `--jobs`
+  above 2 was refused, and a matrix with threads or a replay ran one run
+  at a time. That limit was the human's, set on 2026-11-10 for mission
+  atelier-qr5s, for token cost and after ten agents building Rust pushed
+  this host's load to 45. They lifted it on 2026-11-18, since spend on an
+  eval is no concern and only the replays build Rust (atelier-u708).
+- Runs going at once share nothing a run writes. Each has its own work
+  directory, with its own `delegate` lock and log, agent homes
+  (`CODEX_HOME`s), links to the sign-in, `TMPDIR`, and for a replay its
+  own sandbox, proxy and `target/`. Only the crates the replays build from
+  are shared, in `<work root>/cargo-home`, which cargo locks. What is not
+  separated is the host's network: a fixture's server on a fixed port,
+  such as `refused-push`'s on 8080, is one port for every run that starts
+  it. `harness/test_run.py` runs two thread cases at once with stand-in
+  agents and checks each kept to its own.
+- **Within a run, at most two agents are alive**: its first agent and one
+  child. A scenario without threads is one agent: Claude Code's
   agent-starting tools (`Agent`, `Task`, `Workflow`, `RemoteTrigger`,
   `CronCreate`, `ScheduleWakeup`) are disallowed on its command line, and
-  Codex's `spawn_agent` is removed in its scratch config. These run two at a
-  time, and `--jobs` above 2 is refused. A matrix with a threads scenario runs
-  one run at a time (`--jobs` above 1 is refused), and each such run has at
-  most its first agent and one child alive. In a setup of one Codex model
-  and effort, such as `sol`, the only way to start one is `spawn_agent`,
-  capped by `agents.max_threads = 1`, which counts every subagent of the
-  session with a turn running, so a child can start none, and the first
-  agent can neither start a second child nor give the first a follow-up
-  while one runs; `delegate` is not installed. In every other setup, such as
-  `house`, the only way is `delegate`, for Claude Code and Codex alike, and
-  `spawn_agent` is removed: it holds a lock while its child runs, so a
-  second call waits for the first child to end, whatever their roles and
-  agents; a child that calls it is refused with one line; and a child still
-  running when its run ends is killed. A pass that needs a third thread, such as a reviewer for an
-  implementer the lead started, has the first agent start it after the
-  earlier child's turn ended. Each `result.json` records when every agent of
-  its run ran: a Codex subagent once per turn, from its session record,
-  since it idles between turns and an idle one runs nothing. The matrix
-  prints `matrix_peak_agents`, the most running at once. (Until 2026-11-17 a
-  subagent counted from its record's first event to its last, which read 3
-  for a lead whose implementer had a second turn after the reviewer ended;
-  recomputed per turn, every such run read 2.) `harness/test_run.py` tests
-  each rule without starting an agent.
+  Codex's `spawn_agent` is removed in its scratch config. In a setup of one
+  Codex model and effort, such as `sol`, the only way to start one is
+  `spawn_agent`, capped by `agents.max_threads = 1`, which counts every
+  subagent of the session with a turn running, so a child can start none,
+  and the first agent can neither start a second child nor give the first
+  a follow-up while one runs; `delegate` is not installed. In every other
+  setup, such as `house`, the only way is `delegate`, for Claude Code and
+  Codex alike, and `spawn_agent` is removed: it holds the run's lock while
+  its child runs, so a second call waits for the first child to end,
+  whatever their roles and agents; a child that calls it is refused with
+  one line; and a child still running when its run ends is killed. A pass
+  that needs a third thread, such as a reviewer for an implementer the lead
+  started, has the first agent start it after the earlier child's turn
+  ended. Each `result.json` records when every agent of its run ran: a
+  Codex subagent once per turn, from its session record, since it idles
+  between turns and an idle one runs nothing. The matrix prints
+  `matrix_peak_agents`, the most running at once across its runs, judges
+  included. (Until 2026-11-17 a subagent counted from its record's first
+  event to its last, which read 3 for a lead whose implementer had a second
+  turn after the reviewer ended; recomputed per turn, every such run read
+  2.) `harness/test_run.py` tests each rule without starting an agent.
+- **A run that ends on a provider's limit is invalid, not failed.** If its
+  first agent, a thread `delegate` started, or a judge ended on a rate
+  limit or a spent allowance, the run is graded `null` with the reason
+  `rate limit or spent allowance: <who> ended on '<what the provider
+  said>'` (`provider_limit` in `harness/run.py`). A limit the agent waited
+  out or retried past does not count. A `spawn_agent` subagent's limit
+  shows in its parent's transcript, which is read. Running the matrix again
+  into the same `--out` makes only its runs that are missing there or
+  graded `null`: a graded run in the same setup, on the same binary
+  (`EVAL_ATELIER`) and, in the skill arm, from the same skill commit and
+  directory, is kept and counted in the table the matrix prints. To sample
+  again, raise `--runs` or use another `--out`. `harness/table.py` leaves
+  out a run graded `null` that a later result in the file made again.
 - Claude Code loads instruction files (`CLAUDE.md`, `AGENTS.md`,
   `.claude/CLAUDE.md`, `.claude/rules/` and the like) from every directory
   above its working directory, whatever `--setting-sources` says, so a run

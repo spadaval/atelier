@@ -81,26 +81,39 @@ or under Codex ran another model or effort than its role's, or whose first
 agent exited non-zero, timed out or produced no result, is recorded with
 "pass": null and an "invalid" reason instead of a grade.
 
-The agent limit. At most two eval agents are alive at once, and an agent a
-run starts counts. A scenario without threads is one agent: Claude Code's
-agent-starting tools (AGENT_TOOLS) are disallowed on its command line, and
-Codex's spawn_agent is removed in its scratch config. Such scenarios run two
-at a time, and --jobs above 2 is refused. A scenario with threads runs alone
-(--jobs above 1 is refused when one is in the matrix) and has at most two
-agents alive: its first agent and one child. In a setup of one Codex model
-and effort the only way to start one is spawn_agent, capped by
+Runs at once. A matrix makes its runs side by side, under a cap for each
+kind: --cargo-jobs (default 3) on the runs whose agent builds Rust, the
+replayed reviews ("cargo": true), since this host holds about three such
+builds at once, and --jobs (default 10) on all others, whose agents mostly
+wait on their models. Runs going at once share nothing a run writes: each
+has its own work directory, with its own `delegate` lock and log, agent
+homes, sign-in links and TMPDIR. Only the crates the replayed reviews build
+from are shared, in --work-root's cargo-home, which cargo locks.
+
+Within a run, at most two agents are alive: its first agent and one child.
+A scenario without threads is one agent: Claude Code's agent-starting tools
+(AGENT_TOOLS) are disallowed on its command line, and Codex's spawn_agent is
+removed in its scratch config. In a scenario with threads, in a setup of one
+Codex model and effort, the only way to start one is spawn_agent, capped by
 agents.max_threads = 1, which counts every subagent of the session with a
 turn running, grandchildren included, so a child can start none while it
 runs, and a parent cannot start a second child or give the first a
 follow-up while either runs; `delegate` is not installed. In every other
 setup the only way, under Claude Code and Codex alike, is `delegate`:
-Codex's spawn_agent is removed, and `delegate` holds a lock while its child
-runs, so a second call waits for the first child to end, whichever roles
-they take, and a child may not call it. When the first agent ends, any
+Codex's spawn_agent is removed, and `delegate` holds the run's lock while
+its child runs, so a second call waits for the first child to end, whichever
+roles they take, and a child may not call it. When the first agent ends, any
 child still running is killed.
 Each run records when each of its agents ran (each turn of a Codex subagent,
 from its own session record, since it idles between turns), and the matrix
 prints the most agents running at once.
+
+A run whose first agent, a thread it started through `delegate`, or a judge
+ended on its provider's rate limit or a spent allowance (provider_limit) is
+invalid with that reason, and not failed. Running a matrix again into the
+same --out makes only its runs that are missing there or invalid: one
+already graded in the same setup, from the same skill and binary, is kept
+and counted in the table.
 
 Claude Code loads instruction files (CLAUDE.md, AGENTS.md, .claude/CLAUDE.md,
 .claude/rules/ and the like) from every directory above its working directory,
@@ -126,8 +139,8 @@ later fix; a run whose transcript shows the fix anyway is invalid
 (replay.leak), and result.json lists what the proxy refused
 (proxy_refused). A confined scenario cannot have threads. One with "cargo":
 true has its crates fetched into --work-root's cargo-home before the run,
-which then builds offline in its own target directory, and runs one at a
-time (--jobs 1).
+which then builds offline in its own target directory, and counts against
+--cargo-jobs.
 """
 
 import argparse
@@ -210,6 +223,19 @@ CODEX_THREADS_NOTE = THREADS_LEAD + (
     "it finishes; `wait_agent` waits for it."
 )
 CODEX_AUTH = Path.home() / ".codex" / "auth.json"
+# A run that ends on its provider's limit is invalid with this reason, and
+# made again when its matrix is run again (provider_limit).
+LIMIT_REASON = "rate limit or spent allowance"
+# The words of a provider's limit in an error: a rate limit (HTTP 429), a
+# subscription's usage limit, an API quota or an empty credit balance.
+LIMIT_WORDS = re.compile(r"usage limit|rate[ _-]?limit|\b429\b|too many requests|quota|"
+                         r"hit your limit|credit balance|billing", re.I)
+# Claude Code's kinds of API error that mean a limit, on the message it
+# puts in place of a reply.
+LIMIT_ERRORS = ("rate_limit", "billing_error")
+# The default caps on runs at once, by kind: those that build Rust (the
+# replayed reviews), and all others.
+CARGO_JOBS, JOBS = 3, 10
 JUDGE_TIMEOUT_SEC = 900
 JUDGE_BUDGET_USD = 5
 CANARY_PROMPT = (
@@ -348,8 +374,9 @@ def judged(case: Path, setup: dict, graded: dict, work: Path, final: str, run_di
     """A run's grade from grade.py's facts and the judges' answers to the
     case's rubric, one judge for each lab whose role a question is about,
     each writing its transcript to <name>-<lab>.jsonl. An invalid run is
-    not judged. A grade.py that prints no facts is the case's grade as it
-    printed it."""
+    not judged, and a run whose judge ended on its provider's limit
+    (provider_limit) is made invalid. A grade.py that prints no facts is the
+    case's grade as it printed it."""
     if "facts" not in graded:
         return graded
     facts = graded["facts"]
@@ -359,17 +386,22 @@ def judged(case: Path, setup: dict, graded: dict, work: Path, final: str, run_di
                 **({"pass": None} if invalid else judging.verdict(facts, []))}
     groups = judging.assign(rubric["questions"], setup, LABS)
     given = judging.material(work, final, facts, rubric["context"])
-    answered, runs = {}, []
+    answered, runs, limited = {}, [], None
     for lab, (spec, questions) in groups.items():
+        transcript = run_dir / f"{name}-{lab}.jsonl"
         reply, info = run_judge(spec, judging.prompt(rubric["text"], questions, given),
-                                run_dir / f"{name}-{lab}.jsonl", work_root)
+                                transcript, work_root)
         answered.update(judging.parse_answers(reply, questions, given) if reply is not None
                         else judging.unanswered(questions, f"the judge ({spec['model']}) "
                                                 f"exited {info['exit']} with no reply"))
         runs.append({"lab": lab, **spec, **info, "questions": [q["id"] for q in questions]})
+        said = provider_limit(transcript)
+        limited = limited or (said and f"{LIMIT_REASON}: the judge ({spec['model']}) "
+                              f"ended on {said!r}")
     answers = judging.answers_list(rubric, groups, answered)
     return {"facts": facts, "rubric": answers, "judged": runs,
-            **judging.verdict(facts, answers)}
+            **judging.verdict(facts, answers),
+            **({"pass": None, "invalid": limited} if limited else {})}
 
 
 def setup_problem(setup: dict):
@@ -811,6 +843,61 @@ def peak(agents: list) -> int:
     return top
 
 
+def provider_limit(transcript: Path):
+    """What the provider said, if the agent whose transcript this is ended
+    on its rate limit or a spent allowance; else None. A limit is the last
+    word only until the agent next gets a reply, so one it waited out or
+    retried past is not counted. Claude Code reports a limit as a rejected
+    rate_limit_event, as an API error of kind LIMIT_ERRORS in place of a
+    reply, or in an error result; Codex in an error or a failed turn."""
+    said = None
+    for line in (transcript.read_text().splitlines() if transcript.exists() else []):
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        kind = event.get("type")
+        if kind == "rate_limit_event":
+            info = event.get("rate_limit_info") or {}
+            if info.get("status") == "rejected":
+                said = f"Claude's {info.get('rateLimitType') or 'usage'} limit: rejected"
+        elif kind == "assistant":
+            if event.get("error") in LIMIT_ERRORS:
+                content = (event.get("message") or {}).get("content") or []
+                said = " ".join(c.get("text", "") for c in content
+                                if isinstance(c, dict)).strip() or event["error"]
+            else:
+                said = None
+        elif kind == "result":
+            text = str(event.get("result") or "")
+            if not event.get("is_error"):
+                said = None
+            elif LIMIT_WORDS.search(text):
+                said = text
+        elif kind in ("turn.completed", "item.completed"):
+            said = None
+        elif kind in ("turn.failed", "error"):
+            error = event.get("error") if kind == "turn.failed" else event
+            message = str((error or {}).get("message") or "")
+            if LIMIT_WORDS.search(message):
+                said = message
+            elif kind == "turn.failed":
+                said = None
+    return said.strip()[:300] if said else None
+
+
+def run_limit(transcript: Path, run_dir: Path):
+    """Why a run is invalid because its first agent or a thread `delegate`
+    started ended on its provider's limit (provider_limit), or None."""
+    agents = [("the first agent", transcript),
+              *((f"thread {p.stem}", p) for p in sorted((run_dir / "threads").glob("*.jsonl")))]
+    for who, path in agents:
+        said = provider_limit(path)
+        if said:
+            return f"{LIMIT_REASON}: {who} ended on {said!r}"
+    return None
+
+
 def invalid_reason(arm: str, exit_code, info: dict, threads: bool = False):
     """Why a run's first agent makes it invalid, or None. `threads` is
     whether it may start threads with spawn_agent."""
@@ -1083,7 +1170,7 @@ def run_one(scenario: str, arm: str, ref: str, setup: dict, index: int,
     (run_dir / "final.md").write_text(final)
     graded = grade(sdir, work, transcript)
     every = [first_thread, *started_threads]
-    invalid = invalid_reason(arm, exit_code, info, spawn) or next(
+    invalid = run_limit(transcript, run_dir) or invalid_reason(arm, exit_code, info, spawn) or next(
         (problem for t in every
          if (problem := thread_problem(arm, t, setup["roles"].get(t["role"]) or first,
                                        spawn))), None) or (
@@ -1099,6 +1186,7 @@ def run_one(scenario: str, arm: str, ref: str, setup: dict, index: int,
     result = {
         **named, "skill_ref": staged.get(agent),
         "skill_dir": skill_dir if arm == "skill" else None,
+        "atelier": os.environ.get("EVAL_ATELIER"),
         "roles": setup["roles"], "judges": setup["judges"],
         "exit": exit_code, "seconds": round(seconds), "run_dir": str(run_dir),
         "work_dir": str(work), "init": info["init"],
@@ -1121,21 +1209,31 @@ def discard_work(result: dict, keep: bool) -> bool:
         and not keep and bool(result.get("work_dir"))
 
 
-def check_jobs(jobs: int, scenarios: list) -> str:
-    """Why --jobs breaks the agent limit for these scenarios, or None. A
-    scenario whose agent builds with cargo runs one at a time too."""
-    if jobs > 2:
-        return "--jobs above 2 would run more than two agents at once"
-    metas = {s: json.loads((SCENARIOS / s / "scenario.json").read_text()) for s in scenarios}
-    threaded = [s for s, m in metas.items() if m.get("threads")]
-    if threaded and jobs > 1:
-        return (f"{', '.join(threaded)} start(s) a second agent, so a matrix with "
-                "threads runs one at a time: pass --jobs 1")
-    cargo = [s for s, m in metas.items() if m.get("cargo")]
-    if cargo and jobs > 1:
-        return (f"{', '.join(cargo)} build(s) with cargo, so they run one at a time: "
-                "pass --jobs 1")
-    return None
+def kept_runs(results: list, setup: str, ref, skill_dir: str, atelier) -> dict:
+    """The runs a matrix already made into its output that it keeps, by
+    (scenario, arm, index): graded, in this setup, on the same binary (where
+    both name one), and in the skill arm from the skill at `ref`, a full
+    SHA. Running the matrix again makes only the others: the runs missing
+    and those graded null, the ones that ended on a provider's limit
+    included."""
+    kept = {}
+    for r in results:
+        if r.get("pass") is None or r.get("setup") != setup:
+            continue
+        if atelier and r.get("atelier") and r["atelier"] != atelier:
+            continue
+        if r.get("arm") == "skill" and not (
+                ref and r.get("skill_ref") and ref.startswith(r["skill_ref"])
+                and r.get("skill_dir") == skill_dir):
+            continue
+        kept.setdefault((r.get("scenario"), r.get("arm"), r.get("index")), r)
+    return kept
+
+
+def builds_rust(scenario: str) -> bool:
+    """Whether a scenario's agent builds Rust ("cargo": true, the replayed
+    reviews), so its runs count against --cargo-jobs and not --jobs."""
+    return bool(json.loads((SCENARIOS / scenario / "scenario.json").read_text()).get("cargo"))
 
 
 def check_confined(scenarios: list) -> str:
@@ -1165,9 +1263,14 @@ def main() -> None:
     p.add_argument("--model", help="the one model's name (default opus)")
     p.add_argument("--effort", help="the one model's effort (default high)")
     p.add_argument("--runs", type=int, default=1)
-    p.add_argument("--jobs", type=int, default=2)
+    p.add_argument("--jobs", type=int, default=JOBS,
+                   help=f"the most runs at once that build no Rust (default {JOBS})")
+    p.add_argument("--cargo-jobs", type=int, default=CARGO_JOBS,
+                   help="the most runs at once that build Rust, the replayed reviews "
+                   f"(default {CARGO_JOBS})")
     p.add_argument("--out", type=Path, default=DEFAULT_OUT,
-                   help="where transcripts and results go")
+                   help="where transcripts and results go; a matrix run again into "
+                   "the same one makes only its runs missing or invalid there")
     p.add_argument("--work-root", type=Path, default=DEFAULT_WORK_ROOT,
                    help="where work directories are made; must be outside $HOME")
     p.add_argument("--keep", action="store_true",
@@ -1176,9 +1279,11 @@ def main() -> None:
     if inside(a.work_root, Path.home()):
         p.error(f"--work-root {a.work_root} is inside $HOME, where the user's "
                 "own CLAUDE.md would load into every run")
-    too_many = check_jobs(a.jobs, a.scenarios) or check_confined(a.scenarios)
-    if too_many:
-        p.error(too_many)
+    if a.jobs < 1 or a.cargo_jobs < 1:
+        p.error("--jobs and --cargo-jobs are each at least 1")
+    problem = check_confined(a.scenarios)
+    if problem:
+        p.error(problem)
     roleless = [s for s in a.scenarios if json.loads(
         (SCENARIOS / s / "scenario.json").read_text()).get("role") not in ROLES]
     if roleless:
@@ -1192,20 +1297,36 @@ def main() -> None:
             a.agent or "claude", a.model or "opus", a.effort or "high")
     except ValueError as exc:
         p.error(str(exc))
+    arms = a.arms.split(",")
+    ref = None
+    if "skill" in arms:
+        found = subprocess.run(["git", "-C", str(REPO), "rev-parse", "--verify", "-q",
+                                f"{a.ref}^{{commit}}"], capture_output=True, text=True)
+        if found.returncode != 0:
+            p.error(f"--ref {a.ref} names no commit of this repository")
+        ref = found.stdout.strip()
 
-    jobs = [(s, arm, i) for s in a.scenarios for arm in a.arms.split(",")
-            for i in range(a.runs)]
+    every = [(s, arm, i) for s in a.scenarios for arm in arms for i in range(a.runs)]
     results_path = a.out / "results.jsonl"
     a.out.mkdir(parents=True, exist_ok=True)
     a.work_root.mkdir(parents=True, exist_ok=True)
-    for agent in sorted({r["agent"] for r in setup["roles"].values()}):
-        check_isolation(a.work_root, a.out, agent)
+    made = kept_runs(table.read([results_path]) if results_path.exists() else [],
+                     setup["name"], ref, a.skill_dir, os.environ.get("EVAL_ATELIER"))
+    kept = [made[run] for run in every if run in made]
+    jobs = [run for run in every if run not in made]
+    print(json.dumps({"kept": len(kept), "making": len(jobs), "out": str(a.out)}), flush=True)
+    if jobs:
+        for agent in sorted({r["agent"] for r in setup["roles"].values()}):
+            check_isolation(a.work_root, a.out, agent)
+    rust = {s for s in a.scenarios if builds_rust(s)}
     alive, results = [], []
-    with concurrent.futures.ThreadPoolExecutor(a.jobs) as pool:
-        futures = [pool.submit(run_one, s, arm, a.ref, setup, i,
-                               a.out, a.work_root, a.skill_dir)
-                   for s, arm, i in jobs]
-        for fut, (s, arm, i) in zip(futures, jobs):
+    with concurrent.futures.ThreadPoolExecutor(a.cargo_jobs) as builds, \
+            concurrent.futures.ThreadPoolExecutor(a.jobs) as others:
+        futures = {(builds if s in rust else others).submit(
+            run_one, s, arm, ref or a.ref, setup, i, a.out, a.work_root, a.skill_dir): (s, arm, i)
+            for s, arm, i in jobs}
+        for fut in concurrent.futures.as_completed(futures):
+            s, arm, i = futures[fut]
             try:
                 r = fut.result()
             except Exception as exc:  # record it; keep the other runs' results
@@ -1223,8 +1344,9 @@ def main() -> None:
                                   "exit", "seconds", "peak_agents", "run_dir")},
                               "reported": {a["id"]: a["answer"] for a in r.get("rubric") or []
                                            if a["kind"] == "reported"}}), flush=True)
-    print(json.dumps({"matrix_peak_agents": peak(alive), "runs": len(jobs)}), flush=True)
-    print(table.table(results))
+    print(json.dumps({"matrix_peak_agents": peak(alive), "runs": len(jobs),
+                      "kept": len(kept)}), flush=True)
+    print(table.table(kept + results))
 
 
 if __name__ == "__main__":

@@ -34,7 +34,7 @@ three such builds at once.
 
 - [ ] `--jobs` is a setting and no longer a refusal. The harness caps the
   runs going at once by kind: runs that build Rust, the replayed reviews,
-  and all others. Each cap can be set, and the defaults are three and six.
+  and all others. Each cap can be set, and the defaults are three and ten.
   Cases that start threads run side by side like any other.
 - [ ] Runs going at once do not touch one another: each has its own work
   directory, locks, agent homes and sign-in links, and a test runs two
