@@ -3,12 +3,13 @@ schema: atelier.item
 schema_version: 3
 id: atelier-z8rg
 title: Replay every after-merge defect that fits as a review case, now that one review costs two minutes
-status: ready
+status: building
 mission: atelier-kw8u
 labels: []
 priority: medium
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A9d5de7ee-d750-4bea-9d8c-206890e4d262%3Adelegate-task%3Ab1c31788-3c35-43b9-855a-42b57f88f58f
 ready:
   by: the lead of atelier-kw8u, under its Authority to extend the review cases once atelier-1z52 reported what one costs
   at: 2026-11-19T01:56:05.793049132Z
