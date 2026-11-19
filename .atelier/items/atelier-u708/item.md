@@ -134,3 +134,9 @@ not touch; CI's evals job runs them.
 Not separated: the host's network. `refused-push`'s server reads its port
 from `PORT` with 8080 as the default, so two runs whose agents start it
 unchanged would meet on one port. The README says so.
+
+### Responses
+
+- 1-611l.1: fixed in 38d3ec4b3. A `spawn_agent` subagent's transcript in `threads/` is rebuilt from its session record and keeps no errors, so `run_limit` now also reads the records in `sessions/`, where `provider_limit` takes an `error` or `stream_error` event_msg as a limit and a later completed item, not the parent's message, as a recovery. Two tests run `sol` end to end with a parent that ends normally: a subagent that ends on its usage limit makes the run invalid, and one that recovers keeps its grade.
+- 1-611l.2: fixed in 38d3ec4b3. `kept_runs` takes the resolved setup and keeps a run only if its saved `roles` and `judges` equal the setup's now; a test changes a role's effort and a judge's model under the name `sol` and sees the run made again. The 32 real runs are still kept.
+- 1-611l.3: fixed in 38d3ec4b3. `table.py` drops a remade null only within its own `results.jsonl`; a test reads two matrices' files in both orders and keeps the null.
