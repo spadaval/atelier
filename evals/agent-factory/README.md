@@ -350,3 +350,5 @@ The skill against no skill on the binary at the cutover, with the cuts it
 led to, is [results/2026-11-11-next-skill.md](results/2026-11-11-next-skill.md).
 The smoke run that showed the matrix runs on the branch model is
 [results/2026-11-17-branch-model-smoke.md](results/2026-11-17-branch-model-smoke.md).
+The first replayed reviews, and what one costs, are
+[results/2026-11-18-replayed-reviews.md](results/2026-11-18-replayed-reviews.md).
