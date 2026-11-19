@@ -199,7 +199,9 @@ docstring wrong, and in `later-round-wrong` the docstring is right and the
 code lists the projects in the wrong order. They share one grader,
 [harness/later_round.py](harness/later_round.py), and one set of tests,
 [harness/later_round_tests.py](harness/later_round_tests.py), and run with
-the binary before a change to the brief and after it.
+the binary before a change to the brief and after it. Their first results
+are in
+[results/2026-11-19-later-round-brief.md](results/2026-11-19-later-round-brief.md).
 
 ## Grading
 

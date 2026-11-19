@@ -14,8 +14,10 @@ the week took in the next Monday (`week_of` returned Monday plus seven
 days), and a bad DATE gave a traceback. The implementer fixed both in one
 commit (`week_of` now adds six days; a new `parse_day` refuses a DATE that
 is not YYYY-MM-DD), with a test of each, answered both under `### Responses`
-as fixed, and submitted again. The suite passes. As far as the fixture
-knows, both fixes are right and the commit since round 1 holds no defect.
+as fixed, and submitted again. The suite passes. Both fixes are right,
+with one flaw the fixture did not mean to hold: for a DATE in the last week
+`datetime.date` can hold (9999-12-27 to 9999-12-31), `week_of`'s Sunday
+overflows and `week` ends in `OverflowError`.
 
 `week_lines` in `hours.py`, which totals the week's hours and builds the
 lines, is the same at round 1's commit and at round 2's: round 1 reviewed
