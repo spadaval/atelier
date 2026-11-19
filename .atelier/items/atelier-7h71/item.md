@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-7h71
 title: Find why reviews with the skill miss a defect that reviews without it find
-status: in_review
+status: changes_requested
 mission: atelier-kw8u
 labels: []
 priority: medium
