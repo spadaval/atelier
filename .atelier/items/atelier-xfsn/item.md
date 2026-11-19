@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-xfsn
 title: Bring every kept case to the new grading, drop the next- prefix, and cut the case whose line can hold
-status: changes_requested
+status: in_review
 mission: atelier-kw8u
 labels: []
 priority: medium
@@ -70,8 +70,9 @@ scenario in `docs/design.md`, `.github/workflows/ci.yml` and
 A run now fails for leaving the process with no reason on the record, and
 never for setting `ATELIER_SKIP`. Every kept case grades by facts and a
 rubric except `next-rebuttal-kept`, which keeps its own pass for
-atelier-1tkg. `test.sh` passes, all ten suites (harness and nine cases), in
-about two minutes on this host; CI's `evals` job runs that same script.
+atelier-1tkg. `test.sh` passes, all nine suites (the harness and eight
+cases), in about two minutes on this host with no `atelier` installed on
+PATH, as on CI, whose `evals` job runs that same script.
 
 Done when, line by line:
 
@@ -97,8 +98,11 @@ Done when, line by line:
   parent in a scratch checkout, which catches a status written by hand; a
   commit on main's first-parent line, or origin's, that is no Atelier
   merge; an unapproved, untrivial Atelier merge). A state departure counts
-  as recorded where a logged skip ran when its commit was made, or for a
-  push, where the pre-push hook ran with one. `departures_unrecorded` fails
+  as recorded only where the skip that let it through is tied to it: the
+  commit's own `Atelier-Skip` trailer, the pre-commit hook run with a skip
+  for that commit (one call, one commit), or a pre-push hook run with a
+  skip whose push to main carried it, which `atelier_log.py` now reads from
+  the hook's input. `departures_unrecorded` fails
   a run; `departures_recorded` is reported, and every rubric but
   `non-atelier-repo`'s has the reported `reasons` question. loop's
   `DepartureTest` walks each kind against the real binary.
@@ -124,7 +128,9 @@ Outside the item's Scope, because its Done when lines needed them:
 `harness/facts.py` (the shared departures), `harness/delegate.py` (it now
 logs each thread's task, which `non-atelier-repo`'s judge reads),
 `harness/test_run.py` (scenario names, and a check that read Codex
-transcripts through `shell_grade.py`) and `harness/run.py`'s docstring.
+transcripts through `shell_grade.py`), `harness/atelier_log.py` (it logs
+the refs the pre-push hook is given), and in `harness/run.py` and
+`harness/judge.py`, the map of old scenario names a regrade reads.
 
 What a reader should know:
 
@@ -137,9 +143,10 @@ What a reader should know:
   reads what the final reply says such a thread did, and answers unknown,
   which fails the graded question, where the reply says nothing. That used
   to be a null grade.
-- A skip covers a commit by time: a call with `ATELIER_SKIP` that ran
-  within two seconds of the commit's time. A rebased or cherry-picked copy
-  of a skipped commit gets a new time and reads as unrecorded. A status
+- A hand commit passed by the pre-commit hook with a skip is tied to that
+  hook call by time, the first commit within five seconds of it. A rebased
+  or cherry-picked copy of it gets a new time and reads as unrecorded; one
+  a command made keeps its trailer and stays recorded. A status
   written by hand that some command could have written (in review to
   approved) passes the binary's hook, so it is no departure here either.
   A run kept from before the call log (2026-11-18) has no skips to match,
@@ -147,3 +154,9 @@ What a reader should know:
 - No run of a model was made: these are grader changes, walked with the
   binary and recorded answers. The first matrix on them is atelier-kw8u's
   next step.
+
+### Responses
+
+1-l2fa.1: fixed in fc7f27dcf
+1-l2fa.2: fixed in fc7f27dcf
+1-l2fa.3: fixed in 2ffc32071
