@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-8e8e
 title: Run a matrix in a named setup, a model and an effort per role, and report time and tokens per cell
-status: changes_requested
+status: in_review
 mission: atelier-kw8u
 labels: []
 priority: medium
@@ -109,7 +109,7 @@ shows another model or effort than its role's makes the run invalid.
 - Failed `atelier` calls are read from a log, not parsed from transcripts.
   The harness moves the fixture's `bin/atelier` to `libexec/` and puts
   `harness/atelier_log.py` in its place. Each call is logged with its
-  arguments, directory, thread and exit status, including the fixtures'
+  arguments, directory, exit status and caller, including the fixtures'
   Git hooks, which run `exec atelier check --hook ...` from `PATH`, so a
   refused push shows up as a failed call. atelier-b9o6's graders can read
   the same log.
@@ -165,3 +165,7 @@ shows another model or effort than its role's makes the run invalid.
   `next-non-atelier-repo` matches the word `delegate` and so still sees a
   `delegate reviewer ...`. atelier-xfsn's move to facts can read
   `result.json`'s `threads` and roles instead.
+
+### Responses
+
+1-jgy4.1: fixed in 579100db4: the log records the thread Atelier names, `<parent>/<CODEX_THREAD_ID>` for a Codex subagent, and the harness gives each call the `threads` entry that made it as `by`, with tests of the reviewer's root and child calls.
