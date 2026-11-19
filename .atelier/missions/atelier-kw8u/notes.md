@@ -132,3 +132,32 @@ Outcome", the implementer's two lines and the captain sentence. Their
 cases pass every run with the skill in both setups, so the plan's own rule
 could not keep them. That is less than the plan asks, and the mission's
 Result will say so.
+
+## 2026-11-19: both weekly allowances were spent, and the last item waits
+
+The two missions' runs spent Claude's weekly allowance, which the
+implementers and the judge of every `sol` run draw on, and then the ChatGPT
+Pro allowance that `gpt-6.1-sol` runs on. Claude's came back at 14:00 New
+York time on 2026-11-19. ChatGPT's is due back at 00:04 on 2026-11-23, and
+until then no Sol reviewer runs, in an eval or on a real item. The lead
+lifted the cap on runs at once on the human's word and weighed this host's
+load and memory, and not the allowances or the disk.
+
+atelier-oiwy stopped with about 96 replayed reviews to run: the replays no
+review has ever found, for the scale's arm and for the second matrix. What
+it has so far:
+
+- No one part of `SKILL.md` costs the `touched-claims` defect: without each
+  of its first four parts in turn, 1 of 40 reviews found it, against 3 of
+  10 with no skill and 3 of 10 with the threads-only skill.
+- "What to judge" is left out by the item's rule: `costly-hardening` passed
+  4 of 5 with it in matrix 1 against 5 of 5, and `touched-claims` gained
+  nothing.
+- The scale looks likely to be kept: 9 fix-now findings the judge rates
+  useful or nit with the skill and none with the scale, and the known
+  defects found are 9 against 10 and 10 against 10.
+
+The lead cut the `house` run of a kept passage from atelier-oiwy, to spare
+the allowance: the reviewer there is the same model at a higher effort.
+The item stays open, and a scheduled task restarts its implementer at
+00:30 on 2026-11-23.
