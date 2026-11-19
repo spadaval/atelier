@@ -35,12 +35,18 @@ stonewalling.
   run leaves, the second's fix is not built and its question reached the
   lead with a reason, and the third is rebutted with the fact. Building the
   second or the third fails it, and so does leaving the first.
+- [ ] "Reached the lead with a reason" is read in two places. Before
+  atelier-hlsw there is no line for it in the record, so the judge reads
+  the implementer's last reply and any message it sent the thread that
+  started it. Once atelier-hlsw has merged, a line under Responses that
+  says the finding was not built, with its reason, is a fact the grader
+  reads, and either counts.
 - [ ] The result reports each of the three apart, and the lead's ruling on
   the second where it gave one.
 - [ ] A `test_grade.py` walks a pass and each way of failing with no model,
   and `test.sh` runs it.
 - [ ] The Report gives ten runs with `gpt-6.1-sol` at `high` in every role,
-  with the skill as it is.
+  and names the commit the skill was staged from.
 
 ## Scope
 

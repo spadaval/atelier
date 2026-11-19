@@ -42,9 +42,16 @@ looks without hiding a real defect.
   approves or does not block on it. In the other the flaw makes the work
   come out wrong, and the case passes when the review blocks on it.
   `test.sh` runs both with no model.
-- [ ] The results give both cases in `sol`, ten runs a cell, with the
-  binary before this change and after. The second flaw is found no less
-  often after, or the brief's wording is changed until it is.
+- [ ] The brief's wording is settled before any run and not changed
+  after one. The results give both cases in `sol`, with the binary before
+  this change and after, as two separate matrices of ten runs a cell.
+- [ ] The results also give how often the cosmetic flaw blocks, before
+  and after. Where it blocks no less often after in both matrices, the
+  Report says the brief did not narrow.
+- [ ] If the second flaw is found less often after in both matrices, the
+  sentence on a new finding in code that did not change is taken out, the
+  brief keeps the count of rounds and the order of the diffs, and the
+  Report says so. The wording is not tried again in this item.
 - [ ] `docs/design.md` says what a later round's brief holds and why.
 
 ## Scope

@@ -35,7 +35,9 @@ change does not need.
   the parts are its items, criteria and mechanisms, asked against its
   Outcome.
 - [ ] atelier-s6xk's five cases run with it as a third arm, on
-  `gpt-6.1-sol` at `high`, as two separate matrices of ten runs a cell.
+  `gpt-6.1-sol` at `high`, as two separate matrices of ten runs a cell. The
+  skill arm and this arm are staged from two commits that differ in the
+  passage alone, and the results name both.
 - [ ] The passage is merged into the skill where the three overbuilt cases
   pass more runs with it in each of the two matrices and neither control
   passes fewer in either. Otherwise it is left out. The results say which,

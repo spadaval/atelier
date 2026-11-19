@@ -36,23 +36,32 @@ with a recorded reason.
   it; rebut it once, where it is wrong, with a fact or a test; or, where it
   is real and not worth building, take it straight to the mission's lead
   with a basic reason, and with no mission to the thread that started you.
-  It says a finding that does not block may be left with a basic reason in
-  its line under Responses.
+  It says a finding that does not block may be left with a basic reason.
+- [ ] A line under Responses takes a third form that says a finding was
+  not built, with its reason, and is accepted wherever `fixed in` and
+  `rebutted:` are. On a finding that blocks, `status` shows the line to the
+  mission's lead, the next round's reviewer is told the finding waits on
+  the lead and does not judge it again, and `merge` refuses while it is
+  open unless the lead passes the rule with a reason. An item with no such
+  line reads as before.
 - [ ] It keeps what must hold: an implementer does not ignore a blocking
   finding and passes no rule on its own work. The lead's ruling is the
   lead's to record.
 - [ ] `roles/reviewer.md`, the line `status` prints for answering findings,
   and what a reviewer is told about a rebuttal agree with it. A test covers
   each printed line.
-- [ ] atelier-zwh1's case is run with this text and without it, with
-  `gpt-6.1-sol` at `high` in every role, ten runs a cell. The results give
-  both, each of the three findings apart. The text stays where the real
-  defect is fixed no less often with it.
+- [ ] atelier-zwh1's case is run with this change and without it, with
+  `gpt-6.1-sol` at `high` in every role, ten runs a cell, each arm staged
+  from one of two commits that differ in this change alone. The results
+  name both commits and give each of the three findings apart. The change
+  stays where the real defect is fixed no less often with it.
 - [ ] `docs/design.md` records the decision, its date, and the evidence.
 
 ## Scope
 
 `skills/agent-factory/roles/implementer.md` and `roles/reviewer.md`; the
-lines the binary prints about answering and rebutting a finding, in
-`crates/`, with their tests; `docs/design.md`;
-`evals/agent-factory/results/`. No new command, role or record.
+third form of a Responses line, where the two are parsed, shown and
+checked in `crates/`; the lines the binary prints about answering and
+rebutting a finding, with their tests; `docs/design.md`;
+`evals/agent-factory/results/`. No new command, role or section of a
+record.
