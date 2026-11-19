@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-b9o6
 title: Grade a run by facts from its records and a rubric that a model from another lab reads
-status: changes_requested
+status: in_review
 mission: atelier-kw8u
 labels: []
 priority: medium
@@ -166,8 +166,13 @@ cases; it does not test a hard call. atelier-id3v's thirty-run read covers
 that.
 
 Since round 1, an answer whose quoted line is not in the material counts as
-unknown. All 76 saved answers above quote a line that is, so the table
-stands.
+unknown. Since round 2, the material writes the run's work directory as
+`/work` and its name as `run`, because 11 of the 38 judged runs' final
+replies linked files under a directory whose name holds the arm. I ran the
+judge on all 42 runs again on the blinded material: every answer and every
+verdict came out the same, and all 76 quoted lines are in the material, so
+the table stands. A scan of each run's blinded material finds no `skill`,
+`agent-factory`, `-skill-` or `-none-`.
 
 ### Responses
 
@@ -175,3 +180,5 @@ stands.
 1-0nu9.2: fixed in d8f2cf036
 1-0nu9.3: fixed in d8f2cf036
 1-0nu9.4: fixed in d8f2cf036
+2-7pbx.1: fixed in 4271b208a
+2-7pbx.5: fixed in 4271b208a
