@@ -37,3 +37,18 @@ start a subagent, so its lead cells measure that and nothing else. The
 harness tells a Claude Code thread how to start another and tells a Codex
 thread nothing. The lead added atelier-69oh to tell both the same, and made
 atelier-id3v wait on it.
+
+## 2026-11-18: Codex's own rule on subagents stays, and the matrix gets a third arm
+
+atelier-69oh told a Codex thread how to start another, and one of two
+no-skill leads still asked leave. Codex 0.169 adds its own rule when it
+offers `spawn_agent`: start no subagent unless the user, an `AGENTS.md` or a
+skill asks. A config key would replace the rule. The lead left it in
+place, because T3 Code's Codex threads keep it, so the rule is what a Sol
+thread on the work host meets. The skill is what asks there.
+
+So a no-skill Sol cell partly measures that rule. To tell the sentence that
+lifts it from the rest of the skill, atelier-id3v runs a third arm in
+`sol`: a skill that holds only the Starting Another Thread section. The
+lead also set the matrix's size: five runs a cell, three for a replayed
+review, one matrix on the host at a time.

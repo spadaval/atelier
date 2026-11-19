@@ -32,7 +32,16 @@ harness history.
 - [ ] One matrix in `sol` and one in `house`, each with both arms and every
   case, is recorded in `evals/agent-factory/results/`. Each table gives
   passes, median seconds and tokens per cell, and the file says how many
-  runs each difference it names rests on.
+  runs each difference it names rests on. A cell has five runs, and a
+  replayed review three, since those are read across the twelve cases. Only
+  one matrix runs on this host at a time.
+- [ ] In `sol`, the cases whose first agent starts threads are also run
+  with a third arm: a skill that holds only `SKILL.md`'s Starting Another
+  Thread section, from a branch that is not merged. Codex adds a rule of its
+  own that a thread starts no subagent unless the user, an `AGENTS.md` or a
+  skill asks (atelier-69oh), and T3 Code's Codex threads keep it. This arm
+  tells what the skill adds beyond that one sentence, and the file gives it
+  beside the other two.
 - [ ] The lead's cases and the mission case are also run with the skill as
   it was before atelier-mtzj, by `--ref`, in both setups. For each cell the
   file gives the runs where a planted defect reached main, the runs that
