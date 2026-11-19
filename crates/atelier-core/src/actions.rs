@@ -821,9 +821,9 @@ fn verdict(
         .cloned()
         .collect();
     let mut unmet = decided(file, &seen, decisions);
-    let mut open = seen.iter().filter(|f| {
-        is_open(f, &seen, decisions) && waits_on_lead(&f.name, &seen, responses).is_none()
-    });
+    let mut open = seen
+        .iter()
+        .filter(|f| blocks_verdict(f, &seen, decisions, responses));
     if matches!(action, Action::VerdictChanges | Action::PlanVerdictChanges) {
         if !open.any(|f| f.name.review == file.name) {
             unmet.push(Condition::NoOpenFinding);
@@ -835,6 +835,18 @@ fn verdict(
         }));
     }
     unmet
+}
+
+/// Whether `finding` is open and the reviewer's to judge: a fix-now finding
+/// answered `not built` waits on the lead, so it counts for neither verdict.
+fn blocks_verdict(
+    finding: &Finding,
+    findings: &[Finding],
+    decisions: &[Decision],
+    responses: &[Response],
+) -> bool {
+    is_open(finding, findings, decisions)
+        && waits_on_lead(&finding.name, findings, responses).is_none()
 }
 
 /// What a decision settled before `decide` was removed stays settled, and
@@ -1075,8 +1087,8 @@ fn stale(item: &ItemDir, review: &ReviewFile, since: &SinceApproval) -> Option<C
 
 /// The action the caller would run next on the item, if any: start a ready
 /// item; as its holder, submit it or merge it; as this round's reviewer,
-/// `verdict changes` while its file holds an open fix-now finding, else
-/// `verdict approve`; as anyone else, review it when it is in review and
+/// `verdict changes` while its file holds an open fix-now finding that does
+/// not wait on the lead, else `verdict approve`; as anyone else, review it when it is in review and
 /// they never implemented it, else take it over.
 pub fn next(facts: &Facts) -> Result<Option<Action>, Problem> {
     let status = facts.status();
@@ -1089,9 +1101,10 @@ pub fn next(facts: &Facts) -> Result<Option<Action>, Problem> {
     if let Some(file) = facts.reviewing() {
         let findings = facts.item.findings()?;
         let decisions = facts.item.decisions()?;
-        let open = findings
-            .iter()
-            .any(|f| f.name.review == file.name && is_open(f, &findings, &decisions));
+        let responses = facts.item.responses()?;
+        let open = findings.iter().any(|f| {
+            f.name.review == file.name && blocks_verdict(f, &findings, &decisions, &responses)
+        });
         return Ok(Some(if open {
             Action::VerdictChanges
         } else {

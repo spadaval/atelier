@@ -526,6 +526,13 @@ fn a_finding_not_built_waits_on_the_lead_until_it_rules_and_its_reviewer_does_no
         )),
         "{text}"
     );
+    // The reviewer's status points at approve, the verdict it can record.
+    let status = atelier(&root, "r2", &["status"]).stdout;
+    assert!(
+        status.ends_with("Then: atelier verdict approve (or `atelier verdict changes`, once your file holds a fix-now finding)\n"),
+        "{status}"
+    );
+    assert!(!status.contains("[ ]"), "{status}");
     let refused = verdict(&root, "r2", &["verdict", "changes"]);
     assert_eq!(refused.code, 1, "{}{}", refused.stdout, refused.stderr);
     assert!(
