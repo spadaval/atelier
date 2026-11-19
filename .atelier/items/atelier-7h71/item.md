@@ -123,3 +123,4 @@ the README can add it.
 
 - 1-t0j9.1: fixed in fae6eddc1
 - 1-t0j9.2: fixed in fae6eddc1
+- 2-ziqq.2: fixed in 03e41eef4
