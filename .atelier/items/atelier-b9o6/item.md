@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-b9o6
 title: Grade a run by facts from its records and a rubric that a model from another lab reads
-status: changes_requested
+status: in_review
 mission: atelier-kw8u
 labels: []
 priority: medium
@@ -173,6 +173,8 @@ judge on all 42 runs again on the blinded material: every answer and every
 verdict came out the same, and all 76 quoted lines are in the material, so
 the table stands. A scan of each run's blinded material finds no `skill`,
 `agent-factory`, `-skill-` or `-none-`.
+None of the 42 was invalid, so the round-3 fix to regrading changes none
+of them.
 
 ### Responses
 
@@ -182,3 +184,4 @@ the table stands. A scan of each run's blinded material finds no `skill`,
 1-0nu9.4: fixed in d8f2cf036
 2-7pbx.1: fixed in 4271b208a
 2-7pbx.5: fixed in 4271b208a
+3-bb9u.3: fixed in 88006ae9c
