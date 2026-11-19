@@ -66,6 +66,11 @@ another was ported from the old tool's scenario of that name.
 | `overbuilt-robustness` | New, sized: a correct change whose item asks for `--low N`, guarding against items that `load`, the only maker of items, never returns | As `overbuilt-generality`, for the unneeded robustness |
 | `control-large` | New, sized: a correct change of about 340 lines, importing two banks' statement formats, each part named by a Done when line | Facts as `overbuilt-generality`. Judged (graded): no finding asks for less. Reported: whether such a finding is fix now |
 | `control-lean` | New, sized: a correct `done ID` command of 9 lines and two tests | As `control-large` |
+| `removed-merge-sync` | A removal replay (see [Removal replays](#removal-replays)): the reviewer of atelier-s2ei's change (3ae56002), which adds `atelier merge --sync`, later removed because catching up is `git merge` | Facts: a round-1 review by another thread. Judged (graded): a finding, whatever its recommendation, questions the need for the part later removed or asks for less of it. Reported: whether that finding is fix now, and whether the code supports each other fix-now finding |
+| `removed-merge-wait` | A removal replay: the reviewer of atelier-vqoy's change (bc495ebb), which adds `merge --push`, `--wait` and `--timeout`, later removed because a command that sleeps for minutes fights the harness | As `removed-merge-sync`, for `--wait`, `--timeout` and `--push` |
+| `removed-base-exemption` | A removal replay: the reviewer of atelier-mbrf's change (cb30c86b), which lets a trivial exemption pin a base commit with no owner item, later removed because `start --new` and `merge --trivial` cover it with one path | As `removed-merge-sync`, for the base exemption |
+| `removed-debrief` | A removal replay: the reviewer of atelier-rx22's change (43eefb4b), which adds `atelier debrief` as Markdown and an HTML page, later removed because the Desk shows a mission | As `removed-merge-sync`, for `debrief` |
+| `removed-decision-notes` | A removal replay: the reviewer of atelier-fip8's change (7a371ee7), which adds typed decision notes, a decision record's ADR link and supersession, and `work decisions`, later removed with decision records | As `removed-merge-sync`, for decision notes and records |
 Every case but `non-atelier-repo` also fails a run that leaves the process
 with no reason on the record, and reports each departure that has one, with
 a reported question in its rubric on whether the reason holds (Grading).
@@ -145,6 +150,104 @@ each: the item's Description, its Outcome and Evidence lines, and its close
 reason with the validation receipt the change committed.
 `readiness-blockers` holds the text of the child item that made the change,
 since defects.md credits its epic.
+
+## Removal replays
+
+The five removal replays, from `removed-merge-sync` to
+`removed-decision-notes`, ask whether a reviewer questions the need for
+work this repository built, approved, merged and later took out as
+unneeded (atelier-ad0z). Each replays a change whose part a row of Tried
+and removed in [docs/design.md](../../docs/design.md#tried-and-removed)
+names, on the setup and confinement of the [replayed
+reviews](#replayed-reviews), with no change to either.
+
+- Each `case.toml` holds the fields `harness/replay.py` names for a defect,
+  holding the removal: `defect` is the part later removed with the reason
+  design.md gives, `fix` the commit that removed it, and `defect_item` that
+  commit's item. It also names the `table` and `row` of Tried and removed,
+  the row's `reason`, the `part` later removed, and `gone`, a string the
+  change added under `crates/` that the removal took out. All five were
+  removed in 819024c75, which deleted the old workspace at the rewrite to
+  0.5 (atelier-u1ko); `--one-way`, part of the decision notes, went first,
+  in 60b995d1e.
+- The judge is given what replay.py gives it for a defect. The rubric,
+  which all five share, says that "The known defect" holds the part and
+  its reason, and that "The later fix" of the rewrite is the whole old
+  workspace's deletion, cut short, which it need not read. The reviewer is
+  told nothing.
+- A run passes when the judge reads a finding, whatever its
+  recommendation, as questioning the need for the part later removed, or
+  asking for less of it (`questions-need`). Whether that finding is fix now
+  is the reported `blocks`; whether the code supports each other fix-now
+  finding is the reported `others-supported`, as in the defect replays.
+- [harness/removed_tests.py](harness/removed_tests.py) holds their tests:
+  replay_tests.py's, but for those about a defect. It checks that the case
+  names its row of Tried and removed with the reason design.md gives, that
+  the base is the change's parent, that the removal comes after the change
+  and takes `gone` out of `crates/`, and that recorded reviews grade as the
+  rubric says, with no model and no cargo build.
+
+Five of the rows of Tried and removed replay, one change each:
+
+| Case | Row | Table | Lines |
+| --- | --- | --- | --- |
+| `removed-merge-sync` | `merge`'s `--push`, `--wait`, `--timeout`, `--sync`, `--check` and `--json` | Removed from 0.4.0 | 834 |
+| `removed-merge-wait` | Waiting for CI inside `merge`, for as long as `--wait` and `--timeout` said | Built and taken out | 1,199 |
+| `removed-base-exemption` | The light path and base exemptions | Removed from 0.4.0 | 854 |
+| `removed-debrief` | `brief` and `debrief` commands | Removed from 0.4.0 | 1,261 |
+| `removed-decision-notes` | Issue types, parents, loose ends, validations, decision records | Removed from 0.4.0 | 1,151 |
+
+The rest do not. Lines count the change's diff outside the old tracker's
+files; the largest defect replay holds 937, and row 57 of defects.md was
+left out at 2,453.
+
+- A SQLite cache of records: it came with the fork in the first commit,
+  afef575eb, and its rebuild as a domain-shaped cache, c4125b7cd, is 3,152
+  lines.
+- Transition actions with side effects: their building change, 329d05e50,
+  declares its actions in `.atelier/workflow.yaml`, which the shared setup
+  drops, so the fixture would hold code that nothing configures.
+- A review provider, review rooms, Forgejo pull requests: built over an
+  epic in June and July 2026, in more commits than one review holds
+  (`git log --grep=Forgejo` lists 13 from 2026-06-18 to 2026-07-07).
+- Evidence gates: the first, `evidence_attached`, came in 994d4e39c with
+  every first-class record, 3,864 lines. The mission closeout gates of
+  be20d00e2 sit on a tree that holds the old tracker's records under
+  `.atelier-state/`, which the shared setup does not drop.
+- A configurable workflow file, and `workflow.yaml` with the workflow
+  crate: the file lives under `.atelier/`, which the shared setup drops,
+  and the crate came with the scaffold of 332d02f87.
+- A hard limit on lines of code: the limit was never in the tree. Its only
+  code, `scripts/count_non_test_rust.py`, came inside ace2d6814, a
+  2,130-line rewrite of the mission overview.
+- Sessions as records, and `land`: both came in f072b36ec, which no item
+  recorded: its message has no body and it changes no record, so the
+  fixture would have no Goal or Done when to review against. It is 1,948
+  lines.
+- Records on a separate branch: no one change built it that I could find.
+  The fork's first commit, afef575eb, already kept its locks on a branch of
+  their own, `chainlink/locks`, and no later commit's message names a
+  records branch.
+- A plan as its own branch: restored on 2026-11-13, so not unneeded.
+- Evidence records and commands: as evidence gates.
+- The light path: its change, c982acda1, is 3,249 lines. Base exemptions
+  replay.
+- `bundle`, `migrate`, `doctor`, `prune`: `bundle` came in an epic's squash
+  merge, 52f3c05a7, of 2,236 lines; `doctor` in c4e702a62 among the first
+  day's tracker work, 1,467 lines; `migrate` in 195a353dc, whose message
+  says its tests come in a later commit; and `prune`'s change, 3508231b2,
+  had no item of its own, only its mission's description, and no report.
+- `serve` and the site crate: 8ffbbfbcd, a change marked work in progress,
+  1,994 lines.
+- The nine `work` views and nine `review` subcommands: they became
+  `status`, `list`, `review` and `verdict`, so they were not removed as
+  unneeded. `work decisions` replays with the decision notes.
+- Strategy files and ADRs: documents a mission or a decision wrote, not a
+  change to the tool a reviewer would review as code.
+- What mission atelier-to83 considered: none was built.
+
+Their first results, on `sol` with no skill and with the skill, are in
+[results/2026-11-19-removed-replays.md](results/2026-11-19-removed-replays.md).
 
 ## Sized reviews
 
@@ -302,7 +405,8 @@ cases="loop loop-changes non-atelier-repo settle-within-authority refused-push \
   approval-follow-up base-record-commits base-done-claims merge-sync \
   brief-transitions hierarchy-rules project-slug quiet-tokens priority-contract \
   readiness-blockers after-merge-checks touched-claims \
-  overbuilt-generality overbuilt-layer overbuilt-robustness control-large control-lean"
+  overbuilt-generality overbuilt-layer overbuilt-robustness control-large control-lean \
+  removed-merge-sync removed-merge-wait removed-base-exemption removed-debrief removed-decision-notes"
 run=evals/agent-factory/harness/run.py
 for setup in sol house; do
   python3 $run $cases --setup $setup --ref $sha --runs 3 --out <out>/$setup
