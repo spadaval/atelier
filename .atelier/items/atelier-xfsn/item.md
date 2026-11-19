@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-xfsn
 title: Bring every kept case to the new grading, drop the next- prefix, and cut the case whose line can hold
-status: in_review
+status: approved
 mission: atelier-kw8u
 labels: []
 priority: medium
