@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-z8rg
 title: Replay every after-merge defect that fits as a review case, now that one review costs two minutes
-status: building
+status: in_review
 mission: atelier-kw8u
 labels: []
 priority: medium
