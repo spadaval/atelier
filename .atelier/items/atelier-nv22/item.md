@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-nv22
 title: List every rule a mission's commits passed, with its reason and thread, in atelier show <mission>
-status: changes_requested
+status: in_review
 mission: atelier-kw8u
 labels: []
 priority: medium
@@ -122,8 +122,19 @@ rule on both. The test
 covers it. `cargo nextest run` passes (395 tests), clippy, fmt and `git
 diff --check` are clean, and `evals/agent-factory/test.sh` passes.
 
+Round 4 (3065cc45a): a commit's skips are now given once per record it
+changed: on that record's actions Atelier commits, else on all of its
+actions, else on a fallback line. A `new --from` past a rule keeps the
+skip on the source item's `settle` line beside the new item's `change`.
+The test
+`log::a_settlement_keeps_its_passed_rule_beside_the_item_its_commit_creates`
+covers it, and fails without the fix. `cargo nextest run` passes (396
+tests), clippy, fmt and `git diff --check` are clean, and
+`evals/agent-factory/test.sh` passes.
+
 ### Responses
 
 - 1-36z8.1: fixed in 58e7250fd
 - 1-36z8.2: fixed in 58e7250fd
 - 2-1o5j.3: fixed in 56a9a34b9
+- 3-176y.2: fixed in 3065cc45a
