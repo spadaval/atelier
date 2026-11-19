@@ -147,3 +147,15 @@ What a reader should know:
   `--jobs 1`). Each matrix stayed within its own limit of two agents
   (`matrix_peak_agents` 1 and 2), but for a while the host ran more than
   two eval agents.
+- Round 1 found that the shared setup never put `work/bin` first on PATH
+  (d2800a2b0 fixes it), and CI's `evals` job failed on it. So the fixtures
+  of the eight runs above were built by this host's installed `atelier`
+  0.7.0, not by the copy under test. The agents ran the copy, since the
+  harness puts `work/bin` first for them. The reviewer reran today's
+  graders on the four kept work directories and got the saved facts.
+  `test_the_setup_calls_the_binary_under_test` now runs each setup with no
+  installed `atelier` on PATH. It failed with exit 127 before the fix.
+
+### Responses
+
+- 1-ogm7.1: fixed in d2800a2b0
