@@ -61,7 +61,7 @@ less. Results:
 - Five cases: `overbuilt-generality` (`--csv` asked, an exporter registry
   built), `overbuilt-layer` (`tag` asked, a repository and service layer
   built), `overbuilt-robustness` (`--low` asked, guards against items
-  `load` never returns), `control-large` (a 275-line two-bank import, each
+  `load` never returns), `control-large` (a 340-line two-bank import, each
   part named by a Done when line) and `control-lean` (a 9-line `done`
   command). One reviewer each. Every item's Scope allows new modules, so
   the extra parts cannot be flagged as out of scope instead of unneeded.
@@ -84,15 +84,21 @@ less. Results:
 
 The first matrix found real defects in three changes meant to be correct.
 In `overbuilt-layer` the defect crowded out the sizing finding: with no
-skill it passed 1 of 10 until I fixed it, then 10 of 10. I fixed those,
-reran the three cases, and report each cell from the commit that last
-changed its fixture. `control-large`'s reviews still raise narrower
-points, such as stray quotes Python's `csv` accepts and the physical line
-of a multi-line record's error. I stopped there: each round found
-narrower ones, and none bears on its graded question, which all 60 of its
-runs passed. The results list what is left.
+skill it passed 1 of 10 until I fixed it, then 10 of 10. I fixed each
+defect with a test and report each cell from the commit that last changed
+its fixture. `control-large` took seven rounds; the third answered round 1's
+review. Most of its defects came from Python's `csv` module, which
+accepts stray quotes and reports only where it stopped, so
+`nordbank_records` now reads the format directly. On its last commit,
+457374786, all 20 reviews approved with no finding. The fixture's own
+item now says "such as" before the QIF lines `M` and `N`, since reviews
+read the list as closed.
 
 For atelier-ufbm: Sol already sees the overbuilt part without the skill,
 so a per-part passage can only show its worth in how often the finding
 blocks, or on a model that misses it. The skill arm is already at 30 of
 30 on these cases, so a third arm cannot pass more runs here.
+
+### Responses
+
+- 1-1way.1: fixed in 457374786

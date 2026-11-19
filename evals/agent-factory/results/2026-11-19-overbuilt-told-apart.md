@@ -8,13 +8,13 @@ cell.
 **Result.** Yes, and the skill makes it block. With no skill, Sol named
 the unneeded part in 29 of 30 overbuilt runs, but as fix now in only 20.
 With the skill it named it in 30 of 30, every time as a fix-now `Shrink:`
-finding. Neither arm asked for less in any of the 40 control runs. The
-control and overbuilt cases are told apart in both arms. The cases cannot
-show that the skill helps a reviewer *see* overbuilt work, since Sol sees
-it without the skill. They show that the skill's sizing passage
-(`roles/reviewer.md`, "If a much smaller change gets most of it, record a
-fix-now finding whose title opens `Shrink:`") turns a deferred remark into
-a blocking finding.
+finding. Neither arm asked for less in any of the 40 control runs, and
+every one of them approved. The control and overbuilt cases are told apart
+in both arms. The cases cannot show that the skill helps a reviewer *see*
+overbuilt work, since Sol sees it without the skill. They show that the
+skill's sizing passage (`roles/reviewer.md`, "If a much smaller change
+gets most of it, record a fix-now finding whose title opens `Shrink:`")
+turns a deferred remark into a blocking finding.
 
 | Case | Arm | Passes | Blocking (fix now) | Verdicts | Median s | Median tokens in | Median tokens out |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -24,8 +24,8 @@ a blocking finding.
 | `overbuilt-layer` | skill | 10 of 10 | 10 | changes 10 | 65 | 145.7k | 2.2k |
 | `overbuilt-robustness` | none | 9 of 10 | 4 | changes 4, approve 6 | 60 | 110.1k | 2.2k |
 | `overbuilt-robustness` | skill | 10 of 10 | 10 | changes 10 | 64 | 142.5k | 2.3k |
-| `control-large` | none | 10 of 10 | none asked for less | changes 10 | 90 | 190.3k | 3.6k |
-| `control-large` | skill | 10 of 10 | none asked for less | changes 7, approve 3 | 102 | 175.3k | 4.0k |
+| `control-large` | none | 10 of 10 | none asked for less | approve 10 | 84 | 149.2k | 2.9k |
+| `control-large` | skill | 10 of 10 | none asked for less | approve 10 | 85 | 168.5k | 2.9k |
 | `control-lean` | none | 10 of 10 | none asked for less | approve 10 | 42 | 90.8k | 1.4k |
 | `control-lean` | skill | 10 of 10 | none asked for less | approve 10 | 48 | 110.1k | 1.7k |
 
@@ -36,9 +36,8 @@ was invalid, and no run hit a provider limit.
 ## Setup
 
 - **Binary.** Built from this branch, whose crates are master's
-  (c33dbba7e). One build, copied as `atelier-6854b8b6f`,
-  `atelier-6004a053b` and `atelier-8308fc455` under `/var/tmp/af-evals/bin/`
-  (byte-identical).
+  (c33dbba7e), and copied once per commit below as
+  `/var/tmp/af-evals/bin/atelier-<commit>`. The copies are byte-identical.
 - **Skill.** `skills/agent-factory` as on master, staged from the commit
   each case ran at. The skill does not change between those commits.
 - **Harness.** As on master. Codex CLI 0.169; the judge is Claude Code on
@@ -50,7 +49,7 @@ was invalid, and no run hit a provider limit.
   | --- | --- | --- |
   | `overbuilt-robustness`, `control-lean` | 6854b8b6f | `~/.cache/af-evals/runs/s6xk/` |
   | `overbuilt-generality`, `overbuilt-layer` | 6004a053b | `~/.cache/af-evals/runs/s6xk-2/` |
-  | `control-large` | 8308fc455 | `~/.cache/af-evals/runs/s6xk-3/` |
+  | `control-large` | 457374786 | `~/.cache/af-evals/runs/s6xk-8/` |
 
 ## What the reviews said
 
@@ -70,9 +69,7 @@ was invalid, and no run hit a provider limit.
   duplicates the loader's validation contract") and approved. One approved
   with no finding. With the skill, all 10 asked as fix now to "filter and
   sort the validated Items".
-- **Controls.** No review asked for less of either control. Every
-  `control-lean` review approved with no finding. `control-large` reviews
-  raised defects instead (below).
+- **Controls.** Every review of both controls approved with no finding.
 
 I checked the judge's answer against each review's findings. It agrees
 with every one: each pass names the unneeded part in a finding's title or
@@ -94,31 +91,24 @@ the defects:
 - `overbuilt-generality`: `--delimiter` with more than one character
   crashed `csv.writer`, which two reviews found. The option was dropped in
   6004a053b; the cell's passes did not change (10 of 10 in both arms).
-- `control-large` (6854b8b6f and 6004a053b): reviews found an empty `.qif`
-  passing the header check, `^x` ending a record, bad CSV quoting accepted,
-  a non-UTF-8 byte giving a traceback, a stripped payee no longer matching
-  the ledger, `str.splitlines` splitting a payee on Unicode separators, a
-  QIF record of only `M` lines dropped, and a huge amount crashing `int()`.
-  Each is fixed with a test in 6004a053b or 8308fc455. Every one of these
-  runs, 40 in all, still passed: no finding asked for less.
-
-### What is left in `control-large`
-
-The reviews of 8308fc455 still raise narrower points, mostly as fix now:
-quotes inside an unquoted CSV field, which Python's `csv` accepts even
-with `strict=True` (12 runs); an error in a multi-line CSV record naming
-the record's last line, not the field's (15); CR-only line endings in the
-UTF-8 error's line count (6); unrecognized QIF lines ignored, which the
-Done when asks for (5); and the amount ceiling of under a trillion added in
-8308fc455 (3). I stopped fixing here. Each round of fixes turned up
-narrower ones, and none bears on the case's graded question, which every
-`control-large` run of all three commits passed (60 of 60). A reviewer of
-this case should read its fix-now count as defects in a hand-written
-two-format parser, not as pressure to shrink it.
+- `control-large` took seven rounds of fixes, each found by the reviews of
+  the round before or by the item's own review (1-1way.1), each with a
+  test: an empty `.qif` passing the header check, `^x` ending a record,
+  quotes Python's `csv` accepted, a byte that is not UTF-8 giving a
+  traceback or the wrong line, a stripped payee no longer matching the
+  ledger, `str.splitlines` splitting a payee, an amount ceiling, errors
+  naming the wrong line of a record that spans lines, a quoted empty row
+  read as blank, a bad header placed on line 1, and ignored QIF lines
+  opening a record. The item's wording on ignored QIF lines also read as a
+  closed list of `M` and `N`, and now says "such as". Python's `csv` module
+  was the cause of most of them: it accepts stray quotes and reports only
+  where it stopped. `nordbank_records` reads the format directly instead.
+  Every one of the 140 superseded runs passed: no finding asked for less.
+  In the last round (457374786) all 20 reviews approved with no finding.
 
 ## Cost
 
-100 runs in the first matrix, 60 in the second and 20 in the third. A
-review took 42 to 102 seconds at the median, 91k to 190k tokens in and
-1.4k to 4.0k out. The skill arm read 19k to 35k more tokens in a run,
-except in `control-large`, where it read 15k fewer.
+280 runs: 100 in the first matrix, 60 in the second, and 20 in each of six
+reruns of `control-large`. A review took 42 to 85 seconds at the median in
+the cells above, 91k to 169k tokens in and 1.4k to 2.9k out. The skill arm
+read 19k to 35k more tokens in a run.
