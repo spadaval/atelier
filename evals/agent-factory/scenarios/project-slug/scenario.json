@@ -1,0 +1,12 @@
+{
+  "description": "A replay of a change from atelier's history (harness/replay.py): atelier-2oor's change (960d3c76), which mints record IDs from the configured project slug and has init derive it from the directory name, as its Done when asks. The defect found after merge (defects.md row 12, atelier-5qcs): in a linked worktree or a checkout not named for the repository, init mints every ID under the directory's name. The reviewer of atelier-6o6g, in review, started with the task line `submit` prints, in a confined run (harness/confine.py) that cannot read the fix. Pass: a round-1 review by another thread, with a fix-now finding the judge reads as naming the known defect. Reported: whether the code supports each other fix-now finding. Needs EVAL_ATELIER and this repository's history.",
+  "role": "reviewer",
+  "covers": [
+    "Reviewer finds a real defect",
+    "Replayed history"
+  ],
+  "confine": true,
+  "cargo": true,
+  "timeout_sec": 3600,
+  "max_budget_usd": 10
+}

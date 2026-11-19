@@ -1,0 +1,40 @@
+# A replay case (harness/replay.py): a review fix on atelier-37uq's branch,
+# reviewed again. The base holds the item's changed-claims land and its
+# earlier fixes; the change adds `advances` to the claims walk. Only the
+# judge reads `defect` and the commits; the fixture holds the item's Goal,
+# Done when, Context and Report, and the change.
+
+row = 64
+defect_item = "atelier-ss25"
+item = "atelier-37uq"
+base = "ef1222ec066c7a9ae1a4795556b107fb8df92631"
+change = "6f742c790412a7fbc66382311f28348e67f0f85d"
+fix = "700e102e8189bdd3b6fc42cc57ba68f748b43892"
+defect = """
+The change makes land's touched-claims walk follow `advances` links, so a
+commit that only adds a new issue advancing a mission pulls the mission into
+the touched set and, through it, every done issue of that mission. A
+one-record planning commit then re-verifies the mission's whole done work
+and fails `land` on any old problem in it, which `land` was meant to leave
+to `doctor`. Only the mission's own claim depends on its advancing work; no
+sibling's does.
+"""
+
+id = "atelier-sodr"
+title = "Check only changed claims in land, and add atelier doctor for the full check"
+goal = """
+`land` re-verifies every done item already merged, on every run, which costs about 4.5 of its 5 seconds here and grows with history. If every change reaching the base has its own changed claims and review files checked, the whole history holds by induction, so `land` checks only what changed against a trusted point. A new `atelier doctor` runs the full verification on demand (and in CI), for history that reached the base without the gates (direct pushes, host-side merges, force pushes).
+"""
+done_when = [
+  "On a work branch, land evaluates only claims whose records differ from where the branch left the base and checks review append-only only over that range; on the base, only what changed since the upstream (all of it when there is no upstream); `atelier doctor` runs today's full verification of every retained claim and the whole review history and exits nonzero on a failure.",
+  "Tests cover that land skips an unchanged old claim whose proof no longer verifies while doctor reports it, and that an edited old claim is still checked by land.",
+  "land is measured before and after; docs updated (sessions-and-hooks, cli-surface, ADR note).",
+]
+context = """
+Decided by Sumeet on 2026-10-16. Supersedes most of atelier-7b6e.
+
+Measured on this repository's clean master with release builds: land took 5.77 s before and 0.31 s after; doctor takes about 5.5 s to 7.7 s. A change to `.atelier/workflow.yaml` since the trusted point checks every claim, since a new policy can invalidate claims that held under the old one. doctor, like land, holds no canonical transaction around the checks, because a passing land fences its result with an exclusive one.
+"""
+report = """
+land checks only changed claims; atelier doctor checks every claim
+"""
