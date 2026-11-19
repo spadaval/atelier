@@ -202,6 +202,17 @@ class ReplayCase(unittest.TestCase):
                                 judging.material(self.work, "Done.", self.facts()))
         self.assertNotIn(self.work.name, prompt)
         self.assertNotIn("skill", prompt.lower())
+        # A line quoted from the change's diff counts as resting on the
+        # material, as one from a review does.
+        given = judging.material(self.work, "Done.", self.facts(), rubric["context"])
+        added = next(line for line in replay.git(
+            "diff", self.data["base"], self.data["change"], "--", "crates").splitlines()
+            if line.startswith("+") and len(line) > 30)
+        reply = json.dumps({"answers": [{"id": "others-supported", "answer": "pass",
+                                         "line": added, "reason": "Supported."}]})
+        [question] = [q for q in rubric["questions"] if q["id"] == "others-supported"]
+        answer = judging.parse_answers(reply, [question], given)["others-supported"]
+        self.assertEqual((answer["answer"], answer["line_found"]), ("pass", True))
         task = (self.case / "prompt.md").read_text()
         for marker in replay.markers(self.data) + [self.data["fix"][:7], "defect"]:
             self.assertNotIn(marker, task)

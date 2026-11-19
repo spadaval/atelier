@@ -81,7 +81,8 @@ def parse_rubric(text: str) -> dict:
 def read_rubric(case: Path):
     """The case's parsed rubric.md with its "text", or None where it has none.
     A replay case's text goes on with the known defect, the change and the
-    fix's diff (replay.judge_context), which only the judge reads."""
+    fix's diff (replay.judge_context), which only the judge reads; they are
+    also its "context", which a quoted line may come from (material())."""
     path = Path(case) / "rubric.md"
     if not path.is_file():
         return None
@@ -89,8 +90,9 @@ def read_rubric(case: Path):
     if (Path(case) / "case.toml").is_file():
         sys.path.insert(0, str(Path(__file__).resolve().parent))
         import replay
-        return {**parse_rubric(text), "text": text + replay.judge_context(case)}
-    return {**parse_rubric(text), "text": text}
+        context = replay.judge_context(case)
+        return {**parse_rubric(text), "text": text + context, "context": context}
+    return {**parse_rubric(text), "text": text, "context": ""}
 
 
 def assign(questions: list, setup: dict, labs: dict) -> dict:
@@ -223,12 +225,15 @@ def blind(text: str, work: Path) -> str:
     return text.replace(work.name, "run").replace(work.resolve().name, "run")
 
 
-def material(work: Path, final: str, facts: dict) -> dict:
+def material(work: Path, final: str, facts: dict, context: str = "") -> dict:
     """What the judge reads besides the rubric, blinded to the arm (blind).
-    A quoted line is checked against this same text."""
+    A quoted line is checked against this same text, and against the
+    rubric's `context`, a replay case's diffs, which the rubric's text
+    already carries into the prompt."""
     given = {"facts": json.dumps(facts, indent=1), "final": final.strip() or "(none)",
              "reviews": review_files(work), "diff": run_diff(work)}
-    return {k: blind(v, work) for k, v in given.items()}
+    return {k: blind(v, work) for k, v in given.items()} | (
+        {"context": context} if context else {})
 
 
 PROMPT = """You are the judge of one run of an evaluation case. An AI agent, and any

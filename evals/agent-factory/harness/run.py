@@ -335,7 +335,7 @@ def judged(case: Path, setup: dict, graded: dict, work: Path, final: str, run_di
         return {"facts": facts, "rubric": [], "judged": [],
                 **({"pass": None} if invalid else judging.verdict(facts, []))}
     groups = judging.assign(rubric["questions"], setup, LABS)
-    given = judging.material(work, final, facts)
+    given = judging.material(work, final, facts, rubric["context"])
     answered, runs = {}, []
     for lab, (spec, questions) in groups.items():
         reply, info = run_judge(spec, judging.prompt(rubric["text"], questions, given),
