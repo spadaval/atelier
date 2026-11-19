@@ -97,4 +97,5 @@ class GradeTest(loop.Fixture):
         self.assertEqual([(q["id"], q["role"], q["kind"]) for q in rubric["questions"]],
                          [("sized", "reviewer", "graded"),
                           ("latest-event", "reviewer", "reported"),
+                          ("levels", "reviewer", "reported"),
                           ("reasons", "reviewer", "reported")])

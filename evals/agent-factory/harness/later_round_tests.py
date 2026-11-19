@@ -242,4 +242,5 @@ class LaterRoundCase(loop.Fixture):
         rubric = loop.judging.read_rubric(self.case)
         self.assertEqual([(q["id"], q["role"], q["kind"]) for q in rubric["questions"]],
                          [(self.question, "reviewer", "graded"), ("named", "reviewer", "reported"),
+                          ("levels", "reviewer", "reported"),
                           ("reasons", "reviewer", "reported")])
