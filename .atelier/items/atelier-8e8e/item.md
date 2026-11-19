@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-8e8e
 title: Run a matrix in a named setup, a model and an effort per role, and report time and tokens per cell
-status: changes_requested
+status: in_review
 mission: atelier-kw8u
 labels: []
 priority: medium
@@ -103,8 +103,8 @@ shows another model or effort than its role's makes the run invalid.
 - `result.json` gains `setup`, `role`, `roles`, `judges`, `threads` (each
   thread's role, agent, model, effort, seconds, exit and tokens in, cached
   in and out), `tokens` (their sum), `atelier_calls` and `atelier_failed`.
-  Claude Code's tokens come from its result event and Codex's from its turn
-  events or, for a subagent, its session record. Both count input with
+  Claude Code's tokens come from its result event and Codex's from its
+  session record's running total, which counts a turn that never completed. Both count input with
   cache reads, so the two agents' numbers compare.
 - Failed `atelier` calls are read from a log, not parsed from transcripts.
   The harness moves the fixture's `bin/atelier` to `libexec/` and puts
@@ -169,3 +169,4 @@ shows another model or effort than its role's makes the run invalid.
 ### Responses
 
 1-jgy4.1: fixed in 579100db4: the log records the thread Atelier names, `<parent>/<CODEX_THREAD_ID>` for a Codex subagent, and the harness gives each call the `threads` entry that made it as `by`, with tests of the reviewer's root and child calls.
+2-2vvm.2: fixed in 0d68b7013: every Codex thread, the first agent included, takes its tokens from its session record's running total, with tests of a reviewer thread and a first agent whose turn fails after usage is recorded.
