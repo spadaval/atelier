@@ -3,12 +3,13 @@ schema: atelier.item
 schema_version: 3
 id: atelier-d73k
 title: Say in a later round's brief what the round is for, and show with two cases that it narrows without hiding
-status: ready
+status: building
 mission: atelier-8az0
 labels: []
 priority: medium
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A3a9fab39-7f29-4732-8284-d6c07f2deac6%3Adelegate-task%3A5dd6a795-3174-4859-9ff2-d69a1d4f5ff4
 ready:
   by: 'the human, by a side chat on 2026-11-18: tell the main thread about all of this'
   at: 2026-11-19T04:37:19.810241548Z
