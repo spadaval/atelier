@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-s63j
 title: Strip the old tracker's process text from replay fixtures of any era
-status: building
+status: in_review
 mission: atelier-kw8u
 labels: []
 priority: medium
