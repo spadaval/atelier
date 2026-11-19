@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""delegate "<task>": start a fresh agent as a new thread in this directory.
+"""delegate <role> "<task>": start a fresh agent for a role as a new thread.
 
 The eval harness's stand-in for T3 Code's delegated threads. It reads
-.threads.json beside the bin/ it is installed in, gives the new agent its own
+.threads.json beside the bin/ it is installed in, which gives each role
+(lead, implementer, reviewer) the agent, model and effort of the run's
+setup, starts that role's agent in this directory with its own
 T3CODE_THREAD_ID, writes its transcript to the run's threads/ directory,
 waits for it and prints its final reply.
 
@@ -35,9 +37,15 @@ def main():
                  "say in your final reply what you need, and the thread that "
                  "started you can start it.")
     conf = json.loads((Path(__file__).resolve().parent.parent / ".threads.json").read_text())
-    task = " ".join(sys.argv[1:]).strip()
+    roles = conf["roles"]
+    usage = f'usage: delegate <role> "<task>", where <role> is one of {", ".join(roles)}'
+    role = sys.argv[1] if len(sys.argv) > 1 else ""
+    task = " ".join(sys.argv[2:]).strip()
+    if role not in roles:
+        sys.exit(f"delegate refused: {role!r} is not a role here.\n{usage}")
     if not task:
-        sys.exit('usage: delegate "<task>"')
+        sys.exit(usage)
+    child = roles[role]
     lock = open(conf["lock"], "w")
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -49,13 +57,13 @@ def main():
     out = Path(conf["out"])
     out.mkdir(parents=True, exist_ok=True)
     transcript = out / f"{thread}.jsonl"
-    argv = [arg.replace("{task}", task) for arg in conf["argv"]]
-    env = {**conf["env"], "T3CODE_THREAD_ID": thread, CHILD: "1"}
-    print(f"Started thread {thread}; waiting for it to finish.", flush=True)
+    argv = [arg.replace("{task}", task) for arg in child["argv"]]
+    env = {**child["env"], "T3CODE_THREAD_ID": thread, CHILD: "1"}
+    print(f"Started thread {thread} as the {role}; waiting for it to finish.", flush=True)
     with transcript.open("w") as f:
         proc = subprocess.Popen(argv, cwd=os.getcwd(), env=env, stdin=subprocess.DEVNULL,
                                 stdout=f, stderr=subprocess.STDOUT, start_new_session=True)
-        log(conf, event="start", thread=thread, pgid=proc.pid)
+        log(conf, event="start", thread=thread, pgid=proc.pid, role=role)
         try:
             code = proc.wait(timeout=conf["timeout"])
         except subprocess.TimeoutExpired:
@@ -65,7 +73,7 @@ def main():
         except ProcessLookupError:
             pass
         proc.wait()
-        log(conf, event="end", thread=thread)
+        log(conf, event="end", thread=thread, exit=code)
     lock.close()
     reply = ""
     for line in transcript.read_text().splitlines():

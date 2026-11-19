@@ -1,8 +1,12 @@
 """Tests for the harness: the isolation canary's verdict, with Claude Code
-replaced by a fixed reply; staging; validity; and the limit of two agents,
-from the command lines and config it builds and `delegate` with a stand-in
-agent. Run with `python3 -m unittest` from this directory."""
+replaced by a fixed reply; setups; staging; validity; tokens; the log of
+`atelier` calls; the limit of two agents, from the command lines and config
+it builds and `delegate` with a stand-in agent; and a run in a setup that
+mixes Claude Code and Codex, with stand-ins for both. Run with `python3 -m
+unittest` from this directory."""
+import contextlib
 import importlib.util
+import io
 import json
 import os
 import shutil
@@ -18,6 +22,7 @@ HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location("run", Path(__file__).with_name("run.py"))
 run = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(run)
+table = run.table
 
 
 class CanaryTest(unittest.TestCase):
@@ -41,7 +46,7 @@ class CanaryTest(unittest.TestCase):
             return 0
         run.run_claude = fake
         try:
-            run.check_isolation(self.tmp / "root", "high", self.tmp)
+            run.check_isolation(self.tmp / "root", self.tmp)
         except SystemExit as exc:
             return str(exc.code)
         return None
@@ -98,7 +103,7 @@ class CodexCanaryTest(CanaryTest):
             return 0
         run.run_claude = fake
         try:
-            run.check_isolation(self.tmp / "root", "high", self.tmp, "codex")
+            run.check_isolation(self.tmp / "root", self.tmp, "codex")
         except SystemExit as exc:
             return str(exc.code)
         return None
@@ -250,8 +255,7 @@ class ValidityTest(unittest.TestCase):
     def test_spawn_agent_is_invalid_only_without_threads(self):
         facts = run.codex_given([tools_item("spawn_agent", "wait_agent")], self.home)
         self.assertTrue(facts["spawn_agent"])
-        self.assertEqual(run.invalid_reason("none", 0, self.info(**facts)),
-                         "spawn_agent was offered in a scenario without threads")
+        self.assertIn("spawn_agent was offered", run.invalid_reason("none", 0, self.info(**facts)))
         self.assertIsNone(run.invalid_reason("none", 0, self.info(**facts), threads=True))
 
     def test_a_claude_run_offered_the_agent_tool_is_invalid(self):
@@ -288,17 +292,19 @@ class LimitTest(unittest.TestCase):
         first = run.agent_command("claude", "x", "haiku", "low", 1, self.tmp / "repo")
         self.assertEqual(set(self.disallowed(first)) & {"Agent", "Task", "Workflow"},
                          {"Agent", "Task", "Workflow"})
-        env, note = run.threads(self.tmp, self.tmp / "run", run.agent_env(self.tmp), "claude",
-                                "haiku", "low", {}, "thread-1")
-        child = json.loads((self.tmp / ".threads.json").read_text())["argv"]
-        self.assertEqual(self.disallowed(child), list(run.AGENT_TOOLS))
+        env, note = run.threads(self.tmp, self.tmp / "run", run.agent_env(self.tmp),
+                                run.one_model_setup("claude", "haiku", "low"), {}, "thread-1")
+        roles = json.loads((self.tmp / ".threads.json").read_text())["roles"]
+        for role in run.ROLES:
+            self.assertEqual(self.disallowed(roles[role]["argv"]), list(run.AGENT_TOOLS))
         self.assertEqual(env["T3CODE_THREAD_ID"], "thread-1")
         self.assertTrue((self.tmp / "bin" / "delegate").is_file())
         self.assertIn("delegate", note)
 
     def test_codex_has_no_delegate_and_spawn_agent_only_with_threads(self):
         env, note = run.threads(self.tmp, self.tmp / "run", run.agent_env(self.tmp, "codex", True),
-                                "codex", "gpt-6-luna", "low", {}, "thread-1")
+                                run.one_model_setup("codex", "gpt-6-luna", "low"), {},
+                                "thread-1")
         self.assertFalse((self.tmp / "bin" / "delegate").exists())
         self.assertNotIn("delegate", note)
         config = (Path(env["CODEX_HOME"]) / "config.toml").read_text()
@@ -371,19 +377,26 @@ class DelegateTest(unittest.TestCase):
         fake = self.tmp / "fake_agent.py"
         fake.write_text("import json, sys, time\ntime.sleep(float(sys.argv[1]))\n"
                         "print(json.dumps({'type': 'result', 'result': 'did ' + sys.argv[1]}))\n")
+        role = {"env": {"PATH": os.environ["PATH"]},
+                "argv": [sys.executable, str(fake), "{task}"]}
         (self.tmp / ".threads.json").write_text(json.dumps({
-            "agent": "claude", "env": {"PATH": os.environ["PATH"]},
+            "roles": {"implementer": role, "reviewer": role},
             "out": str(self.tmp / "threads"), "log": str(self.tmp / ".agents.jsonl"),
-            "lock": str(self.tmp / ".threads.lock"), "timeout": 60,
-            "argv": [sys.executable, str(fake), "{task}"]}))
+            "lock": str(self.tmp / ".threads.lock"), "timeout": 60}))
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def delegate(self, task, env=None):
-        return subprocess.Popen([sys.executable, str(self.tmp / "bin" / "delegate"), task],
+    def delegate(self, task, env=None, role="implementer"):
+        return subprocess.Popen([sys.executable, str(self.tmp / "bin" / "delegate"), role, task],
                                 cwd=self.tmp, env={**os.environ, **(env or {})},
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    def test_a_role_the_setup_lacks_is_refused(self):
+        _, err = self.delegate("0.1", role="lead").communicate()
+        self.assertIn("'lead' is not a role here", err)
+        self.assertIn("implementer, reviewer", err)
+        self.assertFalse((self.tmp / ".agents.jsonl").exists())
 
     def test_a_child_cannot_delegate(self):
         out, err = self.delegate("0.1", {"AF_EVAL_DELEGATED": "1"}).communicate()
@@ -397,13 +410,14 @@ class DelegateTest(unittest.TestCase):
             if (self.tmp / ".agents.jsonl").exists():
                 break
             time.sleep(0.05)
-        second = self.delegate("0.2")
+        second = self.delegate("0.2", role="reviewer")
         out1, _ = first.communicate()
         out2, _ = second.communicate()
         self.assertIn("did 1.5", out1)
         self.assertIn("waiting for it to finish first", out2)
         agents = run.delegated_threads(self.tmp)
-        self.assertEqual(len(agents), 2)
+        self.assertEqual([(a["role"], a["exit"]) for a in agents],
+                         [("implementer", 0), ("reviewer", 0)])
         self.assertEqual(run.peak(agents), 1)
         self.assertEqual(run.peak(agents + [{"start": 0, "end": time.time()}]), 2)
 
@@ -484,6 +498,300 @@ class CodexThreadsTest(unittest.TestCase):
             self.assertTrue((tmp / "run" / "sessions" / "rollout-b-kid.jsonl").is_file())
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
+
+
+class SetupTest(unittest.TestCase):
+    """The checked-in setups, their judges, and a one-model setup."""
+
+    def test_sol_is_one_codex_model_at_high_with_one_judge(self):
+        sol = run.load_setup("sol")
+        self.assertEqual({r: (s["agent"], s["model"], s["effort"])
+                          for r, s in sol["roles"].items()},
+                         {r: ("codex", "gpt-6.1-sol", "high") for r in run.ROLES})
+        self.assertEqual(list(sol["judges"]), ["openai"])
+        self.assertEqual(sol["judges"]["openai"]["agent"], "claude")
+        self.assertTrue(run.spawns(sol))
+
+    def test_house_mixes_labs_and_has_a_judge_for_each(self):
+        house = run.load_setup("house")
+        self.assertEqual({r: (s["agent"], s["model"], s["effort"])
+                          for r, s in house["roles"].items()},
+                         {"lead": ("claude", "claude-fable-5-2", "high"),
+                          "implementer": ("claude", "claude-opus-5-5", "high"),
+                          "reviewer": ("codex", "gpt-6.1-sol", "xhigh")})
+        self.assertEqual({lab: run.LABS[j["agent"]] for lab, j in house["judges"].items()},
+                         {"anthropic": "openai", "openai": "anthropic"})
+        self.assertFalse(run.spawns(house))
+
+    def test_a_judge_from_its_threads_lab_or_a_missing_one_is_refused(self):
+        house = run.load_setup("house")
+        same = {**house, "judges": {**house["judges"],
+                                    "anthropic": {"agent": "claude", "model": "m", "effort": "e"}}}
+        self.assertIn("must be from another lab", run.setup_problem(same))
+        missing = {**house, "judges": {"openai": house["judges"]["openai"]}}
+        self.assertIn("one judge for each", run.setup_problem(missing))
+        no_effort = {**house, "roles": {**house["roles"], "lead": {"agent": "claude",
+                                                                    "model": "m"}}}
+        self.assertIn("an effort", run.setup_problem(no_effort))
+        with self.assertRaises(ValueError):
+            run.load_setup("nonesuch")
+
+    def test_a_one_model_setup_puts_it_in_every_role_with_a_judge_from_another_lab(self):
+        luna = run.one_model_setup("codex", "gpt-6-luna", "medium")
+        self.assertEqual(luna["name"], "gpt-6-luna-medium")
+        self.assertIsNone(run.setup_problem(luna))
+        self.assertEqual({s["model"] for s in luna["roles"].values()}, {"gpt-6-luna"})
+        self.assertTrue(run.spawns(luna))
+        self.assertIsNone(run.setup_problem(run.one_model_setup("claude", "opus", "high")))
+        self.assertFalse(run.spawns(run.one_model_setup("claude", "opus", "high")))
+
+    def test_every_case_names_its_first_agents_role(self):
+        for meta in sorted(run.SCENARIOS.glob("*/scenario.json")):
+            self.assertIn(json.loads(meta.read_text()).get("role"), run.ROLES, meta)
+
+    def test_codex_runs_at_its_roles_effort(self):
+        argv = run.agent_command("codex", "x", "gpt-6.1-sol", "xhigh", 1, Path("/r"))
+        self.assertIn('model_reasoning_effort="xhigh"', argv)
+
+
+class MixedSetupTest(unittest.TestCase):
+    """In a setup that mixes Claude Code and Codex every thread starts with
+    `delegate <role>`, as its role's agent, and the limit of two holds."""
+
+    def setUp(self):
+        LimitTest.setUp(self)
+        subprocess.run(["git", "init", "-q", str(self.tmp / "repo")], check=True)
+        self.house = run.load_setup("house")
+
+    tearDown = LimitTest.tearDown
+
+    def threads(self, setup, stage=None):
+        first = setup["roles"]["implementer"]
+        env = run.agent_env(self.tmp, first["agent"], run.spawns(setup))
+        return run.threads(self.tmp, self.tmp / "run", env, setup, {}, "thread-1", stage)
+
+    def test_each_role_runs_its_own_agent_model_and_effort(self):
+        _, note = self.threads(self.house)
+        self.assertIn("delegate <role>", note)
+        roles = json.loads((self.tmp / ".threads.json").read_text())["roles"]
+        lead, implementer, reviewer = (roles[r]["argv"] for r in run.ROLES)
+        self.assertEqual((lead[0], lead[lead.index("--model") + 1],
+                          lead[lead.index("--effort") + 1]), ("claude", "claude-fable-5-2", "high"))
+        self.assertEqual(implementer[implementer.index("--model") + 1], "claude-opus-5-5")
+        self.assertEqual((reviewer[:2], reviewer[reviewer.index("-m") + 1]),
+                         (["codex", "exec"], "gpt-6.1-sol"))
+        self.assertIn('model_reasoning_effort="xhigh"', reviewer)
+        home = Path(roles["reviewer"]["env"]["CODEX_HOME"])
+        self.assertEqual(home, run.role_home(self.tmp, "reviewer"))
+        self.assertIn("disable_native_tools = true", (home / "config.toml").read_text())
+        self.assertTrue((home / "auth.json").is_symlink())
+        run.unlink_auth(self.tmp)
+        self.assertFalse((home / "auth.json").is_symlink())
+        self.assertNotIn("CODEX_HOME", roles["lead"]["env"])
+
+    def test_the_skill_is_staged_for_each_agent_of_the_setup(self):
+        self.threads(self.house, lambda kind, home: run.stage_for(
+            kind, "HEAD", self.tmp, "skills/agent-factory", home))
+        self.assertTrue((self.tmp / "repo/.claude/skills/agent-factory/SKILL.md").is_file())
+        self.assertTrue((run.role_home(self.tmp, "reviewer") /
+                         "skills/agent-factory/SKILL.md").is_file())
+        self.assertEqual((self.tmp / "repo/.git/info/exclude").read_text().count(".claude/"), 1)
+
+    def test_a_codex_first_agent_in_a_mixed_setup_delegates_and_cannot_spawn(self):
+        setup = {**self.house, "roles": {**self.house["roles"],
+                                          "implementer": self.house["roles"]["reviewer"]}}
+        env, note = self.threads(setup)
+        self.assertTrue((self.tmp / "bin" / "delegate").is_file())
+        self.assertIn("delegate <role>", note)
+        config = (Path(env["CODEX_HOME"]) / "config.toml").read_text()
+        self.assertIn("disable_native_tools = true", config)
+
+    def test_a_codex_thread_at_another_effort_than_its_roles_is_invalid(self):
+        spec = self.house["roles"]["reviewer"]
+        thread = {"thread": "t", "role": "reviewer", "init": {
+            "mcp_servers": [], "agent_factory": False, "model": "gpt-6.1-sol",
+            "effort": "low"}}
+        self.assertIn("ran gpt-6.1-sol at low", run.thread_problem("none", thread, spec))
+        thread["init"]["effort"] = "xhigh"
+        self.assertIsNone(run.thread_problem("none", thread, spec))
+        thread["init"]["spawn_agent"] = True
+        self.assertIn("spawn_agent", run.thread_problem("none", thread, spec))
+
+
+class TokensTest(unittest.TestCase):
+    def test_claude_and_codex_usage_count_alike(self):
+        claude = {"input_tokens": 14, "cache_creation_input_tokens": 100,
+                  "cache_read_input_tokens": 1000, "output_tokens": 50}
+        codex = {"input_tokens": 1114, "cached_input_tokens": 1000, "output_tokens": 50}
+        self.assertEqual(run.token_counts([claude]), run.token_counts([codex]))
+        self.assertEqual(run.token_counts([codex, codex])["in"], 2228)
+        self.assertEqual(run.token_counts([]), {"in": 0, "cached_in": 0, "out": 0})
+
+
+class AtelierLogTest(unittest.TestCase):
+    def test_every_call_is_logged_with_its_thread_and_exit(self):
+        tmp = Path(tempfile.mkdtemp(prefix="af-atelier-log-"))
+        try:
+            (tmp / "bin").mkdir()
+            (tmp / "bin" / "atelier").write_text(
+                "#!/bin/sh\necho \"real $*\"\n[ \"$1\" = status ]\n")
+            (tmp / "bin" / "atelier").chmod(0o755)
+            run.log_atelier(tmp)
+            env = {"PATH": f"{tmp / 'bin'}:{os.environ['PATH']}", "T3CODE_THREAD_ID": "t-1"}
+            ok = subprocess.run(["atelier", "status"], env=env, capture_output=True, text=True)
+            bad = subprocess.run(["atelier", "merge", "x"], env=env, capture_output=True, text=True)
+            self.assertEqual((ok.returncode, ok.stdout), (0, "real status\n"))
+            self.assertEqual(bad.returncode, 1)
+            calls = run.atelier_calls(tmp)
+            self.assertEqual([(c["argv"], c["thread"], c["exit"]) for c in calls],
+                             [(["status"], "t-1", 0), (["merge", "x"], "t-1", 1)])
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+FAKE_AGENT = r'''
+import json, os, subprocess, sys, uuid
+from pathlib import Path
+agent, model, effort, prompt = sys.argv[1:5]
+ran_effort = Path(__file__).with_name("codex-effort").read_text() if agent == "codex" else effort
+if agent == "claude":
+    print(json.dumps({"type": "system", "subtype": "init", "model": model, "tools": ["Bash"],
+                      "skills": [], "mcp_servers": []}), flush=True)
+else:
+    sid = str(uuid.uuid4())
+    print(json.dumps({"type": "thread.started", "thread_id": sid}), flush=True)
+    day = Path(os.environ["CODEX_HOME"]) / "sessions" / "2026" / "11" / "18"
+    day.mkdir(parents=True, exist_ok=True)
+    usage = {"input_tokens": 300, "cached_input_tokens": 200, "output_tokens": 30}
+    (day / f"rollout-x-{sid}.jsonl").write_text("\n".join(json.dumps(e) for e in [
+        {"type": "session_meta", "payload": {"id": sid}},
+        {"type": "turn_context", "payload": {"model": model, "effort": ran_effort}},
+        {"type": "event_msg", "payload": {"type": "token_count",
+                                          "info": {"total_token_usage": usage}}}]) + "\n")
+if prompt.startswith("FIRST"):
+    subprocess.run(["atelier", "submit"], stdout=sys.stderr)
+    subprocess.run(["delegate", "reviewer", "review it"], stdout=sys.stderr)
+if agent == "claude":
+    print(json.dumps({"type": "result", "subtype": "success", "result": "done",
+                      "usage": {"input_tokens": 10, "cache_read_input_tokens": 90,
+                                "output_tokens": 5}}))
+else:
+    print(json.dumps({"type": "item.completed", "item": {"type": "agent_message", "text": "ok"}}))
+    print(json.dumps({"type": "turn.completed", "usage": {
+        "input_tokens": 300, "cached_input_tokens": 200, "output_tokens": 30}}))
+'''
+
+
+class RunOneTest(unittest.TestCase):
+    """run_one in house, end to end, with stand-ins for Claude Code and Codex:
+    a Claude Code implementer starts a Codex reviewer with `delegate`."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="af-run-one-"))
+        self.saved = (run.SCENARIOS, run.agent_command, run.CODEX_AUTH)
+        run.CODEX_AUTH = self.tmp / "host-auth.json"
+        run.CODEX_AUTH.write_text("{}")
+        case = self.tmp / "scenarios" / "case"
+        case.mkdir(parents=True)
+        (case / "scenario.json").write_text(json.dumps(
+            {"description": "x", "role": "implementer", "threads": True}))
+        (case / "prompt.md").write_text("FIRST {{skill}}go")
+        (case / "setup.sh").write_text(
+            'set -e\nmkdir -p "$1/repo" "$1/bin"\ngit init -q "$1/repo"\n'
+            'printf "#!/bin/sh\\nexit 1\\n" > "$1/bin/atelier"\nchmod +x "$1/bin/atelier"\n')
+        (case / "grade.py").write_text('print(\'{"pass": true}\')')
+        fake = self.tmp / "fake_agent.py"
+        fake.write_text(FAKE_AGENT)
+        (self.tmp / "codex-effort").write_text("xhigh")
+        run.SCENARIOS = self.tmp / "scenarios"
+        run.agent_command = lambda agent, prompt, model, effort, budget, cwd, system=None: [
+            sys.executable, str(fake), agent, model, effort, prompt]
+
+    def tearDown(self):
+        run.SCENARIOS, run.agent_command, run.CODEX_AUTH = self.saved
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def run_house(self):
+        return run.run_one("case", "none", "HEAD", run.load_setup("house"), 0,
+                           self.tmp / "out", self.tmp / "work")
+
+    def test_each_thread_runs_as_its_role_and_reports_its_tokens(self):
+        r = self.run_house()
+        self.assertIs(r["pass"], True, r.get("invalid"))
+        self.assertEqual((r["setup"], r["role"], r["model"]), ("house", "implementer",
+                                                               "claude-opus-5-5"))
+        first, reviewer = r["threads"]
+        self.assertEqual((first["agent"], first["tokens"]), ("claude", {
+            "in": 100, "cached_in": 90, "out": 5}))
+        self.assertEqual((reviewer["role"], reviewer["agent"], reviewer["model"],
+                          reviewer["effort"], reviewer["exit"]),
+                         ("reviewer", "codex", "gpt-6.1-sol", "xhigh", 0))
+        self.assertEqual(reviewer["tokens"], {"in": 300, "cached_in": 200, "out": 30})
+        self.assertEqual(r["tokens"], {"in": 400, "cached_in": 290, "out": 35})
+        self.assertEqual(r["peak_agents"], 2)
+        [failed] = r["atelier_failed"]
+        self.assertEqual((failed["argv"], failed["thread"], failed["exit"]),
+                         (["submit"], first["thread"], 1))
+        self.assertFalse((run.role_home(Path(r["work_dir"]), "reviewer") / "auth.json")
+                         .is_symlink())
+        self.assertIn("| house | case | none | 1 of 1 |", table.table([r]))
+
+    def test_a_thread_at_another_effort_than_its_roles_makes_the_run_invalid(self):
+        (self.tmp / "codex-effort").write_text("low")
+        r = self.run_house()
+        self.assertIsNone(r["pass"])
+        self.assertIn("(reviewer): it ran gpt-6.1-sol at low", r["invalid"])
+
+
+class MainTest(unittest.TestCase):
+    """main runs a canary for each agent of its setup, and prints the table."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="af-main-"))
+        # A work root must be outside $HOME, where TMPDIR may be.
+        self.work_root = Path(tempfile.mkdtemp(prefix="af-main-", dir="/var/tmp"))
+        self.saved = (run.check_isolation, run.run_one, sys.argv)
+        self.canaries, self.setups = [], []
+        run.check_isolation = lambda root, out, agent: self.canaries.append(agent)
+
+        def fake_run(scenario, arm, ref, setup, index, out, root, skill_dir):
+            self.setups.append(setup["name"])
+            return {"scenario": scenario, "arm": arm, "setup": setup["name"], "index": index,
+                    "pass": True, "seconds": 10, "tokens": {"in": 1000, "out": 10},
+                    "run_dir": "", "agents": []}
+        run.run_one = fake_run
+
+    def tearDown(self):
+        run.check_isolation, run.run_one, sys.argv = self.saved
+        shutil.rmtree(self.tmp, ignore_errors=True)
+        shutil.rmtree(self.work_root, ignore_errors=True)
+
+    def main(self, *args):
+        sys.argv = ["run.py", "next-vacuous-test-review", "--arms", "none",
+                    "--out", str(self.tmp / "out"), "--work-root", str(self.work_root),
+                    *args]
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            run.main()
+        return out.getvalue()
+
+    def test_house_checks_both_agents_and_sol_one(self):
+        printed = self.main("--setup", "house")
+        self.assertEqual(self.canaries, ["claude", "codex"])
+        self.assertIn("| house | next-vacuous-test-review | none | 1 of 1 | 0 | 10 | 1.0k | 10 |",
+                      printed)
+        self.canaries.clear()
+        self.main("--setup", "sol")
+        self.assertEqual(self.canaries, ["codex"])
+
+    def test_one_model_on_the_command_line(self):
+        self.main("--agent", "codex", "--model", "gpt-6-luna", "--effort", "low")
+        self.assertEqual((self.canaries, self.setups), (["codex"], ["gpt-6-luna-low"]))
+
+    def test_a_setup_with_a_model_is_refused(self):
+        with self.assertRaises(SystemExit):
+            self.main("--setup", "sol", "--model", "x")
+        self.assertEqual(self.canaries, [])
 
 
 if __name__ == "__main__":
