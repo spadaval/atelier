@@ -608,9 +608,16 @@ impl Walker<'_, '_> {
             }
         }
         found.sort_by_key(|(_, _, action)| action.row());
-        let carries = found.iter().any(|(_, _, action)| action.commits());
+        // Each record shows the commit's skips once: on its actions Atelier
+        // commits, else on all of its actions. A verdict's carries them and
+        // its review line beside it does not; a settlement carries them
+        // beside an item that the same commit created.
+        let carries: BTreeSet<String> = (found.iter())
+            .filter(|(_, _, action)| action.commits())
+            .map(|(id, _, _)| id.clone())
+            .collect();
         for (id, thread, action) in found {
-            let skips = match !carries || action.commits() {
+            let skips = match !carries.contains(&id) || action.commits() {
                 true => commit.skips.clone(),
                 false => Vec::new(),
             };

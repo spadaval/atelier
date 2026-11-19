@@ -1126,9 +1126,11 @@ which is every action where Atelier makes the commit or prints the commit
 line. Those are `start`, `submit` and `merge`, whose trailers are in the
 merge commit's message whether the forge makes it or `merge` does, a
 take-over of an implementer, which `start` commits, and `verdict`, `ready`,
-`drop`, `close` and `lead`, whose printed commit line carries them. The
-other lines of that commit, such as the `review` line of a verdict's
-commit, do not repeat it.
+`drop`, `close` and `lead`, whose printed commit line carries them. Each
+record the commit changed shows the skips once: on its actions of those
+kinds, so the `review` line beside a verdict on the same item does not
+repeat them; else on all of its actions, as a `settle` in a commit that also
+creates an item; else on a `change` or `merge` line of its own (below).
 
 ### A line
 

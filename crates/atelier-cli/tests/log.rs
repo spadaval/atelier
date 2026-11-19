@@ -788,3 +788,60 @@ fn a_record_with_no_action_beside_one_with_an_action_still_shows_the_rule_its_co
         &format!("{OTHER} ready p1 draft -> ready; by ada; skip {rule} (by p1)")
     );
 }
+
+#[test]
+fn a_settlement_keeps_its_passed_rule_beside_the_item_its_commit_creates() {
+    let scratch = Scratch::new(&[(ID, "ready")]);
+    let root = scratch.root();
+    write_mission(&root);
+    write_item(&root, DONE, "done", &["t1"], &[], "Done.");
+    let item =
+        read(&root, &item_path(DONE)).replace("mission: null", &format!("mission: {MISSION}"));
+    fs::write(root.join(item_path(DONE)), item).unwrap();
+    let path = root.join(DONE_REVIEW);
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(
+        path,
+        format!(
+            "---\nschema: atelier.review\nschema_version: 3\nround: 1\ncommit: abc1234\n\
+             reviewers:\n- t2\nmodel: null\nverdict: approve\n\
+             created_at: 2026-11-10T09:00:00Z\n---\n{FINDINGS}"
+        ),
+    )
+    .unwrap();
+    on_base(&root, "Merge demo-d0ne");
+
+    // Taken into a new item, outside the mission, in the base's checkout.
+    git(&root, &["switch", "-q", "main"]);
+    let direct = "Ada authorized recording this directly";
+    let finding = "demo-d0ne/1-aaaa.1";
+    let run = skipping(
+        &root,
+        "p1",
+        direct,
+        &["new", "Translate greeting", "--from", finding],
+    );
+    run_then(&root, &run.stdout);
+    let commit = short(&root, "HEAD");
+    let message = git(&root, &["log", "-1", "--format=%B"]);
+    let rule = message
+        .lines()
+        .find_map(|line| line.strip_prefix("Atelier-Skip: "))
+        .unwrap_or_else(|| panic!("{message}"))
+        .to_string();
+    assert!(rule.ends_with(&format!(": {direct}")), "{message}");
+
+    let settle = actions(&root, &log(&root, &[DONE]));
+    let settle = settle.last().unwrap();
+    assert!(
+        settle.starts_with(&format!("{DONE} settle p1 1-aaaa.1 taken into "))
+            && settle.ends_with(&format!("; skip {rule} (by p1)")),
+        "{settle}"
+    );
+    let page = show(&root, MISSION);
+    assert_eq!(
+        rules_passed(&page),
+        [format!("  {DONE}, settle in {commit}, by p1: {rule}")],
+        "{page}"
+    );
+}
