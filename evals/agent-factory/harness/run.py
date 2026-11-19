@@ -140,6 +140,11 @@ import table  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[3]
 SCENARIOS = Path(__file__).resolve().parents[1] / "scenarios"
+# Scenarios renamed on 2026-11-18, by the name a saved result gives them,
+# and the name now; None for one deleted.
+RENAMED = {f"next-{name}": name for name in (
+    "loop", "loop-changes", "non-atelier-repo", "refused-push", "settle-within-authority",
+    "vacuous-test-review", "costly-hardening")} | {"next-done-when-rewrite": None}
 DEFAULT_OUT = Path.home() / ".cache" / "af-evals" / "runs"
 DEFAULT_WORK_ROOT = Path("/var/tmp/af-evals")
 DEFAULT_SKILL_DIR = "skills/agent-factory"
@@ -288,6 +293,13 @@ def run_judge(spec: dict, prompt: str, transcript: Path, work_root: Path):
     reply = result.get("result") if exit_code == 0 and not result.get("is_error") else None
     return reply, {"seconds": round(ended - started), "exit": exit_code, "tokens": tokens,
                    "start": started, "end": ended}
+
+
+def case_dir(name: str):
+    """The directory of the scenario a result names, under the name it had
+    when the run was saved (RENAMED); None for a scenario since deleted."""
+    name = RENAMED.get(name, name)
+    return None if name is None else SCENARIOS / name
 
 
 def grade(case: Path, work: Path, transcript: Path) -> dict:

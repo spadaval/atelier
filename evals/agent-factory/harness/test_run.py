@@ -1024,6 +1024,32 @@ class JudgeTest(unittest.TestCase):
         self.assertEqual((r["pass"], out["previous_pass"], out["pass"]), (False, False, True))
         self.assertEqual(len(out["judged"]), 2)
 
+    def test_regrading_a_run_saved_under_a_case_s_old_name_grades_it_as_renamed(self):
+        r = self.run_house({"built-it": "fail"})
+        result = Path(r["run_dir"]) / "result.json"
+        result.write_text(json.dumps({**json.loads(result.read_text()), "scenario": "next-case"}))
+        saved = dict(run.RENAMED)
+        run.RENAMED.update({"next-case": "case", "next-gone": None})
+        try:
+            (self.tmp / "judge-answers.json").write_text("{}")
+            out = self.judging.rejudge(run, Path(r["run_dir"]), None, self.tmp / "work")
+            self.assertIs(out["pass"], True)
+            result.write_text(json.dumps({**json.loads(result.read_text()),
+                                          "scenario": "next-gone"}))
+            out = self.judging.rejudge(run, Path(r["run_dir"]), None, self.tmp / "work")
+            self.assertEqual(out["error"], "next-gone was deleted")
+        finally:
+            run.RENAMED.clear()
+            run.RENAMED.update(saved)
+
+    def test_every_renamed_case_is_a_case_today(self):
+        for old, new in run.RENAMED.items():
+            with self.subTest(old=old):
+                self.assertTrue(new is None or (Path(run.__file__).resolve().parents[1]
+                                                / "scenarios" / new / "grade.py").is_file())
+        self.assertIsNone(run.case_dir("next-done-when-rewrite"))
+        self.assertEqual(run.case_dir("next-rebuttal-kept").name, "next-rebuttal-kept")
+
     def test_a_case_without_facts_keeps_its_own_grade(self):
         (self.tmp / "scenarios" / "case" / "grade.py").write_text(
             'print(\'{"pass": false, "checks": {}, "notes": ["old"]}\')')
