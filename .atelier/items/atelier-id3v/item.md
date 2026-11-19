@@ -132,3 +132,8 @@ held on all 30 runs read by hand.
 
 Checked: `git diff --check`, every relative link in the README and the
 results file resolves. No code changed, so no tests were run.
+
+### Responses
+
+- 1-nmv8.1: fixed in 5d860dd1d. The summary script now takes a count of unsupported findings only where the judge answered `others-supported` fail, counts pass as none, and keeps unknown apart. Of the 144 answers, 126 were pass, 18 unknown and none fail, so every Unsupported cell is 0, and the Result and the replay section say no fix-now finding was found unsupported and that the judge could not tell in 18 reviews.
+- 1-nmv8.2: fixed in 5d860dd1d. The Setup says every run used the pinned copy of 4f36b1fa6 and its skill, and that atelier-hlsw and atelier-d73k changed master's crates, and atelier-hlsw its skill, during the matrix.
