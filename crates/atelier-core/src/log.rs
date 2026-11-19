@@ -111,9 +111,10 @@ pub enum Happened {
     Close {
         status: Move,
     },
-    /// A commit that passed a rule and in which no action above is found,
-    /// such as the merge of a plan or a `set` of a started item: shown so
-    /// that no passed rule goes unseen. `merge` when it is an Atelier merge.
+    /// A record changed in a commit that passed a rule, with no action above
+    /// found on it, such as the merge of a plan or a `set` of a started
+    /// item: shown so that no passed rule goes unseen. `merge` when the
+    /// commit is an Atelier merge.
     Passed {
         merge: bool,
     },
@@ -595,10 +596,15 @@ impl Walker<'_, '_> {
         if !pending.is_empty() {
             self.pending.insert(commit.hash.clone(), pending);
         }
-        if found.is_empty() && !commit.skips.is_empty() {
+        // A record the commit changed with no action of its own, beside one
+        // that has, still shows the rules the commit passed: a `ready` of
+        // two items, one of which was ready already.
+        if !commit.skips.is_empty() {
             let merge = commit.parents.len() > 1;
             for id in self.records_of(commit)? {
-                found.push((id, None, Happened::Passed { merge }));
+                if !found.iter().any(|(of, _, _)| *of == id) {
+                    found.push((id, None, Happened::Passed { merge }));
+                }
             }
         }
         found.sort_by_key(|(_, _, action)| action.row());

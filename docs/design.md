@@ -1113,7 +1113,7 @@ refused as `show` refuses it.
 | lead | A mission's `lead` is set or changes | That entry |
 | ready | An item's status becomes `ready`; on a mission in the old form, its status | None; the name given with `--by` |
 | drop, close | A status becomes `dropped`, or `done` outside a merge | None |
-| merge, change | A commit that passed a rule and in which none of the above is found, such as a plan's merge or a `set` of a started item: `merge` for an Atelier merge, else `change`, one line for each record it changed. An Atelier merge's record is the item or mission its `Atelier-Merge:` names, or, for a backlog branch, each record the merge changed | The thread that passed the rule |
+| merge, change | A record changed in a commit that passed a rule, with none of the above found on that record, such as a plan's merge, a `set` of a started item, or a `ready` of an item ready already beside one that was not: `merge` for an Atelier merge, else `change`. An Atelier merge's record is the item or mission its `Atelier-Merge:` names, or, for a backlog branch, each record the merge changed | The thread that passed the rule |
 
 Where a commit passed a rule and names the thread that ran the command
 (`Atelier-Skip-By:`, see Hooks and the bypass), the line of the action

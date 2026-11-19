@@ -757,3 +757,34 @@ fn a_proposed_plans_lead_and_merge_and_a_set_of_a_started_item_each_show_their_p
         "{lines:?}"
     );
 }
+
+#[test]
+fn a_record_with_no_action_beside_one_with_an_action_still_shows_the_rule_its_commit_passed() {
+    const OTHER: &str = "demo-cd34";
+    let scratch = Scratch::new(&[(ID, "ready"), (OTHER, "draft")]);
+    let root = scratch.root();
+    write_mission(&root);
+    on_base(&root, "Add the mission");
+    // One ready already, in the mission; one a draft, in none.
+    let again = "Ada reconfirmed the ready item";
+    let run = skipping(&root, "p1", again, &["ready", ID, OTHER, "--by", "ada"]);
+    run_then(&root, &run.stdout);
+    git(&root, &["branch", "-f", "main", "HEAD"]);
+    let commit = short(&root, "HEAD");
+    let rule = format!("{ID} is draft (it is ready): {again}");
+    assert_eq!(
+        actions(&root, &log(&root, &[ID])).last().unwrap(),
+        &format!("{ID} change p1 skip {rule} (by p1)")
+    );
+    let page = show(&root, MISSION);
+    assert!(
+        rules_passed(&page).contains(&format!("  {ID}, change in {commit}, by p1: {rule}")),
+        "{page}"
+    );
+    // The other item's own line carries it too.
+    let other = actions(&root, &log(&root, &[OTHER]));
+    assert_eq!(
+        other.last().unwrap(),
+        &format!("{OTHER} ready p1 draft -> ready; by ada; skip {rule} (by p1)")
+    );
+}
