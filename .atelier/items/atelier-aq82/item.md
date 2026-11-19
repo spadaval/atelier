@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-aq82
 title: Add the lead's two cases, and rebuild the implementer's case of a Done when that cannot hold
-status: in_review
+status: approved
 mission: atelier-kw8u
 labels: []
 priority: medium
