@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-t5tc
 title: Show whether the later round's brief hides an important defect in code the fix changed
-status: changes_requested
+status: in_review
 mission: atelier-8az0
 labels: []
 priority: medium
@@ -96,3 +96,7 @@ The host's shared binary was not touched. It is `~/.cargo/bin/atelier`,
 0.7.0, installed at 2026-11-19 02:53, before atelier-d73k merged at 02:57.
 It does not hold that item's brief: its strings lack "reviewed the whole
 change before this one".
+
+### Responses
+
+- 1-usll.1: fixed in 9ed8ea4f7
