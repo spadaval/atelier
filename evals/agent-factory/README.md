@@ -98,7 +98,11 @@ when, Context and Report as they stood. They share one setup,
   the bug item's ID, or a web search of its own is invalid (`replay.leak`),
   and `result.json` lists what its proxy refused (`proxy_refused`).
 - The judge is given the defect, the change's diff and the fix's diff after
-  the rubric. The reviewer is told nothing.
+  the rubric, and the item and the lines of each file a review cites, as the
+  branch under review held them (`replay.cited`). A finding that rests on a
+  rule the change leaves alone can then be checked; one that rests on
+  material the judge lacks is answered unknown, not unsupported. The
+  reviewer is told nothing.
 - A replay reviewer may build with cargo. Its crates are fetched into
   `<work root>/cargo-home` first, it builds offline in its own `target/`,
   and the cases run one at a time (`--jobs 1`).

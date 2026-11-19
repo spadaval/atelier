@@ -32,7 +32,9 @@ other checkouts or the case files, and cannot fetch this repository. As a
 backstop, leak() finds a run whose transcript shows the later fix (its
 commit, its subject, or the bug item's ID) or a web search, and the harness
 makes that run invalid. judge_context() gives the judge the defect, the
-change's diff and the fix's diff; the reviewer is told nothing.
+change's diff and the fix's diff, and cited() the item under review and the
+lines of each file a review cites, so a finding that rests on a rule the
+change leaves untouched can be checked; the reviewer is told nothing.
 """
 import json
 import os
@@ -54,6 +56,13 @@ FIELDS = ("row", "defect_item", "item", "base", "change", "fix", "defect", "id",
           "goal", "done_when", "report")
 # The most of a diff the judge is given, each; the rest is cut and it is told so.
 MAX_DIFF = 60_000
+# A path a review cites, and the lines it names: `docs/adr/0019-x.md:60-64`.
+CITED = re.compile(r"(?<![\w./-])((?:[\w.-]+/)*[\w-][\w.-]*\.[A-Za-z0-9]+)(?::(\d+)(?:-(\d+))?)?")
+# Lines given each side of a cited range; the most of a file cited without
+# lines; and the most of all the cited files, each given to the judge.
+AROUND = 15
+MAX_FILE = 12_000
+MAX_CITED = 60_000
 
 
 def load(case: Path) -> dict:
@@ -205,9 +214,9 @@ def leak(case_dir: Path, transcripts: list):
     return None
 
 
-def cut(text: str) -> str:
-    return text if len(text) <= MAX_DIFF else \
-        text[:MAX_DIFF] + f"\n[... cut: the diff is {len(text)} characters]\n"
+def cut(text: str, most: int = MAX_DIFF, what: str = "the diff") -> str:
+    return text if len(text) <= most else \
+        text[:most] + f"\n[... cut: {what} is {len(text)} characters]\n"
 
 
 def judge_context(case_dir: Path) -> str:
@@ -223,6 +232,67 @@ def judge_context(case_dir: Path) -> str:
             f"and fixed by a later commit, {case['fix'][:9]}.\n\n"
             f"# The change under review\n\n```diff\n{cut(change)}```\n\n"
             f"# The later fix\n\n```diff\n{cut(fix)}```\n")
+
+
+def cited(work: Path, reviews: str) -> str:
+    """What the judge is told of the tree under review besides the diffs:
+    the item's record, and each file the reviews cite, as the branch held
+    it when it was submitted (.branch_head), which for a file the change
+    leaves alone is the base's. A cited range comes with AROUND lines each
+    side, and a file cited without lines whole, up to MAX_FILE. A path is
+    found as written or as the end of one path in the tree; one that names
+    no file there, or a review file (given whole), is left out. Empty for a
+    fixture without .branch_head."""
+    work = Path(work)
+    repo, head_file = work / "repo", work / ".branch_head"
+    if not head_file.is_file():
+        return ""
+    head = head_file.read_text().strip()
+    tree = git("ls-tree", "-r", "--name-only", head, cwd=repo).splitlines()
+    items = [p for p in tree if re.fullmatch(r"\.atelier/items/[^/]+/item\.md", p)]
+    wanted = {}
+    for m in CITED.finditer(reviews):
+        path = m.group(1)
+        found = [p for p in tree if p == path or p.endswith("/" + path)]
+        if len(found) != 1 or found[0] in items or "/reviews/" in found[0]:
+            continue
+        lines = None
+        if m.group(2):
+            start = int(m.group(2))
+            lines = (start, max(start, int(m.group(3) or start)))
+        wanted.setdefault(found[0], []).append(lines)
+
+    def show(path):
+        text = subprocess.run(["git", "-C", str(repo), "show", f"{head}:{path}"],
+                              capture_output=True).stdout.decode(errors="replace")
+        return None if "\0" in text else text
+
+    parts = [f"### {path}\n\n{show(path)}" for path in items]
+    for path, cites in wanted.items():
+        text = show(path)
+        if text is None:
+            continue
+        lines = text.splitlines()
+        spans = sorted((max(1, a - AROUND), min(len(lines), b + AROUND))
+                       for a, b in (c for c in cites if c) if a <= len(lines))
+        if None in cites or not spans:
+            parts.append(f"### {path}, whole\n\n" + cut(text, MAX_FILE, "the file"))
+            continue
+        merged = [list(spans[0])]
+        for a, b in spans[1:]:
+            if a <= merged[-1][1] + 1:
+                merged[-1][1] = max(merged[-1][1], b)
+            else:
+                merged.append([a, b])
+        for a, b in merged:
+            parts.append(f"### {path}, lines {a}-{b}\n\n" + "\n".join(
+                f"{n:>5}  {lines[n - 1]}" for n in range(a, b + 1)))
+    if not parts:
+        return ""
+    return ("\n\n# The item under review, and the files its reviews cite\n\n"
+            "As the branch stood when it was submitted for review; a file the change "
+            "does not touch is as the base tree holds it.\n\n"
+            + cut("\n\n".join(parts), MAX_CITED, "this section") + "\n")
 
 
 def grade(case_dir: Path, work: Path) -> None:

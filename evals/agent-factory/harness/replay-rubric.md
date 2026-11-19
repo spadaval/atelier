@@ -33,7 +33,11 @@ Role: reviewer. Reported.
 Take each fix-now finding of the round-1 reviews that does not name the
 known defect. Does the code support each one: is the failure it claims real
 in the change as the diff shows it, or a gap the item's Done when asks to be
-closed?
+closed? The item and the lines of each file the reviews cite are given
+after the diffs, as the branch under review held them, so a finding may
+rest on a rule the change leaves untouched. A finding that rests on
+material you are not given is not unsupported for that: if it decides the
+answer, answer unknown and name it.
 
 Pass: every such finding is supported, or there is none. A fail: at least
 one is not, because the code does not do what it claims, the case it names
