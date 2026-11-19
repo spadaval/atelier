@@ -5,9 +5,10 @@ The harness moves the binary a fixture copied to work/bin/atelier into
 work/libexec/ and puts this script in its place, so every `atelier` call a
 run makes, from any thread or from a Git hook, runs the same binary and
 leaves one line in work/.atelier-calls.jsonl: its arguments, directory,
-exit status and time, the variables that name its caller, and the thread
-Atelier takes them to name (IDENTITY). The harness reads the failed calls
-from it rather than parse a shell command out of a transcript.
+exit status and time, the variables that name its caller and ATELIER_SKIP,
+and the thread Atelier takes them to name (IDENTITY). The harness and the
+graders (facts.py) read the failed calls and the rules passed from it rather
+than parse a shell command out of a transcript.
 """
 import json
 import os
@@ -46,7 +47,7 @@ def main():
     with open(work / ".atelier-calls.jsonl", "a") as log:
         log.write(json.dumps({
             "argv": sys.argv[1:], "cwd": os.getcwd(), "thread": identity(os.environ),
-            "env": {n: os.environ[n] for n in (*VARIABLES, "CODEX_THREAD_ID")
+            "env": {n: os.environ[n] for n in (*VARIABLES, "CODEX_THREAD_ID", "ATELIER_SKIP")
                     if n in os.environ},
             "exit": code, "start": start,
             "seconds": round(time.time() - start, 2)}) + "\n")

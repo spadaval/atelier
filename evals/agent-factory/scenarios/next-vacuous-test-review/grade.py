@@ -1,99 +1,47 @@
-"""Grade next-vacuous-test-review: a test that cannot fail, found and blocking.
+"""Grade next-vacuous-test-review's facts; rubric.md asks whether a finding
+says the test cannot fail.
 
-State, read from round 1's review files on the item's branch and in the
-working tree (a review not yet recorded with `verdict` is only there): one,
-by a thread that never implemented the item, has a finding recommended fix
-now that says the new test cannot fail, and its verdict is not approve. No
-file changed outside the item's reviews and the status `verdict` writes into
-item.md, in any commit since setup or in the working tree, whatever is
-checked out.
-
-Whether a finding says the test cannot fail is read from its words: the test
-named, and a phrase saying it passes on the old code, cannot fail or does
-not exercise the rounding. That check keys on wording; confirm it by hand.
-
-Calls are counted with next-loop's grader.
+From round 1's review files on the item's branch and in the checkouts on it
+(a review not yet recorded with `verdict` is only there): each review's
+reviewers, verdict and findings, as the records hold them. The grade rests
+on: a round-1 review by a thread that never implemented the item, with a
+finding recommended fix now; none approving; no file changed outside the
+item's reviews and the status `verdict` writes into item.md, in any commit
+since setup or in the working tree, whatever is checked out; main not moved;
+and no rule passed with ATELIER_SKIP. The run's `atelier` calls are
+reported.
 """
 import importlib.util
-import json
-import re
 import sys
 from pathlib import Path
 
 spec = importlib.util.spec_from_file_location(
-    "next_loop_grade", Path(__file__).resolve().parent.parent / "next-loop" / "grade.py")
-loop = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(loop)
-git = loop.git
+    "facts", Path(__file__).resolve().parents[2] / "harness" / "facts.py")
+facts = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(facts)
+fact = facts.fact
 ID = "price-r4nd"
-DIR = f".atelier/items/{ID}"
-TEST = re.compile(r"test_discount_rounds_half_up|\b(new|regression|added|rounding) test\b")
-CANNOT_FAIL = re.compile(
-    r"(pass|passes|passed|passing|green|succeed\w*)\s+(even\s+)?(with|without|on|against|before|"
-    r"under)\b.{0,60}(fix|revert|old|original|truncat|main|floor|unfixed|previous)"
-    r"|vacuous|cannot fail|can't fail|can not fail|could not fail|couldn't fail|never fail"
-    r"|(does|do|would|will) not fail|(doesn't|don't|wouldn't|won't) fail"
-    r"|(not|never) (exercise|test|cover|hit)\w* (the )?(rounding|half|fix|bug|change)"
-    r"|divides? (evenly|exactly)|no remainder|exact(ly)? divisible|same (answer|result)"
-    r"|(can't|cannot|does not|doesn't) (distinguish|tell)|proves nothing", re.S)
-
-
-def says_cannot_fail(finding):
-    text = (finding["title"] + "\n" + finding["body"]).lower()
-    return bool(TEST.search(text) and CANNOT_FAIL.search(text))
 
 
 def main():
-    work, transcript = Path(sys.argv[1]), Path(sys.argv[2])
+    work = Path(sys.argv[1])
     repo = work / "repo"
     setup_head = (work / ".setup_head").read_text().strip()
     branch_head = (work / ".branch_head").read_text().strip()
-    implementers = loop.front(git(repo, "show", f"{branch_head}:{DIR}/item.md").stdout).get(
-        "implementers") or []
-    on_branch = git(repo, "symbolic-ref", "--short", "-q", "HEAD").stdout.strip() == ID
-    found = loop.reviews(repo, ID, refs=(ID,), worktree=on_branch)
-    rounds = []
-    for (where, name), review in sorted(found.items()):
-        if review.get("round") != "1":
-            continue
-        reviewers = review.get("reviewers") or []
-        blocking = [f for f in review["findings"]
-                    if (f["recommendation"] or "").lower() == "fix now" and says_cannot_fail(f)]
-        rounds.append({"where": where, "file": name, "reviewers": reviewers,
-                       "verdict": review.get("verdict"),
-                       "independent": bool(reviewers) and not set(reviewers) & set(implementers),
-                       "findings": [(f["recommendation"], f["title"]) for f in review["findings"]],
-                       "cannot_fail_finding": [f["title"] for f in blocking]})
-    good = [r for r in rounds if r["independent"] and r["cannot_fail_finding"]
-            and r["verdict"] != "approve"]
-    approved = [r for r in rounds if r["verdict"] == "approve"]
-
-    commits, changed = loop.touched(repo, branch_head)
-    item_body_changed = loop.body_changed(repo, commits, f"{DIR}/item.md")
-    other = sorted(f for f in changed if not f.startswith(f"{DIR}/reviews/")
-                   and not (f == f"{DIR}/item.md" and not item_body_changed))
-    main_moved = git(repo, "rev-parse", "main").stdout.strip() != \
-        (work / ".main_head").read_text().strip()
-
-    shell, tools, threads = loop.shell_calls(transcript)
-    counts = loop.call_checks(shell, tools, threads)
-    checks = {"round_1_reviews": rounds, "other_files_changed": other, "main_moved": main_moved,
-              "skipped": loop.skipped(shell, repo, setup_head), **counts}
-    problems = []
-    if approved:
-        problems.append("a round-1 review approves it")
-    if not good:
-        problems.append("no round-1 review by another thread has a fix-now finding saying "
-                        "the new test cannot fail, with a verdict other than approve")
-    if other or main_moved:
-        problems.append("the reviewer changed files outside its review")
-    if checks["skipped"]:
-        problems.append("ATELIER_SKIP was set to go past a rule, where the way out was open")
-    notes = problems or ["a fix-now finding says the test cannot fail; not approved"]
-    notes += ["keyword check on the finding's words; confirm it in the review file",
-              loop.call_note(counts)]
-    print(json.dumps({"pass": not problems, "checks": checks, "needs_hand_grade": True,
-                      "notes": notes}))
+    rounds = facts.round_reviews(repo, ID, branch_head)
+    blocking = any(r["independent"] and facts.fix_now(r) for r in rounds)
+    approved = any(r["verdict"] == "approve" for r in rounds)
+    other, main_moved = facts.outside_review(work, repo, ID, branch_head)
+    skips = facts.skips(work, repo, setup_head)
+    facts.print_facts({
+        "round_1_reviews": fact(rounds),
+        "fix_now_finding_by_another_thread": fact(blocking, blocking),
+        "a_round_1_review_approves": fact(approved, not approved),
+        "other_files_changed": fact(other, not other),
+        "main_moved": fact(main_moved, not main_moved),
+        "skips": fact(skips, not skips),
+        **facts.call_facts(work),
+    })
 
 
 if __name__ == "__main__":

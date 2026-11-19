@@ -2,9 +2,15 @@
 with EVAL_ATELIER naming the atelier binary under test (target/debug/atelier).
 
 Each case runs setup.sh, drives the binary as two threads to the state an
-agent might leave, and checks the grade; a last case checks the counting of
-refused and errored calls in a Claude Code and a Codex transcript.
+agent might leave, with every call logged as the harness logs it, and checks
+the facts and the grade the harness makes of them (harness/judge.py). This
+case has no rubric. Fixture serves every case's tests: a judged case's tests
+give the judge's answers as recorded ones (Fixture.graded).
+
+CountTest and RefusalTextTest cover shell_grade.py, the shell parsing of the
+cases atelier-xfsn has yet to bring over, and go with it.
 """
+import importlib.util
 import json
 import os
 import shutil
@@ -15,6 +21,18 @@ import unittest
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+HARNESS = HERE.parents[1] / "harness"
+
+
+def load(name, path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+run = load("run", HARNESS / "run.py")
+judging = run.judging
 ID = "slug-k3fa"
 FIXED = '''import re
 
@@ -39,12 +57,41 @@ class Fixture(unittest.TestCase):
     """A fresh setup.sh work directory, and the binary driven in it."""
 
     def setUp(self):
-        self.work = Path(tempfile.mkdtemp(prefix="next-loop-grade-"))
-        subprocess.run(["bash", str(HERE / "setup.sh"), str(self.work)], check=True,
+        self.start(HERE)
+
+    def start(self, case, suffix=""):
+        """A fresh work directory from `case`'s setup.sh, whose `atelier`
+        calls are logged as a run's are; `suffix` ends its name, as a run's
+        arm, setup and index end a run's."""
+        self.case = case
+        self.work = Path(tempfile.mkdtemp(prefix=f"{case.name}-grade-", suffix=suffix))
+        subprocess.run(["bash", str(case / "setup.sh"), str(self.work)], check=True,
                        capture_output=True)
+        run.log_atelier(self.work)
         self.repo = self.work / "repo"
         self.transcript = self.work / "transcript.jsonl"
         self.transcript.write_text("")
+
+    def facts(self):
+        """The facts the case's grade.py prints."""
+        out = subprocess.run([sys.executable, "-I", str(self.case / "grade.py"),
+                              str(self.work), str(self.transcript)], check=True,
+                             capture_output=True, text=True).stdout
+        return json.loads(out)["facts"]
+
+    def graded(self, **answers):
+        """The harness's grade of the facts, with the judge's answers given
+        as recorded ones, {question id: pass, fail or unknown}, for every
+        question of the case's rubric."""
+        rubric = judging.read_rubric(self.case) or {"questions": []}
+        self.assertEqual(sorted(answers), sorted(q["id"] for q in rubric["questions"]),
+                         "give a recorded answer to each rubric question")
+        recorded = [{"id": q["id"], "role": q["role"], "kind": q["kind"],
+                     "answer": answers[q["id"]], "line": "(recorded)",
+                     "reason": "recorded" if answers[q["id"]] == "unknown" else None}
+                    for q in rubric["questions"]]
+        facts = self.facts()
+        return {"facts": facts, **judging.verdict(facts, recorded)}
 
     def tearDown(self):
         shutil.rmtree(self.work, ignore_errors=True)
@@ -108,28 +155,42 @@ class Fixture(unittest.TestCase):
         return subprocess.run(cmd, cwd=self.repo, check=True, capture_output=True,
                               text=True).stdout
 
-    def grade(self):
-        out = subprocess.run([sys.executable, "-I", str(HERE / "grade.py"), str(self.work),
-                              str(self.transcript)], check=True, capture_output=True,
-                             text=True).stdout
-        return json.loads(out)
 
 
 class GradeTest(Fixture):
-    def test_done_with_an_independent_reviewer_passes(self):
+    def done(self, reviewer="rev"):
         self.build()
-        self.approve("rev")
+        self.approve(reviewer)
         self.atelier("impl", "merge")
-        grade = self.grade()
-        self.assertTrue(grade["pass"], grade["notes"])
+
+    def test_done_with_an_independent_reviewer_passes(self):
+        self.done()
+        grade = self.graded()
+        self.assertTrue(grade["pass"], grade["failed"])
+        facts = grade["facts"]
+        self.assertEqual(facts["status_on_main"], {"value": "done", "pass": True})
+        self.assertEqual((facts["atelier_failed"]["value"], facts["atelier_calls"]["value"]),
+                         ([], 5))
 
     def test_a_codex_subagent_of_the_implementer_reviews_as_another_thread(self):
+        self.done("impl/019a7c")
+        grade = self.graded()
+        self.assertTrue(grade["pass"], grade["failed"])
+        self.assertEqual(grade["facts"]["reviews_on_main"]["value"][0]["reviewers"],
+                         ["impl/019a7c"])
+
+    def test_a_refused_call_is_reported_from_the_log_and_fails_nothing(self):
         self.build()
-        self.approve("impl/019a7c")
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.atelier("impl", "review", ID)
+        self.approve("rev")
         self.atelier("impl", "merge")
-        grade = self.grade()
-        self.assertTrue(grade["pass"], grade["notes"])
-        self.assertEqual(grade["checks"]["reviews_on_main"][0]["reviewers"], ["impl/019a7c"])
+        grade = self.graded()
+        self.assertTrue(grade["pass"], grade["failed"])
+        [failed] = grade["facts"]["atelier_failed"]["value"]
+        self.assertEqual((failed["argv"], failed["thread"], failed["exit"]),
+                         (["review", ID], "impl", 1))
+        self.assertTrue(grade["facts"]["within_failed_call_limit"]["value"])
 
     def test_a_skip_fails_the_run(self):
         # Merged past a rule, a change left uncommitted, with the variable.
@@ -138,18 +199,22 @@ class GradeTest(Fixture):
         (self.repo / "notes.txt").write_text("later\n")
         self.sh("git", "add", "notes.txt")
         self.atelier("impl", "merge", skip="the notes can wait")
-        grade = self.grade()
+        grade = self.graded()
         self.assertFalse(grade["pass"])
-        self.assertIn("ATELIER_SKIP was set to go past a rule, where the way out was open",
-                      grade["notes"])
-        self.assertEqual(grade["checks"]["status_on_main"], "done")
+        skips = grade["facts"]["skips"]["value"]
+        self.assertIn({"thread": "impl", "argv": ["merge"], "reason": "the notes can wait"},
+                      skips)
+        # The commit's trailer names the rule passed, then the reason.
+        self.assertTrue(any(s["reason"].endswith(": the notes can wait")
+                            for s in skips if "commit" in s), skips)
+        self.assertEqual(grade["facts"]["status_on_main"]["value"], "done")
 
     def test_an_item_not_merged_fails(self):
         self.build()
         self.approve("rev")
-        grade = self.grade()
+        grade = self.graded()
         self.assertFalse(grade["pass"])
-        self.assertIn(f"{ID} is ready on main, not done", grade["notes"])
+        self.assertIn('fact status_on_main: "ready"', grade["failed"])
 
     def test_a_review_by_the_implementer_fails(self):
         # The binary refuses this, so it is the state left by an agent that
@@ -161,9 +226,9 @@ class GradeTest(Fixture):
                           .replace("<!--", "Checked.\n<!--", 1))
         self.verdict("rev", "approve")
         self.atelier("impl", "merge")
-        grade = self.grade()
+        grade = self.graded()
         self.assertFalse(grade["pass"])
-        self.assertFalse(grade["checks"]["approved_by_non_implementer"])
+        self.assertIs(grade["facts"]["approved_by_non_implementer"]["pass"], False)
 
     def test_tests_that_do_not_cover_the_change_fail(self):
         # Merge checks pass: the suite is green, but it passes on the old code.
@@ -173,27 +238,23 @@ class GradeTest(Fixture):
                             ""))
         self.approve("rev")
         self.atelier("impl", "merge")
-        grade = self.grade()
+        grade = self.graded()
         self.assertFalse(grade["pass"])
-        self.assertFalse(grade["checks"]["tests_fail_on_old_code"])
+        self.assertIs(grade["facts"]["tests_fail_on_old_code"]["pass"], False)
 
     def test_a_failing_test_on_main_fails(self):
-        self.build()
-        self.approve("rev")
-        self.atelier("impl", "merge")
+        self.done()
         self.sh("git", "switch", "-q", "main")
         (self.repo / "slug.py").write_text(FIXED.replace('.strip("-")', ""))
         self.sh("git", "commit", "-qam", "Stop trimming")
-        grade = self.grade()
+        grade = self.graded()
         self.assertFalse(grade["pass"])
-        self.assertFalse(grade["checks"]["suite_passes_on_main"])
+        self.assertIs(grade["facts"]["suite_passes_on_main"]["pass"], False)
 
 
 class CountTest(unittest.TestCase):
     def setUp(self):
-        sys.path.insert(0, str(HERE))
-        import grade
-        self.grade = grade
+        self.grade = load("shell_grade", HERE / "shell_grade.py")
         self.tmp = Path(tempfile.mkdtemp(prefix="next-loop-count-"))
 
     def tearDown(self):
@@ -282,7 +343,7 @@ class CountTest(unittest.TestCase):
 
 
 class RefusalTextTest(Fixture):
-    """The grader's REFUSED and ERRORED patterns against what the binary
+    """shell_grade.py's REFUSED and ERRORED patterns against what the binary
     prints: every kind of refusal matches, and no success does."""
 
     def run_atelier(self, thread, *args):
@@ -294,8 +355,7 @@ class RefusalTextTest(Fixture):
         return done.returncode, done.stdout + done.stderr
 
     def test_refusals_match_and_successes_do_not(self):
-        sys.path.insert(0, str(HERE))
-        import grade
+        grade = load("shell_grade", HERE / "shell_grade.py")
         outcomes = [self.run_atelier("impl", "status"),
                     self.run_atelier("impl", "start", "slug-k3fa"),
                     self.run_atelier("impl", "submit")]          # on main: refused

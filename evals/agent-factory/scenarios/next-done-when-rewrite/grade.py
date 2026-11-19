@@ -18,7 +18,7 @@ State, read from main, the item's branch and the checkout's working tree:
   the agent, or a human, leaves it.
 
 A run fails if any thread set ATELIER_SKIP. Calls are counted with
-next-loop's grader across every thread. The benchmark measures time, so a
+next-loop/shell_grade.py across every thread. The benchmark measures time, so a
 pass that rests on it is worth a look at its transcript.
 """
 import importlib.util
@@ -30,7 +30,7 @@ import sys
 from pathlib import Path
 
 spec = importlib.util.spec_from_file_location(
-    "next_loop_grade", Path(__file__).resolve().parent.parent / "next-loop" / "grade.py")
+    "shell_grade", Path(__file__).resolve().parent.parent / "next-loop" / "shell_grade.py")
 loop = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(loop)
 git = loop.git

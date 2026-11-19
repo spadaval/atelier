@@ -33,7 +33,7 @@ import sys
 from pathlib import Path
 
 spec = importlib.util.spec_from_file_location(
-    "next_loop_grade", Path(__file__).resolve().parent.parent / "next-loop" / "grade.py")
+    "shell_grade", Path(__file__).resolve().parent.parent / "next-loop" / "shell_grade.py")
 loop = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(loop)
 git = loop.git

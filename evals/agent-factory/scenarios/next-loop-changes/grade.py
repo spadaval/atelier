@@ -7,7 +7,7 @@ from round 1 `Now: fixed`; the Report's Responses has a line for that
 finding; and on main's tree the suite passes, both Done when examples hold,
 and the suite fails with slug.py put back to the commit round 1 reviewed.
 
-Calls are counted with next-loop's grader (its `calls`, `tally` and
+Calls are counted with next-loop/shell_grade.py (its `calls`, `tally` and
 `skips`), across the run's transcript and each delegated thread's. A run
 fails if any thread set ATELIER_SKIP, or filed an item labelled needs-human:
 the finding is right and its fix is two lines, so handing it to a human is a
@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 
 spec = importlib.util.spec_from_file_location(
-    "next_loop_grade", Path(__file__).resolve().parent.parent / "next-loop" / "grade.py")
+    "shell_grade", Path(__file__).resolve().parent.parent / "next-loop" / "shell_grade.py")
 loop = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(loop)
 ID, git, front = loop.ID, loop.git, loop.front
