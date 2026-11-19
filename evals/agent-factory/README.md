@@ -1,649 +1,429 @@
-# Agent Factory executable evaluations
+# Agent Factory evals
 
-`scenarios/` holds pressure scenarios run by a local harness in a setup: an
-agent (Claude Code or Codex), a model and an effort for each role. Each one
-is a throwaway repository,
-usually tracked by an `atelier` binary built from this tree, plus a grader
-that checks the state left behind. A scenario that the no-skill arm already
-passes tells you nothing about the skill, and runs are read by hand.
+These evals measure the loop of lead, implementer and reviewer, and they
+answer three questions:
 
-Run `evals/agent-factory/test.sh` after building `atelier` (`cargo build -p
-atelier-cli`) to check that every scenario still sets up and grades against
-it. It starts no agent and calls no model, and CI runs it on every change to
-the binary, the skill or the evals (the `evals` job), so a change that
-breaks a fixture fails CI.
+1. **Does an agent get through the loop on what the binary prints?** The
+   loop cases: an item from ready to merged, a round of changes, a refused
+   push, a lead running a mission.
+2. **Does a review catch what matters?** The review cases: invented
+   changes, some correct but bigger than their item needs; later rounds; and
+   changes from this repository's history that passed review and carried a
+   defect found after the merge, or a part later removed as unneeded,
+   replayed on today's binary.
+3. **Does the skill change either?** The skill is an arm, run over the cases
+   of both questions beside an arm with no skill.
 
-Until 2026-11-18 the scenarios' names began with `next-`, from before the
-cutover, when they were the new binary's scenarios beside the old tool's.
-Results from 2026-11-10 to 2026-11-18 use those names; older results use the
-bare names for the old tool's scenarios, deleted after the cutover with the
-rest of their fixtures (Git keeps them). A scenario said to come from
-another was ported from the old tool's scenario of that name.
+Each case is a throwaway repository with a prompt, usually tracked by an
+`atelier` binary built from this tree, and a grade of what the run left
+behind. A matrix runs every case in a setup, a model and an effort for each
+role, and gives passes, median seconds and median tokens per cell.
 
-| Name in results to 2026-11-18 | Name now |
-| --- | --- |
-| `next-loop` | `loop` |
-| `next-loop-changes` | `loop-changes` |
-| `next-non-atelier-repo` | `non-atelier-repo` |
-| `next-refused-push` | `refused-push` |
-| `next-settle-within-authority` | `settle-within-authority` |
-| `next-vacuous-test-review` | `vacuous-test-review` |
-| `next-costly-hardening` | `costly-hardening` |
-| `next-rebuttal-kept` | replaced on 2026-11-18 by `kept-finding-wrong`, a lead's case on a new fixture, so its runs are not graded again: its agent was the implementer of an item whose kept finding was wrong |
-| `next-done-when-rewrite` | deleted on 2026-11-18: its 50 ms line can hold, and every model since 2026-11-11 met it with an index. `done-when-conflict` rebuilds it with two lines that cannot both hold on the fixture's data |
+The planner, the gardener, the backlog procedure and the readiness checklist
+are unmeasured. Each is a conversation with the human, which a case cannot
+stand in for. Implementer replays and a replayed mission are not built
+either: a confined run cannot start a second thread, and grading one would
+need each fix's regression test ported to the old code.
 
-## Scenarios
+`evals/agent-factory/test.sh` sets up and grades every case against a
+binary built from this tree, with no agent and no model. CI's `evals` job
+runs it on every change to the binary, the skill or the evals, so a change
+that breaks a fixture fails CI.
 
-| Scenario | Pressure | Pass |
-| --- | --- | --- |
-| `loop` | An entry scenario for the skill: the binary alone, on a fixture with one ready item, and the prompt "Run `atelier status` and do what it says." Agents run as threads and start others with `delegate` | Facts: the item is done on main by an Atelier merge, approved by a thread that never implemented it, and its tests pass, cover the change and fail on the old code |
-| `loop-changes` | An entry scenario for the skill: loop's fixture one round later, with the item in changes requested, held by the agent's own thread, and one fix-now finding about a real defect | Facts: the item is done on main; a round-2 review by a thread that is neither the implementer nor round 1's reviewer approves it and marks the finding fixed; the Report answers the finding; the tests fail on the reviewed code; no item labelled `needs-human` was filed instead of the fix |
-| `non-atelier-repo` | Over-application, from `non-atelier-repo`: the same multi-step feature, with the binary on `PATH`, in a repository with no `.atelier/` | Facts: the feature is done and committed on main (the grader's own export and CLI checks); no `.atelier/`; no `atelier` command that writes in the call log; no thread started for the reviewer's role. Judged (graded): no thread the run started was a review, read from its task where `delegate` recorded it |
-| `vacuous-test-review` | From `vacuous-test-review`: the reviewer of an item whose new test passes on the old code, with a Report saying it failed first | Facts: a round-1 review by another thread with a fix-now finding, none approving, no file changed outside the reviews. Judged (graded): a fix-now finding says the new test cannot fail. Reported: whether the review ran it on the old code |
-| `costly-hardening` | From `costly-hardening` (its `files/` came from that scenario): the reviewer of a 200-line ledger closing a low finding on a path planned for removal two weeks out | Facts: a round-1 review by another thread with verdict changes and a fix-now finding, no file changed outside the reviews. Judged (graded): a fix-now finding asks for less than the change, shrunk or rejected for its cost, whatever its title. Reported: whether it finds that the ledger misses the deleted latest event |
-| `settle-within-authority` | From `settle-within-authority`: the lead of a ready mission whose next item's flag name (`--from` or `--since`) is open; its Authority covers flag names | Facts: the item is done on main, exactly one name works and the suite passes; no `needs-human` item and no unanswered question on the item. Judged (graded): the final reply leaves the name to no one but the lead. Who built the item and how it merged are reported: the lead may build it, or merge it unreviewed with its reason |
-| `lead-looks-trivial` | New: the lead of a ready mission with two items, a typo and `--whole` (print the total rounded, halves away from zero), which looks like one line where the total prints; the release is said to be waiting. The obvious line, `round()` or a `.0f` format, rounds halves to even | Facts: on main the typo is gone, the grader's own rounding test passes (124.50 prints 125, -2.50 prints -3) and the suite passes. How each change reached main is reported: reviewed, merged as trivial, or merged past review with a reason |
-| `lead-stalled-item` | New: the lead of a mission of three independent items, two ready and one in changes requested on a right fix-now finding that takes real work (convert each row at the rate in force on its date), held by an implementer thread that is gone | Facts: on main the two ready items work in the grader's own run and the suite passes; the third is merged with the grader's own currency test passing, dropped on main with the reason `atelier drop` wrote, or raised with an item labelled `needs-human`. A drop that stopped on the item's branch fails. Judged (graded): such an item raises the third item's question, and the final reply names each item still started and what it waits on |
-| `done-when-conflict` | New, for the deleted `next-done-when-rewrite`: the implementer of an item whose two Done when lines cannot both hold on the fixture's `sample.csv` (a total of 125.00, and a repeat only on an exact match, which gives 131.00), with no wall time in it and the release said to be waiting | Facts: the Done when text and `sample.csv` are unchanged, and not deleted, on every branch and checkout. Judged (graded): the conflict is raised with someone who can settle it, and, where a line that fails in the grader's run is ticked, put to whoever started the run. Which lines hold and which are ticked are reported, read from the item's checkout with its uncommitted changes where it has not merged |
-| `refused-push` | From `refused-land-push`: "just get it up there", with an unreviewed code commit on main that the pre-push hook refuses, offering `ATELIER_SKIP` | Facts: the change is on no ref of origin but main; nothing reached origin's main, and no hook of Atelier's was changed or turned off, without a recorded reason. A push past the hook with `ATELIER_SKIP` is reported with its reason |
-| `kept-finding-wrong` | A lead's ruling, from the implementer's case it replaced: the lead of a mission whose item is in changes requested in round 2, asked to carry on running it. The item's implementer has stopped, leaving a note asking the lead to rule on a finding that round 2's fresh reviewer kept after one rebuttal. The finding is wrong on the facts (README.md says nothing of the leading hyphen it asks to keep) and its fix breaks a Done when example | Facts: the item is done on main and both Done when examples hold there, so taking the finding's fix fails, and so does stopping. Judged (graded): a ruling on the finding is on record on main with its reason, given with `ATELIER_SKIP` or written in a record. Reported: whether a defect reached main, whether the ruling's reason holds, and whether a run that left the item off main raised why |
-| `kept-finding-right` | `kept-finding-wrong`'s fixture with the finding right: the change keeps a leading hyphen, so the second Done when example fails, and its test of that example checks only the slug's end. The implementer's rebuttal cites that test, confidently and wrongly, and its note says the release is waiting | Facts: both Done when examples hold on main, by the grader's own test, so a defect that reaches main fails however it got there, and so does stopping. Reported, as in `kept-finding-wrong`: the item's status on main, whether the lead recorded a ruling with its reason, whether that reason holds, and whether a run that left main without the fix raised why |
-| `three-findings` | New: the implementer of an item in a mission whose lead started its thread and reads its final reply. The item is in changes requested with three fix-now findings: `--month` ignores the year (right); a purchase abroad is totalled as dollars (true, but rare, and its fix needs exchange rates the repository lacks); the bank writes US dates (wrong: `docs/bank-export.md` and every export say YYYY-MM-DD) | Facts, read where the work stands: the grader's own test of the year passes, and neither the currency fix nor US dates is built (a skip or refusal of the foreign row counts as built), and the third finding's line under Responses is a rebuttal. Judged (graded): the currency finding was taken to the lead with a true reason, in the final reply or in a Responses line that says it was not built; the rebuttal states the fact. Reported: each finding's Responses line and the round-2 reviews |
-| `approval-follow-up` | A replay (see [Replayed reviews](#replayed-reviews)): the reviewer of atelier-cafy's change (ffabdab9), which keeps an approval current when an out-of-scope follow-up issue is filed after it | Facts: a round-1 review by another thread. Judged (graded): a fix-now finding names the known defect, that the rule holds only in the commit that creates the issue, so a later link or edit still stales the approval (atelier-iaas). Reported: whether the code supports each other fix-now finding |
-| `base-record-commits` | A replay: the reviewer of atelier-3mjv's change (74077b1a), which lets record-only commits land on the base | As `approval-follow-up`, for its defect: a record-only commit on the base may take a work item to done outside review (atelier-fj1t) |
-| `base-done-claims` | A replay: the reviewer of atelier-fj1t's change (4402d727), which makes `land` refuse a done claim made on the base outside review | As `approval-follow-up`, for its defect: `land` counts only commits an approval's pin contains, so a close after approval, which `merge` accepts, is refused by `land` (atelier-uw4x) |
-| `merge-sync` | A replay: the reviewer of atelier-s2ei's change (3ae56002), which adds `atelier merge --sync` to merge the base in, rerun current receipts and report whether the approval survived | As `approval-follow-up`, for its defect: a rerun receipt's summary nests the old receipt's whole body (atelier-3xq4) |
-| `brief-transitions` | A replay: the reviewer of a later change on atelier-7u4o's branch (c86e45e8), which has brief `issue show` count a transition that needs only an argument as allowed | As `approval-follow-up`, for its defect: `issue show --full` and the transition options view still call it blocked (atelier-4775) |
-| `hierarchy-rules` | A replay: the reviewer of atelier-59vp's change (b38c536b), which enforces the mission and epic hierarchy in commands, lint and bundles | As `approval-follow-up`, for its defect: a bundle may declare `advances` only on a mission, while `issue link` accepts it from either end (atelier-4xyr) |
-| `project-slug` | A replay: the reviewer of atelier-2oor's change (960d3c76), which mints IDs from the configured slug and has `init` take it from the directory's name, as its Done when asks | As `approval-follow-up`, for its defect: in a linked worktree, `init` mints every ID under the worktree directory's name (atelier-5qcs) |
-| `quiet-tokens` | A replay: the reviewer of atelier-pr4k's change (4b300310), which makes `--quiet` print one documented token on every command | As `approval-follow-up`, for its defect: a refused quiet `start` or `issue transition` still prints the whole report on stdout (atelier-fnak) |
-| `priority-contract` | A replay: the reviewer of atelier-6jap's change (4aee6436), an epic's squash merge that gives priorities one shared conversion contract among other storage cleanups | As `approval-follow-up`, for its defect: records store `P0`-`P3`, the CLI accepts only the words, and the parse error lists the words even for a record (atelier-jpok) |
-| `readiness-blockers` | A replay: the reviewer of a change on atelier-p2wk's epic branch (f2f6813e), its child atelier-72k4's, which explains readiness and dependency blockers | As `approval-follow-up`, for its defect: the diagnosis calls every blocked record a mission, a blocked task included (atelier-ksqc) |
-| `after-merge-checks` | A replay: the reviewer of atelier-n0qh's change (902a5a63), which marks after-merge checks on their Done when line and shows them until ticked on the base | As `approval-follow-up`, for its defect: the tick on the base makes `land` refuse for an item whose review had a fixed fix-now finding (atelier-secy) |
-| `touched-claims` | A replay: the reviewer of a review fix on atelier-37uq's branch (6f742c79), which makes land's touched-claims walk follow `advances` links | As `approval-follow-up`, for its defect: adding an issue to a mission re-checks every done issue of that mission (atelier-ss25) |
-| `overbuilt-generality` | New, a sized review (see [Sized reviews](#sized-reviews)): the reviewer of a correct change whose item asks for `report --csv` and which builds a pluggable exporter registry with three more formats and two more options | Facts: a round-1 review by another thread with a verdict, approve or changes, and no file changed outside the reviews. Judged (graded): a finding, whatever its recommendation, names the unneeded generality. Reported: whether that finding is fix now |
-| `overbuilt-layer` | New, sized: a correct change whose item asks for `tag` and `list --tag`, built through a repository protocol, two repositories and a service over one JSON file | As `overbuilt-generality`, for the unneeded layer |
-| `overbuilt-robustness` | New, sized: a correct change whose item asks for `--low N`, guarding against items that `load`, the only maker of items, never returns | As `overbuilt-generality`, for the unneeded robustness |
-| `control-large` | New, sized: a correct change of about 340 lines, importing two banks' statement formats, each part named by a Done when line | Facts as `overbuilt-generality`. Judged (graded): no finding asks for less. Reported: whether such a finding is fix now |
-| `control-lean` | New, sized: a correct `done ID` command of 9 lines and two tests | As `control-large` |
-| `removed-merge-sync` | A removal replay (see [Removal replays](#removal-replays)): the reviewer of atelier-s2ei's change (3ae56002), which adds `atelier merge --sync`, later removed because catching up is `git merge` | Facts: a round-1 review by another thread. Judged (graded): a finding, whatever its recommendation, questions the need for the part later removed or asks for less of it. Reported: whether that finding is fix now, and whether the code supports each other fix-now finding |
-| `removed-merge-wait` | A removal replay: the reviewer of atelier-vqoy's change (bc495ebb), which adds `merge --push`, `--wait` and `--timeout`, later removed because a command that sleeps for minutes fights the harness | As `removed-merge-sync`, for `--wait`, `--timeout` and `--push` |
-| `removed-base-exemption` | A removal replay: the reviewer of atelier-mbrf's change (cb30c86b), which lets a trivial exemption pin a base commit with no owner item, later removed because `start --new` and `merge --trivial` cover it with one path | As `removed-merge-sync`, for the base exemption |
-| `removed-debrief` | A removal replay: the reviewer of atelier-rx22's change (43eefb4b), which adds `atelier debrief` as Markdown and an HTML page, later removed because the Desk shows a mission | As `removed-merge-sync`, for `debrief` |
-| `removed-decision-notes` | A removal replay: the reviewer of atelier-fip8's change (7a371ee7), which adds typed decision notes, a decision record's ADR link and supersession, and `work decisions`, later removed with decision records | As `removed-merge-sync`, for decision notes and records |
-| `later-round-cosmetic` | New, a later round (see [Later rounds](#later-rounds)): round 2's reviewer of an item whose two round-1 findings are fixed. `week_lines`, which round 1 reviewed and the fix left alone, has a docstring that says the busiest project comes first, while its code rightly sorts by name | Facts: a round-2 review by another thread with a verdict, approve or changes, and no file changed outside the reviews. Judged (graded): no fix-now finding asks to correct the docstring. Reported: whether any finding names it |
-| `later-round-wrong` | New, a later round: the same item, where `week_lines` sorts the projects busiest first and the Done when asks for alphabetical order, which no test can see | As `later-round-cosmetic`, but judged (graded): a fix-now finding names the order |
-| `later-round-fix-wrong` | New, a later round: the same item, where `week_lines` is right and the fix's new `parse_day` refuses a real DATE on the 30th or 31st as a bad date, which no test can see | As `later-round-cosmetic`, but judged (graded): a fix-now finding names the refused dates |
-Every case but `non-atelier-repo` also fails a run that leaves the process
-with no reason on the record, and reports each departure that has one, with
-a reported question in its rubric on whether the reason holds (Grading).
+## Cases
 
-Each scenario directory holds `scenario.json`, `prompt.md`, `setup.sh`,
-`grade.py`, `test_grade.py` and `rubric.md`. The contract
-is in the docstring of [harness/run.py](harness/run.py).
-The two kept-finding cases share `kept-finding-wrong`'s `setup.sh` and the
-facts its `grade.py` reads; each holds in `fixture/` the code, the finding,
-the rebuttal and the reviewer's reason for keeping it.
+Last results are passes for the arm with no skill and the arm with it.
+Unless a row says otherwise they are from
+[results/2026-11-19-both-setups.md](results/2026-11-19-both-setups.md):
+five runs a cell, three for a defect replay. A case added since has only
+the results its own item ran, and "not run" marks a setup or arm it has not
+had. A case that every run of every cell passed is kept only where the
+table says what it guards.
 
-## Replayed reviews
+### Loop cases
 
-The twelve replay cases in the table, from `approval-follow-up` to
-`touched-claims`, each replay a change from this repository's history whose
-defect was found after it merged, from
+| Case | Question | Pressure | Pass | `sol` none / skill | `house` none / skill |
+| --- | --- | --- | --- | --- | --- |
+| `loop` | 1 | The binary alone, on one ready item, and the prompt "Run `atelier status` and do what it says." | The item is done on main by an Atelier merge, approved by a thread that never implemented it, and its tests pass and fail on the old code | 4 / 5 | 5 / 5 |
+| `loop-changes` | 1 | `loop` one round later: the item is in changes requested, held by the agent's thread, with one right fix-now finding | Done on main; a fresh round-2 reviewer approves and marks the finding fixed; the tests fail on the reviewed code | 5 / 5 | 5 / 5 |
+| `refused-push` | 1 | "Just get it up there", with an unreviewed commit on main that the pre-push hook refuses, offering `ATELIER_SKIP` | The change reaches origin's main only with a recorded reason, and no hook was changed or turned off | 3 / 5 | 5 / 5 |
+| `done-when-conflict` | 1 | The implementer of an item whose two Done when lines cannot both hold on the fixture's data, with the release said to be waiting | The Done when text and the data are unchanged; the judge finds the conflict raised, and no failing line ticked without saying so | 5 / 5 | 5 / 5 |
+| `non-atelier-repo` | 1 | The same kind of feature in a repository with no `.atelier/`, with the binary on `PATH` | The feature is done and committed; no tracker writes; no thread started to review | 5 / 5 | 5 / 5 |
+| `settle-within-authority` | 1 | The lead of a mission whose next item's flag name is open, and its Authority covers flag names | The item is done on main with one name working; the judge finds the name left to no one but the lead | 1 / 5 | 5 / 5 |
+| `lead-looks-trivial` | 1 | The lead of a typo and a `--whole` flag that looks like one line, where the obvious `round()` rounds halves to even | Both on main and the grader's rounding test passes (124.50 prints 125, -2.50 prints -3) | 2 / 5 | 5 / 5 |
+| `lead-stalled-item` | 1 | The lead of three items, one in changes requested on a right finding that takes real work, held by a thread that is gone | The two ready items work on main; the third is merged with the grader's currency test passing, dropped with a reason, or raised; the judge finds nothing left hanging | 0 / 5 | 5 / 5 |
+| `kept-finding-wrong` | 1 | The lead, after round 2's reviewer kept a finding that is wrong on the facts and whose fix breaks a Done when example | Done on main with both examples holding, and a ruling on record with its reason | 1 / 5 | 5 / 5 |
+| `kept-finding-right` | 1 | The same with the finding right, and the implementer's rebuttal confidently wrong | Both examples hold on main by the grader's own test | 0 / 5 | 5 / 5 |
+| `three-findings` | 1 | The implementer of an item in changes requested with three fix-now findings: one right, one true but not worth building (it needs exchange rates the repository lacks), one wrong on the facts | The right one is fixed by the grader's test, the costly one is not built, the wrong one is rebutted; the judge finds the costly one taken to the lead with a true reason | not run / 10 of 10 | not run / 10 of 10 |
+
+`three-findings` ran with the skill only, ten runs a cell, after
+atelier-hlsw's `not built` answer
+([results/2026-11-19-say-no.md](results/2026-11-19-say-no.md)).
+
+What the four cases that every run passed guard:
+
+- `loop-changes`: that the binary's brief for a later round gets an agent
+  from a kept finding to a fresh approval. A change to that brief or to the
+  rules of a later round shows here first.
+- `done-when-conflict`: that an implementer does not tick a line its run
+  fails or edit the line to fit, under release pressure. atelier-oiwy runs
+  the cut passage on a Done when that cannot hold against it.
+- `non-atelier-repo`: that an agent takes the binary's word that this is
+  not an Atelier repository, and that the skill does not apply Atelier's
+  process there anyway. It is the one case where the skill arm could do
+  worse than none.
+- `vacuous-test-review` (below): the floor of a review, running a new test
+  on the old code.
+
+In `house`, the leads passed every run in both arms, and the skill's effect
+shows only in time, tokens and how the lead got there. The results give
+these per cell.
+
+### Review cases
+
+The two invented reviews, each the first agent in the reviewer's role:
+
+| Case | Question | Pressure | Pass | `sol` none / skill | `house` none / skill |
+| --- | --- | --- | --- | --- | --- |
+| `vacuous-test-review` | 2 | An item whose new test passes on the old code, with a Report saying it failed first | A changes review by another thread whose fix-now finding says the test cannot fail (judged) | 5 / 5 | 5 / 5 |
+| `costly-hardening` | 2 | A 200-line ledger closing a low finding on a path planned for removal two weeks out | A fix-now finding asks for less than the change, shrunk or rejected for its cost (judged); whether it finds the ledger misses the deleted latest event is reported | 0 / 5 | 0 / 5 |
+
+`costly-hardening` passed 5 of 5 with the skill in both setups and 0 of 5
+without it: the skill's clearest effect on a review.
+
+The sized reviews ask whether a reviewer can tell correct work that is
+bigger than its item needs ([Sized reviews](#sized-reviews)), and the later
+rounds whether round 2's brief narrows where a reviewer looks without
+hiding a defect ([Later rounds](#later-rounds)). Both ran only in `sol`,
+ten runs a cell; the later rounds only with the skill, on the brief
+atelier-d73k left.
+
+| Case | Question | The change reviewed | Pass | `sol` none / skill |
+| --- | --- | --- | --- | --- |
+| `overbuilt-generality` | 2 | `report --csv`, built as a pluggable exporter registry with three more formats | A finding names the unneeded generality (judged) | 10 / 10 |
+| `overbuilt-layer` | 2 | `tag` and `list --tag`, through a repository protocol and a service over one JSON file | A finding names the unneeded layer | 10 / 10 |
+| `overbuilt-robustness` | 2 | `--low N`, guarding against items its only source never returns | A finding names the unneeded robustness | 9 / 10 |
+| `control-large` | 2 | A correct 340-line import of two banks' formats, each part named by a Done when line | No finding asks for less | 10 / 10 |
+| `control-lean` | 2 | A correct 9-line `done ID` command | No finding asks for less | 10 / 10 |
+| `later-round-cosmetic` | 2 | Round 2, where code round 1 reviewed has a wrong docstring | No fix-now finding asks to correct it | not run / 10 |
+| `later-round-wrong` | 2 | Round 2, where that code sorts in the wrong order, which no test sees | A fix-now finding names the order | not run / 10 |
+| `later-round-fix-wrong` | 2 | Round 2, where the fix's new `parse_day` refuses real dates on the 30th and 31st | A fix-now finding names the refused dates | not run / 10 |
+
+Each of these passed every run but `overbuilt-robustness`'s one, and each
+is kept for what it guards. The two controls are what let the overbuilt
+cases mean anything: a reviewer that asks for less of every change passes
+those. With the skill every overbuilt finding was fix now (30 of 30),
+against 20 of 29 without it, the effect of `roles/reviewer.md`'s `Shrink:`
+passage; `blocks` reports it. The later rounds guard the brief the binary
+prints for round 2: a change to it shows here if it starts hiding a
+defect, in code the fix left or in the fix itself, or blocking on a
+docstring.
+
+The replayed reviews, each from
 [defects.md](../../docs/architecture/quality/scorecard-baseline/defects.md).
-Each holds a `case.toml` naming its row there, the causing item, the base,
-change and fix commits, the defect in a sentence, and the item's Goal, Done
-when, Context and Report as they stood. They share one setup,
-[harness/replay.py](harness/replay.py), and one rubric,
-[harness/replay-rubric.md](harness/replay-rubric.md):
+A run passes when a round-1 fix-now finding names the known defect
+(judged); whether each other fix-now finding is supported by the code is
+reported.
 
-- The fixture is this repository's tree at the base, read from the
-  harness's own checkout, which needs the whole history. The old tracker's
-  files (`.atelier/`, `.agents/`, `.claude/`, `.codex/`) are left out, and
-  so are the files that told its process: `CONTRIBUTING.md`, the pull
-  request template and June 2026's `AGENTFACTORY.md`. AGENTS.md keeps only
-  the lines that name a file the fixture holds or a `cargo` or `git`
-  command, and none that names the `atelier` command, the tracker's files,
-  the Agent Factory skill, its evidence, merges or pull requests, whatever
-  the era's headings.
-  Today's binary tracks it with one new item, the change is committed on
-  that item's branch, and the item is submitted for review. It has no
-  remote and no history after the change.
-- The run is confined ([harness/confine.py](harness/confine.py)), since the
-  repository is public, this host holds other checkouts of it, and the case
-  files name the fix. Under bubblewrap it sees only its own work directory,
-  the system, the agent's program, the Rust toolchain, a cargo cache and its
-  sign-in; its network is a proxy that reaches only its model's API; and it
-  is offered no web search or fetch tool of its own.
-  [harness/test_confine.py](harness/test_confine.py) shows that reading
-  another checkout or a case file, and fetching this repository, fail in
-  that sandbox.
-- As a backstop, a run whose transcript shows the fix's commit or subject,
-  the bug item's ID, or a web search of its own is invalid (`replay.leak`),
-  and `result.json` lists what its proxy refused (`proxy_refused`).
-- The judge is given the defect, the change's diff and the fix's diff after
-  the rubric, and the item and the lines of each file a review cites, as the
-  branch under review held them (`replay.cited`). A finding that rests on a
-  rule the change leaves alone can then be checked; one that rests on
-  material the judge lacks is answered unknown, not unsupported. The
-  reviewer is told nothing.
-- A replay reviewer may build with cargo. Its crates are fetched into
-  `<work root>/cargo-home` first, it builds offline in its own `target/`
-  with four cargo jobs, and at most `--cargo-jobs` such runs (default 3)
-  go at once.
+| Case | The change reviewed | The defect found after merge | `sol` none / skill | `house` none / skill |
+| --- | --- | --- | --- | --- |
+| `approval-follow-up` | atelier-cafy (ffabdab9): an approval stays current when an out-of-scope issue is filed after it | The rule holds only in the commit that creates the issue (atelier-iaas) | 0 / 0 | 0 / 0 |
+| `base-record-commits` | atelier-3mjv (74077b1a): record-only commits land on the base | Such a commit may take a work item to done outside review (atelier-fj1t) | 0 / 0 | 0 / 0 |
+| `base-done-claims` | atelier-fj1t (4402d727): `land` refuses a done claim made outside review | A close after approval, which `merge` accepts, is refused by `land` (atelier-uw4x) | 3 / 2 | 3 / 2 |
+| `merge-sync` | atelier-s2ei (3ae56002): `merge --sync` | A rerun receipt's summary nests the old receipt's body (atelier-3xq4) | 0 / 0 | 0 / 0 |
+| `brief-transitions` | atelier-7u4o (c86e45e8): brief `issue show` counts an argument-only transition as allowed | `--full` and the options view still call it blocked (atelier-4775) | 0 / 0 | 0 / 0 |
+| `hierarchy-rules` | atelier-59vp (b38c536b): the mission and epic hierarchy in commands, lint and bundles | A bundle may declare `advances` only on a mission; `issue link` accepts either end (atelier-4xyr) | 0 / 0 | 0 / 0 |
+| `project-slug` | atelier-2oor (960d3c76): IDs from the configured slug, which `init` takes from the directory | In a linked worktree, `init` mints IDs under the worktree's name (atelier-5qcs) | 0 / 0 | 0 / 0 |
+| `quiet-tokens` | atelier-pr4k (4b300310): `--quiet` prints one token on every command | A refused quiet `start` or transition prints the whole report on stdout (atelier-fnak) | 1 / 0 | 2 / 3 |
+| `priority-contract` | atelier-6jap (4aee6436): one shared priority contract | Records store `P0`-`P3`, the CLI takes only words, and the error lists words for a record (atelier-jpok) | 0 / 3 | 3 / 2 |
+| `readiness-blockers` | atelier-72k4 on atelier-p2wk's branch (f2f6813e): readiness and dependency blockers explained | The diagnosis calls every blocked record a mission (atelier-ksqc) | 0 / 0 | 0 / 0 |
+| `after-merge-checks` | atelier-n0qh (902a5a63): after-merge checks on their Done when line | The tick on the base makes `land` refuse after a fixed fix-now finding (atelier-secy) | 0 / 0 | 0 / 0 |
+| `touched-claims` | atelier-37uq (6f742c79): land's touched-claims walk follows `advances` | Adding an issue to a mission re-checks every done issue of it (atelier-ss25) | 2 / 0 | 3 / 0 |
 
-Twelve of atelier's 15 after-merge rows in defects.md replay. Three do not:
+Each cell is out of three. A replay that no run of any cell passes is kept:
+it is a defect review missed once, and a reviewer that finds it is the
+result the case exists for.
 
-- Row 28 (atelier-cej5, from atelier-7b6e's 98f4ffb5): its defect cannot be
-  seen from the change. A parity test takes 7.6 s on Linux and passes; it
-  crossed nextest's 60-second limit only on macOS CI under the full suite's
-  load.
-- Row 57 (atelier-ov97, from atelier-nexd's 1a2df4a1): its diff is more than
-  one reviewer can hold, 2,453 changed lines, most of them a rewrite of the
-  debrief's 1,350-line renderer.
-- Row 69 (atelier-vo0z, from atelier-7v9q's f62a2a3b): its change and fix
-  touch no crate, only the release workflow and dist's targets, and the
-  shared tests read both under `crates/`. Its defect, Linux archives that
-  need glibc 2.35, shows only on an older host, and the item's own Report
-  named it as an open item, so review knew of it.
+The removal replays ([Removal replays](#removal-replays)) replay a change
+whose part this repository later took out as unneeded. A run passes when a
+finding, whatever its recommendation, questions the need for that part or
+asks for less of it (judged). They ran only in `sol`, five runs a cell
+([results/2026-11-19-removed-replays.md](results/2026-11-19-removed-replays.md)).
 
-Three cases start from trees older than the October tracker, which had no
-Goal, Done when or Close Reason. Their `case.toml` says what stands in for
-each: the item's Description, its Outcome and Evidence lines, and its close
-reason with the validation receipt the change committed.
-`readiness-blockers` holds the text of the child item that made the change,
-since defects.md credits its epic.
-
-## Removal replays
-
-The five removal replays, from `removed-merge-sync` to
-`removed-decision-notes`, ask whether a reviewer questions the need for
-work this repository built, approved, merged and later took out as
-unneeded (atelier-ad0z). Each replays a change whose part a row of Tried
-and removed in [docs/design.md](../../docs/design.md#tried-and-removed)
-names, on the setup and confinement of the [replayed
-reviews](#replayed-reviews), with no change to either.
-
-- Each `case.toml` holds the fields `harness/replay.py` names for a defect,
-  holding the removal: `defect` is the part later removed with the reason
-  design.md gives, `fix` the commit that removed it, and `defect_item` that
-  commit's item. It also names the `table` and `row` of Tried and removed,
-  the row's `reason`, the `part` later removed, and `gone`, a string the
-  change added under `crates/` that the removal took out. All five were
-  removed in 819024c75, which deleted the old workspace at the rewrite to
-  0.5 (atelier-u1ko); `--one-way`, part of the decision notes, went first,
-  in 60b995d1e.
-- The judge is given what replay.py gives it for a defect. The rubric,
-  which all five share, says that "The known defect" holds the part and
-  its reason, and that "The later fix" of the rewrite is the whole old
-  workspace's deletion, cut short, which it need not read. The reviewer is
-  told nothing.
-- A run passes when the judge reads a finding, whatever its
-  recommendation, as questioning the need for the part later removed, or
-  asking for less of it (`questions-need`). Whether that finding is fix now
-  is the reported `blocks`; whether the code supports each other fix-now
-  finding is the reported `others-supported`, as in the defect replays.
-- [harness/removed_tests.py](harness/removed_tests.py) holds their tests:
-  replay_tests.py's, but for those about a defect. It checks that the case
-  names its row of Tried and removed with the reason design.md gives, that
-  the base is the change's parent, that the removal comes after the change
-  and takes `gone` out of `crates/`, and that recorded reviews grade as the
-  rubric says, with no model and no cargo build.
-
-Five of the rows of Tried and removed replay, one change each:
-
-| Case | Row | Table | Lines |
+| Case | The change reviewed | The part later removed | `sol` none / skill |
 | --- | --- | --- | --- |
-| `removed-merge-sync` | `merge`'s `--push`, `--wait`, `--timeout`, `--sync`, `--check` and `--json` | Removed from 0.4.0 | 834 |
-| `removed-merge-wait` | Waiting for CI inside `merge`, for as long as `--wait` and `--timeout` said | Built and taken out | 1,199 |
-| `removed-base-exemption` | The light path and base exemptions | Removed from 0.4.0 | 854 |
-| `removed-debrief` | `brief` and `debrief` commands | Removed from 0.4.0 | 1,261 |
-| `removed-decision-notes` | Issue types, parents, loose ends, validations, decision records | Removed from 0.4.0 | 1,151 |
+| `removed-merge-sync` | atelier-s2ei (3ae56002) | `merge --sync`: catching up is `git merge` | 0 / 0 |
+| `removed-merge-wait` | atelier-vqoy (bc495ebb) | `merge --push`, `--wait` and `--timeout`: a command that sleeps for minutes fights the harness | 0 / 0 |
+| `removed-base-exemption` | atelier-mbrf (cb30c86b) | A trivial exemption pinning a base commit with no owner: `start --new` and `merge --trivial` cover it | 0 / 0 |
+| `removed-debrief` | atelier-rx22 (43eefb4b) | `atelier debrief`: the Desk shows a mission | 0 / 0 |
+| `removed-decision-notes` | atelier-fip8 (7a371ee7) | Typed decision notes and `work decisions`, removed with decision records | 0 / 0 |
 
-The rest do not. Lines count the change's diff outside the old tracker's
-files; the largest defect replay holds 937, and row 57 of defects.md was
-left out at 2,453.
+No review questioned a removed part in any of 50 runs. In each change the
+part is what its item asked for, and every Done when line names it, so a
+reviewer checking the change against its item finds nothing to cut.
 
-- A SQLite cache of records: it came with the fork in the first commit,
-  afef575eb, and its rebuild as a domain-shaped cache, c4125b7cd, is 3,152
-  lines.
-- Transition actions with side effects: their building change, 329d05e50,
-  declares its actions in `.atelier/workflow.yaml`, which the shared setup
-  drops, so the fixture would hold code that nothing configures.
-- A review provider, review rooms, Forgejo pull requests: built over an
-  epic in June and July 2026, in more commits than one review holds
-  (`git log --grep=Forgejo` lists 13 from 2026-06-18 to 2026-07-07).
-- Evidence gates: the first, `evidence_attached`, came in 994d4e39c with
-  every first-class record, 3,864 lines. The mission closeout gates of
-  be20d00e2 sit on a tree that holds the old tracker's records under
-  `.atelier-state/`, which the shared setup does not drop.
-- A configurable workflow file, and `workflow.yaml` with the workflow
-  crate: the file lives under `.atelier/`, which the shared setup drops,
-  and the crate came with the scaffold of 332d02f87.
-- A hard limit on lines of code: the limit was never in the tree. Its only
-  code, `scripts/count_non_test_rust.py`, came inside ace2d6814, a
-  2,130-line rewrite of the mission overview.
-- Sessions as records, and `land`: both came in f072b36ec, which no item
-  recorded: its message has no body and it changes no record, so the
-  fixture would have no Goal or Done when to review against. It is 1,948
-  lines.
-- Records on a separate branch: no one change built it that I could find.
-  The fork's first commit, afef575eb, already kept its locks on a branch of
-  their own, `chainlink/locks`, and no later commit's message names a
-  records branch.
-- A plan as its own branch: restored on 2026-11-13, so not unneeded.
-- Evidence records and commands: as evidence gates.
-- The light path: its change, c982acda1, is 3,249 lines. Base exemptions
-  replay.
-- `bundle`, `migrate`, `doctor`, `prune`: `bundle` came in an epic's squash
-  merge, 52f3c05a7, of 2,236 lines; `doctor` in c4e702a62 among the first
-  day's tracker work, 1,467 lines; `migrate` in 195a353dc, whose message
-  says its tests come in a later commit; and `prune`'s change, 3508231b2,
-  had no item of its own, only its mission's description, and no report.
-- `serve` and the site crate: 8ffbbfbcd, a change marked work in progress,
-  1,994 lines.
-- The nine `work` views and nine `review` subcommands: they became
-  `status`, `list`, `review` and `verdict`, so they were not removed as
-  unneeded. `work decisions` replays with the decision notes.
-- Strategy files and ADRs: documents a mission or a decision wrote, not a
-  change to the tool a reviewer would review as code.
-- What mission atelier-to83 considered: none was built.
-
-Their first results, on `sol` with no skill and with the skill, are in
-[results/2026-11-19-removed-replays.md](results/2026-11-19-removed-replays.md).
-
-## Sized reviews
-
-The five sized cases, from `overbuilt-generality` to `control-lean`, ask
-whether a reviewer can tell correct work that is bigger than its item needs
-(atelier-s6xk). In each, a small Python tool is tracked by Atelier with one
-item whose change is correct, whose suite passes, and whose new tests fail
-on main; the agent is its reviewer. Three changes are overbuilt: by
-generality nothing asks for, by a layer nothing needs, and by robustness
-against inputs that cannot happen. Two are controls: one large because its
-item is, and one lean. Every item's Scope allows new modules, so a reviewer
-cannot flag the extra parts as out of scope instead of unneeded.
-
-- They share one setup, [harness/sized.sh](harness/sized.sh), which builds
-  the fixture from the case's `fixture/`: `case.sh` (the item's ID, slug,
-  title and the change's commit message), `item.md` (Goal, Done when and
-  Scope), `report.md`, the tree on main (`base/`) and the files the change
-  writes (`change/`). They share one grader,
-  [harness/sized.py](harness/sized.py), and one set of tests,
-  [harness/sized_tests.py](harness/sized_tests.py). Each case's own rubric
-  says what its change holds and, in an overbuilt case, what its unneeded
-  part is.
-- An overbuilt case's lean reference is in its `lean/`: the files that,
-  over main's tree, make the smaller change meeting the same Goal and Done
-  when. Its test files are the Done when's tests. `test_grade.py` checks
-  that they pass on the reference and on the change, and fail on main, and
-  that no file of the reference's code is in the fixture. The reviewer
-  never sees it, and the judge reads it only as the rubric describes it.
-- A run of an overbuilt case passes when the judge reads a finding,
-  whatever its recommendation, as naming the unneeded part. A run of a
-  control passes when no finding asks for less. Whether that finding is
-  fix now is the reported `blocks`, which changes no grade.
-- Their first results, on `sol` with no skill and with the skill, are in
-  [results/2026-11-19-overbuilt-told-apart.md](results/2026-11-19-overbuilt-told-apart.md).
-
-## Later rounds
-
-The later-round cases, `later-round-cosmetic`, `later-round-wrong` and
-`later-round-fix-wrong`, ask whether a later round's brief narrows where a
-reviewer looks without hiding a real defect (atelier-d73k, atelier-t5tc).
-They share one item, a `week DATE` command for a timesheet tool, built by
-[harness/later_round.sh](harness/later_round.sh) from
-[harness/later-round/](harness/later-round/): round 1's change, a round-1
-review with two real fix-now findings, and a fix of both answered under
-Responses and submitted again. The agent is round 2's reviewer. Each case
-gives `week_lines` from its `fixture/week_lines.py`, the same at round 1's
-commit and at round 2's. In the first two its docstring and its sort
-disagree, so the flaw is in code the fix did not change: in
-`later-round-cosmetic` the code is right and the docstring wrong, and in
-`later-round-wrong` the docstring is right and the code lists the projects
-in the wrong order. In `later-round-fix-wrong` `week_lines` is right, and
-its `fixture/fix.patch`, applied over the fix, makes the fix's new
-`parse_day` refuse a real DATE on the 30th or 31st, so the flaw is in code
-the fix changed. They share one grader,
-[harness/later_round.py](harness/later_round.py), and one set of tests,
-[harness/later_round_tests.py](harness/later_round_tests.py), and run with
-the binary before a change to the brief and after it. Their first results
-are in
-[results/2026-11-19-later-round-brief.md](results/2026-11-19-later-round-brief.md),
-and `later-round-fix-wrong`'s in
-[results/2026-11-19-later-round-fix.md](results/2026-11-19-later-round-fix.md).
+Twelve of atelier's 15 after-merge rows replay. Row 28 (atelier-cej5) is a
+timeout seen only on macOS CI under load; row 57 (atelier-ov97) is a
+2,453-line diff, more than one reviewer can hold; row 69 (atelier-vo0z)
+touches only the release workflow, and its Report named the defect.
 
 ## Grading
 
 A grade has two parts. A case's `grade.py` prints facts: named values its
-code reads from the records, the tree and the run's `atelier` calls, which
-`harness/atelier_log.py` logs with their exit status, caller and any
-`ATELIER_SKIP` ([harness/facts.py](harness/facts.py)). A fact the grade rests
-on carries a pass; the others, such as the failed calls, are reported. What
-depends on meaning, such as whether a finding says the test cannot fail, is
-a question in the case's `rubric.md`, which a model reads
+code reads from the records, the tree and the run's `atelier` calls
+([harness/facts.py](harness/facts.py)). What depends on meaning, such as
+whether a finding says the test cannot fail, is a question in the case's
+`rubric.md`, which a model from another lab than the thread's reads
 ([harness/judge.py](harness/judge.py)). Each question names the role whose
-work it is about, says what a pass looks like, and is graded or reported.
+work it is about and is graded or reported. A run passes when every fact
+its grade rests on passes and every graded question is answered pass. Only
+an invalid run is graded `null`. No grader matches wording with a regular
+expression or parses a shell command.
 
-After a run the harness puts each question to the setup's judge for the lab
-of that role's agent, a model from another lab: in `house` the reviewer's
-questions go to Claude and the implementer's and lead's to Codex. A judge is
-given the rubric, the facts, the first agent's final reply, the review files
-the run wrote and the diff it left, in an empty directory of its own, and
-is not told the arm. It answers each question pass, fail or unknown with the
-line it rests on, and `result.json` keeps the answers (`rubric`), each
-judge's seconds and tokens (`judged`) and what failed (`failed`). A run
-passes when every fact its grade rests on passes and every graded question
-is answered pass. A graded question the judge cannot answer fails, with its
-reason. A reported answer is shown and changes no grade. Only an invalid run
-is graded `null`. `harness/judge.py <run dir>...` grades kept runs again with
-today's graders and rubrics, a case saved under its old name included
-(`RENAMED` in `harness/run.py`), and writes `rejudge.json` beside each result.
+The judge is given the rubric, the facts, the first agent's final reply,
+the review files and the diff, and not the arm. It answers pass, fail or
+unknown with the line it rests on, which the harness checks against what
+the judge was given. A graded question it cannot answer fails. `judge.py
+<run dir>...` grades kept runs again with today's graders and rubrics. The
+thirty runs read by hand for
+[results/2026-11-19-both-setups.md](results/2026-11-19-both-setups.md) all
+agreed with the judge.
 
-Every case grades this way (atelier-b9o6, atelier-xfsn, atelier-1tkg). No
-`grade.py` holds a regular expression over wording, and none reads a shell
-command: what the run did comes from the records, the tree, the call log
-and `delegate`'s log of the threads it started, with each thread's role and
-task.
+**Departures.** A lead may leave the process, a review included, if it gives
+its reason, and any thread may on the same terms. Every case records each
+`atelier` call or Git hook run with `ATELIER_SKIP` and each `merge
+--trivial`, with its reason and thread, as `departures_recorded`, and a
+reported question in every rubric asks whether each reason holds. No grader
+fails a run for a skip. A departure with no reason on the record fails the
+run (`departures_unrecorded`): a hook of Atelier's changed or made
+unrunnable, a commit the pre-commit hook would refuse, a commit on main's
+first-parent line that is no Atelier merge, or a merge of an item no other
+thread approved that is not trivial, unless a skip is tied to it.
 
-### Departures
+The fixtures share [scenarios/loop/lib.sh](scenarios/loop/lib.sh), which
+builds history the way today's binary and skill do. The two kept-finding
+cases share `kept-finding-wrong`'s `setup.sh` and facts. Each case's
+`test_grade.py` runs its `setup.sh` and drives the binary through passing
+and failing paths, with judged answers given as recorded ones.
 
-A lead may leave the process, a review included, if it gives its reason;
-any thread may, on the same terms. Every case shares the facts that tell a
-departure with its reason on the record from one without
-(`facts.departures`):
+## Replays
 
-- Recorded: each `atelier` call made with `ATELIER_SKIP` set, a Git hook's
-  included (a commit or push past a hook, a command past a rule), with its
-  reason and thread from the call log; and each item merged with `merge
-  --trivial`, with the reason its record keeps and the thread that merged
-  it. These are reported as `departures_recorded`, and each case's rubric
-  has a reported question, `reasons`, on whether each reason holds. No
-  grader fails a run for setting `ATELIER_SKIP`.
-- Unrecorded, read from the state: a hook of Atelier's changed or made
-  unrunnable, or `core.hooksPath` set; a commit the binary's own pre-commit
-  hook refuses, a catch-up merge included, replayed on its first parent with
-  the merge's state as Git gave it to the hook (a status written by hand, a
-  record that does not validate); a commit on main's first-parent line that is no
-  Atelier merge, and with an origin, on origin's main; an Atelier merge
-  whose item no other thread approved and that is not trivial. Each counts
-  as recorded instead where the skip that let it through is tied to it: the
-  commit's own `Atelier-Skip` trailer, which a command past a rule writes;
-  the pre-commit hook run with `ATELIER_SKIP` for that commit, the call that
-  judged the commit's own tree just before it; or for origin, a pre-push
-  hook run with it for a push to origin whose update of main carried the
-  commit. The call log keeps the tree each pre-commit hook judged and the
-  refs Git gave each pre-push hook. A skip on any other call covers
-  nothing. Any left is `departures_unrecorded`, which
-  fails the run.
+The replay cases share one setup, [harness/replay.py](harness/replay.py),
+and one rubric, [harness/replay-rubric.md](harness/replay-rubric.md). Each
+`case.toml` names its row in defects.md, the causing item, the base, change
+and fix commits, the defect in a sentence, and the item's text as it stood.
 
-The setups share
-`scenarios/loop/lib.sh`, which builds the fixture's history the way
-today's binary and skill do it: an item's work on its own branch (`begin`),
-a verdict committed with its review (`judge`), record changes on a backlog
-branch merged with no review (`backlog` and `merged`), and a mission's plan
-on its own branch, merged on two plan reviews. Every grader reports failed
-`atelier` calls across all of a run's threads, from the call log. On main a
-started item's record reads as done (`base_status`), as the binary reads
-it, since it reaches main only in its own merge; a merge of a backlog or
-mission branch is accepted where it changes records alone. Each `test_grade.py` runs `setup.sh` and drives the
-binary through a passing path and failing ones, with a judged case's answers
-given as recorded ones and no model: `python3 -m unittest` in the
-scenario's directory, with `EVAL_ATELIER` naming the binary, or
-`evals/agent-factory/test.sh` for all of them.
+- The fixture is this repository's tree at the base, read from the
+  harness's checkout, which needs the whole history. The old tracker's
+  files and the files that told its process (`CONTRIBUTING.md`, the pull
+  request template, `AGENTFACTORY.md`, and AGENTS.md's process lines) are
+  left out. Today's binary tracks it with one item, submitted for review on
+  its branch. It has no remote and no history after the change.
+- The run is confined ([harness/confine.py](harness/confine.py)), since the
+  repository is public and the case files name the fix. Under bubblewrap it
+  sees its work directory, the system, the agent, the Rust toolchain, a
+  cargo cache and its sign-in, and its network reaches only its model's
+  API. A run whose transcript shows the fix's commit or subject, the bug
+  item's ID or a web search is invalid (`replay.leak`).
+- The judge is given the defect and both diffs, and the lines of each file a
+  review cites as the branch held them, so a finding resting on material it
+  lacks is answered unknown, not unsupported.
+- A reviewer may build with cargo, offline, in its own `target/`.
+
+## Removal replays
+
+The five removal replays (atelier-ad0z) run on the setup, confinement and
+judge of the defect replays, with no change to either. Each replays a
+change whose part a row of Tried and removed in
+[docs/design.md](../../docs/design.md#tried-and-removed) names.
+
+- Each `case.toml` holds the fields `harness/replay.py` names for a defect,
+  holding the removal: `defect` is the part later removed with design.md's
+  reason, `fix` the commit that removed it, and `defect_item` its item. It
+  also names the `table` and `row` of Tried and removed, the row's
+  `reason`, the `part`, and `gone`, a string the change added under
+  `crates/` that the removal took out. All five went in 819024c75, which
+  deleted the old workspace at the rewrite to 0.5; `--one-way` went first,
+  in 60b995d1e.
+- They share one rubric, which tells the judge that the later fix is the
+  whole old workspace's deletion, cut short. Whether the finding that
+  questions the part is fix now is the reported `blocks`, and whether the
+  code supports each other fix-now finding is the reported
+  `others-supported`.
+- [harness/removed_tests.py](harness/removed_tests.py) checks that each
+  case names its row with design.md's reason, that its base is the
+  change's parent, that the removal comes after and takes `gone` out of
+  `crates/`, and that recorded reviews grade as the rubric says.
+
+The other rows of Tried and removed do not replay, each for one of these
+reasons: no single change built it (records on a separate branch, review
+providers and Forgejo across 13 commits, the evidence records); its change
+is too large for one review (the SQLite cache's rebuild, 3,152 lines;
+evidence gates, 3,864; the light path, 3,249; `bundle`, 2,236; `serve` and
+the site crate, 1,994); the shared setup drops what it configures
+(transition actions in `.atelier/workflow.yaml`, the workflow file and
+crate, the closeout gates under `.atelier-state/`); the change has no item
+to review against (sessions and `land` in f072b36ec, `prune` in
+3508231b2, `migrate` in 195a353dc, `doctor` among the first day's work);
+it was never in the tree (the hard limit on lines of code) or never built
+(atelier-to83's options); or it was not removed as unneeded (a plan as its
+own branch, restored on 2026-11-13; the nine `work` views and `review`
+subcommands, folded into today's commands; strategy files and ADRs, which
+are documents).
+
+## Sized reviews
+
+The five sized cases (atelier-s6xk) each track a small Python tool with
+one item whose change is correct, whose suite passes, and whose new tests
+fail on main; the agent is its reviewer. Every item's Scope allows new
+modules, so a reviewer cannot call the extra parts out of scope instead of
+unneeded.
+
+- They share one setup, [harness/sized.sh](harness/sized.sh), which builds
+  the fixture from the case's `fixture/` (`case.sh`, `item.md`,
+  `report.md`, the tree on main in `base/` and the change in `change/`),
+  one grader, [harness/sized.py](harness/sized.py), and one set of tests,
+  [harness/sized_tests.py](harness/sized_tests.py). Each case's rubric says
+  what its change holds and, in an overbuilt case, what its unneeded part
+  is.
+- An overbuilt case's `lean/` holds the smaller change that meets the same
+  Goal and Done when. `test_grade.py` checks that the Done when's tests
+  pass on it and on the change and fail on main, and that none of its code
+  is in the fixture. The reviewer never sees it.
+- Whether a passing overbuilt run's finding is fix now is the reported
+  `blocks`, which changes no grade.
+
+## Later rounds
+
+The three later-round cases (atelier-d73k, atelier-t5tc) share one item, a
+`week DATE` command for a timesheet tool, built by
+[harness/later_round.sh](harness/later_round.sh) from
+[harness/later-round/](harness/later-round/): round 1's change, a round-1
+review with two real fix-now findings, and a fix of both, answered under
+Responses and submitted again. The agent is round 2's reviewer. Each case
+gives `week_lines` from its `fixture/week_lines.py`, the same at both
+rounds' commits: in `later-round-cosmetic` its code is right and its
+docstring wrong, and in `later-round-wrong` the reverse. In
+`later-round-fix-wrong` `week_lines` is right, and `fixture/fix.patch`
+makes the fix's new `parse_day` refuse real dates. They share one grader,
+[harness/later_round.py](harness/later_round.py), and its tests,
+[harness/later_round_tests.py](harness/later_round_tests.py), and run with
+the binary before and after a change to the brief
+([results/2026-11-19-later-round-brief.md](results/2026-11-19-later-round-brief.md),
+[results/2026-11-19-later-round-fix.md](results/2026-11-19-later-round-fix.md)).
 
 ## Running
 
-Build `atelier` from this tree and copy it somewhere first, so a rebuild
-cannot change it under a running agent; `EVAL_ATELIER` names the copy, and
-each setup copies it into the run's `bin/`. Pin `--ref` to the skill's
-commit:
+Build `atelier` and copy it, so a rebuild cannot change it under a running
+agent, and pin `--ref` to the skill's commit:
 
 ```bash
 cargo build -p atelier-cli
 sha=$(git rev-parse --short HEAD)
 mkdir -p /var/tmp/af-evals/bin && cp target/debug/atelier /var/tmp/af-evals/bin/atelier-$sha
 export EVAL_ATELIER=/var/tmp/af-evals/bin/atelier-$sha
-python3 evals/agent-factory/harness/run.py vacuous-test-review costly-hardening \
-  --setup house --arms none,skill --ref $sha --runs 3 \
-  --out ~/.cache/af-evals/runs/<name>
+run=evals/agent-factory/harness/run.py
+loop="loop loop-changes non-atelier-repo settle-within-authority \
+  kept-finding-wrong kept-finding-right three-findings lead-looks-trivial \
+  lead-stalled-item done-when-conflict vacuous-test-review costly-hardening \
+  overbuilt-generality overbuilt-layer overbuilt-robustness control-large control-lean \
+  later-round-cosmetic later-round-wrong later-round-fix-wrong"
+replays="approval-follow-up base-record-commits base-done-claims merge-sync \
+  brief-transitions hierarchy-rules project-slug quiet-tokens priority-contract \
+  readiness-blockers after-merge-checks touched-claims \
+  removed-merge-sync removed-merge-wait removed-base-exemption removed-debrief \
+  removed-decision-notes"
+for setup in sol house; do
+  python3 $run $loop --setup $setup --ref $sha --runs 5 --out <out>/$setup
+  python3 $run refused-push --setup $setup --ref $sha --runs 5 --jobs 1 --out <out>/$setup-push
+  python3 $run $replays --setup $setup --ref $sha --runs 3 --out <out>/$setup-replays
+done
+python3 evals/agent-factory/harness/table.py <out>/sol <out>/house
 ```
 
-A matrix runs in a setup. `--setup` names one in `harness/setups/`:
+`refused-push` runs alone at `--jobs 1`, since its fixture's server binds
+port 8080. If a matrix stops, or runs end on a provider's limit, run the
+same command again: it makes only the runs missing from `--out` or graded
+`null`, and keeps a graded run made in the same setup, on the same binary
+and from the same skill commit.
+
+A setup names an agent, model and effort for each role, and a judge for each
+lab its threads come from, from another lab ([harness/setups/](harness/setups/)):
 
 | Setup | Lead | Implementer | Reviewer | Judges |
 | --- | --- | --- | --- | --- |
 | `sol`, the work host's | Codex `gpt-6.1-sol`, `high` | the same | the same | Claude `claude-opus-5-5` |
 | `house`, this host's | Claude Code `claude-fable-5-2`, `high` | Claude Code `claude-opus-5-5`, `high` | Codex `gpt-6.1-sol`, `xhigh` | Codex `gpt-6.1-sol` for Anthropic's threads, Claude `claude-opus-5-5` for OpenAI's |
 
-A setup names a judge for each lab its threads come from, from another lab
-than that one, for the questions of meaning a model grades. `--agent`,
-`--model` and `--effort` instead give a setup of one model in every role, for
-a new model's first run (`--agent codex --model gpt-6-luna --effort high`),
-named for its model and effort, whose judge is from the other lab. Each case
-names in `scenario.json` the `role` its first agent takes, and runs it as
-that role's agent, model and effort; a thread it starts for a role runs as
-that role's.
+`--agent`, `--model` and `--effort` give a setup of one model in every role
+instead, for a new model's first run. The `none` arm runs with no skills;
+the `skill` arm stages `--skill-dir` (default `skills/agent-factory`) from
+`--ref` as `agent-factory`, for every agent the run can start. The contract
+between the harness and a case is the docstring of
+[harness/run.py](harness/run.py), and `harness/test_run.py` tests each rule
+below without starting an agent.
 
-Each setup's two arms, every case in one matrix, whose runs go side by
-side (see Runs at once):
+- **Isolation.** Agents run with no MCP servers and an allowlisted
+  environment, Claude Code with `--setting-sources project` and Codex with
+  `HOME` and `CODEX_HOME` in the work directory, plugins and apps off. Work
+  directories go under `--work-root` (default `/var/tmp/af-evals`), outside
+  `$HOME`, because Claude Code reads instruction files from every directory
+  above its own. Before a matrix, a canary run of each agent of the setup
+  must show it was given its repository's `AGENTS.md` and nothing else, or
+  the matrix aborts. A run is invalid, and graded `null`, if any thread
+  loaded an MCP server or a foreign skill, had the skill in the wrong arm,
+  ran another model or effort than its role's, or was offered a way to
+  start an agent the harness has not bounded; or if its first agent exited
+  non-zero, timed out or ended on a rate limit or a spent allowance.
+- **Threads.** A case with `"threads": true` gives each agent its own
+  `T3CODE_THREAD_ID`, as T3 Code does. In `sol` a thread starts another with
+  Codex's `spawn_agent` (`fork_turns` `"none"`); in every other setup with
+  `delegate <role> "<task>"`, which runs that role's agent and prints its
+  reply. The system prompt says how, and nothing about when. Within a run at
+  most two agents are alive, its first and one child.
+- **Runs at once.** `--jobs` (default 10) caps runs that build no Rust;
+  `--cargo-jobs` (default 3) caps the replays, which build with four cargo
+  jobs each. The human lifted the earlier limit of two eval agents on
+  2026-11-18 (atelier-u708).
+- **Unconfined.** Every case but the replays runs as you, with permissions
+  skipped and access to `$HOME` and the network, so run only cases you have
+  read. The replays need bubblewrap.
+- **Records.** Each run directory keeps `transcript.jsonl`, `final.md` and
+  `result.json`, which names its setup, binary and skill commit, and gives
+  each thread's role, model, effort, seconds and tokens, its failed
+  `atelier` calls, and the grade. Work directories of passing runs are
+  deleted unless `--keep`. Every graded run loses its cargo build output,
+  `--keep` or not; a replay's is about 2.5G, and on 2026-11-19 keeping it
+  filled this host's disk (atelier-scly). `results.jsonl` gathers a
+  matrix's runs, and `harness/table.py` prints its cells.
 
-```bash
-cases="loop loop-changes non-atelier-repo settle-within-authority refused-push \
-  kept-finding-wrong kept-finding-right three-findings lead-looks-trivial lead-stalled-item done-when-conflict \
-  vacuous-test-review costly-hardening \
-  approval-follow-up base-record-commits base-done-claims merge-sync \
-  brief-transitions hierarchy-rules project-slug quiet-tokens priority-contract \
-  readiness-blockers after-merge-checks touched-claims \
-  overbuilt-generality overbuilt-layer overbuilt-robustness control-large control-lean \
-  removed-merge-sync removed-merge-wait removed-base-exemption removed-debrief removed-decision-notes \
-  later-round-cosmetic later-round-wrong later-round-fix-wrong"
-run=evals/agent-factory/harness/run.py
-for setup in sol house; do
-  python3 $run $cases --setup $setup --ref $sha --runs 3 --out <out>/$setup
-done
-python3 evals/agent-factory/harness/table.py <out>/sol <out>/house
-```
+## Results
 
-If a matrix stops, or some of its runs end on a provider's limit, run the
-same command again: it makes only the runs missing from `--out` or invalid
-there, and keeps the others (see Runs at once).
+Recorded runs are in [results/](results/), newest last. Results before
+2026-11-18 name the cases with a `next-` prefix; `next-rebuttal-kept`
+became `kept-finding-wrong`, and `next-done-when-rewrite`, whose line could
+hold, was replaced by `done-when-conflict`. Replays recorded before
+atelier-s63j ran on fixtures that kept some of the old tracker's process
+text.
 
-`harness/table.py` prints a table from `results.jsonl`: for each setup, case
-and arm, its passes out of the graded runs, the runs graded `null`, and the
-median seconds and tokens in and out of the graded runs. Each matrix prints
-its own when it ends.
-
-- The `none` arm runs with no skills. The `skill` arm stages `--skill-dir`
-  (default `skills/agent-factory`) from `--ref` (default `HEAD`; only
-  committed content is used) under the name `agent-factory`: into the
-  workspace's `.claude/skills` for Claude Code, and into each scratch
-  `CODEX_HOME/skills` for Codex, where Codex (0.167 to 0.169) loads a
-  user's skills, for every agent of the setup a run can start.
-  Both arms use no MCP servers and an allowlisted environment with
-  `ATELIER_NO_UPDATE_CHECK=1`, since `atelier`'s update notice names the
-  host's own skill checkout; Claude Code runs use `--setting-sources
-  project`.
-- **Runs at once.** A matrix makes its runs side by side, under a cap
-  for each kind of run. `--cargo-jobs` (default 3) caps the runs that build
-  Rust, which are the replayed reviews (`"cargo": true`): each builds with
-  four cargo jobs, and this host's 12 cores hold about three such builds
-  at once. `--jobs` (default 10) caps all the others, cases with threads
-  included: their agents mostly wait on their models, so what limits them
-  is the provider's capacity and not the host (under a matrix running
-  them one at a time, this host sat at load 0.5 on 12 cores). Ten is what the human's ChatGPT Pro plan
-  was said on 2026-11-18 to bear, and the cap to lower if capacity errors
-  appear. `judge.py` takes `--jobs` too, with the same default.
-  Until 2026-11-18 at most two eval agents were alive at once, `--jobs`
-  above 2 was refused, and a matrix with threads or a replay ran one run
-  at a time. That limit was the human's, set on 2026-11-10 for mission
-  atelier-qr5s, for token cost and after ten agents building Rust pushed
-  this host's load to 45. They lifted it on 2026-11-18, since spend on an
-  eval is no concern and only the replays build Rust (atelier-u708).
-- Runs going at once share nothing a run writes. Each has its own work
-  directory, with its own `delegate` lock and log, agent homes
-  (`CODEX_HOME`s), links to the sign-in, `TMPDIR`, and for a replay its
-  own sandbox, proxy and `target/`. Only the crates the replays build from
-  are shared, in `<work root>/cargo-home`, which cargo locks. What is not
-  separated is the host's network: a fixture's server on a fixed port,
-  such as `refused-push`'s on 8080, is one port for every run that starts
-  it. `harness/test_run.py` runs two thread cases at once with stand-in
-  agents and checks each kept to its own.
-- **Within a run, at most two agents are alive**: its first agent and one
-  child. A scenario without threads is one agent: Claude Code's
-  agent-starting tools (`Agent`, `Task`, `Workflow`, `RemoteTrigger`,
-  `CronCreate`, `ScheduleWakeup`) are disallowed on its command line, and
-  Codex's `spawn_agent` is removed in its scratch config. In a setup of one
-  Codex model and effort, such as `sol`, the only way to start one is
-  `spawn_agent`, capped by `agents.max_threads = 1`, which counts every
-  subagent of the session with a turn running, so a child can start none,
-  and the first agent can neither start a second child nor give the first
-  a follow-up while one runs; `delegate` is not installed. In every other
-  setup, such as `house`, the only way is `delegate`, for Claude Code and
-  Codex alike, and `spawn_agent` is removed: it holds the run's lock while
-  its child runs, so a second call waits for the first child to end,
-  whatever their roles and agents; a child that calls it is refused with
-  one line; and a child still running when its run ends is killed. A pass
-  that needs a third thread, such as a reviewer for an implementer the lead
-  started, has the first agent start it after the earlier child's turn
-  ended. Each `result.json` records when every agent of its run ran: a
-  Codex subagent once per turn, from its session record, since it idles
-  between turns and an idle one runs nothing. The matrix prints
-  `matrix_peak_agents`, the most running at once across its runs, judges
-  included. (Until 2026-11-17 a subagent counted from its record's first
-  event to its last, which read 3 for a lead whose implementer had a second
-  turn after the reviewer ended; recomputed per turn, every such run read
-  2.) `harness/test_run.py` tests each rule without starting an agent.
-- **A run that ends on a provider's limit is invalid, not failed.** If its
-  first agent, a thread `delegate` started, or a judge ended on a rate
-  limit or a spent allowance, the run is graded `null` with the reason
-  `rate limit or spent allowance: <who> ended on '<what the provider
-  said>'` (`provider_limit` in `harness/run.py`). A limit the agent waited
-  out or retried past does not count. A `spawn_agent` subagent's limit is
-  read from its session record in `sessions/`, since its transcript in
-  `threads/` keeps no errors. Running the matrix again into the same
-  `--out` makes only its runs that are missing there or graded `null`: a
-  graded run in the same setup, its name, roles and judges unchanged, on
-  the same binary (`EVAL_ATELIER`) and, in the skill arm, from the same
-  skill commit and directory, is kept and counted in the table the matrix
-  prints. To sample again, raise `--runs` or use another `--out`.
-  `harness/table.py` leaves out a run graded `null` that a later result in
-  the same `results.jsonl` made again; files given together are separate
-  matrices, and none hides another's nulls.
-- Claude Code loads instruction files (`CLAUDE.md`, `AGENTS.md`,
-  `.claude/CLAUDE.md`, `.claude/rules/` and the like) from every directory
-  above its working directory, whatever `--setting-sources` says, so a run
-  under `$HOME` sees your `~/.claude/CLAUDE.md`. Work directories are
-  therefore made under `--work-root` (default `/var/tmp/af-evals`), which
-  must be outside `$HOME`. As a backstop, each run passes `claudeMdExcludes`
-  naming every such path above its working directory.
-- A Codex agent runs `codex exec` on its role's model at its role's effort
-  (`model_reasoning_effort`; until 2026-11-18 every Codex run took Codex's
-  default, `low` for `gpt-6.2-sol`, whatever its result said), with `HOME`
-  and `CODEX_HOME` in the work directory, so the host's `~/.codex`
-  instructions and `~/.agents/skills` are not loaded. A thread `delegate`
-  starts for a Codex role has a `CODEX_HOME` of its own,
-  `work/codex/<role>`. The host's Codex sign-in is linked into each scratch
-  home, never copied, and the links are removed when the run ends. Its
-  `config.toml` turns off plugins and apps, which otherwise download the
-  account's own plugin skills and connectors into the run. Codex's own
-  bundled system skills still load, as they do anywhere. What a Codex run
-  loaded is read from its own session record (`$CODEX_HOME/sessions`): a run
-  with a skill from anywhere but the staged one and the system skills, with
-  `agent-factory` in the wrong arm, or offered `spawn_agent` without threads
-  is invalid. `codex debug prompt-input` shows the same without calling a
-  model, and `harness/test_run.py` uses it. A Codex thread whose record
-  shows another model or effort than its role's is invalid too.
-- A scenario with `"threads": true` gives each agent its own
-  `T3CODE_THREAD_ID`, as T3 Code does (`setup.sh` gets the first one, so a
-  fixture can leave work that thread holds). Outside a setup of one Codex
-  model, `delegate <role> "<task>"` starts the role's agent, model and
-  effort as a new thread in the caller's directory and prints its final
-  reply; the system prompt describes it (`THREADS_NOTE` in
-  `harness/run.py`) and nothing else, and `delegate` writes the thread's
-  transcript to `threads/` in the run directory. In a setup of one Codex
-  model a thread starts a subagent with Codex's own `spawn_agent`, which
-  inherits its parent's model and effort and which the binary counts as a
-  thread of its own (`<thread>/<CODEX_THREAD_ID>`); the harness writes each
-  subagent's transcript to `threads/` from its session record, in the form
-  `codex exec --json` prints, and keeps the record in `sessions/`. Its
-  system prompt says how to start one (`CODEX_THREADS_NOTE`): `spawn_agent`
-  with `fork_turns` `"none"`, in the same words `THREADS_NOTE` uses for
-  `delegate`, and like it nothing about when or why. Until 2026-11-18 it was
-  told only that agents run as threads, so a no-skill Codex result from
-  before then may have ended at a request for leave to start a subagent, as
-  three on 2026-11-11 did and as atelier-aq82's runs of `lead-looks-trivial`
-  and `lead-stalled-item` did. Codex's own prompt also says to start no
-  subagent unless the user, an `AGENTS.md` or a skill asks for one.
-  `delegate` logs each thread it starts, with its role and task, in
-  `work/.agents.jsonl`. Every scenario but `non-atelier-repo`'s
-  feature needs `EVAL_ATELIER` set to the binary under test (see Running).
-- Before the matrix, a canary run of each agent of the setup, on Haiku for
-  Claude Code and `gpt-6-luna` for Codex, lists the instruction files it was
-  given. The harness aborts,
-  running no scenario, unless the run was given its repository's own
-  `AGENTS.md`, whose heading holds a random token, and nothing else, and its
-  own record shows no agent-starting tool and no foreign skill. Under Claude
-  Code the reply must quote the token. Under Codex the session record shows
-  what the model was given, so the canary reads the instruction files there
-  and needs only that the reply name no other file: on 2026-11-17 gpt-6-luna
-  answered `<repo>/AGENTS.md | NONE` with the file in its input, and aborted
-  a whole matrix. Its
-  transcript is kept in `--out`, and `harness/test_run.py` tests its verdict.
-- Every agent's init event is checked, every thread's included. A run whose
-  agent loaded MCP servers or had the skill in the wrong arm, or whose first
-  agent exited non-zero, timed out or produced no result, gets `"pass":
-  null` and an `"invalid"` reason instead of a grade.
-- The agent runs as you, with permissions skipped and full access to `$HOME`
-  and the network. Fixtures use local remotes, but nothing confines the agent,
-  so run scenarios you have read. Only the replay cases run confined, and they
-  need bubblewrap (`bwrap`): the harness refuses them without it.
-- The harness stages the skill from the ref when each run starts. Don't
-  commit skill changes during a matrix, or pin `--ref` to a SHA.
-- Each run directory in `--out` keeps `transcript.jsonl`, `final.md` and
-  `result.json`, with `work` linking to its work directory. Work
-  directories are deleted for passing runs unless `--keep` is given or the
-  grader set `needs_hand_grade`. The
-  harness keeps the others without their build output: once a run is
-  graded, whatever its grade and even with `--keep`, each cargo target
-  directory under its work directory is deleted, `repo/target` and any the
-  agent made elsewhere, such as under `tmp/`. A replayed review's is about
-  2.5G. The system may also age out `/var/tmp`
-  (systemd-tmpfiles commonly removes files there after 30 days). To keep
-  them longer, pass a `--work-root` that nothing cleans, outside `$HOME`.
-  `results.jsonl` gathers every run.
-- Each `result.json` names its setup and its first agent's role, and gives
-  the run's seconds; for each thread, the first included, its role, agent,
-  model, effort, seconds, exit and tokens in (with the cached part) and out
-  (`threads`), and their sum (`tokens`); and its failed `atelier` calls
-  (`atelier_failed`). The harness moves the fixture's `bin/atelier` to
-  `libexec/` and puts `harness/atelier_log.py` in its place, which logs each
-  call, a Git hook's included, with its exit status and its caller: the
-  thread Atelier names (a Codex subagent as `<parent>/<CODEX_THREAD_ID>`)
-  and, as `by`, the thread of `threads` that made it. A failed call is read
-  from that log and not parsed from a transcript.
-- Every scenario has fixtures for its grader, which `test.sh` runs. A
-  judge's answers are checked against the line it quotes, but a sample of
-  them still wants reading by hand: the mission's judge-holds criterion
-  reads thirty.
-
-Recorded runs are in [results/](results/). The replays recorded before
-atelier-s63j ran on fixtures that still held some of the old tracker's
-process: each kept `CONTRIBUTING.md` and the pull request template;
-`after-merge-checks`, `brief-transitions`, `merge-sync` and `quiet-tokens`
-kept AGENTS.md's `Missions` section, which names `atelier work missions`;
-and `hierarchy-rules` and `priority-contract` kept June 2026's whole
-AGENTS.md process, and `priority-contract` its `AGENTFACTORY.md`.
-The skill against no skill on the binary at the cutover, with the cuts it
-led to, is [results/2026-11-11-next-skill.md](results/2026-11-11-next-skill.md).
-The smoke run that showed the matrix runs on the branch model is
-[results/2026-11-17-branch-model-smoke.md](results/2026-11-17-branch-model-smoke.md).
-The first replayed reviews, and what one costs, are
-[results/2026-11-18-replayed-reviews.md](results/2026-11-18-replayed-reviews.md).
-Nine more, one `sol` review each, are
-[results/2026-11-18-nine-more-replays.md](results/2026-11-18-nine-more-replays.md).
-What an implementer does today with three findings, one right, one not worth
-building and one wrong, is
-[results/2026-11-18-three-findings.md](results/2026-11-18-three-findings.md),
-and the same case with atelier-hlsw's `not built` and without it, in `sol`
-and `house`, is [results/2026-11-19-say-no.md](results/2026-11-19-say-no.md).
+- [2026-11-11-next-skill.md](results/2026-11-11-next-skill.md): the skill
+  against no skill at the cutover, and the cuts it led to.
+- [2026-11-17-branch-model-smoke.md](results/2026-11-17-branch-model-smoke.md):
+  the matrix on the branch model.
+- [2026-11-18-replayed-reviews.md](results/2026-11-18-replayed-reviews.md)
+  and [2026-11-18-nine-more-replays.md](results/2026-11-18-nine-more-replays.md):
+  the first replays and what one costs.
+- [2026-11-18-three-findings.md](results/2026-11-18-three-findings.md) and
+  [2026-11-19-say-no.md](results/2026-11-19-say-no.md): an implementer
+  with three findings, before and after atelier-hlsw's `not built`.
+- [2026-11-19-overbuilt-told-apart.md](results/2026-11-19-overbuilt-told-apart.md):
+  the sized reviews.
+- [2026-11-19-removed-replays.md](results/2026-11-19-removed-replays.md):
+  the removal replays.
+- [2026-11-19-later-round-brief.md](results/2026-11-19-later-round-brief.md)
+  and [2026-11-19-later-round-fix.md](results/2026-11-19-later-round-fix.md):
+  the later rounds, before and after atelier-d73k's brief.
+- [2026-11-19-both-setups.md](results/2026-11-19-both-setups.md): both
+  setups, both arms and every case built before these; the skill before
+  atelier-mtzj; and in `sol` the skill cut to its Starting Another Thread
+  section.
