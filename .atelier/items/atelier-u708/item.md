@@ -3,12 +3,13 @@ schema: atelier.item
 schema_version: 3
 id: atelier-u708
 title: 'Run a matrix''s runs side by side: make the cap on runs at once a setting, by kind of run'
-status: ready
+status: building
 mission: atelier-kw8u
 labels: []
 priority: medium
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A3a9fab39-7f29-4732-8284-d6c07f2deac6%3Adelegate-task%3A9d593cd6-175c-4a28-a844-d3290c45da60
 ready:
   by: 'the human, by a side chat on 2026-11-18: lift the limit and run the matrix in parallel'
   at: 2026-11-19T03:43:07.963292839Z
