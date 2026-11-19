@@ -4,6 +4,7 @@ replaced by a fixed reply; setups; staging; validity; tokens; the log of
 it builds and `delegate` with a stand-in agent; and a run in a setup that
 mixes Claude Code and Codex, with stand-ins for both. Run with `python3 -m
 unittest` from this directory."""
+import concurrent.futures
 import contextlib
 import importlib.util
 import io
@@ -13,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -334,18 +336,11 @@ class LimitTest(unittest.TestCase):
         self.assertIn("`wait_agent`", spawn)
         self.assertNotIn("delegate", spawn)
 
-    def test_jobs_above_two_and_threads_above_one_are_refused(self):
-        self.assertIn("above 2", run.check_jobs(3, ["vacuous-test-review"]))
-        self.assertIsNone(run.check_jobs(2, ["vacuous-test-review",
-                                             "costly-hardening"]))
-        self.assertIn("--jobs 1", run.check_jobs(2, ["vacuous-test-review", "loop"]))
-        self.assertIsNone(run.check_jobs(1, ["loop"]))
-        refused = subprocess.run([sys.executable, str(HERE / "run.py"), "loop",
-                                  "--jobs", "2", "--out", str(self.tmp / "out")],
-                                 capture_output=True, text=True)
-        self.assertEqual(refused.returncode, 2)
-        self.assertIn("--jobs 1", refused.stderr)
-        self.assertFalse((self.tmp / "out").exists())
+    def test_only_the_replayed_reviews_build_rust(self):
+        rust = {d.name for d in run.SCENARIOS.iterdir() if run.builds_rust(d.name)}
+        replays = {d.name for d in run.SCENARIOS.iterdir() if (d / "case.toml").is_file()}
+        self.assertEqual(rust, replays)
+        self.assertEqual((run.CARGO_JOBS, run.JOBS), (3, 10))
 
     def test_only_a_pass_needing_no_hand_read_loses_its_work_directory(self):
         self.assertTrue(run.discard_work({"pass": True, "work_dir": "w"}, keep=False))
@@ -359,6 +354,59 @@ class LimitTest(unittest.TestCase):
         self.assertEqual(run.peak([{"start": 0, "end": 10}, {"start": 1, "end": 4},
                                    {"start": 4, "end": 9}]), 2)
         self.assertEqual(run.peak([{"start": 0, "end": 1}, {"start": 2, "end": 3}]), 1)
+
+
+class ProviderLimitTest(unittest.TestCase):
+    """provider_limit: whether an agent ended on its provider's rate limit or
+    spent allowance, from its transcript."""
+
+    def limit(self, *events):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "t.jsonl"
+            path.write_text("".join(json.dumps(e) + "\n" for e in events) + "not json\n")
+            return run.provider_limit(path)
+
+    def test_claude_code_ending_on_a_limit(self):
+        rejected = {"type": "rate_limit_event", "rate_limit_info": {
+            "status": "rejected", "rateLimitType": "seven_day"}}
+        self.assertEqual(self.limit(rejected), "Claude's seven_day limit: rejected")
+        self.assertEqual(self.limit(rejected, {"type": "result", "is_error": True,
+                                               "result": "You've hit your limit"}),
+                         "You've hit your limit")
+        self.assertEqual(self.limit({"type": "assistant", "error": "rate_limit", "message": {
+            "content": [{"type": "text", "text": "API Error: Request rejected (429)"}]}}),
+            "API Error: Request rejected (429)")
+        self.assertEqual(self.limit({"type": "assistant", "error": "billing_error",
+                                     "message": {"content": []}}), "billing_error")
+        self.assertEqual(self.limit({"type": "result", "is_error": True,
+                                     "result": "Credit balance is too low"}),
+                         "Credit balance is too low")
+
+    def test_codex_ending_on_a_limit(self):
+        self.assertEqual(self.limit({"type": "turn.failed", "error": {
+            "message": "You've hit your usage limit. Upgrade to Pro"}}),
+            "You've hit your usage limit. Upgrade to Pro")
+        self.assertEqual(self.limit({"type": "error", "message": "Quota exceeded. Check your "
+                                     "plan and billing details."}),
+                         "Quota exceeded. Check your plan and billing details.")
+
+    def test_a_limit_waited_out_or_another_ending_is_none(self):
+        warned = {"type": "rate_limit_event", "rate_limit_info": {"status": "allowed_warning"}}
+        rejected = {"type": "rate_limit_event", "rate_limit_info": {"status": "rejected"}}
+        reply = {"type": "assistant", "message": {"content": [{"type": "text", "text": "hi"}]}}
+        self.assertIsNone(self.limit(warned, {"type": "result", "result": "done"}))
+        self.assertIsNone(self.limit(rejected, reply))
+        self.assertIsNone(self.limit({"type": "result", "is_error": True,
+                                      "subtype": "error_max_budget_usd"}))
+        self.assertIsNone(self.limit({"type": "error", "message": "Reconnecting... 1/5 "
+                                      "(429 Too Many Requests)"},
+                                     {"type": "item.completed", "item": {}},
+                                     {"type": "turn.completed"}))
+        self.assertIsNone(self.limit({"type": "error", "message": "Reconnecting... 429"},
+                                     {"type": "turn.failed", "error": {
+                                         "message": "exceeded retry limit, last status: 500"}}))
+        self.assertIsNone(self.limit({"type": "turn.failed", "error": {"message": "stopped"}}))
+        self.assertIsNone(run.provider_limit(Path("/nonexistent/t.jsonl")))
 
 
 @unittest.skipUnless(shutil.which("codex"), "needs codex on PATH")
@@ -646,6 +694,24 @@ class MixedSetupTest(unittest.TestCase):
         self.assertIn("spawn_agent", run.thread_problem("none", thread, spec))
 
 
+class TableTest(unittest.TestCase):
+    def test_a_rerun_hides_its_own_null_and_not_another_matrix_s(self):
+        run_ = {"setup": "sol", "scenario": "c", "arm": "none", "index": 0, "seconds": 1}
+        null, graded = {**run_, "pass": None, "invalid": "x"}, {**run_, "pass": True}
+        with tempfile.TemporaryDirectory() as tmp:
+            a, b = Path(tmp, "a"), Path(tmp, "b")
+            a.mkdir(), b.mkdir()
+            (a / "results.jsonl").write_text(json.dumps(null) + "\n")
+            (b / "results.jsonl").write_text(json.dumps(graded) + "\n")
+            for order in ([a, b], [b, a]):
+                self.assertIn("| sol | c | none | 1 of 1 | 1 |",
+                              table.table(table.read(order)))
+            (a / "results.jsonl").write_text(json.dumps(null) + "\n" + json.dumps(graded) + "\n")
+            self.assertIn("| sol | c | none | 1 of 1 | 0 |", table.table(table.read([a])))
+            (a / "results.jsonl").write_text(json.dumps(graded) + "\n" + json.dumps(null) + "\n")
+            self.assertIn("| sol | c | none | 1 of 1 | 1 |", table.table(table.read([a])))
+
+
 class TokensTest(unittest.TestCase):
     def test_claude_and_codex_usage_count_alike(self):
         claude = {"input_tokens": 14, "cache_creation_input_tokens": 100,
@@ -719,7 +785,7 @@ class AtelierLogTest(unittest.TestCase):
 
 
 FAKE_AGENT = r'''
-import json, os, subprocess, sys, uuid
+import json, os, subprocess, sys, time, uuid
 from pathlib import Path
 agent, model, effort, prompt = sys.argv[1:5]
 ran_effort = Path(__file__).with_name("codex-effort").read_text() if agent == "codex" else effort
@@ -737,9 +803,48 @@ else:
         {"type": "turn_context", "payload": {"model": model, "effort": ran_effort}},
         {"type": "event_msg", "payload": {"type": "token_count",
                                           "info": {"total_token_usage": usage}}}]) + "\n")
+    if prompt.startswith("SPAWN"):
+        # A spawn_agent subagent whose turn meets the usage limit, and
+        # which recovers only if told to; the parent then ends normally.
+        kid, at = str(uuid.uuid4()), "2026-11-18T23:00:0{}Z"
+        child = [{"type": "session_meta", "payload": {"id": kid, "parent_thread_id": sid}},
+                 {"type": "turn_context", "payload": {"model": model, "effort": ran_effort}},
+                 {"timestamp": at.format(0), "type": "event_msg",
+                  "payload": {"type": "task_started"}},
+                 {"timestamp": at.format(1), "type": "event_msg", "payload": {
+                     "type": "error", "message": "You've hit your usage limit. Try again later."}}]
+        if Path(__file__).with_name("child-recovers").exists():
+            child.append({"timestamp": at.format(2), "type": "event_msg", "payload": {
+                "type": "item_completed", "item": {"type": "AgentMessage",
+                                                   "content": [{"text": "done"}]}}})
+        child.append({"timestamp": at.format(3), "type": "event_msg",
+                      "payload": {"type": "task_complete"}})
+        (day / f"rollout-2026-11-18T23-00-00-{kid}.jsonl").write_text(
+            "".join(json.dumps(e) + "\n" for e in child))
+# What this agent was given, for a test of runs going at once.
+home = os.environ.get("CODEX_HOME")
+with open(Path(os.environ["TMPDIR"]) / "seen.jsonl", "a") as seen:
+    seen.write(json.dumps({"agent": agent, "thread": os.environ.get("T3CODE_THREAD_ID"),
+                           "home": home, "cwd": os.getcwd(),
+                           "auth": bool(home) and Path(home, "auth.json").is_symlink()}) + "\n")
 if prompt.startswith("FIRST"):
     subprocess.run(["atelier", "submit"], stdout=sys.stderr)
     subprocess.run(["delegate", "reviewer", "review it"], stdout=sys.stderr)
+elif Path(__file__).with_name("child-sleep").exists():
+    time.sleep(float(Path(__file__).with_name("child-sleep").read_text()))
+if Path(__file__).with_name(f"{agent}-limit").exists():
+    # The provider's limit ends the agent's turn.
+    if agent == "claude":
+        print(json.dumps({"type": "rate_limit_event", "rate_limit_info": {
+            "status": "rejected", "rateLimitType": "five_hour"}}))
+        print(json.dumps({"type": "result", "subtype": "success", "is_error": True,
+                          "result": "You've hit your limit \u00b7 resets 5pm"}))
+    else:
+        print(json.dumps({"type": "error", "message": "You've hit your usage limit. "
+                          "Try again at 5:00 PM."}))
+        print(json.dumps({"type": "turn.failed", "error": {
+            "message": "You've hit your usage limit. Try again at 5:00 PM."}}))
+    sys.exit(1)
 final = "ok"
 if Path(__file__).with_name("final-link").exists():
     # A final reply that links a review file, as agents' replies do.
@@ -837,6 +942,86 @@ class RunOneTest(unittest.TestCase):
         self.assertIsNone(r["pass"])
         self.assertIn("(reviewer): it ran gpt-6.1-sol at low", r["invalid"])
 
+    def test_two_thread_runs_at_once_do_not_touch_one_another(self):
+        """Two runs of a threads case, side by side as a matrix makes them:
+        each first agent starts its own reviewer, and each run keeps its own
+        work directory, lock, log, agent homes and sign-in links."""
+        (self.tmp / "child-sleep").write_text("1")
+        with concurrent.futures.ThreadPoolExecutor(2) as pool:
+            runs = list(pool.map(lambda i: run.run_one(
+                "case", "none", "HEAD", run.load_setup("house"), i, self.tmp / "out",
+                self.tmp / "work"), (0, 1)))
+        a, b = runs
+        # They ran at once: each first agent started before the other ended.
+        first = [r["agents"][0] for r in runs]
+        self.assertLess(max(f["start"] for f in first), min(f["end"] for f in first))
+        self.assertGreater(run.peak(a["agents"] + b["agents"]), 2)
+        for r in runs:
+            self.assertIs(r["pass"], True, r.get("invalid"))
+            work, run_dir = Path(r["work_dir"]), Path(r["run_dir"])
+            # Within each run nothing changes: its first agent and one child.
+            self.assertEqual(r["peak_agents"], 2)
+            conf = json.loads((work / ".threads.json").read_text())
+            self.assertEqual((conf["lock"], conf["log"], conf["out"]),
+                             (str(work / ".threads.lock"), str(work / ".agents.jsonl"),
+                              str(run_dir / "threads")))
+            first_thread, reviewer = r["threads"]
+            self.assertEqual([t["thread"] for t in run.delegated_threads(work)],
+                             [reviewer["thread"]])
+            self.assertEqual([p.stem for p in (run_dir / "threads").glob("*.jsonl")],
+                             [reviewer["thread"]])
+            self.assertEqual(reviewer["tokens"], {"in": 300, "cached_in": 200, "out": 30})
+            seen = [json.loads(line) for line in
+                    (work / "tmp" / "seen.jsonl").read_text().splitlines()]
+            self.assertEqual([(s["agent"], s["thread"]) for s in seen],
+                             [("claude", first_thread["thread"]),
+                              ("codex", reviewer["thread"])])
+            # The reviewer's home was its run's own, with the sign-in linked
+            # while it ran and gone after.
+            self.assertEqual(seen[1]["home"], str(run.role_home(work, "reviewer")))
+            self.assertTrue(seen[1]["auth"])
+            self.assertFalse((run.role_home(work, "reviewer") / "auth.json").is_symlink())
+            self.assertEqual(len(list(run.role_home(work, "reviewer")
+                                      .glob("sessions/**/rollout-*.jsonl"))), 1)
+            self.assertEqual([(c["argv"], c["by"]) for c in r["atelier_failed"]],
+                             [(["submit"], first_thread["thread"])])
+        self.assertNotEqual(a["work_dir"], b["work_dir"])
+        self.assertNotEqual(a["threads"][1]["thread"], b["threads"][1]["thread"])
+
+    def test_a_thread_that_ends_on_its_providers_limit_makes_the_run_invalid(self):
+        (self.tmp / "codex-limit").write_text("")
+        r = self.run_house()
+        self.assertIsNone(r["pass"])
+        self.assertEqual(r["invalid"], f"{run.LIMIT_REASON}: thread {r['threads'][1]['thread']} "
+                         "ended on \"You've hit your usage limit. Try again at 5:00 PM.\"")
+
+    def run_sol_spawning(self):
+        case = self.tmp / "scenarios" / "case"
+        (case / "prompt.md").write_text("SPAWN {{skill}}go")
+        (self.tmp / "codex-effort").write_text("high")
+        return run.run_one("case", "none", "HEAD", run.load_setup("sol"), 0,
+                           self.tmp / "out", self.tmp / "work")
+
+    def test_a_spawn_agent_subagent_that_ends_on_its_limit_makes_the_run_invalid(self):
+        r = self.run_sol_spawning()
+        self.assertEqual((r["exit"], r["pass"]), (0, None))
+        kid = r["threads"][1]["thread"]
+        self.assertTrue(kid.startswith("codex-"))
+        self.assertEqual(r["invalid"], f"{run.LIMIT_REASON}: thread {kid} ended on "
+                         "\"You've hit your usage limit. Try again later.\"")
+
+    def test_a_spawn_agent_subagent_that_recovers_from_a_limit_keeps_its_grade(self):
+        (self.tmp / "child-recovers").write_text("")
+        r = self.run_sol_spawning()
+        self.assertIs(r["pass"], True, r.get("invalid"))
+
+    def test_a_first_agent_that_ends_on_its_providers_limit_is_invalid_with_why(self):
+        (self.tmp / "claude-limit").write_text("")
+        r = self.run_house()
+        self.assertEqual((r["pass"], r["exit"]), (None, 1))
+        self.assertEqual(r["invalid"], f"{run.LIMIT_REASON}: the first agent ended on "
+                         "\"You've hit your limit · resets 5pm\"")
+
 
 FAKE_JUDGE = r"""
 import json, re, sys
@@ -850,6 +1035,10 @@ here = Path(__file__).parent
 (here / "judge-cwds" / model).write_text(str(Path.cwd()))
 if (here / "judge-exits").exists():
     sys.exit(3)
+if (here / "judge-limit").exists() and agent == "codex":
+    print(json.dumps({"type": "turn.failed", "error": {
+        "message": "exceeded retry limit, last status: 429 Too Many Requests"}}))
+    sys.exit(1)
 asked = re.findall(r"^- (\S+) \(about the", prompt.split("# Your questions", 1)[1], re.M)
 told = json.loads((here / "judge-answers.json").read_text())
 # The line it quotes is the run's final reply, which the material holds.
@@ -1029,6 +1218,13 @@ class JudgeTest(unittest.TestCase):
                           r["failed"])
             self.assertTrue((Path(r["run_dir"]) / "result.json").is_file())
 
+    def test_a_judge_that_ends_on_its_providers_limit_makes_the_run_invalid(self):
+        (self.tmp / "judge-limit").write_text("")
+        r = self.run_house()
+        self.assertIsNone(r["pass"])
+        self.assertEqual(r["invalid"], f"{run.LIMIT_REASON}: the judge (gpt-6.1-sol) ended on "
+                         "'exceeded retry limit, last status: 429 Too Many Requests'")
+
     def test_an_invalid_run_is_null_and_not_judged(self):
         (self.tmp / "codex-effort").write_text("low")
         r = self.run_house()
@@ -1207,8 +1403,8 @@ class MainTest(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
         shutil.rmtree(self.work_root, ignore_errors=True)
 
-    def main(self, *args):
-        sys.argv = ["run.py", "vacuous-test-review", "--arms", "none",
+    def main(self, *args, cases=("vacuous-test-review",)):
+        sys.argv = ["run.py", *cases, "--arms", "none",
                     "--out", str(self.tmp / "out"), "--work-root", str(self.work_root),
                     *args]
         out = io.StringIO()
@@ -1233,6 +1429,116 @@ class MainTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self.main("--setup", "sol", "--model", "x")
         self.assertEqual(self.canaries, [])
+
+    def test_runs_go_side_by_side_under_a_cap_for_each_kind(self):
+        """Runs that build Rust count against --cargo-jobs, all others, a
+        case with threads included, against --jobs, and both kinds run at
+        once."""
+        cases = self.tmp / "scenarios"
+        for name, meta in (("build", {"cargo": True}), ("talk", {}), ("chat", {"threads": True})):
+            (cases / name).mkdir(parents=True)
+            (cases / name / "scenario.json").write_text(json.dumps({"role": "reviewer", **meta}))
+        saved, run.SCENARIOS = run.SCENARIOS, cases
+        lock, going, most = threading.Lock(), {"rust": 0, "other": 0}, {"rust": 0, "other": 0}
+        overlap = []
+
+        def fake_run(scenario, arm, ref, setup, index, out, root, skill_dir):
+            kind = "rust" if scenario == "build" else "other"
+            with lock:
+                going[kind] += 1
+                most[kind] = max(most[kind], going[kind])
+                overlap.append(going["rust"] > 0 and going["other"] > 0)
+            time.sleep(0.05)
+            with lock:
+                going[kind] -= 1
+            return {"scenario": scenario, "arm": arm, "setup": setup["name"], "index": index,
+                    "pass": True, "seconds": 1, "run_dir": "", "agents": []}
+        run.run_one = fake_run
+        try:
+            printed = self.main("--setup", "sol", "--runs", "8", "--jobs", "3",
+                                "--cargo-jobs", "2", cases=("build", "talk", "chat"))
+        finally:
+            run.SCENARIOS = saved
+        self.assertEqual(most, {"rust": 2, "other": 3})
+        self.assertTrue(any(overlap))
+        self.assertIn('"runs": 24', printed)
+        self.assertIn("| sol | chat | none | 8 of 8 |", printed)
+
+    def test_a_matrix_run_again_makes_only_its_missing_and_invalid_runs(self):
+        out = self.tmp / "out"
+        out.mkdir()
+        ref = subprocess.run(["git", "-C", str(run.REPO), "rev-parse", "--short", "HEAD"],
+                             capture_output=True, text=True, check=True).stdout.strip()
+        sol = run.load_setup("sol")
+        case = {"scenario": "vacuous-test-review", "setup": "sol", "seconds": 5,
+                "run_dir": "", "agents": [], "roles": sol["roles"], "judges": sol["judges"]}
+        before = [
+            {**case, "arm": "none", "index": 0, "pass": False},
+            {**case, "arm": "none", "index": 1, "pass": None,
+             "invalid": f"{run.LIMIT_REASON}: the first agent ended on 'x'"},
+            {**case, "arm": "skill", "index": 0, "pass": True, "skill_ref": ref,
+             "skill_dir": run.DEFAULT_SKILL_DIR},
+            {**case, "arm": "skill", "index": 1, "pass": True, "skill_ref": "0000000",
+             "skill_dir": run.DEFAULT_SKILL_DIR},
+            {**case, "arm": "none", "index": 0, "pass": True, "setup": "house"},
+        ]
+        (out / "results.jsonl").write_text("".join(json.dumps(r) + "\n" for r in before))
+        made = []
+        run.run_one = lambda scenario, arm, ref_, setup, index, out_, root, skill_dir: made.append(
+            (arm, index)) or {**case, "arm": arm, "index": index, "pass": True,
+                              "skill_ref": ref_[:len(ref)] if arm == "skill" else None,
+                              "skill_dir": skill_dir if arm == "skill" else None}
+        printed = self.main("--setup", "sol", "--arms", "none,skill", "--runs", "2")
+        # The failed run and the skill's run from this ref are kept; the
+        # invalid one, the one from another skill, and those of another
+        # setup are made.
+        self.assertEqual(sorted(made), [("none", 1), ("skill", 1)])
+        self.assertIn('{"kept": 2, "making": 2', printed)
+        self.assertIn("| sol | vacuous-test-review | none | 1 of 2 | 0 |", printed)
+        self.assertIn("| sol | vacuous-test-review | skill | 2 of 2 | 0 |", printed)
+        # The table of the whole output leaves out the invalid run made again.
+        whole = table.table(table.read([out]))
+        self.assertIn("| sol | vacuous-test-review | none | 1 of 2 | 0 |", whole)
+        made.clear()
+        printed = self.main("--setup", "sol", "--arms", "none,skill", "--runs", "2")
+        self.assertEqual((made, self.canaries.count("codex")), ([], 1))
+        self.assertIn('{"kept": 4, "making": 0', printed)
+
+    def test_another_binary_or_skill_dir_makes_the_run_again(self):
+        sol = run.load_setup("sol")
+        old = {"scenario": "vacuous-test-review", "setup": "sol", "arm": "none", "index": 0,
+               "pass": True, "atelier": "/var/tmp/af-evals/bin/atelier-old",
+               "roles": sol["roles"], "judges": sol["judges"]}
+        kept = run.kept_runs([old], sol, None, run.DEFAULT_SKILL_DIR,
+                             "/var/tmp/af-evals/bin/atelier-new")
+        self.assertEqual(kept, {})
+        self.assertEqual(len(run.kept_runs([old], sol, None, run.DEFAULT_SKILL_DIR, None)), 1)
+        skill = {**old, "arm": "skill", "skill_ref": "abc1234", "skill_dir": "skills/other"}
+        self.assertEqual(run.kept_runs([skill], sol, "abc1234ff", run.DEFAULT_SKILL_DIR,
+                                       None), {})
+
+    def test_a_setup_changed_under_its_name_makes_its_runs_again(self):
+        """A role or a judge edited in setups/sol.json is another setup, so
+        its matrix makes every run again."""
+        sol = run.load_setup("sol")
+        old = {"scenario": "vacuous-test-review", "setup": "sol", "arm": "none", "index": 0,
+               "pass": True, "roles": sol["roles"], "judges": sol["judges"]}
+        self.assertEqual(len(run.kept_runs([old], sol, None, run.DEFAULT_SKILL_DIR, None)), 1)
+        role = {**sol, "roles": {**sol["roles"], "reviewer": {
+            **sol["roles"]["reviewer"], "effort": "xhigh"}}}
+        judge = {**sol, "judges": {"openai": {**sol["judges"]["openai"], "model": "x"}}}
+        for changed in (role, judge):
+            self.assertEqual(run.kept_runs([old], changed, None, run.DEFAULT_SKILL_DIR,
+                                           None), {})
+        out = self.tmp / "out"
+        out.mkdir()
+        (out / "results.jsonl").write_text(json.dumps({**old, "roles": role["roles"]}) + "\n")
+        made = []
+        run.run_one = lambda scenario, arm, ref_, setup, index, *rest: made.append(
+            index) or {**old, "index": index}
+        printed = self.main("--setup", "sol")
+        self.assertEqual(made, [0])
+        self.assertIn('{"kept": 0, "making": 1', printed)
 
 
 class ProductMapTest(unittest.TestCase):
