@@ -3,12 +3,13 @@ schema: atelier.item
 schema_version: 3
 id: atelier-7h71
 title: Find why reviews with the skill miss a defect that reviews without it find
-status: ready
+status: building
 mission: atelier-kw8u
 labels: []
 priority: medium
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A2ec81be6-36b2-4b12-a37f-0052f9f2be6c%3Adelegate-task%3A7475e1ef-65b3-43de-bfd9-7c2f5a5d8c6b
 ready:
   by: 'the lead of atelier-kw8u: the matrix found the skill costing a reviewer a defect, and atelier-oiwy should not add passages before it is understood'
   at: 2026-11-19T11:37:11.739669970Z
