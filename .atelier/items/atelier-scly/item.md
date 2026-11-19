@@ -3,12 +3,13 @@ schema: atelier.item
 schema_version: 3
 id: atelier-scly
 title: Delete a replayed review's build output once it is graded, so a matrix cannot fill the disk
-status: ready
+status: building
 mission: atelier-kw8u
 labels: []
 priority: medium
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A90b6e89e-5f0b-4a65-9258-88eb6abe0d8b%3Adelegate-task%3A653e24dd-a76a-40f9-ab1c-4f07a3b8c3f9
 ready:
   by: 'the lead of atelier-kw8u: replayed reviews filled the host''s disk twice on 2026-11-19'
   at: 2026-11-19T10:32:10.603919033Z
