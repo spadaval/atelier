@@ -111,6 +111,12 @@ pub enum Happened {
     Close {
         status: Move,
     },
+    /// A commit that passed a rule and in which no action above is found,
+    /// such as the merge of a plan or a `set` of a started item: shown so
+    /// that no passed rule goes unseen. `merge` when it is an Atelier merge.
+    Passed {
+        merge: bool,
+    },
 }
 
 impl Happened {
@@ -128,6 +134,8 @@ impl Happened {
             Happened::Ready { .. } => "ready",
             Happened::Drop { .. } => "drop",
             Happened::Close { .. } => "close",
+            Happened::Passed { merge: true } => "merge",
+            Happened::Passed { merge: false } => "change",
         }
     }
 
@@ -143,6 +151,7 @@ impl Happened {
             Happened::Lead { .. } => 6,
             Happened::Ready { .. } => 7,
             Happened::Drop { .. } | Happened::Close { .. } => 8,
+            Happened::Passed { .. } => 9,
         }
     }
 
@@ -160,6 +169,7 @@ impl Happened {
                 | Happened::Drop { .. }
                 | Happened::Close { .. }
                 | Happened::Lead { .. }
+                | Happened::Passed { .. }
         )
     }
 }
@@ -217,8 +227,12 @@ pub fn history(
         Some(id) => {
             validate_id(id).map_err(|message| anyhow::anyhow!(message))?;
             let mission = format!(".atelier/missions/{id}/mission.md");
-            let is_mission = repo.reader().blob(&format!("{base_tip}:{mission}"))?;
             let tip = tips.iter().find(|(name, _)| name == id);
+            // A proposed mission is only on its branch.
+            let mut is_mission = repo.reader().blob(&format!("{base_tip}:{mission}"))?;
+            if let (None, Some((_, tip))) = (&is_mission, tip) {
+                is_mission = repo.reader().blob(&format!("{tip}:{mission}"))?;
+            }
             let mut item = repo
                 .reader()
                 .blob(&format!("{base_tip}:{}", item_path(id)))?;
@@ -279,8 +293,8 @@ pub fn history(
     Ok(Some(history))
 }
 
-/// Whether the item `id`'s record, on the base's tip or else on its
-/// branch, names `mission`.
+/// Whether the item `id`'s record, on the base's tip, else on its branch,
+/// else on the mission's, names `mission`.
 fn in_mission(
     repo: &mut Repo,
     base_tip: &str,
@@ -290,8 +304,11 @@ fn in_mission(
 ) -> Result<bool> {
     let path = item_path(id);
     let mut text = repo.reader().blob(&format!("{base_tip}:{path}"))?;
-    if text.is_none() {
-        if let Some((_, tip)) = tips.iter().find(|(name, _)| name == id) {
+    for branch in [id, mission] {
+        if text.is_some() {
+            break;
+        }
+        if let Some((_, tip)) = tips.iter().find(|(name, _)| name == branch) {
             text = repo.reader().blob(&format!("{tip}:{path}"))?;
         }
     }
@@ -578,6 +595,12 @@ impl Walker<'_, '_> {
         if !pending.is_empty() {
             self.pending.insert(commit.hash.clone(), pending);
         }
+        if found.is_empty() && !commit.skips.is_empty() {
+            let merge = commit.parents.len() > 1;
+            for id in self.records_of(commit)? {
+                found.push((id, None, Happened::Passed { merge }));
+            }
+        }
         found.sort_by_key(|(_, _, action)| action.row());
         let carries = found.iter().any(|(_, _, action)| action.commits());
         for (id, thread, action) in found {
@@ -642,6 +665,47 @@ impl Walker<'_, '_> {
             new.implementers.holder().cloned(),
             action,
         )))
+    }
+
+    /// The IDs of the records `commit` changed, each once: for an Atelier
+    /// merge, the item or mission it names, else those its merge changed
+    /// against the base it merged into, as a backlog branch's merge does.
+    fn records_of(&mut self, commit: &Commit) -> Result<Vec<String>> {
+        let paths: Vec<String> = match commit.parents.as_slice() {
+            [base, _, ..] => {
+                if let Some(id) = commit.merged.as_ref().filter(|id| validate_id(id).is_ok()) {
+                    return Ok(vec![id.clone()]);
+                }
+                let listed = git::listing(
+                    &self.repo.root,
+                    &[
+                        "diff",
+                        "--name-only",
+                        "-z",
+                        "--no-renames",
+                        base,
+                        &commit.hash,
+                        "--",
+                        ".atelier/items",
+                        ".atelier/missions",
+                    ],
+                )?;
+                git::names(&listed)
+            }
+            _ => (commit.changes.iter())
+                .map(|change| change.path.clone())
+                .collect(),
+        };
+        let mut ids: Vec<String> = Vec::new();
+        for path in paths {
+            if let Some(record) = Record::of(&path) {
+                let id = record.id().to_string();
+                if !ids.contains(&id) {
+                    ids.push(id);
+                }
+            }
+        }
+        Ok(ids)
     }
 
     /// The version of the record at `path` whose blob is `blob`, read from

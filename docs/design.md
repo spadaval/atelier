@@ -1096,7 +1096,8 @@ command only formats it (`crates/atelier-cli/src/history.rs`).
 `atelier log` prints everything; `atelier log <item>` that item's actions;
 `atelier log <mission>` the actions on the mission, its plan reviews and its
 items, an item being the mission's when its record on the base's tip, or
-else on its branch, names it. `--since <time>` keeps the actions committed at
+else on its branch or the mission's, names it. A proposed mission, on its
+branch alone, is found there. `--since <time>` keeps the actions committed at
 or after an RFC 3339 time or a `YYYY-MM-DD` date, which is that day's start
 in UTC. An ID no record has on the base's tip or on a branch named for it is
 refused as `show` refuses it.
@@ -1112,6 +1113,7 @@ refused as `show` refuses it.
 | lead | A mission's `lead` is set or changes | That entry |
 | ready | An item's status becomes `ready`; on a mission in the old form, its status | None; the name given with `--by` |
 | drop, close | A status becomes `dropped`, or `done` outside a merge | None |
+| merge, change | A commit that passed a rule and in which none of the above is found, such as a plan's merge or a `set` of a started item: `merge` for an Atelier merge, else `change`, one line for each record it changed. An Atelier merge's record is the item or mission its `Atelier-Merge:` names, or, for a backlog branch, each record the merge changed | The thread that passed the rule |
 
 Where a commit passed a rule and names the thread that ran the command
 (`Atelier-Skip-By:`, see Hooks and the bypass), the line of the action
@@ -1163,6 +1165,7 @@ holds:
 | ready | The status move, then `by <name>` |
 | drop | The status move, then the reason the record's `Dropped:` line gives |
 | close | The status move |
+| merge or change, for a passed rule alone | Nothing but its skips |
 
 ### The walk
 

@@ -628,3 +628,132 @@ fn a_version_that_does_not_read_twice_stands_each_time_for_the_version_before_it
     );
     assert_eq!(actions.len(), 3, "{actions:?}");
 }
+
+/// `atelier` as `thread` with `ATELIER_SKIP` set to `reason`, which must
+/// succeed.
+fn skipping(root: &Path, thread: &str, reason: &str, args: &[&str]) -> Run {
+    let output = atelier_command(root, thread, args)
+        .env("ATELIER_SKIP", reason)
+        .output()
+        .unwrap();
+    let run = Run {
+        code: output.status.code().unwrap_or(-1),
+        stdout: String::from_utf8(output.stdout).unwrap(),
+        stderr: String::from_utf8(output.stderr).unwrap(),
+    };
+    assert_eq!(run.code, 0, "{}{}", run.stdout, run.stderr);
+    run
+}
+
+/// The page's `Rules passed:` lines, none when it has no such section.
+fn rules_passed(page: &str) -> Vec<String> {
+    let Some((_, after)) = page.split_once("\nRules passed:\n") else {
+        return Vec::new();
+    };
+    let section = after.split("\n\n").next().unwrap();
+    section.lines().map(str::to_string).collect()
+}
+
+#[test]
+fn a_proposed_plans_lead_and_merge_and_a_set_of_a_started_item_each_show_their_passed_rule() {
+    let scratch = Scratch::new(&[(ID, "ready")]);
+    let root = scratch.root();
+    // The plan, proposed on its own branch, with the item in it.
+    git(&root, &["switch", "-q", "-c", MISSION]);
+    write_mission(&root);
+    let path = format!(".atelier/missions/{MISSION}/mission.md");
+    fs::write(
+        root.join(&path),
+        read(&root, &path).replace("status: draft", "status: open"),
+    )
+    .unwrap();
+    git(&root, &["add", "-A"]);
+    git(&root, &["commit", "-qm", "Plan the mission"]);
+
+    // Led while still proposed: found on its branch.
+    let lead = "Lead it now";
+    let run = skipping(&root, "lead1", lead, &["lead", MISSION]);
+    run_then(&root, &run.stdout);
+    let led = short(&root, "HEAD");
+    let page = show(&root, MISSION);
+    let passed = rules_passed(&page);
+    assert_eq!(passed.len(), 1, "{page}");
+    assert!(
+        passed[0].starts_with(&format!("  {MISSION}, lead in {led}, by lead1: "))
+            && passed[0].ends_with(&format!(": {lead}")),
+        "{page}"
+    );
+    let lines = actions(&root, &log(&root, &[MISSION]));
+    assert!(
+        lines
+            .iter()
+            .any(|line| line.starts_with(&format!("{MISSION} lead lead1"))
+                && line.ends_with(&format!(": {lead} (by lead1)"))),
+        "{lines:?}"
+    );
+
+    // Merged without its two plan reviews: the merge changes no status,
+    // and its line still shows the rule.
+    let unreviewed = "Ada agreed the plan in conversation";
+    skipping(&root, "p1", unreviewed, &["merge"]);
+    let merged = short(&root, "main");
+    let page = show(&root, MISSION);
+    let passed = rules_passed(&page);
+    assert!(
+        passed.iter().any(|line| line
+            .starts_with(&format!("  {MISSION}, merge in {merged}, by p1: "))
+            && line.ends_with(&format!(": {unreviewed}"))),
+        "{page}"
+    );
+    let lines = actions(&root, &log(&root, &[MISSION]));
+    assert!(
+        lines.iter().any(
+            |line| line.starts_with(&format!("{MISSION} merge p1 skip "))
+                && line.ends_with(&format!(": {unreviewed} (by p1)"))
+        ),
+        "{lines:?}"
+    );
+
+    // A started item's priority set on a backlog branch: no action, and
+    // its rule still shows.
+    git(&root, &["checkout", "-q", "--detach", "main"]);
+    ok(atelier(&root, "t1", &["start", ID]));
+    git(&root, &["checkout", "-q", "--detach", "main"]);
+    ok(atelier(&root, "p1", &["start", "--backlog", "tidy"]));
+    let lower = "Ada lowered it";
+    let run = skipping(&root, "p1", lower, &["set", ID, "--priority", "low"]);
+    run_then(&root, &run.stdout);
+    let set = short(&root, "HEAD");
+    // Its backlog branch merged past a rule of its own, which the merge
+    // commit carries: it names the branch, so the records it changed are
+    // the merge's.
+    ok(atelier(&root, "p1", &["submit"]));
+    append(&root, &item_path(ID), "\nNot committed.\n");
+    let dirty = "Ada keeps the note";
+    skipping(&root, "p1", dirty, &["merge"]);
+    let backlog = short(&root, "main");
+    let rule = format!("{ID} is draft or ready (it is building)");
+    let page = show(&root, MISSION);
+    assert!(
+        rules_passed(&page).contains(&format!("  {ID}, change in {set}, by p1: {rule}: {lower}")),
+        "{page}"
+    );
+    assert!(
+        rules_passed(&page).iter().any(|line| line
+            .starts_with(&format!("  {ID}, merge in {backlog}, by p1: "))
+            && line.ends_with(&format!(": {dirty}"))),
+        "{page}"
+    );
+    let lines = actions(&root, &log(&root, &[ID]));
+    let n = lines.len();
+    assert_eq!(
+        lines[n - 2],
+        format!("{ID} change p1 skip {rule}: {lower} (by p1)"),
+        "{lines:?}"
+    );
+    assert!(
+        lines[n - 1].starts_with(&format!("{ID} merge p1 skip "))
+            && lines[n - 1].ends_with(&format!(": {dirty} (by p1)")),
+        "{lines:?}"
+    );
+}

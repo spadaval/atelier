@@ -107,6 +107,7 @@ fn changed(action: &Happened) -> Vec<String> {
         Happened::Drop { status, reason } => {
             [shown(status)].into_iter().chain(reason.clone()).collect()
         }
+        Happened::Passed { .. } => Vec::new(),
     }
 }
 

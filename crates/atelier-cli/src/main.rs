@@ -75,7 +75,7 @@ enum Command {
     ///
     /// Each line is the commit's time in UTC, the commit, the item or mission, the action, the thread that acted or `-` where no record holds one, then what changed, and last each rule its commit skipped as `skip <rule>: <reason> (by <thread>)`, or `(thread not recorded)` in a commit from before the thread was. Where a commit that passed a rule names the thread that ran the command, its action's line shows that thread. The first five hold no space; what changed and the skips are parts separated by `; `.
     ///
-    /// The actions are start, take-over, submit, review, verdict, merge, settle, lead, ready, drop and close. A status move reads `<from> -> <to>`, and `new` is a record the commit added. `log` sees commits, not commands: two actions on one record in one commit show as their net change. It adds nothing up; narrow its lines with grep.
+    /// The actions are start, take-over, submit, review, verdict, merge, settle, lead, ready, drop and close, and change: a commit that passed a rule and holds none of the others, which is `merge` when it is an Atelier merge. A status move reads `<from> -> <to>`, and `new` is a record the commit added. `log` sees commits, not commands: two actions on one record in one commit show as their net change. It adds nothing up; narrow its lines with grep.
     Log {
         /// An item or a mission.
         id: Option<String>,
