@@ -3,13 +3,15 @@ schema: atelier.item
 schema_version: 3
 id: atelier-d73k
 title: Say in a later round's brief what the round is for, and show with two cases that it narrows without hiding
-status: draft
+status: ready
 mission: atelier-8az0
 labels: []
 priority: medium
 blocked_by: []
 implementers: []
-ready: null
+ready:
+  by: 'the human, by a side chat on 2026-11-18: tell the main thread about all of this'
+  at: 2026-11-19T04:37:19.810241548Z
 trivial: null
 caused_by: null
 created_at: 2026-11-19T04:12:27.403171799Z
