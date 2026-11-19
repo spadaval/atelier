@@ -1048,7 +1048,7 @@ class JudgeTest(unittest.TestCase):
                 self.assertTrue(new is None or (Path(run.__file__).resolve().parents[1]
                                                 / "scenarios" / new / "grade.py").is_file())
         self.assertIsNone(run.case_dir("next-done-when-rewrite"))
-        self.assertEqual(run.case_dir("next-rebuttal-kept").name, "next-rebuttal-kept")
+        self.assertIsNone(run.case_dir("no-such-case"))
 
     def test_a_case_without_facts_keeps_its_own_grade(self):
         (self.tmp / "scenarios" / "case" / "grade.py").write_text(
