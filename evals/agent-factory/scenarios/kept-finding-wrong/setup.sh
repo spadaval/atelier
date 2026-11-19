@@ -17,6 +17,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 fixture=${2:-$here}/fixture
 bash "$here/../loop/setup.sh" "$work"
 source "$here/../loop/lib.sh"
+export PATH="$work/bin:$PATH"
 lead=$T3CODE_THREAD_ID planner=thread-0d9e8f7a impl=thread-4d1e9a7c
 id=slug-k3fa mission=slug-m4hy
 cd "$work/repo"

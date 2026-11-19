@@ -21,6 +21,9 @@ ID = kept.ID
 class GradeTest(kept.KeptFixture):
     CASE = HERE
 
+    def test_the_setup_calls_the_binary_under_test(self):
+        self.set_up_without_an_installed_atelier()
+
     def test_the_lead_s_status_shows_the_dispute(self):
         status = self.atelier("lead", "status")
         self.assertIn(f"{ID}/{self.r1} (kept in {self.r2})", status)

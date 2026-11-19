@@ -7,7 +7,10 @@ checks the grade the harness makes of the facts and of the judge's answers,
 given as recorded ones. KeptFixture serves kept-finding-right's tests too.
 """
 import importlib.util
+import os
 import re
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -100,11 +103,27 @@ class KeptFixture(loop.Fixture):
             self.atelier("impl2", "merge")
         self.sh("git", "switch", "-q", "main")
 
+    def set_up_without_an_installed_atelier(self):
+        """Run the case's setup.sh with no `atelier` on PATH but the copy it
+        makes of EVAL_ATELIER, which it must call: CI installs none, and an
+        installed one would build the fixture with another binary."""
+        path = os.pathsep.join(d for d in os.environ["PATH"].split(os.pathsep)
+                               if not (Path(d) / "atelier").exists())
+        work = Path(tempfile.mkdtemp(prefix=f"{self.CASE.name}-path-"))
+        out = subprocess.run(["bash", str(self.CASE / "setup.sh"), str(work / "w")],
+                             capture_output=True, text=True,
+                             env={**os.environ, "PATH": path, "T3CODE_THREAD_ID": "lead"})
+        subprocess.run(["rm", "-rf", str(work)])
+        self.assertEqual(out.returncode, 0, out.stderr)
+
     def needs_human_item(self):
         self.needs_human("lead", f"Rule on {ID}'s kept finding", "main")
 
 
 class GradeTest(KeptFixture):
+    def test_the_setup_calls_the_binary_under_test(self):
+        self.set_up_without_an_installed_atelier()
+
     def test_the_lead_s_status_shows_the_dispute(self):
         status = self.atelier("lead", "status")
         self.assertIn(f"You lead mission {MISSION}", status)
