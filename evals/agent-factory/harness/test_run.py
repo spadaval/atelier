@@ -356,7 +356,6 @@ class LimitTest(unittest.TestCase):
         self.assertEqual(run.peak([{"start": 0, "end": 1}, {"start": 2, "end": 3}]), 1)
 
 
-@unittest.skipUnless(shutil.which("codex"), "needs codex on PATH")
 class ProviderLimitTest(unittest.TestCase):
     """provider_limit: whether an agent ended on its provider's rate limit or
     spent allowance, from its transcript."""
@@ -410,6 +409,7 @@ class ProviderLimitTest(unittest.TestCase):
         self.assertIsNone(run.provider_limit(Path("/nonexistent/t.jsonl")))
 
 
+@unittest.skipUnless(shutil.which("codex"), "needs codex on PATH")
 class CodexPromptTest(unittest.TestCase):
     """Codex's own rendering of what a session is given, from the scratch
     home the harness builds (`codex debug prompt-input` calls no model)."""
