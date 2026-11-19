@@ -15,3 +15,18 @@ Opus, so the case can show what the change is for.
 The case has no lead agent, so it cannot show the lead's ruling. The lead
 left that: `kept-finding-wrong` and `kept-finding-right` already put a
 lead's ruling to the test.
+
+## 2026-11-19: the overbuilt cases are at their ceiling
+
+atelier-s6xk: on `gpt-6.1-sol` at `high`, ten runs a cell, reviews named
+the unneeded part in 29 of 30 with no skill and 30 of 30 with it, and asked
+for less in 0 of 40 control reviews. The skill changes whether the finding
+blocks: 20 of 30 without it, 30 of 30 with.
+
+The plan keeps atelier-ufbm's passage only where the three overbuilt cases
+pass more runs with it. At 30 of 30 they cannot, so by the plan's rule the
+passage is left out without having been tested. The lead added atelier-ad0z, which
+replays changes this repository built and later removed as unneeded, and
+made atelier-ufbm wait on it. Whether the passage may be kept on those
+cases is the human's to say, since it changes a criterion of the plan; the
+lead has asked.
