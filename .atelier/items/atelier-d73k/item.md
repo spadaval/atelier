@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-d73k
 title: Say in a later round's brief what the round is for, and show with two cases that it narrows without hiding
-status: in_review
+status: approved
 mission: atelier-8az0
 labels: []
 priority: medium
