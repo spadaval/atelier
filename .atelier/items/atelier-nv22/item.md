@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-nv22
 title: List every rule a mission's commits passed, with its reason and thread, in atelier show <mission>
-status: changes_requested
+status: in_review
 mission: atelier-kw8u
 labels: []
 priority: medium
@@ -132,9 +132,21 @@ covers it, and fails without the fix. `cargo nextest run` passes (396
 tests), clippy, fmt and `git diff --check` are clean, and
 `evals/agent-factory/test.sh` passes.
 
+Round 5 (0de0b98c9): `log::history` walked only local branches named for a
+record. It now takes its branches from `Repo::walked`, the branches the
+convention names, record and backlog, local and the forge's
+remote-tracking, as `show` reads them: it walks every tip, and finds a
+record by its branch's name at the tip `show` reads. Two tests cover a
+proposed mission fetched alone and fetched ahead of its local branch, and a
+rule passed on a backlog branch not merged yet; both fail without the fix.
+`cargo nextest run` passes (398 tests), clippy, fmt and `git diff --check`
+are clean, and `evals/agent-factory/test.sh` passes. `show atelier-kw8u`
+here takes about 1.9 s, from 1.2 s, for the larger walk.
+
 ### Responses
 
 - 1-36z8.1: fixed in 58e7250fd
 - 1-36z8.2: fixed in 58e7250fd
 - 2-1o5j.3: fixed in 56a9a34b9
 - 3-176y.2: fixed in 3065cc45a
+- 4-q6v2.2: fixed in 0de0b98c9
