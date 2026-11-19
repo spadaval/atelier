@@ -88,8 +88,8 @@ def read_text(path):
 
 def nordbank_records(path, text):
     """Each record of a Nordbank export, as a list of (field, line) with the
-    line each field starts on. A quote anywhere but around a whole field is
-    an error on the line of the field it is in."""
+    line each field starts on; a blank line is none. A quote anywhere but
+    around a whole field is an error on the line of the field it is in."""
     pos, line = 0, 1
     while pos < len(text):
         record = []
@@ -109,7 +109,8 @@ def nordbank_records(path, text):
                 raise StatementError(path, record[-1][1], "bad quoting")
             pos, line = end.end(), line + 1
             break
-        yield record
+        if field.group(0) or len(record) > 1:
+            yield record
 
 
 def read_nordbank(path):
@@ -120,8 +121,6 @@ def read_nordbank(path):
     if header is None or [value for value, _ in header] != ["Date", "Payee", "Amount"]:
         raise StatementError(path, 1, "expected the header Date;Payee;Amount")
     for record in records:
-        if [value for value, _ in record] == [""]:
-            continue
         if len(record) != 3:
             raise StatementError(path, record[0][1], f"expected 3 fields, found {len(record)}")
         (date_text, date_line), (payee, payee_line), (amount_text, amount_line) = record

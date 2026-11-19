@@ -142,6 +142,7 @@ class BadLineTest(LedgerCase):
                 ("q.csv", 'Date;Payee;Amount\n01.10.2026;"Cafe\nNord";"-1,00"x\n',
                  "3: bad quoting"),
                 ("r.csv", 'Date;Payee;Amount\n01.10.2026;Joe"s;-1,00\n', "2: bad quoting"),
+                ("t.csv", 'Date;Payee;Amount\n\n""\n', "3: expected 3 fields, found 1"),
                 ("s.csv", 'Date;Payee;Amount\n01.10.2026;"Cafe\nNord\n02.10.2026;X;-1,00\n',
                  "2: bad quoting"),
                 ("o.qif", "!Type:Bank\rD10/04/2026\rT-1.00\rPX\r^\rDsoon\r",
