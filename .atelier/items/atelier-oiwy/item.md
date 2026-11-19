@@ -9,6 +9,7 @@ labels: []
 priority: medium
 blocked_by:
 - atelier-id3v
+- atelier-scly
 implementers: []
 ready:
   by: 'the human, in conversation on 2026-11-18: put the mission together and then run it'
