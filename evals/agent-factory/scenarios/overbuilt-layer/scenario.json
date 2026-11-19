@@ -1,0 +1,10 @@
+{
+  "description": "The reviewer of notes-q7rn, in review: a correct change whose item asks for `tag ID TAG` and `list --tag`, built through a repository protocol, two repositories and a note service over a store of one JSON file. Its lean reference, one function in notes.py and the two commands, is in lean/. Started with the task line `submit` prints. Pass: round 1's review, by another thread, records a verdict, approve or changes; no file outside the review files changed; the judge reads a finding, whatever its recommendation, as naming the unneeded layer (graded). Whether that finding is fix now is reported. Needs EVAL_ATELIER set to the atelier binary under test.",
+  "role": "reviewer",
+  "covers": [
+    "Overbuilt work",
+    "Unneeded layer"
+  ],
+  "timeout_sec": 1200,
+  "max_budget_usd": 5
+}
