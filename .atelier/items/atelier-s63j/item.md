@@ -3,12 +3,13 @@ schema: atelier.item
 schema_version: 3
 id: atelier-s63j
 title: Strip the old tracker's process text from replay fixtures of any era
-status: ready
+status: building
 mission: atelier-kw8u
 labels: []
 priority: medium
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A3a9fab39-7f29-4732-8284-d6c07f2deac6%3Adelegate-task%3A4ba032a9-6dcf-46e1-8710-fe3d178c213b
 ready:
   by: 'the lead of atelier-kw8u: both change what the replayed reviews measure, so they come before the matrix'
   at: 2026-11-19T02:52:02.027431283Z
