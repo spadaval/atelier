@@ -3,14 +3,16 @@ schema: atelier.item
 schema_version: 3
 id: atelier-hlsw
 title: Give the implementer a way to say no, in the skill and in what the binary prints
-status: draft
+status: ready
 mission: atelier-8az0
 labels: []
 priority: medium
 blocked_by:
 - atelier-zwh1
 implementers: []
-ready: null
+ready:
+  by: 'the human, by a side chat on 2026-11-18: tell the main thread about all of this'
+  at: 2026-11-19T04:37:19.810241548Z
 trivial: null
 caused_by: null
 created_at: 2026-11-19T04:12:27.576691099Z
