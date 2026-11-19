@@ -3,12 +3,13 @@ schema: atelier.item
 schema_version: 3
 id: atelier-69oh
 title: Tell a Codex thread how to start another, as a Claude Code thread is told
-status: ready
+status: building
 mission: atelier-kw8u
 labels: []
 priority: medium
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A3a9fab39-7f29-4732-8284-d6c07f2deac6%3Adelegate-task%3A7e5f3461-b0f8-4c45-85f5-64fc10dd916f
 ready:
   by: 'the lead of atelier-kw8u: without it the matrix''s no-skill Sol lead cells end at a request for leave'
   at: 2026-11-19T02:59:35.928767435Z
