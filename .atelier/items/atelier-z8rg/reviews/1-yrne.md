@@ -30,6 +30,7 @@ I did not start new model reviews, rebuild the old Rust workspaces, reproduce th
 
 ## Finding 1: Remove retained historical process instructions in a shared-setup follow-up
 Recommendation: defer
+Taken: atelier-s63j by thread:delegated-task:command%3Amcp%3A9d5de7ee-d750-4bea-9d8c-206890e4d262%3Adelegate-task%3Ab1c31788-3c35-43b9-855a-42b57f88f58f
 
 `evals/agent-factory/README.md:123-128` correctly discloses that hierarchy-rules and priority-contract retain old process guidance. I verified their base trees: hierarchy-rules' AGENTS.md explicitly requires the removed `.agents/skills/agent-factory/SKILL.md` and obsolete tracker commands, while priority-contract also loads AGENTFACTORY.md with its own workflow instructions. `replay.strip_process` only removes three differently named headings, so these instructions survive in the fixtures. The retained priority-contract result records a failed `atelier issue show atelier-zivs` against today's tracker, consistent with the Report.
 
@@ -37,6 +38,7 @@ Equal exposure in both arms does not remove the competing workflow instructions 
 
 ## Finding 2: Give the replay judge the source material needed to assess other findings
 Recommendation: defer
+Taken: atelier-6ve6 by thread:delegated-task:command%3Amcp%3A9d5de7ee-d750-4bea-9d8c-206890e4d262%3Adelegate-task%3Ab1c31788-3c35-43b9-855a-42b57f88f58f
 
 `evals/agent-factory/results/2026-11-18-nine-more-replays.md:58-63` identifies a real limitation, not merely a disagreement with the judge. The retained merge-sync review cites ADR 0019 decision 3 and standards.md's prohibition on Atelier creating commits. I verified both in the fixture's base tree. `replay.judge_context` supplies only the causing and fixing diffs, which omit those unchanged governing lines. The judge consequently labels the finding unsupported because it sees the new receipt-commit contract but not the existing prohibition.
 
