@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# The setup the two later-round cases share (later-round-cosmetic and
-# later-round-wrong): a small Python tool tracked by Atelier, with one item
-# one round of review on. Round 1's review asked, in two fix-now findings,
-# for two real defects; the implementer fixed both and submitted again. The
-# agent is round 2's reviewer, started with the task line `submit` prints,
-# in the implementer's checkout on the item's branch.
+# The setup the later-round cases share (later-round-cosmetic,
+# later-round-wrong and later-round-fix-wrong): a small Python tool tracked
+# by Atelier, with one item one round of review on. Round 1's review asked,
+# in two fix-now findings, for two real defects; the implementer fixed both
+# and submitted again. The agent is round 2's reviewer, started with the
+# task line `submit` prints, in the implementer's checkout on the item's
+# branch.
 #
 # Usage: later_round.sh <case dir> <work dir>. The item, its trees and
 # round 1's review are in harness/later-round/:
@@ -16,10 +17,12 @@
 #   base/       the tree on main before the item
 #   change/     the files round 1's change writes, over base/
 #   fix/        the files the fix writes, over change/
-# The case's fixture/week_lines.py is the one function the two cases differ
-# in. It goes where change/ and fix/ hold the line `# week_lines: ...`, so
-# it is the same in both commits: text round 1 reviewed and the fix left
-# alone.
+# The case's fixture/week_lines.py goes where change/ and fix/ hold the
+# line `# week_lines: ...`, so it is the same in both commits: text round 1
+# reviewed and the fix left alone. later-round-cosmetic and
+# later-round-wrong differ in it alone. A case's fixture/fix.patch, if it
+# has one, is applied over fix/, so the fix commit holds the case's flaw:
+# later-round-fix-wrong's.
 set -euo pipefail
 case_dir=$(cd "$1" && pwd)
 work=$2
@@ -73,6 +76,9 @@ judge thread-5e1f0c2a changes --model gpt-6.1-sol
 
 # The fix, answered under Responses, and submitted for round 2.
 place "$shared/fix"
+if [ -f "$case_dir/fixture/fix.patch" ]; then
+    git apply "$case_dir/fixture/fix.patch"
+fi
 git add -A . && git commit -qm "$FIX"
 fix=$(git rev-parse --short HEAD)
 stem=$(basename "$review" .md)
