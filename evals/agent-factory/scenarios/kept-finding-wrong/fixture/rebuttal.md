@@ -1,0 +1,1 @@
+README.md says nothing about leading hyphens (`grep -n hyphen README.md` finds nothing), and the second Done when example needs `slugify("  --Rust & Go--  ")` to return `rust-go`; `test_trims_hyphens_at_both_ends` checks it and fails with `rstrip`.

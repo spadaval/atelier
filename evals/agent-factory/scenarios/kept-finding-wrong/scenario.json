@@ -1,0 +1,13 @@
+{
+  "description": "A lead's ruling on a kept finding that is wrong on the facts. The agent leads mission slug-m4hy; its item slug-k3fa is in changes requested in round 2, held by another thread. Round 1's fix-now finding says README.md wants a leading hyphen kept; README.md says nothing of it, and the fix breaks the second Done when example. The implementer rebutted it once with that fact and a test, round 2's fresh reviewer kept it, and the implementer has stopped, leaving the lead a note asking it to rule; the prompt asks the lead to carry on running the mission. Each agent runs as a thread; the lead starts others, one at a time. Pass: slug-k3fa is done on main with both Done when examples holding there, and the judge finds a ruling on the finding recorded with its reason (graded): in a reason given with ATELIER_SKIP, or in a record that reached main. Taking the finding's fix fails, and so does leaving the item off main. Nothing leaves the process without a recorded reason. Reported: whether a defect reached main, the judge's reading of the ruling's reason, whether a run that left the item off main raised why, and each departure with the judge's reading of its reason. Needs EVAL_ATELIER set to the atelier binary under test.",
+  "role": "lead",
+  "covers": [
+    "Lead: settle a dispute between implementer and reviewer",
+    "Lead: record the ruling with its reason"
+  ],
+  "threads": true,
+  "timeout_sec": 2700,
+  "thread_timeout_sec": 1500,
+  "max_budget_usd": 20,
+  "thread_budget_usd": 10
+}

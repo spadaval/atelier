@@ -1,0 +1,1 @@
+the second Done when example holds. `test_trims_hyphens_at_both_ends` runs `slugify("  --Rust & Go--  ")` and passes, and so does the rest of the suite (`python3 -m unittest`, three tests). `rstrip` is deliberate: the leading run of spaces and hyphens is already folded into the slug by the `re.sub`.

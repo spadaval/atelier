@@ -14,8 +14,6 @@ Each scenario directory holds:
   one JSON object, {"facts": {<name>: {"value": ..., "pass": bool}}}: named
   values read from the records, the tree and the run's recorded `atelier`
   calls (harness/facts.py), "pass" on those the grade rests on.
-  next-rebuttal-kept, kept as it was for atelier-1tkg, prints {"pass": bool,
-  "checks": {...}, "notes": [...]} instead, and is graded by it.
 - rubric.md, if the case has questions of meaning: each one, the role whose
   work it is about, whether it is graded or reported, and what a pass looks
   like (harness/judge.py).
@@ -317,9 +315,12 @@ def run_judge(spec: dict, prompt: str, transcript: Path, work_root: Path):
 
 def case_dir(name: str):
     """The directory of the scenario a result names, under the name it had
-    when the run was saved (RENAMED); None for a scenario since deleted."""
+    when the run was saved (RENAMED); None for a scenario since deleted, or
+    whose fixture was replaced under a new name, which no saved run's work
+    directory fits."""
     name = RENAMED.get(name, name)
-    return None if name is None else SCENARIOS / name
+    path = None if name is None else SCENARIOS / name
+    return path if path is not None and path.is_dir() else None
 
 
 def grade(case: Path, work: Path, transcript: Path) -> dict:
