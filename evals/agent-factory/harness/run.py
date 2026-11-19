@@ -13,9 +13,9 @@ Each scenario directory holds:
 - grade.py: called with the work directory and the transcript path; prints
   one JSON object, {"facts": {<name>: {"value": ..., "pass": bool}}}: named
   values read from the records, the tree and the run's recorded `atelier`
-  calls (harness/facts.py), "pass" on those the grade rests on. A case not
-  yet brought over to facts prints {"pass": bool, "checks": {...}, "notes":
-  [...]} instead, and is graded by it.
+  calls (harness/facts.py), "pass" on those the grade rests on.
+  next-rebuttal-kept, kept as it was for atelier-1tkg, prints {"pass": bool,
+  "checks": {...}, "notes": [...]} instead, and is graded by it.
 - rubric.md, if the case has questions of meaning: each one, the role whose
   work it is about, whether it is graded or reported, and what a pass looks
   like (harness/judge.py).
