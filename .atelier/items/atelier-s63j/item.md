@@ -89,3 +89,7 @@ What the rule costs and leaves:
 - The results in `results/` were recorded on the old fixtures. They are not
   rerun here.
 
+### Responses
+
+1-omqy.1: fixed in 162a0c034: merges and pull requests are process markers, so that bullet goes and the test fails without them.
+1-omqy.2: fixed in 162a0c034: the Report no longer ends in a blank line.
