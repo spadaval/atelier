@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-u708
 title: 'Run a matrix''s runs side by side: make the cap on runs at once a setting, by kind of run'
-status: building
+status: in_review
 mission: atelier-kw8u
 labels: []
 priority: medium
