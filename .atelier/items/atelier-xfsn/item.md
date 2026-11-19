@@ -128,6 +128,12 @@ Done when, line by line:
 - No `grade.py` but `next-rebuttal-kept`'s imports `re` or `shlex`;
   `scenarios/loop/shell_grade.py` and the tests of it are deleted.
 
+atelier-1z52 merged three replayed review cases while this was in review.
+Their shared grader, `harness/replay.py`, failed a run for a skip; after
+merging master in, it uses the shared departure facts, and
+`harness/replay-rubric.md` asks the reported `reasons` question
+(effdef61f). `test.sh` passes all twelve suites with them.
+
 Outside the item's Scope, because its Done when lines needed them:
 `harness/facts.py` (the shared departures), `harness/delegate.py` (it now
 logs each thread's task, which `non-atelier-repo`'s judge reads),
