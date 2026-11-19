@@ -15,6 +15,7 @@ use crate::records::{
     ReviewFile,
 };
 use crate::repo::item_path;
+use crate::skip::{BY_TRAILER, TRAILER};
 use crate::{git, Repo};
 use anyhow::{bail, Context, Result};
 use chrono::{DateTime, NaiveDate, Utc};
@@ -31,12 +32,16 @@ pub struct Logged {
     pub commit: String,
     /// The item or mission the action is on.
     pub id: String,
-    /// The thread the action is shown with, where the log's table gives one.
+    /// The thread the action is shown with: the one that ran it, where its
+    /// commit names one, else the one the log's table gives, if any.
     pub thread: Option<Thread>,
     pub action: Happened,
     /// Each rule the action's commit carries an `Atelier-Skip` trailer for, as
     /// `<rule>: <reason>`.
     pub skips: Vec<String>,
+    /// The thread that passed `skips`, as the commit's `Atelier-Skip-By`
+    /// trailer names it; `None` in a commit made before that trailer.
+    pub skipped_by: Option<Thread>,
 }
 
 /// A status a record moved from and to in one commit; `from` is `None`
@@ -303,6 +308,8 @@ struct Commit {
     /// The item an `Atelier-Merge:` trailer names.
     merged: Option<String>,
     skips: Vec<String>,
+    /// The thread an `Atelier-Skip-By:` trailer names.
+    skipped_by: Option<Thread>,
     /// Each record file it changed from its parent, with the old and new
     /// blob as Git abbreviates them, `None` where it has none.
     changes: Vec<Change>,
@@ -319,6 +326,13 @@ struct Change {
 /// merge: without it Git follows only the side a merge matches on the
 /// record paths, and the other side's actions are lost.
 fn walk(root: &Path, revisions: &[String]) -> Result<Vec<Commit>> {
+    let trailer = |key: &str| format!("%(trailers:key={key},valueonly,separator=%x1f)");
+    let format = format!(
+        "--format=%x01%H%x02%h%x02%P%x02%ct%x02{}%x02{}%x02{}%x03",
+        trailer("Atelier-Merge"),
+        trailer(TRAILER),
+        trailer(BY_TRAILER),
+    );
     let mut args = vec![
         "log",
         "-z",
@@ -333,7 +347,7 @@ fn walk(root: &Path, revisions: &[String]) -> Result<Vec<Commit>> {
         "--root",
         "--no-renames",
         "--raw",
-        "--format=%x01%H%x02%h%x02%P%x02%ct%x02%(trailers:key=Atelier-Merge,valueonly,separator=%x1f)%x02%(trailers:key=Atelier-Skip,valueonly,separator=%x1f)%x03",
+        &format,
     ];
     args.extend(revisions.iter().map(String::as_str));
     args.extend(["--", ".atelier/items", ".atelier/missions"]);
@@ -348,7 +362,7 @@ fn commit(entry: &str) -> Result<Commit> {
     let unreadable = || format!("git log printed a commit this tool cannot read: {entry:?}");
     let (header, raw) = entry.split_once('\x03').with_context(unreadable)?;
     let fields: Vec<&str> = header.split('\x02').collect();
-    let [hash, short, parents, time, merged, skips] = fields.as_slice() else {
+    let [hash, short, parents, time, merged, skips, skipped_by] = fields.as_slice() else {
         bail!(unreadable());
     };
     let seconds: i64 = time.parse().with_context(unreadable)?;
@@ -388,6 +402,7 @@ fn commit(entry: &str) -> Result<Commit> {
         time: DateTime::from_timestamp(seconds, 0).with_context(unreadable)?,
         merged: values(merged).into_iter().next(),
         skips: values(skips),
+        skipped_by: values(skipped_by).into_iter().next().map(Thread),
         changes,
     })
 }
@@ -570,6 +585,14 @@ impl Walker<'_, '_> {
                 true => commit.skips.clone(),
                 false => Vec::new(),
             };
+            let skipped_by = commit.skipped_by.clone().filter(|_| !skips.is_empty());
+            // The thread that ran the command which made the commit, where
+            // the commit names it: a lead's merge of an implementer's item
+            // is the lead's.
+            let thread = match (action.commits(), &commit.skipped_by) {
+                (true, Some(by)) => Some(by.clone()),
+                _ => thread,
+            };
             self.history.actions.push(Logged {
                 time: commit.time,
                 commit: commit.short.clone(),
@@ -577,6 +600,7 @@ impl Walker<'_, '_> {
                 thread,
                 action,
                 skips,
+                skipped_by,
             });
         }
         Ok(())
@@ -900,7 +924,7 @@ mod tests {
     #[test]
     fn a_commit_reads_with_its_fields_and_changes() {
         let entry =
-            "abc123\x02abc\x02p1 p2\x0217944170\x02demo-ab12\x02rule: why\x1fother: why\x03\0\n\
+            "abc123\x02abc\x02p1 p2\x0217944170\x02demo-ab12\x02rule: why\x1fother: why\x02t1\x03\0\n\
                      :100644 100644 1111111 0000000 D\0.atelier/items/demo-ab12/item.md\0\
                      :000000 100644 0000000 2222222 A\0.atelier/missions/demo-cd34/mission.md\0";
         let commit = commit(entry).unwrap();
@@ -909,6 +933,7 @@ mod tests {
         assert_eq!(commit.parents, ["p1", "p2"]);
         assert_eq!(commit.merged.as_deref(), Some("demo-ab12"));
         assert_eq!(commit.skips, ["rule: why", "other: why"]);
+        assert_eq!(commit.skipped_by, Some(Thread("t1".into())));
         assert_eq!(commit.changes.len(), 2);
         assert_eq!(commit.changes[0].old.as_deref(), Some("1111111"));
         assert_eq!(commit.changes[0].new, None);

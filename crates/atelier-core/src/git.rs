@@ -198,17 +198,13 @@ pub fn is_ancestor(repo: &Path, commit: &str, of: &str) -> Result<bool> {
     }
 }
 
-/// `message` with a trailer `Atelier-Skip: <rule>: <reason>` for each rule
-/// `skip` passed, in its trailer paragraph.
+/// `message` with [`Skip::trailers`] in its trailer paragraph: one for
+/// each rule `skip` passed, and the thread that passed them.
 pub fn with_skips(repo: &Path, message: &str, skip: &Skip) -> Result<String> {
-    let passed = skip.passed();
-    if passed.is_empty() {
+    let trailers = skip.trailers();
+    if trailers.is_empty() {
         return Ok(message.to_string());
     }
-    let trailers: Vec<String> = passed
-        .iter()
-        .map(|line| format!("Atelier-Skip: {line}"))
-        .collect();
     let mut args = vec!["interpret-trailers"];
     for trailer in &trailers {
         args.extend(["--trailer", trailer]);

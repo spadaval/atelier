@@ -313,7 +313,7 @@ fn a_mission_shows_its_ready_lead_plan_review_and_close_with_its_items_actions()
 }
 
 #[test]
-fn a_skip_ends_the_line_of_the_action_whose_commit_carries_it() {
+fn a_skip_ends_the_line_of_the_action_whose_commit_carries_it_with_its_thread() {
     let scratch = Scratch::new(&[(ID, "draft")]);
     let root = scratch.root();
     let output = atelier_command(&root, "t1", &["start", ID])
@@ -324,8 +324,70 @@ fn a_skip_ends_the_line_of_the_action_whose_commit_carries_it() {
     assert_eq!(
         actions(&root, &log(&root, &[])),
         [format!(
-            "{ID} start t1 draft -> building; skip {ID} is ready (it is draft): {REASON}"
+            "{ID} start t1 draft -> building; skip {ID} is ready (it is draft): {REASON} (by t1)"
         )]
+    );
+}
+
+/// The page `show` prints of mission `id`.
+fn show(root: &Path, id: &str) -> String {
+    let run = atelier(root, "t9", &["show", id]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    run.stdout
+}
+
+#[test]
+fn a_skip_from_before_its_thread_was_recorded_says_so_in_the_log_and_the_missions_page() {
+    let scratch = Scratch::new(&[(ID, "draft")]);
+    let root = scratch.root();
+    write_mission(&root);
+    // Agreed, so that only the item's status is a rule its start passes.
+    let path = format!(".atelier/missions/{MISSION}/mission.md");
+    let agreed = read(&root, &path).replace(
+        "status: draft\nlabels: []\nlead: null\nready: null\n",
+        "status: ready\nlabels: []\nlead: null\nready:\n  by: ada\n  at: 2026-11-10T09:00:00Z\n",
+    );
+    fs::write(root.join(&path), agreed).unwrap();
+    on_base(&root, "Add the mission");
+    // A mission none of whose commits passed a rule says nothing of it.
+    assert!(!show(&root, MISSION).contains("Rules passed"));
+
+    let output = atelier_command(&root, "t1", &["start", ID])
+        .env("ATELIER_SKIP", REASON)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let rule = format!("{ID} is ready (it is draft): {REASON}");
+    let message = git(&root, &["log", "-1", "--format=%B"]);
+    assert!(
+        message.ends_with(&format!("\n\nAtelier-Skip: {rule}\nAtelier-Skip-By: t1")),
+        "{message}"
+    );
+    let commit = short(&root, "HEAD");
+    assert!(
+        show(&root, MISSION).contains(&format!(
+            "\nRules passed:\n  {ID}, start in {commit}, by t1: {rule}\n\nPlan reviews:\n"
+        )),
+        "{}",
+        show(&root, MISSION)
+    );
+
+    // As a binary from before the thread was recorded wrote it.
+    let old = message.replace("\nAtelier-Skip-By: t1", "");
+    git(&root, &["commit", "-q", "--amend", "-m", &old]);
+    let commit = short(&root, "HEAD");
+    assert_eq!(
+        actions(&root, &log(&root, &[ID])),
+        [format!(
+            "{ID} start t1 draft -> building; skip {rule} (thread not recorded)"
+        )]
+    );
+    assert!(
+        show(&root, MISSION).contains(&format!(
+            "\nRules passed:\n  {ID}, start in {commit}, thread not recorded: {rule}\n"
+        )),
+        "{}",
+        show(&root, MISSION)
     );
 }
 

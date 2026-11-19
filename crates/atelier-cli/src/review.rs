@@ -307,7 +307,7 @@ fn plan_verdict(repo: &mut Repo, verdict: Verdict, model: Option<String>) -> Res
         repo.git_at(),
         std::slice::from_ref(&path),
         &message,
-        &repo.skip.passed(),
+        &repo.skip.trailers(),
     );
     let landing = landing(repo, &id)?;
     Ok(Outcome::Done(output::plan_verdict_recorded(
@@ -381,7 +381,7 @@ pub fn verdict(repo: &mut Repo, verdict: Verdict, model: Option<String>) -> Resu
         .write_item(&item)
         .context("cannot write the item's record")?;
     let paths = [item_path(&id), review_path];
-    let line = output::commit_line(repo.git_at(), &paths, &message, &repo.skip.passed());
+    let line = output::commit_line(repo.git_at(), &paths, &message, &repo.skip.trailers());
     Ok(Outcome::Done(output::verdict_recorded(
         &id,
         file.name.round,

@@ -1113,13 +1113,20 @@ refused as `show` refuses it.
 | ready | An item's status becomes `ready`; on a mission in the old form, its status | None; the name given with `--by` |
 | drop, close | A status becomes `dropped`, or `done` outside a merge | None |
 
+Where a commit passed a rule and names the thread that ran the command
+(`Atelier-Skip-By:`, see Hooks and the bypass), the line of the action
+that commit is for shows that thread instead of the table's. A lead that
+merges an implementer's item past a rule is shown as the lead, not as the
+item's holder.
+
 A skip is shown on the line of the action whose commit carries its trailer,
-which is every action where Atelier makes the commit. Those are `start`,
-`submit` and `merge`, whose trailers are in the merge commit's message
-whether the forge makes it or `merge` does, and a take-over of an
-implementer, which `start` commits. Actions the agent commits carry no
-trailer. The other lines of that
-commit, such as the `review` line of a verdict's commit, do not repeat it.
+which is every action where Atelier makes the commit or prints the commit
+line. Those are `start`, `submit` and `merge`, whose trailers are in the
+merge commit's message whether the forge makes it or `merge` does, a
+take-over of an implementer, which `start` commits, and `verdict`, `ready`,
+`drop`, `close` and `lead`, whose printed commit line carries them. The
+other lines of that commit, such as the `review` line of a verdict's
+commit, do not repeat it.
 
 ### A line
 
@@ -1130,7 +1137,9 @@ commit, such as the `review` line of a verdict's commit, do not repeat it.
 Each line holds, in this order: the commit's committer time in UTC, to the
 second; the commit, as Git abbreviates it; the record's ID; the action; the
 thread the table gives, or `-` where it gives none; then what changed, and
-last each skip as `skip <rule>: <reason>`. The first five are separated by
+last each skip as `skip <rule>: <reason> (by <thread>)`, naming the thread
+that passed it, or `(thread not recorded)` for a commit made before
+2026-11-18, whose trailer holds the rule alone. The first five are separated by
 single spaces and hold no space. What changed and the skips are the rest of
 the line, in parts separated by `; `, with any line break in them made a
 space. A thread's identity is printed whole, as the record holds it, so a
@@ -1346,10 +1355,21 @@ rule names.
   and `merge`, whose message the forge's merge commit carries), `git
   interpret-trailers` adds a trailer
   `Atelier-Skip: <rule>: <reason>` for each to its message, after `merge`'s
-  `Atelier-Merge:`. A command that writes files and makes no commit, such as
+  `Atelier-Merge:`, and then one `Atelier-Skip-By: <thread>`, the thread
+  that ran the command (2026-11-18, atelier-nv22). A command that writes files and makes no commit, such as
   `ready`, `set`, `close` or `verdict`, puts the same trailers in the commit
   line it prints, as `--trailer` arguments (2026-11-18, atelier-mtzj, so a
-  lead's departure on one is kept). Whitespace in the reason and in each
+  lead's departure on one is kept). The thread is its own trailer so that a
+  binary from before it, which reads only `Atelier-Skip`, reads the commit as
+  it always did; a commit from before it has none, and is read as not saying
+  who passed the rule. `skip.rs` writes the trailers (`Skip::trailers`) and
+  `log.rs` reads them back. Each passed rule is shown in two places: at the
+  end of its action's line in `atelier log`, with its thread, and on the page
+  `atelier show <mission>` prints, under `Rules passed:`, one line per rule
+  that a commit of the mission or of its items passed: `<item>, <action> in
+  <commit>, by <thread>: <rule>: <reason>`. That section is left out when the
+  mission's commits passed none. Both read the mission's log, so they agree
+  on the thread and say `thread not recorded` for an old trailer alike. Whitespace in the reason and in each
   rule is made one line. A skip in a hook writes nothing; it shows in the
   transcript as the variable on the command, which is where the scorecard
   counts it. Atelier's own `git commit` and `git
@@ -1569,7 +1589,10 @@ What is still to come:
   set, and the skip printed; a branch switch printing `status`, and one to
   a branch holding a record that does not parse succeeding.
 - `ATELIER_SKIP`: each kind of rule passed, its line printed, and its
-  trailer in the commit of `start`, `submit` and `merge`; a mission set
+  trailers, with the thread, in the commit of `start`, `submit` and
+  `merge`; a lead's merge of an implementer's item past a rule named as the
+  lead's in `log` and in `show <mission>`, and a trailer without its thread
+  said to be one in both; a mission set
   from `dropped` back to `open` by hand refused, and one closed from `open`
   allowed; a blank reason refused by the commands and the hooks;
   and each kind of refusal that is not a rule refused with the variable
@@ -1645,7 +1668,7 @@ became `show`, `list` and `status`:
 
 | Old view | Replaced by |
 | --- | --- |
-| `work mission <id>` | `show <mission>`: status, lead, Outcome, criteria and Result, items by status with holder and blockers, what is disputed, plan reviews |
+| `work mission <id>` | `show <mission>`: status, lead, Outcome, criteria and Result, items by status with holder and blockers, what is disputed, the rules its commits passed, plan reviews |
 | `work missions` | `list`, which heads each open mission's items with its status, whether it is in progress, and its lead; `status` on the base lists the missions in progress |
 | `work missions --all` | `list --done` for finished missions and items; `list` heads the open ones, and lists items in no mission |
 | `work ready` | `list --ready`, and "Ready to start" in `status` on the base |

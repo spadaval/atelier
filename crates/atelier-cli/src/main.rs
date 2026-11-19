@@ -28,10 +28,15 @@ fn skip_variable() -> Option<String> {
     Some(value.to_str().unwrap_or("?").to_string())
 }
 
+/// The thread running this command, from the environment.
+fn caller() -> atelier_core::model::Thread {
+    identity(|name| std::env::var(name).ok())
+}
+
 /// The repository of the checkout this command runs in, opened for the
 /// calling thread with this invocation's skip.
 pub(crate) fn open<'s>(dir: &Path, skip: &'s Skip) -> anyhow::Result<Repo<'s>> {
-    Repo::open(dir, identity(|name| std::env::var(name).ok()), skip)
+    Repo::open(dir, caller(), skip)
 }
 
 #[derive(Parser)]
@@ -64,11 +69,11 @@ enum Command {
     },
     /// Install Atelier's Git hooks in this clone, keeping any hook it has as <name>.local; or with a harness, its session hooks in this repository.
     Setup { harness: Option<setup::Harness> },
-    /// One item in full with its reviews, or one mission on one page with its items and disputed findings, found on the base or on any named branch this clone has, local or fetched, and saying where it was read from. It fetches nothing.
+    /// One item in full with its reviews, or one mission on one page with its items, disputed findings and the rules its commits passed, found on the base or on any named branch this clone has, local or fetched, and saying where it was read from. It fetches nothing.
     Show { id: String },
     /// The history of actions, read from Git, one line each, oldest first: of everything, of one item, or of one mission with its plan reviews and its items.
     ///
-    /// Each line is the commit's time in UTC, the commit, the item or mission, the action, the thread that acted or `-` where no record holds one, then what changed, and last each rule its commit skipped as `skip <rule>: <reason>`. The first five hold no space; what changed and the skips are parts separated by `; `.
+    /// Each line is the commit's time in UTC, the commit, the item or mission, the action, the thread that acted or `-` where no record holds one, then what changed, and last each rule its commit skipped as `skip <rule>: <reason> (by <thread>)`, or `(thread not recorded)` in a commit from before the thread was. Where a commit that passed a rule names the thread that ran the command, its action's line shows that thread. The first five hold no space; what changed and the skips are parts separated by `; `.
     ///
     /// The actions are start, take-over, submit, review, verdict, merge, settle, lead, ready, drop and close. A status move reads `<from> -> <to>`, and `new` is a record the commit added. `log` sees commits, not commands: two actions on one record in one commit show as their net change. It adds nothing up; narrow its lines with grep.
     Log {
@@ -254,7 +259,9 @@ fn main() -> ExitCode {
         }
         print!("{}", output::blank_skip(false));
     }
-    let skip = Skip::new(variable.as_deref());
+    // The thread running this command, which a commit's trailers name
+    // beside each rule it passes.
+    let skip = Skip::new(variable.as_deref()).by(caller());
     // `check` reads the records itself, and reports a config that does not
     // read rather than stopping at it.
     if let Command::Check { hook, args } = &cli.command {

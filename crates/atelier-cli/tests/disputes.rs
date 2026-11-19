@@ -400,10 +400,11 @@ fn a_lead_rules_for_the_implementer_by_merging_past_a_kept_finding_with_its_reas
     assert!(atelier(&root, "t9", &["show", ID])
         .stdout
         .contains("Status: done"));
-    // The dispute stays listed, and the merge's line in the log ends with
-    // each rule the ruling passed. The trailer does not yet say which
-    // thread passed them, so the line names the implementer; atelier-nv22
-    // records the lead.
+    // The merge commit names the lead beside the rules it passed.
+    let message = git(&root, &["log", "-1", "--format=%B", "main"]);
+    assert!(message.ends_with("\nAtelier-Skip-By: lead1"), "{message}");
+    // The dispute stays listed, and the merge's line in the log is the
+    // lead's, and ends with each rule the ruling passed, by the lead.
     assert!(
         disputed(&root, &[]).contains(&format!("{ID}/")),
         "{}",
@@ -412,10 +413,25 @@ fn a_lead_rules_for_the_implementer_by_merging_past_a_kept_finding_with_its_reas
     let log = atelier(&root, "t9", &["log", ID]).stdout;
     let merge = log.lines().last().unwrap();
     assert!(
-        merge.contains(&format!(" {ID} merge t1 changes_requested -> done; skip ")),
+        merge.contains(&format!(
+            " {ID} merge lead1 changes_requested -> done; skip "
+        )),
         "{log}"
     );
     for rule in &rules {
-        assert!(merge.contains(&format!("; skip {rule}: {RULING}")), "{log}");
+        assert!(
+            merge.contains(&format!("; skip {rule}: {RULING} (by lead1)")),
+            "{log}"
+        );
+    }
+    // The mission's page lists each, with the lead that passed it.
+    let commit = merge.split(' ').nth(1).unwrap();
+    let shown = atelier(&root, "t9", &["show", "demo-m1ss"]).stdout;
+    let (_, passed) = shown.split_once("\nRules passed:\n").expect(&shown);
+    let (passed, _) = passed.split_once("\n\nPlan reviews:\n").expect(&shown);
+    assert_eq!(passed.lines().count(), rules.len(), "{shown}");
+    for rule in &rules {
+        let line = format!("  {ID}, merge in {commit}, by lead1: {rule}: {RULING}");
+        assert!(passed.lines().any(|shown| shown == line), "{shown}");
     }
 }
