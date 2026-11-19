@@ -16,7 +16,7 @@ use crate::records::{
 };
 use crate::repo::item_path;
 use crate::skip::{BY_TRAILER, TRAILER};
-use crate::{git, Repo};
+use crate::{git, Repo, Walked};
 use anyhow::{bail, Context, Result};
 use chrono::{DateTime, NaiveDate, Utc};
 use std::collections::{BTreeSet, HashMap};
@@ -284,7 +284,7 @@ pub fn history(
                 .collect();
             let mut members = BTreeSet::new();
             for item in ids {
-                if in_mission(repo, &base_tip, &tips, &item, mission)? {
+                if in_mission(repo, &base_tip, &walked, &item, mission)? {
                     members.insert(item);
                 }
             }
@@ -301,24 +301,26 @@ pub fn history(
     Ok(Some(history))
 }
 
-/// Whether the item `id`'s record, on the base's tip, else on its branch,
-/// else on the mission's, names `mission`.
+/// Whether the item `id`'s record names `mission`: on the base's tip,
+/// else on its own branch, else, as `show` finds a record the base does not
+/// hold, on the first unmerged branch of `walked`, by name, that adds it,
+/// such as the mission's or a backlog branch.
 fn in_mission(
     repo: &mut Repo,
     base_tip: &str,
-    tips: &[(String, String)],
+    walked: &[Walked],
     id: &str,
     mission: &str,
 ) -> Result<bool> {
     let path = item_path(id);
     let mut text = repo.reader().blob(&format!("{base_tip}:{path}"))?;
-    for branch in [id, mission] {
+    let own = walked.iter().filter(|b| b.record.as_deref() == Some(id));
+    let adding = walked.iter().filter(|b| !b.merged);
+    for branch in own.chain(adding) {
         if text.is_some() {
             break;
         }
-        if let Some((_, tip)) = tips.iter().find(|(name, _)| name == branch) {
-            text = repo.reader().blob(&format!("{tip}:{path}"))?;
-        }
+        text = repo.reader().blob(&format!("{}:{path}", branch.tip))?;
     }
     let item = text.and_then(|text| parse_item(Path::new(&path), &text).ok());
     Ok(item.is_some_and(|item| item.mission.as_deref() == Some(mission)))

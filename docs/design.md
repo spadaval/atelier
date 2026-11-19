@@ -1095,8 +1095,10 @@ command only formats it (`crates/atelier-cli/src/history.rs`).
 
 `atelier log` prints everything; `atelier log <item>` that item's actions;
 `atelier log <mission>` the actions on the mission, its plan reviews and its
-items, an item being the mission's when its record on the base's tip, or
-else on its branch or the mission's, names it. A proposed mission, on its
+items, an item being the mission's when its record names it: on the base's
+tip, else on its own branch, else, as `show` finds a record the base does
+not hold, on the first unmerged named branch that adds it, such as the
+mission's or a backlog branch. A proposed mission, on its
 branch alone, is found there. `--since <time>` keeps the actions committed at
 or after an RFC 3339 time or a `YYYY-MM-DD` date, which is that day's start
 in UTC. An ID no record has on the base's tip or on a branch named for it is

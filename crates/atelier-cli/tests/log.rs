@@ -932,3 +932,44 @@ fn a_rule_passed_on_a_backlog_branch_not_merged_yet_shows_on_the_missions_page()
         &format!("{ID} change p1 skip {rule} (by p1)")
     );
 }
+
+#[test]
+fn an_item_only_on_a_backlog_branch_not_merged_yet_shows_its_passed_rule_on_its_missions_page() {
+    let scratch = Scratch::new(&[(ID, "ready")]);
+    let root = scratch.root();
+    write_mission(&root);
+    let path = format!(".atelier/missions/{MISSION}/mission.md");
+    fs::write(
+        root.join(&path),
+        read(&root, &path).replace("status: draft", "status: open"),
+    )
+    .unwrap();
+    on_base(&root, "Add the mission");
+    ok(atelier(&root, "p1", &["start", "--backlog", "tidy"]));
+    let run = atelier(&root, "p1", &["new", "New greeting", "--in", MISSION]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    run_then(&root, &run.stdout);
+    let added = git(&root, &["diff", "--name-only", "HEAD~1", "HEAD"]);
+    let new = added.split('/').nth(2).unwrap().to_string();
+    let run = atelier(&root, "p1", &["ready", &new, "--by", "ada"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    run_then(&root, &run.stdout);
+    let again = "Ada reconfirmed it";
+    let run = skipping(&root, "p1", again, &["ready", &new, "--by", "ada"]);
+    run_then(&root, &run.stdout);
+    let commit = short(&root, "HEAD");
+    git(&root, &["checkout", "-q", "--detach", "main"]);
+
+    let rule = format!("{new} is draft (it is ready): {again}");
+    let page = show(&root, MISSION);
+    assert!(page.contains(&format!("  {new} ")), "{page}");
+    assert_eq!(
+        rules_passed(&page),
+        [format!("  {new}, change in {commit}, by p1: {rule}")],
+        "{page}"
+    );
+    assert_eq!(
+        actions(&root, &log(&root, &[MISSION])).last().unwrap(),
+        &format!("{new} change p1 skip {rule} (by p1)")
+    );
+}

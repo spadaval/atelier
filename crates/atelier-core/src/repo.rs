@@ -30,6 +30,8 @@ pub struct Walked {
     /// The tip `show` reads: the local or the remote-tracking branch,
     /// whichever contains the other, else the local one.
     pub tip: String,
+    /// Whether `tip` is in the base's history.
+    pub merged: bool,
     /// Each of its tips, local and remote-tracking.
     pub tips: Vec<String>,
 }
@@ -339,7 +341,7 @@ impl<'s> Repo<'s> {
 
     /// Every branch the convention names, local and the forge's
     /// remote-tracking ones, record and backlog branches alike, as `log`
-    /// walks them.
+    /// walks them, in order of name.
     pub fn walked(&self) -> Result<Vec<Walked>> {
         let refs = self.refs()?;
         let mut walked = Vec::new();
@@ -351,12 +353,14 @@ impl<'s> Repo<'s> {
                 .map(|found| found.tip.clone())
                 .collect();
             tips.dedup();
+            let read = self.tip(pair)?;
             walked.push(Walked {
                 record: match named {
                     Named::Record(id) => Some(id.clone()),
                     Named::Backlog(_) => None,
                 },
-                tip: self.tip(pair)?.tip,
+                tip: read.tip,
+                merged: read.merged,
                 tips,
             });
         }
