@@ -96,3 +96,23 @@ last 30 minutes and no result.
 atelier-scly, which atelier-ad0z's implementer filed, is readied, and
 atelier-oiwy waits on it: that item runs the replayed reviews ten times
 over and would fill the disk again.
+
+## 2026-11-19: what the matrix showed, and what the lead did with it
+
+atelier-id3v, 469 graded runs:
+
+- In `sol` the skill takes the lead's cases from 4 of 25 to 25 of 25, and
+  a skill cut to its Starting Another Thread section does exactly as well,
+  35 of 35. All of the skill's effect on passes there is getting past
+  Codex's own rule on subagents. In `house` every lead run passes in both
+  arms, and the skill cuts the median time and tokens of each lead case.
+- No planted defect reached main, no departure went unrecorded and no lead
+  stopped with nothing raised, with the skill before atelier-mtzj or after.
+  Of 40 recorded departures the judge found two reasons that did not hold.
+- On replayed reviews the skill found the known defect in 12 of 72 against
+  17 of 72 without it, and on `touched-claims` in 0 of 6 against 5 of 6.
+
+The lead added atelier-7h71 to confirm that last gap and find the text behind it,
+and made atelier-oiwy wait on it. The 18 cases mission atelier-8az0 added
+while the matrix ran are not run again on their own: atelier-oiwy's review
+arms run the review cases among them.
