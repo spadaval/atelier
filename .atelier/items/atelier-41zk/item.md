@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-41zk
 title: 'Rewrite the README to show what Atelier does: the loop, the records, missions, the Desk and the T3 Code extension'
-status: in_review
+status: changes_requested
 mission: null
 labels: []
 priority: medium
