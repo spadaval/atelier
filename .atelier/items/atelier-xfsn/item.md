@@ -3,13 +3,14 @@ schema: atelier.item
 schema_version: 3
 id: atelier-xfsn
 title: Bring every kept case to the new grading, drop the next- prefix, and cut the case whose line can hold
-status: ready
+status: building
 mission: atelier-kw8u
 labels: []
 priority: medium
 blocked_by:
 - atelier-b9o6
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3Adfff1aea-5166-4f31-a652-65819a65bb75%3Adelegate-task%3A60bbad4f-f864-4552-b696-05fbe5d575e4
 ready:
   by: 'the human, in conversation on 2026-11-18: put the mission together and then run it'
   at: 2026-11-18T23:49:47.284668623Z
