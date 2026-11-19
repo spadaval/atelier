@@ -8,10 +8,10 @@ mission: atelier-kw8u
 labels: []
 priority: medium
 blocked_by:
-- atelier-xfsn
 - atelier-aq82
 - atelier-1tkg
-- atelier-z8rg
+- atelier-s63j
+- atelier-6ve6
 implementers: []
 ready:
   by: 'the human, in conversation on 2026-11-18: put the mission together and then run it'
