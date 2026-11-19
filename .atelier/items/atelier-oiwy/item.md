@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-oiwy
 title: Find which part of the skill costs a reviewer a defect, and try two passages for the reviewer
-status: ready
+status: building
 mission: atelier-kw8u
 labels: []
 priority: medium
@@ -11,7 +11,8 @@ blocked_by:
 - atelier-id3v
 - atelier-scly
 - atelier-7h71
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A901dd2a0-b01e-4401-8056-a16ce644a3f9%3Adelegate-task%3A8eeb1931-a263-48c9-99af-02fdad3a8f21
 ready:
   by: 'the human, in conversation on 2026-11-18: put the mission together and then run it'
   at: 2026-11-18T23:49:47.284668623Z
