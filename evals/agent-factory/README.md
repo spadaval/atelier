@@ -463,3 +463,6 @@ The first replayed reviews, and what one costs, are
 [results/2026-11-18-replayed-reviews.md](results/2026-11-18-replayed-reviews.md).
 Nine more, one `sol` review each, are
 [results/2026-11-18-nine-more-replays.md](results/2026-11-18-nine-more-replays.md).
+What an implementer does today with three findings, one right, one not worth
+building and one wrong, is
+[results/2026-11-18-three-findings.md](results/2026-11-18-three-findings.md).
