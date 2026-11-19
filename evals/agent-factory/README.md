@@ -353,7 +353,15 @@ its own when it ends.
   inherits its parent's model and effort and which the binary counts as a
   thread of its own (`<thread>/<CODEX_THREAD_ID>`); the harness writes each
   subagent's transcript to `threads/` from its session record, in the form
-  `codex exec --json` prints, and keeps the record in `sessions/`.
+  `codex exec --json` prints, and keeps the record in `sessions/`. Its
+  system prompt says how to start one (`CODEX_THREADS_NOTE`): `spawn_agent`
+  with `fork_turns` `"none"`, in the same words `THREADS_NOTE` uses for
+  `delegate`, and like it nothing about when or why. Until 2026-11-18 it was
+  told only that agents run as threads, so a no-skill Codex result from
+  before then may have ended at a request for leave to start a subagent, as
+  three on 2026-11-11 did and as atelier-aq82's runs of `lead-looks-trivial`
+  and `lead-stalled-item` did. Codex's own prompt also says to start no
+  subagent unless the user, an `AGENTS.md` or a skill asks for one.
   `delegate` logs each thread it starts, with its role and task, in
   `work/.agents.jsonl`. Every scenario but `non-atelier-repo`'s
   feature needs `EVAL_ATELIER` set to the binary under test (see Running).
