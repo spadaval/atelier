@@ -820,10 +820,13 @@ if (here / "judge-exits").exists():
     sys.exit(3)
 asked = re.findall(r"^- (\S+) \(about the", prompt.split("# Your questions", 1)[1], re.M)
 told = json.loads((here / "judge-answers.json").read_text())
-answers = {"answers": [{"id": q, "answer": told.get(q, "pass"),
-                        "line": "Finding 1: the test passes on the old code",
+# The line it quotes is the run's final reply, which the material holds.
+final = prompt.split("# The final reply of the run's first agent\n\n", 1)[1].split("\n")[0]
+answers = {"answers": [{"id": q, "answer": told.get(q, "pass"), "line": final,
                         "reason": "said so"} for q in asked]}
 reply = "Here it is.\n" + json.dumps(answers)
+if (here / "judge-reply").exists():
+    reply = (here / "judge-reply").read_text()
 if agent == "claude":
     print(json.dumps({"type": "system", "subtype": "init", "tools": [], "mcp_servers": []}))
     print(json.dumps({"type": "result", "subtype": "success", "result": reply,
@@ -924,7 +927,7 @@ class JudgeTest(unittest.TestCase):
         self.assertEqual(r["facts"]["merged"], {"value": True, "pass": True})
         found = next(a for a in r["rubric"] if a["id"] == "found-it")
         self.assertEqual((found["answer"], found["line"], found["line_found"]),
-                         ("pass", "Finding 1: the test passes on the old code", False))
+                         ("pass", "ok", True))
         self.assertTrue((Path(r["run_dir"]) / "judge-openai.jsonl").is_file())
         # Each judge ran after the agent, alone, and counts as an agent.
         self.assertEqual(r["peak_agents"], 1)
@@ -964,6 +967,16 @@ class JudgeTest(unittest.TestCase):
         self.assertIn("graded found-it (reviewer): unknown, the judge (claude-opus-5-5) "
                       "exited 3 with no reply", r["failed"])
         self.assertNotIn("said-why", " ".join(r["failed"]))
+
+    def test_a_malformed_reply_fails_the_graded_questions_and_keeps_the_result(self):
+        for reply, why in (('{"answers": [', "was not the JSON asked for"),
+                           ('{"answers": 7}', "held no list of answers")):
+            (self.tmp / "judge-reply").write_text(reply)
+            r = self.run_house()
+            self.assertIs(r["pass"], False)
+            self.assertIn(f"graded found-it (reviewer): unknown, the judge's reply {why}",
+                          r["failed"])
+            self.assertTrue((Path(r["run_dir"]) / "result.json").is_file())
 
     def test_an_invalid_run_is_null_and_not_judged(self):
         (self.tmp / "codex-effort").write_text("low")
@@ -1009,6 +1022,22 @@ class JudgingTest(unittest.TestCase):
                                     "reason": "r", "line_found": True})
         self.assertEqual(got["b"]["answer"], "unknown")
         self.assertIn("'maybe'", got["b"]["reason"])
+
+    def test_an_answer_resting_on_no_line_of_the_material_is_unknown(self):
+        given = {"diff": "actual evidence\n"}
+        for answer, why in (({"id": "a", "answer": "pass"}, "without quoting the line"),
+                            ({"id": "a", "answer": "pass", "line": "invented evidence"},
+                             "quoting a line that is not in the material")):
+            got = self.judging.parse_answers(json.dumps({"answers": [answer]}),
+                                             self.QUESTIONS[:1], given)["a"]
+            self.assertEqual(got["answer"], "unknown")
+            self.assertIn(why, got["reason"])
+            facts = {"ok": {"value": 1, "pass": True}}
+            graded = [{**self.QUESTIONS[0], **got}]
+            self.assertIs(self.judging.verdict(facts, graded)["pass"], False)
+            # A reported answer resting on nothing changes no grade.
+            reported = [{**self.QUESTIONS[1], **got}]
+            self.assertIs(self.judging.verdict(facts, reported)["pass"], True)
 
     def test_a_reply_that_is_not_json_leaves_every_question_unknown(self):
         got = self.judging.parse_answers("I think it passes.", self.QUESTIONS, {})

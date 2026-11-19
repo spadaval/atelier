@@ -258,12 +258,14 @@ def prompt(rubric_text: str, questions: list, given: dict) -> str:
 
 def parse_answers(reply: str, questions: list, given: dict) -> dict:
     """{id: {"answer", "line", "reason", "line_found"}} from the judge's
-    reply, for each of `questions`; one it left out, or answered with
-    anything but pass, fail or unknown, is unknown. `line_found` says
-    whether the quoted line is in the material, spaces aside."""
+    reply, for each of `questions`. Each is unknown, with why, where the
+    reply is not the JSON asked for, leaves the question out, answers
+    anything but pass, fail or unknown, or answers pass or fail without
+    quoting a line found in the material (spaces aside): an answer must
+    rest on the material it was given."""
     parsed = None
     candidates = [reply.strip()] + re.findall(r"```(?:json)?\s*(.*?)```", reply, re.S)[::-1]
-    if "{" in reply:
+    if "{" in reply and "}" in reply[reply.index("{"):]:
         candidates.append(reply[reply.index("{"):reply.rindex("}") + 1])
     for text in candidates:
         try:
@@ -271,25 +273,33 @@ def parse_answers(reply: str, questions: list, given: dict) -> dict:
             break
         except (json.JSONDecodeError, ValueError):
             continue
+    listed = parsed.get("answers") if isinstance(parsed, dict) else None
+    if not isinstance(listed, list):
+        why = "the judge's reply was not the JSON asked for" if parsed is None \
+            else "the judge's reply held no list of answers"
+        return unanswered(questions, why)
+    by_id = {a.get("id"): a for a in listed if isinstance(a, dict)}
     given_text = " ".join(" ".join(given.values()).split())
-    by_id = {a.get("id"): a for a in (parsed or {}).get("answers") or []
-             if isinstance(a, dict)} if isinstance(parsed, dict) else {}
     out = {}
     for q in questions:
         a = by_id.get(q["id"])
         if a is None:
-            why = "the judge's reply held no answer to it" if parsed is not None \
-                else "the judge's reply was not the JSON asked for"
-            out[q["id"]] = {"answer": "unknown", "line": None, "reason": why, "line_found": False}
+            out[q["id"]] = {"answer": "unknown", "line": None, "line_found": False,
+                            "reason": "the judge's reply held no answer to it"}
             continue
-        answer = str(a.get("answer", "")).lower()
-        line = a.get("line") or None
-        out[q["id"]] = {
-            "answer": answer if answer in ANSWERS else "unknown",
-            "line": line,
-            "reason": a.get("reason") if answer in ANSWERS
-            else f"the judge answered {a.get('answer')!r}, not pass, fail or unknown",
-            "line_found": bool(line) and " ".join(str(line).split()) in given_text}
+        answer, line = str(a.get("answer", "")).lower(), a.get("line")
+        line = line if isinstance(line, str) and line.strip() else None
+        found = line is not None and " ".join(line.split()) in given_text
+        reason = a.get("reason") if isinstance(a.get("reason"), str) else None
+        if answer not in ANSWERS:
+            answer, reason = "unknown", (f"the judge answered {a.get('answer')!r}, not "
+                                         "pass, fail or unknown")
+        elif answer != "unknown" and not found:
+            reason = (f"the judge answered {answer} " + (
+                "quoting a line that is not in the material" if line
+                else "without quoting the line it rests on") + (f": {reason}" if reason else ""))
+            answer = "unknown"
+        out[q["id"]] = {"answer": answer, "line": line, "reason": reason, "line_found": found}
     return out
 
 

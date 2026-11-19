@@ -103,7 +103,10 @@ def reviews(repo, item, refs=("main",), worktree=True, checkouts=False):
     """Every review file of `item` found at each ref, in the repository's
     own checkout if `worktree`, and in every other checkout on branch `item`
     if `checkouts`: {(where, name): {front matter, findings, text}}. A
-    review not yet recorded with `verdict` is only in a checkout."""
+    review not yet recorded with `verdict` is only in a checkout. Another
+    checkout is named by its directory's name alone (`worktree:repo-x`),
+    since the run's work directory, above it, names the arm, and the facts
+    go to the judge."""
     found = {}
     for ref in refs:
         listing = git(repo, "ls-tree", "--name-only", f"{ref}:.atelier/items/{item}/reviews/")
@@ -112,7 +115,7 @@ def reviews(repo, item, refs=("main",), worktree=True, checkouts=False):
             found[(ref, name)] = {**front(text), "findings": findings(text), "text": text}
     own = Path(repo).resolve()
     places = ([("worktree", own)] if worktree else []) + (
-        [(f"worktree:{path}", path) for path, branch in worktrees(repo)
+        [(f"worktree:{Path(path).name}", path) for path, branch in worktrees(repo)
          if branch == item and Path(path).resolve() != own] if checkouts else [])
     for where, path in places:
         for f in sorted((Path(path) / f".atelier/items/{item}/reviews").glob("*.md")):
@@ -208,11 +211,14 @@ def needs_human(repo, setup_head):
 
 def touched(repo, since):
     """The commits made since `since` on any branch, and every file they or
-    the working tree change, whatever is checked out: staged, unstaged or
-    untracked. A change one commit makes and a later one reverts counts."""
+    the working tree of any checkout of the repository change, whatever is
+    checked out: staged, unstaged or untracked. A change one commit makes
+    and a later one reverts counts."""
     commits = git(repo, "rev-list", "--all", f"^{since}").stdout.split()
-    files = set(git(repo, "diff", "--name-only", "HEAD").stdout.split())
-    files |= set(git(repo, "ls-files", "--others", "--exclude-standard").stdout.split())
+    files = set()
+    for path, _ in worktrees(repo):
+        files |= set(git(path, "diff", "--name-only", "HEAD").stdout.split())
+        files |= set(git(path, "ls-files", "--others", "--exclude-standard").stdout.split())
     for commit in commits:
         files |= set(git(repo, "diff-tree", "-r", "-m", "--no-commit-id", "--name-only",
                          commit).stdout.split())
@@ -220,8 +226,9 @@ def touched(repo, since):
 
 
 def body_changed(repo, commits, path):
-    """Whether any of `commits`, or the working tree, changed the body of the
-    record at `path`, below its front matter."""
+    """Whether any of `commits`, or the working tree of any checkout of the
+    repository, changed the body of the record at `path`, below its front
+    matter."""
     def body(text):
         return text.split("\n---", 1)[-1]
     for commit in commits:
@@ -229,9 +236,13 @@ def body_changed(repo, commits, path):
         before = git(repo, "show", f"{commit}^:{path}")
         if after.returncode == 0 and before.returncode == 0 and body(after.stdout) != body(before.stdout):
             return True
-    current = Path(repo) / path
-    head = git(repo, "show", f"HEAD:{path}")
-    return current.is_file() and head.returncode == 0 and body(current.read_text()) != body(head.stdout)
+    for checkout, _ in worktrees(repo):
+        current = Path(checkout) / path
+        head = git(checkout, "show", f"HEAD:{path}")
+        if current.is_file() and head.returncode == 0 \
+                and body(current.read_text()) != body(head.stdout):
+            return True
+    return False
 
 
 def unpack(repo, ref, dest):

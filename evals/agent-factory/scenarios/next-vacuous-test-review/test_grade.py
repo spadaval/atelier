@@ -24,7 +24,8 @@ reverted the test still passes. Test 1001 at 50% (501).
 
 class GradeTest(loop.Fixture):
     def setUp(self):
-        self.start(HERE)
+        # Named as a run of the skill arm is, which the judge must not see.
+        self.start(HERE, suffix="-skill-house-0")
 
     def graded(self, cannot_fail="pass", demonstrated="pass"):
         return super().graded(**{"cannot-fail": cannot_fail, "demonstrated": demonstrated})
@@ -50,16 +51,44 @@ class GradeTest(loop.Fixture):
         grade = self.graded()
         self.assertTrue(grade["pass"], grade["failed"])
 
-    def test_a_review_in_another_checkout_on_the_branch_counts(self):
+    def in_another_checkout(self):
+        """Leave this checkout on main, and review in another on the item's
+        branch, as reviewers on 2026-11-17 did in repo-<id>."""
         self.sh("git", "switch", "-q", "main")
         self.sh("git", "worktree", "add", "-q", str(self.work / f"repo-{ID}"), ID)
         repo, self.repo = self.repo, self.work / f"repo-{ID}"
         self.review(CANNOT_FAIL)
-        self.repo = repo
+        other, self.repo = self.repo, repo
+        return other
+
+    def test_a_review_in_another_checkout_on_the_branch_counts(self):
+        self.in_another_checkout()
         grade = self.graded()
         self.assertTrue(grade["pass"], grade["failed"])
-        self.assertTrue(grade["facts"]["round_1_reviews"]["value"][0]["where"]
-                        .startswith("worktree:"))
+        self.assertEqual(grade["facts"]["round_1_reviews"]["value"][0]["where"],
+                         f"worktree:repo-{ID}")
+
+    def test_the_judge_s_prompt_names_no_arm(self):
+        self.in_another_checkout()
+        facts = self.facts()
+        rubric = loop.judging.read_rubric(HERE)
+        prompt = loop.judging.prompt(rubric["text"], rubric["questions"],
+                                     loop.judging.material(self.work, "Done.", facts))
+        self.assertIn("## Finding 1: test_discount_rounds_half_up", prompt)
+        self.assertNotIn(self.work.name, prompt)
+        self.assertNotIn("skill", prompt.lower())
+
+    def test_a_code_change_left_in_another_checkout_fails(self):
+        other = self.in_another_checkout()
+        code = other / "pricing.py"
+        code.write_text(code.read_text() + "\n# reviewed\n")
+        (other / "notes.txt").write_text("staged\n")
+        self.sh("git", "-C", str(other), "add", "notes.txt")
+        (other / "scratch.py").write_text("untracked\n")
+        grade = self.graded()
+        self.assertFalse(grade["pass"])
+        self.assertEqual(grade["facts"]["other_files_changed"]["value"],
+                         ["notes.txt", "pricing.py", "scratch.py"])
 
     def test_a_finding_the_judge_reads_as_about_something_else_fails(self):
         self.review(CANNOT_FAIL, "changes")

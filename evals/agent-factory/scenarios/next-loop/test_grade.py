@@ -59,11 +59,12 @@ class Fixture(unittest.TestCase):
     def setUp(self):
         self.start(HERE)
 
-    def start(self, case):
+    def start(self, case, suffix=""):
         """A fresh work directory from `case`'s setup.sh, whose `atelier`
-        calls are logged as a run's are."""
+        calls are logged as a run's are; `suffix` ends its name, as a run's
+        arm, setup and index end a run's."""
         self.case = case
-        self.work = Path(tempfile.mkdtemp(prefix=f"{case.name}-grade-"))
+        self.work = Path(tempfile.mkdtemp(prefix=f"{case.name}-grade-", suffix=suffix))
         subprocess.run(["bash", str(case / "setup.sh"), str(self.work)], check=True,
                        capture_output=True)
         run.log_atelier(self.work)
