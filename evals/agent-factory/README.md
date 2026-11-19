@@ -343,14 +343,17 @@ its own when it ends.
   limit or a spent allowance, the run is graded `null` with the reason
   `rate limit or spent allowance: <who> ended on '<what the provider
   said>'` (`provider_limit` in `harness/run.py`). A limit the agent waited
-  out or retried past does not count. A `spawn_agent` subagent's limit
-  shows in its parent's transcript, which is read. Running the matrix again
-  into the same `--out` makes only its runs that are missing there or
-  graded `null`: a graded run in the same setup, on the same binary
-  (`EVAL_ATELIER`) and, in the skill arm, from the same skill commit and
-  directory, is kept and counted in the table the matrix prints. To sample
-  again, raise `--runs` or use another `--out`. `harness/table.py` leaves
-  out a run graded `null` that a later result in the file made again.
+  out or retried past does not count. A `spawn_agent` subagent's limit is
+  read from its session record in `sessions/`, since its transcript in
+  `threads/` keeps no errors. Running the matrix again into the same
+  `--out` makes only its runs that are missing there or graded `null`: a
+  graded run in the same setup, its name, roles and judges unchanged, on
+  the same binary (`EVAL_ATELIER`) and, in the skill arm, from the same
+  skill commit and directory, is kept and counted in the table the matrix
+  prints. To sample again, raise `--runs` or use another `--out`.
+  `harness/table.py` leaves out a run graded `null` that a later result in
+  the same `results.jsonl` made again; files given together are separate
+  matrices, and none hides another's nulls.
 - Claude Code loads instruction files (`CLAUDE.md`, `AGENTS.md`,
   `.claude/CLAUDE.md`, `.claude/rules/` and the like) from every directory
   above its working directory, whatever `--setting-sources` says, so a run

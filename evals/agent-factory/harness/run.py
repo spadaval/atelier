@@ -108,12 +108,13 @@ Each run records when each of its agents ran (each turn of a Codex subagent,
 from its own session record, since it idles between turns), and the matrix
 prints the most agents running at once.
 
-A run whose first agent, a thread it started through `delegate`, or a judge
-ended on its provider's rate limit or a spent allowance (provider_limit) is
-invalid with that reason, and not failed. Running a matrix again into the
-same --out makes only its runs that are missing there or invalid: one
-already graded in the same setup, from the same skill and binary, is kept
-and counted in the table.
+A run whose first agent, a thread it started, or a judge ended on its
+provider's rate limit or a spent allowance (provider_limit) is invalid with
+that reason, and not failed; a spawn_agent subagent's limit is read from its
+session record. Running a matrix again into the same --out makes only its
+runs that are missing there or invalid: one already graded in the same
+setup (its roles and judges unchanged), from the same skill and binary, is
+kept and counted in the table.
 
 Claude Code loads instruction files (CLAUDE.md, AGENTS.md, .claude/CLAUDE.md,
 .claude/rules/ and the like) from every directory above its working directory,
@@ -233,6 +234,8 @@ LIMIT_WORDS = re.compile(r"usage limit|rate[ _-]?limit|\b429\b|too many requests
 # Claude Code's kinds of API error that mean a limit, on the message it
 # puts in place of a reply.
 LIMIT_ERRORS = ("rate_limit", "billing_error")
+# The session ID at the end of a Codex session record's file name.
+SESSION_ID = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}(?=\.jsonl$)")
 # The default caps on runs at once, by kind: those that build Rust (the
 # replayed reviews), and all others.
 CARGO_JOBS, JOBS = 3, 10
@@ -849,7 +852,9 @@ def provider_limit(transcript: Path):
     word only until the agent next gets a reply, so one it waited out or
     retried past is not counted. Claude Code reports a limit as a rejected
     rate_limit_event, as an API error of kind LIMIT_ERRORS in place of a
-    reply, or in an error result; Codex in an error or a failed turn."""
+    reply, or in an error result; `codex exec` in an error or a failed turn;
+    and a Codex session record, a spawn_agent subagent's, in an error
+    event_msg."""
     said = None
     for line in (transcript.read_text().splitlines() if transcript.exists() else []):
         try:
@@ -857,6 +862,14 @@ def provider_limit(transcript: Path):
         except json.JSONDecodeError:
             continue
         kind = event.get("type")
+        if kind == "event_msg":
+            # A session record's event, read as `codex exec` would print it;
+            # a message from the parent is not a reply.
+            event = event.get("payload") or {}
+            item = (event.get("item") or {}).get("type")
+            kind = {"error": "error", "stream_error": "error"}.get(event.get("type")) or (
+                "item.completed" if event.get("type") == "item_completed"
+                and item != "UserMessage" else None)
         if kind == "rate_limit_event":
             info = event.get("rate_limit_info") or {}
             if info.get("status") == "rejected":
@@ -887,10 +900,17 @@ def provider_limit(transcript: Path):
 
 
 def run_limit(transcript: Path, run_dir: Path):
-    """Why a run is invalid because its first agent or a thread `delegate`
-    started ended on its provider's limit (provider_limit), or None."""
+    """Why a run is invalid because its first agent or a thread it started
+    ended on its provider's limit (provider_limit), or None: a thread
+    `delegate` started from its transcript, and a spawn_agent subagent from
+    its session record, which keeps the errors its transcript in threads/
+    (codex_thread_events) leaves out."""
+    records = sorted((run_dir / "sessions").glob("rollout-*.jsonl"))
     agents = [("the first agent", transcript),
-              *((f"thread {p.stem}", p) for p in sorted((run_dir / "threads").glob("*.jsonl")))]
+              *((f"thread {p.stem}", p) for p in sorted((run_dir / "threads").glob("*.jsonl"))),
+              *((f"thread codex-{SESSION_ID.search(p.name).group(0)}"
+                 if SESSION_ID.search(p.name) else f"subagent record {p.name}", p)
+                for p in records)]
     for who, path in agents:
         said = provider_limit(path)
         if said:
@@ -1209,16 +1229,18 @@ def discard_work(result: dict, keep: bool) -> bool:
         and not keep and bool(result.get("work_dir"))
 
 
-def kept_runs(results: list, setup: str, ref, skill_dir: str, atelier) -> dict:
+def kept_runs(results: list, setup: dict, ref, skill_dir: str, atelier) -> dict:
     """The runs a matrix already made into its output that it keeps, by
-    (scenario, arm, index): graded, in this setup, on the same binary (where
+    (scenario, arm, index): graded, in this setup, its name, roles and
+    judges as they are now, on the same binary (where
     both name one), and in the skill arm from the skill at `ref`, a full
     SHA. Running the matrix again makes only the others: the runs missing
     and those graded null, the ones that ended on a provider's limit
     included."""
     kept = {}
     for r in results:
-        if r.get("pass") is None or r.get("setup") != setup:
+        if r.get("pass") is None or r.get("setup") != setup["name"] \
+                or r.get("roles") != setup["roles"] or r.get("judges") != setup["judges"]:
             continue
         if atelier and r.get("atelier") and r["atelier"] != atelier:
             continue
@@ -1311,7 +1333,7 @@ def main() -> None:
     a.out.mkdir(parents=True, exist_ok=True)
     a.work_root.mkdir(parents=True, exist_ok=True)
     made = kept_runs(table.read([results_path]) if results_path.exists() else [],
-                     setup["name"], ref, a.skill_dir, os.environ.get("EVAL_ATELIER"))
+                     setup, ref, a.skill_dir, os.environ.get("EVAL_ATELIER"))
     kept = [made[run] for run in every if run in made]
     jobs = [run for run in every if run not in made]
     print(json.dumps({"kept": len(kept), "making": len(jobs), "out": str(a.out)}), flush=True)

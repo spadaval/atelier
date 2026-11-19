@@ -694,6 +694,24 @@ class MixedSetupTest(unittest.TestCase):
         self.assertIn("spawn_agent", run.thread_problem("none", thread, spec))
 
 
+class TableTest(unittest.TestCase):
+    def test_a_rerun_hides_its_own_null_and_not_another_matrix_s(self):
+        run_ = {"setup": "sol", "scenario": "c", "arm": "none", "index": 0, "seconds": 1}
+        null, graded = {**run_, "pass": None, "invalid": "x"}, {**run_, "pass": True}
+        with tempfile.TemporaryDirectory() as tmp:
+            a, b = Path(tmp, "a"), Path(tmp, "b")
+            a.mkdir(), b.mkdir()
+            (a / "results.jsonl").write_text(json.dumps(null) + "\n")
+            (b / "results.jsonl").write_text(json.dumps(graded) + "\n")
+            for order in ([a, b], [b, a]):
+                self.assertIn("| sol | c | none | 1 of 1 | 1 |",
+                              table.table(table.read(order)))
+            (a / "results.jsonl").write_text(json.dumps(null) + "\n" + json.dumps(graded) + "\n")
+            self.assertIn("| sol | c | none | 1 of 1 | 0 |", table.table(table.read([a])))
+            (a / "results.jsonl").write_text(json.dumps(graded) + "\n" + json.dumps(null) + "\n")
+            self.assertIn("| sol | c | none | 1 of 1 | 1 |", table.table(table.read([a])))
+
+
 class TokensTest(unittest.TestCase):
     def test_claude_and_codex_usage_count_alike(self):
         claude = {"input_tokens": 14, "cache_creation_input_tokens": 100,
@@ -785,6 +803,24 @@ else:
         {"type": "turn_context", "payload": {"model": model, "effort": ran_effort}},
         {"type": "event_msg", "payload": {"type": "token_count",
                                           "info": {"total_token_usage": usage}}}]) + "\n")
+    if prompt.startswith("SPAWN"):
+        # A spawn_agent subagent whose turn meets the usage limit, and
+        # which recovers only if told to; the parent then ends normally.
+        kid, at = str(uuid.uuid4()), "2026-11-18T23:00:0{}Z"
+        child = [{"type": "session_meta", "payload": {"id": kid, "parent_thread_id": sid}},
+                 {"type": "turn_context", "payload": {"model": model, "effort": ran_effort}},
+                 {"timestamp": at.format(0), "type": "event_msg",
+                  "payload": {"type": "task_started"}},
+                 {"timestamp": at.format(1), "type": "event_msg", "payload": {
+                     "type": "error", "message": "You've hit your usage limit. Try again later."}}]
+        if Path(__file__).with_name("child-recovers").exists():
+            child.append({"timestamp": at.format(2), "type": "event_msg", "payload": {
+                "type": "item_completed", "item": {"type": "AgentMessage",
+                                                   "content": [{"text": "done"}]}}})
+        child.append({"timestamp": at.format(3), "type": "event_msg",
+                      "payload": {"type": "task_complete"}})
+        (day / f"rollout-2026-11-18T23-00-00-{kid}.jsonl").write_text(
+            "".join(json.dumps(e) + "\n" for e in child))
 # What this agent was given, for a test of runs going at once.
 home = os.environ.get("CODEX_HOME")
 with open(Path(os.environ["TMPDIR"]) / "seen.jsonl", "a") as seen:
@@ -958,6 +994,26 @@ class RunOneTest(unittest.TestCase):
         self.assertIsNone(r["pass"])
         self.assertEqual(r["invalid"], f"{run.LIMIT_REASON}: thread {r['threads'][1]['thread']} "
                          "ended on \"You've hit your usage limit. Try again at 5:00 PM.\"")
+
+    def run_sol_spawning(self):
+        case = self.tmp / "scenarios" / "case"
+        (case / "prompt.md").write_text("SPAWN {{skill}}go")
+        (self.tmp / "codex-effort").write_text("high")
+        return run.run_one("case", "none", "HEAD", run.load_setup("sol"), 0,
+                           self.tmp / "out", self.tmp / "work")
+
+    def test_a_spawn_agent_subagent_that_ends_on_its_limit_makes_the_run_invalid(self):
+        r = self.run_sol_spawning()
+        self.assertEqual((r["exit"], r["pass"]), (0, None))
+        kid = r["threads"][1]["thread"]
+        self.assertTrue(kid.startswith("codex-"))
+        self.assertEqual(r["invalid"], f"{run.LIMIT_REASON}: thread {kid} ended on "
+                         "\"You've hit your usage limit. Try again later.\"")
+
+    def test_a_spawn_agent_subagent_that_recovers_from_a_limit_keeps_its_grade(self):
+        (self.tmp / "child-recovers").write_text("")
+        r = self.run_sol_spawning()
+        self.assertIs(r["pass"], True, r.get("invalid"))
 
     def test_a_first_agent_that_ends_on_its_providers_limit_is_invalid_with_why(self):
         (self.tmp / "claude-limit").write_text("")
@@ -1413,8 +1469,9 @@ class MainTest(unittest.TestCase):
         out.mkdir()
         ref = subprocess.run(["git", "-C", str(run.REPO), "rev-parse", "--short", "HEAD"],
                              capture_output=True, text=True, check=True).stdout.strip()
+        sol = run.load_setup("sol")
         case = {"scenario": "vacuous-test-review", "setup": "sol", "seconds": 5,
-                "run_dir": "", "agents": []}
+                "run_dir": "", "agents": [], "roles": sol["roles"], "judges": sol["judges"]}
         before = [
             {**case, "arm": "none", "index": 0, "pass": False},
             {**case, "arm": "none", "index": 1, "pass": None,
@@ -1448,18 +1505,40 @@ class MainTest(unittest.TestCase):
         self.assertIn('{"kept": 4, "making": 0', printed)
 
     def test_another_binary_or_skill_dir_makes_the_run_again(self):
-        out = self.tmp / "out"
-        out.mkdir()
+        sol = run.load_setup("sol")
         old = {"scenario": "vacuous-test-review", "setup": "sol", "arm": "none", "index": 0,
-               "pass": True, "atelier": "/var/tmp/af-evals/bin/atelier-old"}
-        (out / "results.jsonl").write_text(json.dumps(old) + "\n")
-        kept = run.kept_runs([old], "sol", None, run.DEFAULT_SKILL_DIR,
+               "pass": True, "atelier": "/var/tmp/af-evals/bin/atelier-old",
+               "roles": sol["roles"], "judges": sol["judges"]}
+        kept = run.kept_runs([old], sol, None, run.DEFAULT_SKILL_DIR,
                              "/var/tmp/af-evals/bin/atelier-new")
         self.assertEqual(kept, {})
-        self.assertEqual(len(run.kept_runs([old], "sol", None, run.DEFAULT_SKILL_DIR, None)), 1)
+        self.assertEqual(len(run.kept_runs([old], sol, None, run.DEFAULT_SKILL_DIR, None)), 1)
         skill = {**old, "arm": "skill", "skill_ref": "abc1234", "skill_dir": "skills/other"}
-        self.assertEqual(run.kept_runs([skill], "sol", "abc1234ff", run.DEFAULT_SKILL_DIR,
+        self.assertEqual(run.kept_runs([skill], sol, "abc1234ff", run.DEFAULT_SKILL_DIR,
                                        None), {})
+
+    def test_a_setup_changed_under_its_name_makes_its_runs_again(self):
+        """A role or a judge edited in setups/sol.json is another setup, so
+        its matrix makes every run again."""
+        sol = run.load_setup("sol")
+        old = {"scenario": "vacuous-test-review", "setup": "sol", "arm": "none", "index": 0,
+               "pass": True, "roles": sol["roles"], "judges": sol["judges"]}
+        self.assertEqual(len(run.kept_runs([old], sol, None, run.DEFAULT_SKILL_DIR, None)), 1)
+        role = {**sol, "roles": {**sol["roles"], "reviewer": {
+            **sol["roles"]["reviewer"], "effort": "xhigh"}}}
+        judge = {**sol, "judges": {"openai": {**sol["judges"]["openai"], "model": "x"}}}
+        for changed in (role, judge):
+            self.assertEqual(run.kept_runs([old], changed, None, run.DEFAULT_SKILL_DIR,
+                                           None), {})
+        out = self.tmp / "out"
+        out.mkdir()
+        (out / "results.jsonl").write_text(json.dumps({**old, "roles": role["roles"]}) + "\n")
+        made = []
+        run.run_one = lambda scenario, arm, ref_, setup, index, *rest: made.append(
+            index) or {**old, "index": index}
+        printed = self.main("--setup", "sol")
+        self.assertEqual(made, [0])
+        self.assertIn('{"kept": 0, "making": 1', printed)
 
 
 class ProductMapTest(unittest.TestCase):
