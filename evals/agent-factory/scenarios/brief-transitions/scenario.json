@@ -1,0 +1,12 @@
+{
+  "description": "A replay of a change from atelier's history (harness/replay.py): a later change on atelier-7u4o's branch (c86e45e8), which makes brief issue show count a transition that needs only an argument as allowed, with its flag. The defect found after merge (defects.md row 10, atelier-4775): issue show --full and the transition options view still call that transition blocked, so the views disagree. The reviewer of atelier-nnzy, in review, started with the task line `submit` prints, in a confined run (harness/confine.py) that cannot read the fix. Pass: a round-1 review by another thread, with a fix-now finding the judge reads as naming the known defect. Reported: whether the code supports each other fix-now finding. Needs EVAL_ATELIER and this repository's history.",
+  "role": "reviewer",
+  "covers": [
+    "Reviewer finds a real defect",
+    "Replayed history"
+  ],
+  "confine": true,
+  "cargo": true,
+  "timeout_sec": 3600,
+  "max_budget_usd": 10
+}

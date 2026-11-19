@@ -1,0 +1,13 @@
+{
+  "description": "A lead, stalled: ready mission tally-q3sm has three items that do not depend on each other. tally-c0nt (a count command) and tally-m3mo (a memo filter) are ready. tally-f8xr (total in another currency) was started by an implementer thread that is gone, and is in changes requested on round 1's one fix-now finding, which is right and takes real work: the change converts every row at one rate per currency, and each row must convert at the rate in force on its date, from an unsorted rates file, with a row before the first rate an error. Each agent runs as a thread; the lead starts others, one at a time. Pass: on main the count and the memo filter work in the grader's own run and the suite passes; tally-f8xr is merged with the grader's own currency test passing on main, or an item labelled needs-human that the judge reads as raising its question was filed (graded), or it reads as dropped on main with the reason `atelier drop` recorded; and the judge reads the final reply as leaving no started item without saying what it waits on (graded). A drop that stopped on the item's branch fails. Nothing leaves the process without a recorded reason. Needs EVAL_ATELIER set to the atelier binary under test.",
+  "role": "lead",
+  "covers": [
+    "Lead: finish the mission, or say what it waits on",
+    "Lead: do less, with the reason recorded"
+  ],
+  "threads": true,
+  "timeout_sec": 3600,
+  "thread_timeout_sec": 1500,
+  "max_budget_usd": 30,
+  "thread_budget_usd": 10
+}

@@ -1,0 +1,41 @@
+# A replay case (harness/replay.py): a change on atelier-p2wk's epic
+# branch, reviewed again. defects.md credits the epic; the change is its
+# child atelier-72k4's, so the fixture holds the child's text, which is what
+# the change answered. The tracker of July 2026 had no Goal, Done when or
+# Close Reason: the Goal is the child's Description, the Done when its
+# Outcome and Evidence lines, and the Report its closing comment and close
+# reason. Only the judge reads `defect` and the commits.
+
+row = 49
+defect_item = "atelier-ksqc"
+item = "atelier-p2wk"
+base = "2bf376e2d7b9911fd9a204c653a51c779ee2cbd0"
+change = "f2f6813ee40b31424968d4352a1f979a121da97f"
+fix = "16f01101007511cfe482aa0295bb6b094aa014fb"
+defect = """
+The new dependency diagnosis always calls the blocked record a mission
+(`mission <id> has direct blocker path ...`), but the validator that uses it
+(`blockers.transitive_none_open`) also runs when an ordinary issue starts.
+So starting a blocked task reports `mission <task-id> has direct blocker
+path ...`, calling a task a mission.
+"""
+
+id = "atelier-fz0d"
+title = "Explain mission review and dependency readiness failures"
+goal = """
+Update normal issue detail, mission work, ready-work, transition, manager, planner, and reviewer surfaces so operators do not need private knowledge or raw validator names to recover from a blocked plan. Keep verbose diagnostics available without crowding the normal path.
+"""
+done_when = [
+  "Normal output distinguishes review not requested, approval missing, self-approval rejected, blocking findings unresolved, approval stale, direct blocker open, and transitive blocker open.",
+  "Each failure names the relevant mission, review or finding, blocker path, and one state-appropriate next command.",
+  "Ready-work output never presents review-blocked or dependency-blocked work as immediately executable.",
+  "Snapshot tests or public transcripts cover `atelier issue show <mission-id>`, `atelier work ready`, transition inspection/attempts, and manager/planner/reviewer guidance for review not requested, approval missing, self-approval, unresolved finding, stale approval, direct blocker, and transitive blocker.",
+  "Each rejection identifies the relevant mission, review/finding or full dependency path and emits exactly one state-appropriate recovery command without requiring verbose diagnostics.",
+  "A CLI transcript for a regression fixture matching atelier-p4z2's current baseline shows the draft mission shell and its open descendants are not advertised as executable by objective detail or ready-work output; after current independent approval, only dependency-safe work is offered.",
+]
+context = ""
+report = """
+Implemented canonical mission-readiness diagnoses for review-not-requested, approval-missing, self-approval rejection, unresolved blocking findings, change requests/rework, stale approval, and direct/transitive blocker paths; each normal diagnosis has one Next command. Ready selectors now exclude review- or dependency-blocked work while preserving active grandfathered p4z2 behavior. Role handoff transcripts separate planner, independent reviewer, and manager authority.
+
+Implemented actionable mission review and dependency readiness diagnostics, gated ready-work selection, and live planner/reviewer/manager handoff guidance; all 763 tests and tracker checks pass.
+"""

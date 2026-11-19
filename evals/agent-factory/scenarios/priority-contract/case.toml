@@ -1,0 +1,47 @@
+# A replay case (harness/replay.py): atelier-6jap's change, the squash
+# merge of an epic and its children, reviewed again as one change. The
+# tracker of June 2026 had no Goal, Done when or Close Reason: the Goal is
+# the epic's Description, the Done when its Outcome and Evidence lines, and
+# the Report its close reason and its validation receipt. The base's
+# AGENTS.md is that era's, whose process sections the shared setup does not
+# strip, and the base holds that era's AGENTFACTORY.md. Only the judge reads
+# `defect` and the commits.
+
+row = 45
+defect_item = "atelier-jpok"
+item = "atelier-6jap"
+base = "2f11348a2852fca93c2113c2e88836df96fdb027"
+change = "4aee6436921db965a31b81f5140a45e6c906cb72"
+fix = "39ca34a92cb39cb483d93384e35e1d56d6242549"
+defect = """
+The shared priority contract (`IssuePriority`) gives records and the CLI
+two vocabularies that refuse each other. Records store `P0` to `P3`, but CLI
+input is parsed with `from_label` alone, so `issue create -p P1` and `issue
+list --priority P1` are refused. Its one parse error, used for record tokens
+and CLI words alike, always says `Valid values: critical, high, medium,
+low`, so a record holding `low` fails `atelier check` with a message that
+lists the words, while the file needs `P3`.
+"""
+
+id = "atelier-zivs"
+title = "Finish storage boundary cleanup"
+goal = """
+Finish storage-boundary cleanup uncovered by the architecture audit. RecordStore and SQLite have moved toward the target architecture, but live code still mixes large record-store responsibilities, duplicated priority vocabulary, raw SQLite access, compatibility-style session/work APIs, and unclear comment sidecar ownership.
+
+This epic owns interface cleanup and boundary proof. It should not change public CLI behavior unless a child issue explicitly names that behavior.
+"""
+done_when = [
+  "RecordStore code is split by durable record ownership and parser/rendering responsibilities are easy to locate.",
+  "Canonical priority, human priority labels, projection filters, and work-order sorting use one shared conversion contract.",
+  "`atelier-sqlite::Database` exposes narrow projection/query APIs; raw connection access and compatibility helpers are private, deleted, or isolated behind clearly named test/import adapters.",
+  "Comment sidecar ownership is documented and implemented in the boundary that owns the canonical activity files.",
+  "Focused records and SQLite tests cover record round trips, rebuild/projection behavior, priority conversion/filtering, and database interface encapsulation.",
+  "Search transcript proves removed or isolated compatibility APIs are no longer used by production code.",
+  "`atelier lint`, `atelier export --check`, `atelier doctor`, and `git diff --check` pass.",
+]
+context = ""
+report = """
+Storage boundary cleanup is complete: all child issues are done with proof, epic validation evidence is attached, and lint/export/doctor/diff checks pass.
+
+Storage-boundary epic validation passed after all five child issues closed. Verified RecordStore ownership modules and canonical record registry, shared priority conversion, narrowed SQLite boundary, and activity sidecar ownership. Validation passed: cargo fmt -- --check; cargo test -p atelier-records; cargo test -p atelier-sqlite; cargo test -p atelier-app export; target/debug/atelier lint; target/debug/atelier export --check; target/debug/atelier doctor; git diff --check.
+"""
