@@ -718,6 +718,10 @@ if agent == "claude":
                                 "output_tokens": 5}}))
 else:
     print(json.dumps({"type": "item.completed", "item": {"type": "agent_message", "text": "ok"}}))
+    if Path(__file__).with_name("codex-fails").exists():
+        # Usage recorded, then the turn fails: exec prints no usage for it.
+        print(json.dumps({"type": "turn.failed", "error": {"message": "stopped"}}))
+        sys.exit(1)
     print(json.dumps({"type": "turn.completed", "usage": {
         "input_tokens": 300, "cached_input_tokens": 200, "output_tokens": 30}}))
 '''
@@ -776,6 +780,24 @@ class RunOneTest(unittest.TestCase):
         self.assertFalse((run.role_home(Path(r["work_dir"]), "reviewer") / "auth.json")
                          .is_symlink())
         self.assertIn("| house | case | none | 1 of 1 |", table.table([r]))
+
+    def test_a_codex_thread_that_fails_keeps_the_tokens_its_record_counts(self):
+        # Review 2's reproduction: the reviewer records usage, then its turn fails.
+        (self.tmp / "codex-fails").write_text("")
+        r = self.run_house()
+        reviewer = r["threads"][1]
+        self.assertEqual((reviewer["exit"], reviewer["tokens"]),
+                         (1, {"in": 300, "cached_in": 200, "out": 30}))
+        self.assertEqual(r["tokens"], {"in": 400, "cached_in": 290, "out": 35})
+
+    def test_a_codex_first_agent_that_fails_keeps_its_tokens(self):
+        (self.tmp / "codex-fails").write_text("")
+        meta = self.tmp / "scenarios" / "case" / "scenario.json"
+        meta.write_text(json.dumps({"description": "x", "role": "reviewer"}))
+        r = self.run_house()
+        self.assertEqual((r["agent"], r["exit"]), ("codex", 1))
+        self.assertIsNone(r["pass"])
+        self.assertEqual(r["tokens"], {"in": 300, "cached_in": 200, "out": 30})
 
     def test_a_thread_at_another_effort_than_its_roles_makes_the_run_invalid(self):
         (self.tmp / "codex-effort").write_text("low")

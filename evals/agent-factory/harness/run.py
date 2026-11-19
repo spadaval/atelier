@@ -500,7 +500,9 @@ def codex_given(items: list, home: Path) -> dict:
 def codex_record(events: list, home: Path) -> dict:
     """What a session record says its session was given (codex_given), the
     model and effort its last turn ran at, and its tokens, from its last
-    running total."""
+    running total, or None where it has none. The record counts a turn
+    that never completed, which `codex exec --json` gives no usage for, so
+    a Codex thread's tokens are taken from here."""
     facts = {**codex_given([e.get("payload") or {} for e in events], home),
              "model": None, "effort": None}
     total = None
@@ -510,7 +512,7 @@ def codex_record(events: list, home: Path) -> dict:
             facts["model"], facts["effort"] = payload.get("model"), payload.get("effort")
         if e.get("type") == "event_msg" and payload.get("type") == "token_count":
             total = (payload.get("info") or {}).get("total_token_usage") or total
-    facts["tokens"] = token_counts([total] if total else [])
+    facts["tokens"] = token_counts([total]) if total else None
     return facts
 
 
@@ -600,7 +602,8 @@ def codex_threads(home: Path, run_dir: Path, ended: float, threads: list = None)
             threads.append({"thread": thread, "role": None, "agent": "codex",
                             "model": facts["model"], "effort": facts["effort"],
                             "seconds": round(sum(t["end"] - t["start"] for t in turns)),
-                            "exit": None, "tokens": facts.pop("tokens"),
+                            "exit": None,
+                            "tokens": facts.pop("tokens") or token_counts([]),
                             "init": {**facts, "mcp_servers": []}})
     return agents
 
@@ -632,15 +635,15 @@ def thread_facts(entry: dict, setup: dict, run_dir: Path, work: Path) -> dict:
     role's CODEX_HOME)."""
     spec = setup["roles"].get(entry.get("role")) or {}
     info = read_transcript(run_dir / "threads" / f"{entry['thread']}.jsonl")
-    init = info["init"]
+    init, tokens = info["init"], info["tokens"]
     if spec.get("agent") == "codex" and init is not None:
         record = codex_session(role_home(work, entry["role"]), init.get("thread_id"))
+        tokens = record.pop("tokens") or tokens
+        record.pop("instructions")
         init = {**init, **record}
-        init.pop("tokens")
-        init.pop("instructions")
     return {"thread": entry["thread"], "role": entry.get("role"), **spec,
             "seconds": round(entry["end"] - entry["start"]), "exit": entry.get("exit"),
-            "tokens": info["tokens"], "init": init}
+            "tokens": tokens, "init": init}
 
 
 def peak(agents: list) -> int:
@@ -903,7 +906,7 @@ def run_one(scenario: str, arm: str, ref: str, setup: dict, index: int,
         agents += codex_threads(home, run_dir, agents[0]["end"], started_threads)
         if info["init"] is not None:
             record = codex_session(home)
-            record.pop("tokens")
+            first_thread["tokens"] = record.pop("tokens") or first_thread["tokens"]
             record.pop("instructions")
             info["init"].update(record)
     calls = atelier_calls(work, first_thread["thread"])
