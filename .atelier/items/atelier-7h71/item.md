@@ -74,7 +74,7 @@ times. Results:
   With the skill, 15 of 19 tested only whether the walk misses a claim
   (one-sided links, reopened child work), and none of them found it. Under
   Size and Verdict, all 22 failing skill reviews gave the change's own aim
-  as its Value. Two of them also stated the Goal's boundary ("unrelated
+  as its Value. Three of them also stated the Goal's boundary ("unrelated
   historical claims remain trusted") and never tested it; the reviews that
   found the defect are the ones that built a case for it. Eleven named the
   defect's class under Risk

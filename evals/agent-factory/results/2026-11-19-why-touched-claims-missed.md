@@ -127,12 +127,17 @@ past the suite checked one-sided links and nested work.
 **What they wrote under Size and Verdict.** Every one of the 22 failing
 skill reviews gives the change's own aim as its Value, in words like
 "reopening advancing work must invalidate a completed mission's claim".
-Two of them also state the Goal's boundary and then do not test it. One,
-from today's `house` runs (`house-3-8a5b`), says "while unrelated
-historical claims remain trusted", and one of id3v's (`house-2-434a`) says
-"while unrelated historical claims remain eligible to be skipped". Both
-tested only one-sided links and child work, and both approved. The other
-20 do not mention the Goal's aim, a `land` that checks only what changed. Under
+Three of them also state the Goal's boundary and then do not test it:
+today's `house-3-8a5b` ("while unrelated historical claims remain
+trusted"), and id3v's `house-2-434a` ("while unrelated historical claims
+remain eligible to be skipped") and `sol-1-b165` ("while skipping
+unaffected history"). All three approved. The two in `house` tested only
+one-sided links and child work, and the one in `sol` ran only the suite.
+I read all 22 Value lines for this count. The other 19 do not say that
+unrelated claims stay skipped. Where they say "unchanged", they mean the
+mission's own record, which is the change's aim. One of them, `sol-7-ba88`,
+names skipping only as the reason to check more ("skipping historical
+verification requires checking affected mission claims"). Under
 Risk, 10 rate the change high for the opposite failure: "an omitted
 dependency can silently skip a required completion check." Another 11 name
 the defect's own class and rate it low or medium, most of them because it
