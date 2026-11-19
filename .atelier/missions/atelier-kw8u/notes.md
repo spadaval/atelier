@@ -116,3 +116,19 @@ The lead added atelier-7h71 to confirm that last gap and find the text behind it
 and made atelier-oiwy wait on it. The 18 cases mission atelier-8az0 added
 while the matrix ran are not run again on their own: atelier-oiwy's review
 arms run the review cases among them.
+
+## 2026-11-19: atelier-oiwy reshaped on what the matrix and atelier-7h71 found
+
+atelier-7h71 confirmed the gap on `touched-claims`: 15 of 26 reviews found
+the defect with no skill and 4 of 26 with it. Removing `roles/reviewer.md`
+or its Size and Verdict did not bring it back; the first four parts of
+`SKILL.md` are the suspect.
+
+The lead rewrote atelier-oiwy. It first finds which part of `SKILL.md`
+costs the defect. It tries two passages, both the reviewer's: "What to
+judge" and the human's scale of severity. Three passages the plan's
+`passages-tried` names are left out untried: the lead's "Close against the
+Outcome", the implementer's two lines and the captain sentence. Their
+cases pass every run with the skill in both setups, so the plan's own rule
+could not keep them. That is less than the plan asks, and the mission's
+Result will say so.
