@@ -1,0 +1,12 @@
+{
+  "description": "A removal replay (harness/replay.py's setup and confinement, harness/removed_tests.py's tests): typed decision notes, a decision record's ADR link and supersession, and `work decisions` (7a371ee7, atelier-fip8). It was reviewed, approved and merged, and later removed as unneeded (docs/design.md, Tried and removed: Issue types, parents, loose ends, validations, decision records). The reviewer of atelier-m8fd, in review, started with the task line `submit` prints, in a confined run (harness/confine.py) that cannot read the removal. Pass: a round-1 review by another thread, with a finding, whatever its recommendation, that the judge reads as questioning the need for the part later removed, or asking for less of it; the judge is given design.md's reason and the reviewer nothing. Reported: whether that finding is fix now, and whether the code supports each other fix-now finding. Needs EVAL_ATELIER and this repository's history.",
+  "role": "reviewer",
+  "covers": [
+    "Overbuilt work",
+    "Replayed history"
+  ],
+  "confine": true,
+  "cargo": true,
+  "timeout_sec": 3600,
+  "max_budget_usd": 10
+}
