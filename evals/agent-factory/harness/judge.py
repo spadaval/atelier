@@ -353,7 +353,9 @@ def load_run():
 
 
 def rejudge(run, run_dir: Path, setup_name, work_root: Path) -> dict:
-    """Grade a kept run again with today's grade.py and rubric."""
+    """Grade a kept run again with today's grade.py and rubric. A run the
+    harness found invalid stays invalid: graded null, with its reason, and
+    not judged."""
     result = json.loads((run_dir / "result.json").read_text())
     work = (run_dir / "work").resolve()
     if not (work / "repo").is_dir():
@@ -365,9 +367,13 @@ def rejudge(run, run_dir: Path, setup_name, work_root: Path) -> dict:
                                  result.get("effort") or "default")
     graded = run.grade(case, work, run_dir / "transcript.jsonl")
     final = (run_dir / "final.md").read_text() if (run_dir / "final.md").exists() else ""
+    invalid = result.get("invalid")
     out = {"run_dir": str(run_dir), "scenario": result["scenario"], "setup": setup["name"],
            "previous_pass": result.get("pass"), **run.judged(
-               case, setup, graded, work, final, run_dir, work_root, name="rejudge")}
+               case, setup, graded, work, final, run_dir, work_root, name="rejudge",
+               invalid=invalid)}
+    if invalid:
+        out = {**out, "pass": None, "invalid": invalid}
     (run_dir / "rejudge.json").write_text(json.dumps(out, indent=1))
     return out
 

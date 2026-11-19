@@ -879,6 +879,7 @@ class JudgeTest(unittest.TestCase):
     """A house run of a case with a rubric, end to end, with stand-ins for
     the agents and the judges: each question goes to the judge of its
     role's lab, and the run's grade is its facts and its graded answers."""
+    judging = run.judging
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="af-judge-"))
@@ -1007,6 +1008,24 @@ class JudgeTest(unittest.TestCase):
         self.assertIn("it ran gpt-6.1-sol at low", r["invalid"])
         self.assertEqual(r["judged"], [])
         self.assertFalse((self.tmp / "judge-prompts").exists())
+
+    def test_regrading_an_invalid_run_keeps_it_invalid_and_unjudged(self):
+        (self.tmp / "codex-effort").write_text("low")
+        r = self.run_house()
+        out = self.judging.rejudge(run, Path(r["run_dir"]), None, self.tmp / "work")
+        self.assertIsNone(out["pass"])
+        self.assertEqual(out["invalid"], r["invalid"])
+        self.assertEqual(out["judged"], [])
+        self.assertFalse((self.tmp / "judge-prompts").exists())
+        saved = json.loads((Path(r["run_dir"]) / "rejudge.json").read_text())
+        self.assertEqual((saved["pass"], saved["invalid"]), (None, r["invalid"]))
+
+    def test_regrading_a_valid_run_judges_it_again(self):
+        r = self.run_house({"built-it": "fail"})
+        (self.tmp / "judge-answers.json").write_text("{}")
+        out = self.judging.rejudge(run, Path(r["run_dir"]), None, self.tmp / "work")
+        self.assertEqual((r["pass"], out["previous_pass"], out["pass"]), (False, False, True))
+        self.assertEqual(len(out["judged"]), 2)
 
     def test_a_case_without_facts_keeps_its_own_grade(self):
         (self.tmp / "scenarios" / "case" / "grade.py").write_text(
