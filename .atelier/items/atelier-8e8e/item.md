@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-8e8e
 title: Run a matrix in a named setup, a model and an effort per role, and report time and tokens per cell
-status: in_review
+status: approved
 mission: atelier-kw8u
 labels: []
 priority: medium
