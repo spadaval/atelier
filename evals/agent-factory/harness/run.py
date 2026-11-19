@@ -42,11 +42,13 @@ one Codex model and effort a thread starts a subagent with Codex's own
 spawn_agent, which the tool counts as a thread of its own and which
 inherits its parent's model and effort; the harness writes its transcript
 to threads/ from its session record, in the form `codex exec --json`
-prints. In every other setup, work/bin/delegate (harness/delegate.py) is
-the only way: `delegate <role> "<task>"` starts that role's agent, model and
-effort as a new thread in the caller's directory, waits for it and prints
-its final reply, and writes its transcript to threads/. The system prompt
-describes it in THREADS_NOTE, and nothing else.
+prints; the system prompt describes it in CODEX_THREADS_NOTE. In every
+other setup, work/bin/delegate (harness/delegate.py) is the only way:
+`delegate <role> "<task>"` starts that role's agent, model and effort as a
+new thread in the caller's directory, waits for it and prints its final
+reply, and writes its transcript to threads/. The system prompt describes it
+in THREADS_NOTE. Either note says how to start a thread, and nothing about
+when or why.
 
 A Codex agent runs `codex exec` at its role's effort, with HOME and
 CODEX_HOME in the work directory, so the host's ~/.codex instructions and
@@ -187,18 +189,26 @@ DEFAULT_JUDGES = {
     "anthropic": {"agent": "codex", "model": "gpt-6.1-sol", "effort": "xhigh"},
     "openai": {"agent": "claude", "model": "claude-opus-5-5", "effort": "high"},
 }
-THREADS_NOTE = (
-    "Agents here run as threads, each with its own thread ID in "
-    "T3CODE_THREAD_ID. To start another agent as a new thread, run "
-    "`delegate <role> \"<task>\"` in a shell, where <role> is the role the "
+# What a thread is told about starting another: how, and nothing about when
+# or why, since the scenario is what tests that. Both kinds of agent hear the
+# same sentences, about the tool each starts threads with.
+THREADS_LEAD = ("Agents here run as threads, each with its own thread ID in "
+                "T3CODE_THREAD_ID. To start another agent as a new thread, ")
+THREADS_NOTE = THREADS_LEAD + (
+    "run `delegate <role> \"<task>\"` in a shell, where <role> is the role the "
     "thread takes: lead, implementer or reviewer. It starts a fresh agent for "
     "that role in the current directory with that task as its only prompt, "
     "waits for it to finish, and prints its final reply."
 )
 # In a setup of one Codex model and effort, Codex starts threads with its own
-# spawn_agent, whose subagent inherits both, so it is not told of delegate.
-CODEX_THREADS_NOTE = ("Agents here run as threads, each with its own thread ID "
-                      "in T3CODE_THREAD_ID.")
+# spawn_agent, whose subagent inherits both, so it is told of that and not of
+# delegate. fork_turns "none" keeps the parent's history out, as delegate does.
+CODEX_THREADS_NOTE = THREADS_LEAD + (
+    "call `spawn_agent` with fork_turns \"none\" and the task as its message. "
+    "It starts a fresh agent on your model and effort in the current directory "
+    "with that task as its only prompt, and its final reply comes to you when "
+    "it finishes; `wait_agent` waits for it."
+)
 CODEX_AUTH = Path.home() / ".codex" / "auth.json"
 JUDGE_TIMEOUT_SEC = 900
 JUDGE_BUDGET_USD = 5
