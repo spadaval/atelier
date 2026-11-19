@@ -92,4 +92,4 @@ What the rule costs and leaves:
 ### Responses
 
 1-omqy.1: fixed in 162a0c034: merges and pull requests are process markers, so that bullet goes and the test fails without them.
-1-omqy.2: fixed in 162a0c034: the Report no longer ends in a blank line.
+1-omqy.2: fixed in 3488f4abe: the Report no longer ends in a blank line.
