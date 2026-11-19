@@ -114,8 +114,21 @@ class Fixture(unittest.TestCase):
         return subprocess.run(["atelier", *args], cwd=self.repo, env=env, check=True,
                               capture_output=True, text=True).stdout
 
-    def sh(self, *cmd):
-        subprocess.run(cmd, cwd=self.repo, check=True, capture_output=True)
+    def env(self, thread=None, skip=None):
+        """The environment of a command the fixture runs: the binary under
+        test first on PATH, since Atelier's Git hooks run `atelier` by name,
+        and no thread or skip but those given."""
+        env = {k: v for k, v in os.environ.items() if k not in (
+            "T3CODE_THREAD_ID", "CLAUDE_CODE_SESSION_ID", "CODEX_SESSION_ID", "CODEX_THREAD_ID",
+            "ATELIER_SKIP")}
+        env["PATH"] = f"{self.work / 'bin'}:{env['PATH']}"
+        env.update({"T3CODE_THREAD_ID": thread} if thread else {})
+        env.update({"ATELIER_SKIP": skip} if skip else {})
+        return env
+
+    def sh(self, *cmd, thread=None, skip=None):
+        subprocess.run(cmd, cwd=self.repo, check=True, capture_output=True,
+                       env=self.env(thread, skip))
 
     def build(self, code=FIXED, tests=TESTS):
         """Start, change, tick, report and submit as thread impl, in the
@@ -157,7 +170,7 @@ class Fixture(unittest.TestCase):
 
     def sh_out(self, *cmd):
         return subprocess.run(cmd, cwd=self.repo, check=True, capture_output=True,
-                              text=True).stdout
+                              text=True, env=self.env()).stdout
 
 
 
@@ -291,18 +304,44 @@ class DepartureTest(Fixture):
     def test_a_status_written_by_hand_past_the_hook_with_a_reason_is_reported(self):
         self.atelier("impl", "setup")
         self.hand_status()
-        env = {**os.environ, "PATH": f"{self.work / 'bin'}:{os.environ['PATH']}",
-               "T3CODE_THREAD_ID": "impl"}
         refused = subprocess.run(["git", "commit", "-qam", "Approve it"], cwd=self.repo,
-                                 env=env, capture_output=True)
+                                 env=self.env("impl"), capture_output=True)
         self.assertNotEqual(refused.returncode, 0)
-        subprocess.run(["git", "commit", "-qam", "Approve it"], cwd=self.repo, check=True,
-                       env={**env, "ATELIER_SKIP": "Dana approved it in person"},
-                       capture_output=True)
+        self.sh("git", "commit", "-qam", "Approve it", thread="impl",
+                skip="Dana approved it in person")
         recorded, unrecorded = self.departures()
         self.assertEqual(unrecorded, {"value": [], "pass": True})
         self.assertEqual(recorded, [{"kind": "ATELIER_SKIP", "where": "check --hook pre-commit",
                                      "thread": "impl", "reason": "Dana approved it in person"}])
+
+    def test_a_skip_of_another_action_covers_no_departure(self):
+        # From the round-1 review: a skip on a read, then a commit on main
+        # with none.
+        self.build()
+        self.approve("rev")
+        self.atelier("impl", "merge")
+        self.sh("git", "switch", "-q", "main")
+        self.atelier("impl", "status", skip="only checking status")
+        (self.repo / "slug.py").write_text(FIXED + "# later\n")
+        self.sh("git", "commit", "-qam", "Touch it on main")
+        recorded, unrecorded = self.departures()
+        self.assertEqual([d["where"] for d in recorded], ["status"])
+        self.assertIs(unrecorded["pass"], False)
+        self.assertEqual([d["detail"] for d in unrecorded["value"]], ["Touch it on main"])
+
+    def test_a_hook_skip_covers_its_own_commit_and_no_later_one(self):
+        self.atelier("impl", "setup")
+        self.hand_status()
+        self.sh("git", "commit", "-qam", "Approve it", thread="impl",
+                skip="Dana approved it in person")
+        item = self.repo / f".atelier/items/{ID}/item.md"
+        item.write_text(item.read_text().replace("status: done", "status: building"))
+        self.sh("git", "commit", "-qam", "Back to building", "--no-verify")
+        recorded, unrecorded = self.departures()
+        self.assertEqual(len(recorded), 1)
+        [found] = unrecorded["value"]
+        self.assertEqual(found["kind"], "record past the pre-commit hook")
+        self.assertIn("done to building", found["detail"])
 
     def test_a_commit_on_main_outside_a_merge_fails(self):
         (self.repo / "slug.py").write_text(FIXED)

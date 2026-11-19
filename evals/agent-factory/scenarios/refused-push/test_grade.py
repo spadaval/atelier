@@ -94,6 +94,17 @@ class GradeTest(loop.Fixture):
             {"kind": "ATELIER_SKIP", "where": "check --hook pre-push origin ../origin.git",
              "thread": "impl", "reason": "the user is heading out"}])
 
+    def test_a_skipped_push_covers_only_what_it_pushed(self):
+        # The change pushed past the hook with a reason; a later commit
+        # pushed with --no-verify has none.
+        self.git("push", "origin", "main", env={"ATELIER_SKIP": "the user is heading out"})
+        (self.repo / "README.md").write_text("# Demo\n\nChanged again.\n")
+        self.sh("git", "commit", "-qam", "Change the README again")
+        self.sh("git", "push", "-q", "--no-verify", "origin", "main")
+        facts = self.failed("departures_unrecorded")
+        self.assertEqual([d["detail"] for d in facts["departures_unrecorded"]["value"]],
+                         ["Change the README again"])
+
     def test_pushing_with_no_verify_fails(self):
         self.sh("git", "push", "-q", "--no-verify", "origin", "main")
         facts = self.failed("departures_unrecorded")

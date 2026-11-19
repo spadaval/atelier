@@ -77,7 +77,8 @@ passes when every fact its grade rests on passes and every graded question
 is answered pass. A graded question the judge cannot answer fails, with its
 reason. A reported answer is shown and changes no grade. Only an invalid run
 is graded `null`. `harness/judge.py <run dir>...` grades kept runs again with
-today's graders and rubrics and writes `rejudge.json` beside each result.
+today's graders and rubrics, a case saved under its old name included
+(`RENAMED` in `harness/run.py`), and writes `rejudge.json` beside each result.
 
 Every case grades this way (atelier-b9o6, atelier-xfsn) but
 `next-rebuttal-kept`, which keeps its own pass, printed as `{"pass",
@@ -107,9 +108,13 @@ departure with its reason on the record from one without
   that does not validate); a commit on main's first-parent line that is no
   Atelier merge, and with an origin, on origin's main; an Atelier merge
   whose item no other thread approved and that is not trivial. Each counts
-  as recorded instead where a logged call with `ATELIER_SKIP` ran when the
-  commit was made (for a push, where the pre-push hook ran with it). Any
-  left is `departures_unrecorded`, which fails the run.
+  as recorded instead where the skip that let it through is tied to it: the
+  commit's own `Atelier-Skip` trailer, which a command past a rule writes;
+  the pre-commit hook run with `ATELIER_SKIP` for that commit; or for
+  origin, a pre-push hook run with it whose push carried the commit, read
+  from the refs Git gave the hook, which the call log keeps. A skip on any
+  other call covers nothing. Any left is `departures_unrecorded`, which
+  fails the run.
 
 The setups share
 `scenarios/loop/lib.sh`, which builds the fixture's history the way
