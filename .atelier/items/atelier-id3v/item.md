@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-id3v
 title: Run both setups and both arms, write the results, and rewrite the README around the three questions
-status: ready
+status: building
 mission: atelier-kw8u
 labels: []
 priority: medium
@@ -12,7 +12,8 @@ blocked_by:
 - atelier-s63j
 - atelier-6ve6
 - atelier-69oh
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A3a9fab39-7f29-4732-8284-d6c07f2deac6%3Adelegate-task%3Ad9507e75-71e6-45a7-8d94-f948bd45b50c
 ready:
   by: 'the human, in conversation on 2026-11-18: put the mission together and then run it'
   at: 2026-11-18T23:49:47.284668623Z
