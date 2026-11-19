@@ -1,0 +1,12 @@
+{
+  "description": "This host's: Claude Fable as lead and Claude Opus as implementer in Claude Code, and Codex with gpt-6.1-sol at xhigh as reviewer, so a review comes from another lab than the change. Its threads are Anthropic's and OpenAI's, so it has a judge from the other lab for each.",
+  "roles": {
+    "lead": {"agent": "claude", "model": "claude-fable-5-2", "effort": "high"},
+    "implementer": {"agent": "claude", "model": "claude-opus-5-5", "effort": "high"},
+    "reviewer": {"agent": "codex", "model": "gpt-6.1-sol", "effort": "xhigh"}
+  },
+  "judges": {
+    "anthropic": {"agent": "codex", "model": "gpt-6.1-sol", "effort": "xhigh"},
+    "openai": {"agent": "claude", "model": "claude-opus-5-5", "effort": "high"}
+  }
+}

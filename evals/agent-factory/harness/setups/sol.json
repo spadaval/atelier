@@ -1,0 +1,11 @@
+{
+  "description": "The work host's: Codex with gpt-6.1-sol in every role, at high. Its threads are all OpenAI's, so its one judge is Anthropic's.",
+  "roles": {
+    "lead": {"agent": "codex", "model": "gpt-6.1-sol", "effort": "high"},
+    "implementer": {"agent": "codex", "model": "gpt-6.1-sol", "effort": "high"},
+    "reviewer": {"agent": "codex", "model": "gpt-6.1-sol", "effort": "high"}
+  },
+  "judges": {
+    "openai": {"agent": "claude", "model": "claude-opus-5-5", "effort": "high"}
+  }
+}
