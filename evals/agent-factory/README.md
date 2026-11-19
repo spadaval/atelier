@@ -176,6 +176,8 @@ cannot flag the extra parts as out of scope instead of unneeded.
   whatever its recommendation, as naming the unneeded part. A run of a
   control passes when no finding asks for less. Whether that finding is
   fix now is the reported `blocks`, which changes no grade.
+- Their first results, on `sol` with no skill and with the skill, are in
+  [results/2026-11-19-overbuilt-told-apart.md](results/2026-11-19-overbuilt-told-apart.md).
 
 ## Grading
 
