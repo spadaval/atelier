@@ -61,6 +61,8 @@ because its line could hold.
 
 Three new directories under `evals/agent-factory/scenarios/`.
 
+## Report
+
 Three cases are added under `evals/agent-factory/scenarios/`, each graded by
 facts and a rubric, with a `test_grade.py` that `test.sh` runs (10 walks
 each, no model). `evals/agent-factory/test.sh` passes for every case.
