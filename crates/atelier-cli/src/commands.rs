@@ -607,7 +607,7 @@ fn submit_records(repo: &mut Repo) -> Result<Outcome> {
     let branch = records_branch(repo)?.expect("on a records branch");
     let uncommitted = record_changes(repo)?;
     if !uncommitted.is_empty() {
-        let line = output::commit_line(repo.git_at(), &uncommitted, "<what they change>");
+        let line = output::commit_line(repo.git_at(), &uncommitted, "<what they change>", &[]);
         return Ok(Outcome::Refused(output::records_uncommitted(
             &branch,
             &uncommitted,

@@ -273,7 +273,7 @@ pub fn unsaved(
         }
         text += &format!(
             "Commit them with: {}\n",
-            commit_line(at, records, "<what they change>")
+            commit_line(at, records, "<what they change>", &[])
         );
     }
     if let (Some(branch), Some(remote), false) = (branch, remote, unpushed.is_empty()) {

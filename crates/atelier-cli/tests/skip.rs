@@ -95,13 +95,16 @@ fn a_skipped_rule_is_printed_and_trailed_in_the_commit_of_start_submit_verdict_a
     let run = skipping(&root, "t2", REASON, &["verdict", "changes"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert!(run.stdout.starts_with(&skipped(&[none])), "{}", run.stdout);
-    // `verdict` makes no commit, so its skip is in the transcript alone.
+    // `verdict` makes no commit; the commit it prints carries its skip.
     run_then(&root, &run.stdout);
     assert!(
-        message(&root, "HEAD").ends_with("changes requested"),
+        message(&root, "HEAD").ends_with(&format!("changes requested\n\n{}", trailers(&[none]))),
         "{}",
         message(&root, "HEAD")
     );
+    let log = atelier(&root, "t9", &["log", ID]).stdout;
+    let line = format!(" changes; in_review -> changes_requested; skip {none}: {REASON}");
+    assert!(log.lines().last().unwrap().ends_with(&line), "{log}");
 
     // Merged with no approval, after the trailer the pre-push hook knows.
     let (status, approval) = (
@@ -148,7 +151,7 @@ fn set_with_a_skip_changes_a_started_items_base_record() {
 }
 
 #[test]
-fn ready_on_a_record_that_is_not_a_draft_passes_with_a_skip_and_commits_nothing() {
+fn ready_on_a_record_that_is_not_a_draft_passes_with_a_skip_in_the_commit_it_prints() {
     let scratch = Scratch::new(&[(ID, "ready")]);
     let root = scratch.root();
     let rule = format!("{ID} is draft (it is ready)");
@@ -159,9 +162,15 @@ fn ready_on_a_record_that_is_not_a_draft_passes_with_a_skip_and_commits_nothing(
     let run = skipping(&root, "p1", REASON, &["ready", ID, "--by", "ada"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert!(run.stdout.starts_with(&skipped(&[&rule])), "{}", run.stdout);
-    // A command that makes no commit writes its skip nowhere.
+    // It makes no commit, and the commit it prints carries its skip.
     assert_eq!(git(&root, &["rev-parse", "HEAD"]), head);
     assert_eq!(git(&root, &["diff", "--name-only"]), item_path(ID));
+    run_then(&root, &run.stdout);
+    assert!(
+        message(&root, "HEAD").ends_with(&format!("\n\n{}", trailers(&[&rule]))),
+        "{}",
+        message(&root, "HEAD")
+    );
 }
 
 #[test]

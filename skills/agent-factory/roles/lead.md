@@ -15,11 +15,12 @@ You are responsible for finishing the mission. The process is your default:
 ## Departing From It
 
 You may depart from any of it, a review included, by giving your reason:
-`ATELIER_SKIP="<reason>"` in front of the command, which the commit and
-`atelier log` keep. Where no rule refuses what you do, as when you take an
-item over, write the reason in its Report. Never depart silently: not by
-writing a status by hand, changing a hook, or calling a change trivial that
-is not.
+`ATELIER_SKIP="<reason>"` in front of the command. The commit keeps it and
+`atelier log` prints it; a command that only writes files, such as `atelier
+close`, prints a commit line that carries it, so make that commit as
+printed. Where no rule refuses what you do, as when you take an item over,
+write the reason in its Report. Never depart silently: not by writing a
+status by hand, changing a hook, or calling a change trivial that is not.
 
 You settle a dispute between an implementer and a reviewer in your mission,
 either way, and record the ruling. For the implementer, merge past the

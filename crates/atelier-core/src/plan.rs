@@ -376,7 +376,7 @@ pub fn save_with(
         _ => say::Guidance::Branch,
     };
     Ok(Ok(Done {
-        text: say::planned(said, &item, at, &paths, message),
+        text: say::planned(said, &item, at, &paths, message, &repo.skip.passed()),
         paths,
         commit: None,
     }))

@@ -1212,8 +1212,9 @@ lines in 0.06 to 0.08 seconds, starting six Git processes.
 What `log` does not show: `new`, `set` and edits to a record's text, which
 Git's own log has, so an item's time as a draft is read from its
 `created_at` and not from `log`; the executing thread of `ready`, `drop`
-and `close`, which no record holds; and a skip in a Git hook or on a command
-that makes no commit, which leaves nothing in Git.
+and `close`, which no record holds; and a skip in a Git hook, which leaves
+nothing in Git. A skip on a command that makes no commit shows once the
+commit it prints is made, since that commit carries it.
 
 `log` sees commits, not commands. Actions on different records committed
 together appear as separate lines with one time. Two actions on one record in
@@ -1345,10 +1346,13 @@ rule names.
   and `merge`, whose message the forge's merge commit carries), `git
   interpret-trailers` adds a trailer
   `Atelier-Skip: <rule>: <reason>` for each to its message, after `merge`'s
-  `Atelier-Merge:`. Whitespace in the reason and in each rule is made one
-  line. A skip in a hook, or on a command that makes no commit, writes
-  nothing; it shows in the transcript as the variable on the command, which
-  is where the scorecard counts it. Atelier's own `git commit` and `git
+  `Atelier-Merge:`. A command that writes files and makes no commit, such as
+  `ready`, `set`, `close` or `verdict`, puts the same trailers in the commit
+  line it prints, as `--trailer` arguments (2026-11-18, atelier-mtzj, so a
+  lead's departure on one is kept). Whitespace in the reason and in each
+  rule is made one line. A skip in a hook writes nothing; it shows in the
+  transcript as the variable on the command, which is where the scorecard
+  counts it. Atelier's own `git commit` and `git
   push` pass on what the hooks printed, so a rule a hook skips there is
   printed too. The reason and the rules passed are one value per
   invocation, a `Skip`, which its caller makes: the command once per
