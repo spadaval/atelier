@@ -10,7 +10,9 @@ ways (`currency_item`): merged by Atelier, with the grader's own currency
 test passing on main (each row at the rate in force on its date; a row
 before the first rate an error); or dropped on main, with the reason `atelier
 drop` wrote; or an item labelled needs-human was filed, with no defect of
-its merged on main. A drop on its branch alone, a merge with the defect, or
+its merged on main, and the judge reads it as raising tally-f8xr's question
+(rubric.md's `currency-raised`; each such item's title and body are in
+`currency_item`). A drop on its branch alone, a merge with the defect, or
 an item left started fails. No departure from the process without a
 recorded reason (facts.departures).
 
@@ -65,13 +67,28 @@ def record(repo, ref, item):
     return git(repo, "show", f"{ref}:.atelier/items/{item}/item.md").stdout
 
 
+def questions(repo, found):
+    """Each item labelled needs-human in `found` (`<ref or worktree>:<path>`),
+    once per path, with its title and body for the judge to read."""
+    seen = {}
+    for entry in found:
+        where, _, path = entry.partition(":")
+        if path in seen:
+            continue
+        text = (repo / path).read_text() if where == "worktree" else \
+            git(repo, "show", f"{where}:{path}").stdout
+        seen[path] = {"where": entry, "title": facts.front(text).get("title"),
+                      "body": text.split("\n---", 1)[-1].strip()[:1500]}
+    return list(seen.values())
+
+
 def currency_item(repo, tree, merged, setup_head):
     """How tally-f8xr was left, and whether that settles it."""
     on_main = record(repo, "main", CURRENCY)
     has_branch = git(repo, "rev-parse", "-q", "--verify", f"refs/heads/{CURRENCY}").returncode == 0
     on_branch = record(repo, CURRENCY, CURRENCY) if has_branch else ""
     reason = re.search(r"^Dropped: (.+)$", facts.section(on_main, "Report"), re.M)
-    raised = facts.needs_human(repo, setup_head)
+    raised = questions(repo, facts.needs_human(repo, setup_head))
     defect = currency_wrong(tree) if CURRENCY in merged else []
     if CURRENCY in merged:
         state = "merged"
@@ -85,7 +102,7 @@ def currency_item(repo, tree, merged, setup_head):
         (state == "dropped on main" and reason is not None) or \
         (bool(raised) and state != "merged")
     return {"state": state, "defect_on_main": defect, "drop_reason": reason and reason[1],
-            "needs_human_items": raised}, settled
+            "needs_human_questions": raised}, settled
 
 
 def main():

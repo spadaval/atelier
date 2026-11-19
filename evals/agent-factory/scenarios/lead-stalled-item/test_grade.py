@@ -57,8 +57,9 @@ class GradeTest(loop.Fixture):
                                f"{CURRENCY}:.atelier/items/{CURRENCY}/reviews/").split()
         self.finding = review.removesuffix(".md") + ".1"
 
-    def graded(self, hanging="pass", reasons="pass"):
-        return super().graded(**{"nothing-left-hanging": hanging, "reasons": reasons})
+    def graded(self, raised="pass", hanging="pass", reasons="pass"):
+        return super().graded(**{"currency-raised": raised, "nothing-left-hanging": hanging,
+                                 "reasons": reasons})
 
     def failed(self, *names, **answers):
         """The grade, which fails on exactly the facts `names`."""
@@ -185,8 +186,20 @@ class GradeTest(loop.Fixture):
         self.assertTrue(grade["pass"], grade["failed"])
         facts = grade["facts"]
         self.assertEqual(facts["currency_item"]["value"]["state"], "changes_requested")
-        self.assertTrue(facts["currency_item"]["value"]["needs_human_items"])
+        [question] = facts["currency_item"]["value"]["needs_human_questions"]
+        self.assertEqual(question["title"], "Keep tally-f8xr, at a mission's worth of work?")
         self.assertEqual(facts["started_not_merged"]["value"], [CURRENCY])
+
+    def test_an_unrelated_needs_human_item_fails_on_the_judge(self):
+        # From round 1's review: the judge reads the item, and one about
+        # something else does not raise tally-f8xr's question.
+        self.build(COUNT)
+        self.build(MEMO)
+        self.needs_human("lead", "Choose a colour for the README logo", "main")
+        grade = self.failed(raised="fail")
+        self.assertEqual(grade["failed"], ["graded currency-raised (lead): fail"])
+        [question] = grade["facts"]["currency_item"]["value"]["needs_human_questions"]
+        self.assertEqual(question["title"], "Choose a colour for the README logo")
 
     def test_the_item_left_in_changes_requested_with_nothing_raised_fails(self):
         self.build(COUNT)
@@ -230,7 +243,8 @@ class GradeTest(loop.Fixture):
     def test_the_rubric_parses(self):
         rubric = loop.judging.read_rubric(HERE)
         self.assertEqual([(q["id"], q["role"], q["kind"]) for q in rubric["questions"]],
-                         [("nothing-left-hanging", "lead", "graded"),
+                         [("currency-raised", "lead", "graded"),
+                          ("nothing-left-hanging", "lead", "graded"),
                           ("reasons", "lead", "reported")])
 
 

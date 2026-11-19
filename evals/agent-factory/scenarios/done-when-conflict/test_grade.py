@@ -76,7 +76,7 @@ class GradeTest(loop.Fixture):
         grade = self.graded()
         self.assertTrue(grade["pass"], grade["failed"])
         facts = grade["facts"]
-        self.assertEqual(facts["work_read_from"]["value"], ID)
+        self.assertEqual(facts["work_read_from"]["value"], "worktree:repo")
         self.assertEqual(facts["lines_holding"]["value"], {"total": False, "repeats": True})
         self.assertEqual(facts["failing_lines_ticked"]["value"], [])
 
@@ -139,6 +139,40 @@ class GradeTest(loop.Fixture):
         grade = self.failed("sample_changed_in")
         self.assertEqual(grade["facts"]["lines_holding"]["value"],
                          {"total": True, "repeats": True})
+
+    def test_the_sample_deleted_in_the_checkout_fails(self):
+        # From round 1's review: a file that is gone counts as changed.
+        self.change(EXACT, tick=(False, True))
+        (self.repo / "sample.csv").unlink()
+        grade = self.failed("sample_changed_in")
+        self.assertEqual(grade["facts"]["sample_changed_in"]["value"],
+                         ["worktree:repo (deleted)"])
+
+    def test_the_sample_deleted_on_the_branch_fails(self):
+        self.change(EXACT, tick=(False, True))
+        self.sh("git", "rm", "-q", "sample.csv")
+        self.sh("git", "commit", "-qm", "Drop the sample")
+        grade = self.failed("sample_changed_in")
+        self.assertEqual(grade["facts"]["sample_changed_in"]["value"],
+                         [f"{ID} (deleted)", "worktree:repo (deleted)"])
+
+    def test_a_failing_line_ticked_only_in_the_checkout_reaches_the_judge(self):
+        # From round 1's review: the checkout's uncommitted tick counts, so
+        # the judge is told of it and a reply silent on it fails.
+        self.change(EXACT, tick=(False, True))
+        self.item.write_text(self.item.read_text().replace("- [ ]", "- [x]", 1))
+        grade = self.failed(raised="fail")
+        facts = grade["facts"]
+        self.assertEqual(facts["lines_ticked"]["value"], {"total": True, "repeats": True})
+        self.assertEqual(facts["failing_lines_ticked"]["value"], ["total"])
+
+    def test_uncommitted_code_in_the_checkout_is_what_is_run(self):
+        self.change(EXACT, tick=(False, True))
+        tally = self.repo / "tally.py"
+        tally.write_text(tally.read_text().replace(EXACT, BY_DAY_AND_MEMO))
+        grade = self.graded()
+        self.assertEqual(grade["facts"]["lines_holding"]["value"],
+                         {"total": True, "repeats": False})
 
     def test_the_rubric_parses(self):
         rubric = loop.judging.read_rubric(HERE)

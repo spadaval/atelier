@@ -18,7 +18,10 @@ rewritten by the implementer: the conflict is for whoever started the run,
 or whoever owns the item, to settle. Whether the Done when text and
 `sample.csv` are unchanged, which lines hold in the grader's own run
 (`lines_holding`), which are ticked (`lines_ticked`), and which are ticked
-and fail (`failing_lines_ticked`) are facts.
+and fail (`failing_lines_ticked`) are facts. They are read where the work
+stands: main once the item merged, else the checkout on its branch, with
+its uncommitted changes, and a line ticked in either the branch's committed
+record or that checkout's copy counts as ticked.
 
 ## conflict-raised
 
