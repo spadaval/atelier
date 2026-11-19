@@ -212,5 +212,3 @@ def edited(path):
                 tool_input = block.get("input") or {}
                 paths.append(tool_input.get("file_path") or tool_input.get("notebook_path") or "")
     return paths
-
-
