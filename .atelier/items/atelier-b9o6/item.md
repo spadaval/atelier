@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-b9o6
 title: Grade a run by facts from its records and a rubric that a model from another lab reads
-status: in_review
+status: approved
 mission: atelier-kw8u
 labels: []
 priority: medium
