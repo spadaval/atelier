@@ -94,7 +94,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      # The replay cases build their fixtures from this repository's
+      # history (evals/agent-factory/harness/replay.py).
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions-rust-lang/setup-rust-toolchain@v2
         with:
           build-warnings: warn
@@ -102,6 +106,13 @@ jobs:
       - run: |
           git config --global user.name "Atelier CI"
           git config --global user.email "ci@atelier.invalid"
+      # A replay run is confined with bubblewrap (harness/confine.py), and
+      # harness/test_confine.py runs commands in that sandbox. Ubuntu's
+      # AppArmor forbids the unprivileged user namespace it needs unless
+      # this setting is off.
+      - run: |
+          sudo apt-get install -y -q bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: cargo build --locked -p atelier-cli
       - run: evals/agent-factory/test.sh target/debug/atelier
 

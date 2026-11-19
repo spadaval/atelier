@@ -114,8 +114,20 @@ Before a matrix, a canary run of each agent of the setup, on a cheap model
 unless the canary repository's own AGENTS.md is the only one, and its own
 record shows no agent-starting tool and no foreign skill.
 
-The agent still runs as the user with permissions skipped and full access to
-$HOME and the network; fixtures use local remotes, but nothing confines it.
+The agent runs as the user with permissions skipped and full access to
+$HOME and the network; fixtures use local remotes, but nothing confines it,
+except in a scenario with "confine": true in scenario.json. That one runs
+its agent in harness/confine.py's sandbox: it sees only its own work
+directory, the system, its program, the toolchain and its sign-in, reaches
+only its model's API, and is not offered a web search or fetch tool of its
+own (Claude Code's are disallowed, Codex's web_search is "disabled"). The
+replay cases (harness/replay.py) confine, since they must not reach the
+later fix; a run whose transcript shows the fix anyway is invalid
+(replay.leak), and result.json lists what the proxy refused
+(proxy_refused). A confined scenario cannot have threads. One with "cargo":
+true has its crates fetched into --work-root's cargo-home before the run,
+which then builds offline in its own target directory, and runs one at a
+time (--jobs 1).
 """
 
 import argparse
@@ -135,7 +147,9 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import confine  # noqa: E402
 import judge as judging  # noqa: E402
+import replay  # noqa: E402
 import table  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[3]
@@ -208,8 +222,12 @@ def instruction_excludes(cwd: Path) -> list:
     return [str(d / name) for d in dirs for name in INSTRUCTION_NAMES]
 
 
-def claude_command(prompt: str, model: str, effort: str, budget, cwd: Path) -> list:
+def claude_command(prompt: str, model: str, effort: str, budget, cwd: Path,
+                   confined: bool = False) -> list:
+    """Claude Code's command; a confined run is not offered its web tools
+    (confine.WEB_TOOLS)."""
     settings = {"claudeMdExcludes": instruction_excludes(cwd)}
+    disallowed = AGENT_TOOLS + (confine.WEB_TOOLS if confined else ())
     return [
         "claude", "-p", prompt,
         "--model", model, "--effort", effort,
@@ -219,7 +237,7 @@ def claude_command(prompt: str, model: str, effort: str, budget, cwd: Path) -> l
         "--dangerously-skip-permissions",
         "--no-session-persistence",
         "--max-budget-usd", str(budget),
-        "--disallowedTools", ",".join(AGENT_TOOLS),
+        "--disallowedTools", ",".join(disallowed),
         *NO_MCP,
     ]
 
@@ -235,10 +253,12 @@ def codex_command(prompt: str, model: str, effort: str, system=None) -> list:
 
 
 def agent_command(agent: str, prompt: str, model: str, effort: str, budget,
-                  cwd: Path, system=None) -> list:
+                  cwd: Path, system=None, confined: bool = False) -> list:
+    """An agent's command. A confined Codex run's web search is turned off
+    in its scratch config (codex_config), not here."""
     if agent == "codex":
         return codex_command(prompt, model, effort, system)
-    cmd = claude_command(prompt, model, effort, budget, cwd)
+    cmd = claude_command(prompt, model, effort, budget, cwd, confined)
     return cmd + (["--append-system-prompt", system] if system else [])
 
 
@@ -380,24 +400,26 @@ def spawns(setup: dict) -> bool:
     return first["agent"] == "codex" and all(r == first for r in rest)
 
 
-def codex_config(threads: bool) -> str:
+def codex_config(threads: bool, confined: bool = False) -> str:
     """The scratch config.toml. Codex 0.167 runs gpt-6 models on multi-agent
     v2 whatever features.multi_agent says, and there disable_native_tools
     removes spawn_agent and the other collaboration tools. agents.max_threads
     caps the subagents with a turn running across the session, so with 1 a
     child can start no grandchild, and a parent no second child while the
-    first runs; max_depth is v1's, set for a model on v1."""
+    first runs; max_depth is v1's, set for a model on v1. A confined run
+    has its web search turned off."""
     return (
+        ('web_search = "disabled"\n\n' if confined else "") +
         "[features]\nplugins = false\nremote_plugin = false\napps = false\n\n"
         "[features.multi_agent_v2]\n"
         f"disable_native_tools = {'false' if threads else 'true'}\n\n"
         "[agents]\nmax_threads = 1\nmax_depth = 1\n")
 
 
-def codex_home(home: Path, threads: bool = False) -> Path:
+def codex_home(home: Path, threads: bool = False, confined: bool = False) -> Path:
     """A scratch CODEX_HOME holding its config and a link to the host's sign-in."""
     home.mkdir(parents=True, exist_ok=True)
-    (home / "config.toml").write_text(codex_config(threads))
+    (home / "config.toml").write_text(codex_config(threads, confined))
     link = home / "auth.json"
     if not link.is_symlink():
         link.symlink_to(CODEX_AUTH)
@@ -418,13 +440,14 @@ def unlink_auth(work: Path) -> None:
 
 
 def agent_env(work: Path, agent: str = "claude", threads: bool = False,
-              home: Path = None) -> dict:
+              home: Path = None, confined: bool = False) -> dict:
     """The environment of an agent of a run. A Codex agent's HOME is
     work/home, and its CODEX_HOME `home` (by default work/home/.codex), with
     spawn_agent only if `threads`."""
     env = {k: os.environ[k] for k in ENV_KEEP if k in os.environ}
     if agent == "codex":
-        env["CODEX_HOME"] = str(codex_home(home or work / "home" / ".codex", threads))
+        env["CODEX_HOME"] = str(codex_home(home or work / "home" / ".codex", threads,
+                                           confined))
         env["HOME"] = str(work / "home")
     env["TERM"] = "dumb"
     env["ENABLE_CLAUDEAI_MCP_SERVERS"] = "false"
@@ -955,6 +978,7 @@ def run_one(scenario: str, arm: str, ref: str, setup: dict, index: int,
     sdir = SCENARIOS / scenario
     meta = json.loads((sdir / "scenario.json").read_text())
     has_threads = bool(meta.get("threads"))
+    confined = bool(meta.get("confine"))
     role = meta["role"]
     first = setup["roles"][role]
     agent, model, effort = first["agent"], first["model"], first["effort"]
@@ -979,7 +1003,14 @@ def run_one(scenario: str, arm: str, ref: str, setup: dict, index: int,
     log_atelier(work)
     judging.snapshot_refs(work)
     repo_dir = work / "repo"
-    env, system = agent_env(work, agent, spawn), None
+    cargo_home = work_root / "cargo-home" if meta.get("cargo") else None
+    if cargo_home:
+        try:
+            replay.cargo_fetch(repo_dir, cargo_home)
+        except subprocess.CalledProcessError as exc:
+            return {**named, "pass": None, "run_dir": str(run_dir), "work_dir": str(work),
+                    "invalid": "cargo fetch failed: " + (exc.stderr or b"").decode()[-500:]}
+    env, system = agent_env(work, agent, spawn, confined=confined), None
     staged = {}
 
     def stage(kind, home=None):
@@ -993,11 +1024,17 @@ def run_one(scenario: str, arm: str, ref: str, setup: dict, index: int,
     if has_threads:
         env, system = threads(work, run_dir, env, setup, meta, thread, stage)
     cmd = agent_command(agent, prompt, model, effort, meta.get("max_budget_usd", 5),
-                        repo_dir, system)
+                        repo_dir, system, confined)
     started = time.time()
     try:
-        exit_code = run_claude(cmd, repo_dir, env, transcript,
-                               timeout=meta.get("timeout_sec", 1200))
+        if confined:
+            with confine.Sandbox(work, agent, cargo_home) as box:
+                argv, inner = box.wrap(cmd, env)
+                exit_code = run_claude(argv, repo_dir, inner, transcript,
+                                       timeout=meta.get("timeout_sec", 1200))
+        else:
+            exit_code = run_claude(cmd, repo_dir, env, transcript,
+                                   timeout=meta.get("timeout_sec", 1200))
     finally:
         unlink_auth(work)
         delegated = delegated_threads(work)
@@ -1027,7 +1064,9 @@ def run_one(scenario: str, arm: str, ref: str, setup: dict, index: int,
         (problem for t in every
          if (problem := thread_problem(arm, t, setup["roles"].get(t["role"]) or first,
                                        spawn))), None) or (
-        f"grade.py printed no JSON: {graded['error'][-500:]}" if "error" in graded else None)
+        f"grade.py printed no JSON: {graded['error'][-500:]}" if "error" in graded else None) or (
+        replay.leak(sdir, [transcript, *sorted((run_dir / "threads").glob("*.jsonl"))])
+        if (sdir / "case.toml").is_file() else None)
     verdict = judged(sdir, setup, graded, work, final, run_dir, work_root, invalid=invalid)
     agents += [{"thread": f"judge-{j['lab']}", "start": j.pop("start"), "end": j.pop("end")}
                for j in verdict.get("judged") or []]
@@ -1044,6 +1083,7 @@ def run_one(scenario: str, arm: str, ref: str, setup: dict, index: int,
         "threads": [{k: v for k, v in t.items() if k != "init"} for t in every],
         "atelier_calls": len(calls),
         "atelier_failed": [c for c in calls if c["exit"] != 0],
+        **({"proxy_refused": confine.refused(work)} if confined else {}),
         "agents": agents, "peak_agents": peak(agents),
         **verdict,
     }
@@ -1059,15 +1099,32 @@ def discard_work(result: dict, keep: bool) -> bool:
 
 
 def check_jobs(jobs: int, scenarios: list) -> str:
-    """Why --jobs breaks the agent limit for these scenarios, or None."""
+    """Why --jobs breaks the agent limit for these scenarios, or None. A
+    scenario whose agent builds with cargo runs one at a time too."""
     if jobs > 2:
         return "--jobs above 2 would run more than two agents at once"
-    threaded = [s for s in scenarios
-                if json.loads((SCENARIOS / s / "scenario.json").read_text()).get("threads")]
+    metas = {s: json.loads((SCENARIOS / s / "scenario.json").read_text()) for s in scenarios}
+    threaded = [s for s, m in metas.items() if m.get("threads")]
     if threaded and jobs > 1:
         return (f"{', '.join(threaded)} start(s) a second agent, so a matrix with "
                 "threads runs one at a time: pass --jobs 1")
+    cargo = [s for s, m in metas.items() if m.get("cargo")]
+    if cargo and jobs > 1:
+        return (f"{', '.join(cargo)} build(s) with cargo, so they run one at a time: "
+                "pass --jobs 1")
     return None
+
+
+def check_confined(scenarios: list) -> str:
+    """Why these scenarios cannot run here, or None: a confined one needs
+    a sandbox (confine.available) and no threads."""
+    metas = {s: json.loads((SCENARIOS / s / "scenario.json").read_text()) for s in scenarios}
+    confined = [s for s, m in metas.items() if m.get("confine")]
+    both = [s for s in confined if metas[s].get("threads")]
+    if both:
+        return f"{', '.join(both)} confine(s) a run and start(s) threads, which it cannot"
+    problem = confine.available() if confined else None
+    return f"{', '.join(confined)} must run confined, and {problem}" if problem else None
 
 
 def main() -> None:
@@ -1096,7 +1153,7 @@ def main() -> None:
     if inside(a.work_root, Path.home()):
         p.error(f"--work-root {a.work_root} is inside $HOME, where the user's "
                 "own CLAUDE.md would load into every run")
-    too_many = check_jobs(a.jobs, a.scenarios)
+    too_many = check_jobs(a.jobs, a.scenarios) or check_confined(a.scenarios)
     if too_many:
         p.error(too_many)
     roleless = [s for s in a.scenarios if json.loads(

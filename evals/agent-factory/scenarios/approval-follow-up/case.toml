@@ -1,0 +1,33 @@
+# A replay case (harness/replay.py): atelier-cafy's change, reviewed again.
+# Only the judge reads `defect` and the commits; the fixture holds the item's
+# Goal, Done when, Context and Report, and the change.
+
+row = 40
+defect_item = "atelier-iaas"
+item = "atelier-cafy"
+base = "b089587063e04a002590b579a9085ab6163b1bc5"
+change = "ffabdab9c001cab6311495c36ea933be1ace4fd3"
+fix = "bbd0f9964dda4f9fd3684a30eab9e31bc6404c0e"
+defect = """
+The new rule in `allowed_edge` keeps an approval current only in the commit
+that creates an out-of-scope issue, since it asks whether the record existed
+at that commit's parent (`old.is_none()`), not at the approval's pin. So a
+follow-up filed after approval and then linked to its mission, or edited, in
+any later commit still stales the approval.
+"""
+
+id = "atelier-k4wd"
+title = "Let follow-up records for deferred findings keep an approval current"
+goal = """
+A `defer` disposition needs an existing follow-up issue. Filing that issue after the reviewer approved (the natural order, since the reviewer recommends the defer) makes the approval stale, because a new issue record is not one of the changes approval freshness ignores. Every deferred finding then costs a second approval round.
+"""
+done_when = [
+  "Either approval freshness ignores newly created issue records that are outside the owner's scope, or the review docs and the Agent Factory reference say to file follow-ups before the final approval.",
+  "A test covers the chosen rule.",
+]
+context = """
+Found 2026-10-15 on atelier-9k7o: filing atelier-lwdu after approval atelier-j2r2 blocked review.current until a fresh approval.
+"""
+report = """
+Approval freshness ignores newly created issue records outside the owner's scope, so filing a defer follow-up after approval keeps the approval current; adding a child still stales it because it edits the owner. Test: new_out_of_scope_follow_up_issue_keeps_approval_but_new_child_does_not. Documented in reviews-and-merge.md.
+"""

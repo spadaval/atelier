@@ -79,10 +79,18 @@ def parse_rubric(text: str) -> dict:
 
 
 def read_rubric(case: Path):
-    """The case's parsed rubric.md with its "text", or None where it has none."""
+    """The case's parsed rubric.md with its "text", or None where it has none.
+    A replay case's text goes on with the known defect, the change and the
+    fix's diff (replay.judge_context), which only the judge reads."""
     path = Path(case) / "rubric.md"
-    return {**parse_rubric(path.read_text()), "text": path.read_text()} \
-        if path.is_file() else None
+    if not path.is_file():
+        return None
+    text = path.read_text()
+    if (Path(case) / "case.toml").is_file():
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import replay
+        return {**parse_rubric(text), "text": text + replay.judge_context(case)}
+    return {**parse_rubric(text), "text": text}
 
 
 def assign(questions: list, setup: dict, labs: dict) -> dict:

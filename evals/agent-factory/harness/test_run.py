@@ -753,7 +753,7 @@ class RunOneTest(unittest.TestCase):
         fake.write_text(FAKE_AGENT)
         (self.tmp / "codex-effort").write_text("xhigh")
         run.SCENARIOS = self.tmp / "scenarios"
-        run.agent_command = lambda agent, prompt, model, effort, budget, cwd, system=None: [
+        run.agent_command = lambda agent, prompt, model, effort, budget, cwd, system=None, confined=False: [
             sys.executable, str(fake), agent, model, effort, prompt]
 
     def tearDown(self):
@@ -901,7 +901,7 @@ class JudgeTest(unittest.TestCase):
         agent.write_text(FAKE_AGENT)
         judge.write_text(FAKE_JUDGE)
         run.SCENARIOS = self.tmp / "scenarios"
-        run.agent_command = lambda agent_, prompt, model, effort, budget, cwd, system=None: [
+        run.agent_command = lambda agent_, prompt, model, effort, budget, cwd, system=None, confined=False: [
             sys.executable, str(agent), agent_, model, effort, prompt]
         run.judge_command = lambda spec, cwd: [sys.executable, str(judge), spec["agent"],
                                                spec["model"]]
