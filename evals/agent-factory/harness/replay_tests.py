@@ -70,6 +70,7 @@ class ReplayCase(unittest.TestCase):
         self.work = self.root / "work-skill-house-0"
         shutil.copytree(self.template / "work", self.work, symlinks=True)
         run.log_atelier(self.work)
+        judging.snapshot_refs(self.work)
         self.repo = self.work / "repo"
         self.id = self.data["id"]
 
@@ -80,10 +81,11 @@ class ReplayCase(unittest.TestCase):
         return subprocess.run(["git", "-C", str(cwd or self.repo), *args], check=True,
                               capture_output=True, text=True).stdout
 
-    def atelier(self, thread, *args):
+    def atelier(self, thread, *args, skip=None):
         env = {k: v for k, v in os.environ.items() if k not in (
             "CLAUDE_CODE_SESSION_ID", "CODEX_SESSION_ID", "CODEX_THREAD_ID", "ATELIER_SKIP")}
         env.update(T3CODE_THREAD_ID=thread, PATH=f"{self.work / 'bin'}:{env['PATH']}")
+        env.update({"ATELIER_SKIP": skip} if skip else {})
         return subprocess.run(["atelier", *args], cwd=self.repo, env=env, check=True,
                               capture_output=True, text=True).stdout
 
@@ -103,10 +105,10 @@ class ReplayCase(unittest.TestCase):
                              check=True, capture_output=True, text=True).stdout
         return json.loads(out)["facts"]
 
-    def graded(self, found, others):
+    def graded(self, found, others, reasons="pass"):
         """The harness's grade, with the judge's answers given as recorded."""
         rubric = judging.read_rubric(self.case)
-        answers = {"found": found, "others-supported": others}
+        answers = {"found": found, "others-supported": others, "reasons": reasons}
         self.assertEqual(sorted(answers), sorted(q["id"] for q in rubric["questions"]))
         recorded = [{"id": q["id"], "role": q["role"], "kind": q["kind"],
                      "answer": answers[q["id"]], "line": "(recorded)", "reason": "recorded"}
@@ -186,6 +188,15 @@ class ReplayCase(unittest.TestCase):
         grade = self.graded("fail", "fail")
         self.assertFalse(grade["pass"])
         self.assertEqual(grade["failed"], ["graded found (reviewer): fail, recorded"])
+
+    def test_a_skip_is_reported_and_fails_nothing(self):
+        self.review(FOUND.format(title="The defect", body=self.data["defect"]))
+        self.atelier("rev", "verdict", "changes", skip="in a hurry")
+        grade = self.graded("pass", "pass", reasons="fail")
+        self.assertTrue(grade["pass"], grade["failed"])
+        self.assertEqual(grade["facts"]["departures_recorded"]["value"], [
+            {"kind": "ATELIER_SKIP", "where": "verdict changes", "thread": "rev",
+             "reason": "in a hurry"}])
 
     def test_no_review_fails_on_the_facts(self):
         grade = self.graded("fail", "pass")
