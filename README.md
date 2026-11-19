@@ -402,9 +402,10 @@ install the Git hooks. Once they are installed, the base takes nothing but
 merges:
 
 ```console
-$ atelier setup claude     # or `atelier setup codex`, which writes .codex/
-$ git add .atelier .claude && git commit -m "Track with Atelier" && git push
-$ atelier setup            # the Git hooks, in this clone
+$ atelier setup claude        # for Codex: atelier setup codex
+$ git add .atelier .claude    # for Codex: git add .atelier .codex
+$ git commit -m "Track with Atelier" && git push
+$ atelier setup               # the Git hooks, in this clone
 $ atelier status
 You are thread alice, on the base branch main.
 Nothing is ready to start.
