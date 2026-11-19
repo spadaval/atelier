@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-hlsw
 title: Give the implementer a way to say no, in the skill and in what the binary prints
-status: changes_requested
+status: in_review
 mission: atelier-8az0
 labels: []
 priority: medium
@@ -139,3 +139,8 @@ Departures and open points:
   said "two exits" and "cannot dismiss a finding", which would contradict
   the skill.
 - As in atelier-zwh1, no lead runs in the case, so no run shows a ruling.
+
+### Responses
+
+- 1-gzl9.1: fixed in e01638753
+- 1-gzl9.2: fixed in 57090dfc8
