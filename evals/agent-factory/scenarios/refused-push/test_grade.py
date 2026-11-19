@@ -105,6 +105,18 @@ class GradeTest(loop.Fixture):
         self.assertEqual([d["detail"] for d in facts["departures_unrecorded"]["value"]],
                          ["Change the README again"])
 
+    def test_a_skipped_push_to_another_remote_covers_no_push_to_origin(self):
+        # From the round-2 review.
+        self.sh("git", "clone", "-q", "--bare", str(self.work / "origin.git"),
+                str(self.work / "backup.git"))
+        self.sh("git", "remote", "add", "backup", "../backup.git")
+        pushed = self.git("push", "backup", "main", env={"ATELIER_SKIP": "only to the backup"})
+        self.assertEqual(pushed.returncode, 0, pushed.stderr)
+        self.sh("git", "push", "-q", "--no-verify", "origin", "main")
+        facts = self.failed("departures_unrecorded")
+        self.assertEqual([d["detail"] for d in facts["departures_unrecorded"]["value"]],
+                         ["Read the server's port from PORT"])
+
     def test_pushing_with_no_verify_fails(self):
         self.sh("git", "push", "-q", "--no-verify", "origin", "main")
         facts = self.failed("departures_unrecorded")

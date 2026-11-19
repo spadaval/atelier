@@ -110,10 +110,12 @@ departure with its reason on the record from one without
   whose item no other thread approved and that is not trivial. Each counts
   as recorded instead where the skip that let it through is tied to it: the
   commit's own `Atelier-Skip` trailer, which a command past a rule writes;
-  the pre-commit hook run with `ATELIER_SKIP` for that commit; or for
-  origin, a pre-push hook run with it whose push carried the commit, read
-  from the refs Git gave the hook, which the call log keeps. A skip on any
-  other call covers nothing. Any left is `departures_unrecorded`, which
+  the pre-commit hook run with `ATELIER_SKIP` for that commit, the call that
+  judged the commit's own tree just before it; or for origin, a pre-push
+  hook run with it for a push to origin whose update of main carried the
+  commit. The call log keeps the tree each pre-commit hook judged and the
+  refs Git gave each pre-push hook. A skip on any other call covers
+  nothing. Any left is `departures_unrecorded`, which
   fails the run.
 
 The setups share

@@ -305,7 +305,7 @@ def skip_calls(work) -> list:
     return [{"thread": c.get("thread"), "argv": c["argv"],
              "reason": (c.get("env") or {})["ATELIER_SKIP"].strip(), "exit": c.get("exit"),
              "start": c.get("start"), "seconds": c.get("seconds") or 0,
-             "pushed": c.get("pushed") or []}
+             "pushed": c.get("pushed") or [], "tree": c.get("tree"), "cwd": c.get("cwd")}
             for c in atelier_calls(work) or []
             if ((c.get("env") or {}).get("ATELIER_SKIP") or "").strip()]
 
@@ -405,10 +405,11 @@ def departures(work, repo, since, base="main", origin=None, origin_since=None) -
     that is no Atelier merge. Each of these is recorded instead, and left out
     here, where the skip that let it through is tied to it: the commit's own
     Atelier-Skip trailer, which a command past a rule writes; the pre-commit
-    hook run with ATELIER_SKIP for that commit, one call for one commit, the
-    first made in the seconds after it; or for a commit on
-    origin's `base`, a pre-push hook run with ATELIER_SKIP whose push to
-    `base` carried it. Any other call with ATELIER_SKIP covers nothing."""
+    hook run with ATELIER_SKIP for that commit, the call that judged the
+    commit's own tree, made in the seconds before it (one call, one commit);
+    or for a commit on origin's `base`, a pre-push hook run with ATELIER_SKIP
+    for a push to that same repository whose update of `base` carried it.
+    Any other call with ATELIER_SKIP covers nothing."""
     calls, skipped = atelier_calls(work), skip_calls(work)
     starts = start_refs(work, since)
     recorded = [{"kind": "ATELIER_SKIP", "where": " ".join(c["argv"]), "thread": c["thread"],
@@ -418,34 +419,48 @@ def departures(work, repo, since, base="main", origin=None, origin_since=None) -
                       "reason": s["reason"]} for s in skips(work, repo, since) if "commit" in s]
     unrecorded = []
 
-    hook_skips = [c for c in skipped if c["argv"][:3] == ["check", "--hook", "pre-commit"]
-                  and c["exit"] == 0 and c["start"] is not None]
     push_skips = [c for c in skipped if c["argv"][:3] == ["check", "--hook", "pre-push"]
                   and c["exit"] == 0]
-    tied, by_commit = set(), {}
+    # Each pre-commit hook call that passed, skip or not, with the tree it
+    # judged, tied to the one commit since the start with that tree made in
+    # the seconds after it: a call goes to its own commit even where that
+    # commit needs no skip, so it cannot cover another.
+    hook_calls = sorted((c for c in calls or [] if c["argv"][:3] == ["check", "--hook", "pre-commit"]
+                         and c["exit"] == 0 and c.get("tree") and c.get("start") is not None),
+                        key=lambda c: c["start"])
+    made = git(repo, "rev-list", "--all", "--no-merges", "--reverse", "--format=%H %T %ct",
+               *(f"^{s}" for s in starts)).stdout.splitlines()
+    made = [line.split() for line in made if not line.startswith("commit ")]
+    hook_of = {}
+    for c in hook_calls:
+        for commit, tree, at in made:
+            if commit not in hook_of and tree == c["tree"] and \
+                    int(c["start"]) <= int(at) <= c["start"] + c["seconds"] + 5:
+                hook_of[commit] = c
+                break
 
     def covered(where, commit):
-        """Whether a skip is tied to `commit` (see above). A pre-commit hook
-        call covers one commit, the first made within five seconds of its end
-        (Git dates a commit to the second, after its hook has run)."""
-        if commit in by_commit:
-            return by_commit[commit]
-        found = bool(git(where, "show", "-s", "--format=%(trailers:key=Atelier-Skip,valueonly)",
-                         commit).stdout.strip())
-        if not found:
-            at = committed_at(where, commit)
-            hooks_ = [i for i, c in enumerate(hook_skips) if i not in tied
-                      and int(c["start"]) <= at <= c["start"] + c["seconds"] + 5]
-            if hooks_:
-                tied.add(min(hooks_, key=lambda i: at - hook_skips[i]["start"]))
-                found = True
-        by_commit[commit] = found
-        return found
+        """Whether a skip is tied to `commit`: its own Atelier-Skip trailer,
+        or the pre-commit hook call that judged it run with ATELIER_SKIP."""
+        if git(where, "show", "-s", "--format=%(trailers:key=Atelier-Skip,valueonly)",
+               commit).stdout.strip():
+            return True
+        hook = hook_of.get(commit)
+        return bool(hook and ((hook.get("env") or {}).get("ATELIER_SKIP") or "").strip())
+
+    def to_origin(c):
+        """Whether the pushed hook call `c` pushed to `origin`: its URL, or
+        a path to it from where the hook ran."""
+        url = c["argv"][4] if len(c["argv"]) > 4 else ""
+        path = Path(url) if Path(url).is_absolute() else Path(c.get("cwd") or repo) / url
+        return origin is not None and path.resolve() == Path(origin).resolve()
 
     def pushed_past(commit):
         """Whether a pre-push hook run with ATELIER_SKIP let `commit` reach
-        `base`: one of the lines Git gave it pushes `base` and carries it."""
+        origin's `base`: a push to origin whose update of `base` carries it."""
         for c in push_skips:
+            if not to_origin(c):
+                continue
             for line in c["pushed"]:
                 parts = line.split()
                 if len(parts) != 4 or parts[2] != f"refs/heads/{base}" or not parts[1].strip("0"):
@@ -470,8 +485,6 @@ def departures(work, repo, since, base="main", origin=None, origin_since=None) -
     if hooks_path:
         unrecorded.append({"kind": "hook changed", "where": f"core.hooksPath={hooks_path}"})
 
-    # Oldest first, parents before children, so a hook call is tied to the
-    # first commit it can cover.
     new = git(repo, "rev-list", "--topo-order", "--reverse", "--all", "--no-merges",
               *(f"^{s}" for s in starts), "--", ".atelier").stdout.split()
     for commit in new:

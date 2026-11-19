@@ -329,6 +329,25 @@ class DepartureTest(Fixture):
         self.assertIs(unrecorded["pass"], False)
         self.assertEqual([d["detail"] for d in unrecorded["value"]], ["Touch it on main"])
 
+    def test_a_hook_skip_on_an_ordinary_commit_covers_no_other(self):
+        # From the round-2 review: a skip on another thread's ordinary commit,
+        # then a commit on main past the hook with none.
+        self.build()
+        self.approve("rev")
+        self.atelier("impl", "merge")
+        self.sh("git", "switch", "-q", ID)
+        self.atelier("impl", "setup")
+        (self.repo / "notes.txt").write_text("later\n")
+        self.sh("git", "add", "notes.txt")
+        self.sh("git", "commit", "-qm", "Notes", thread="other",
+                skip="only this ordinary commit")
+        self.sh("git", "switch", "-q", "main")
+        (self.repo / "slug.py").write_text(FIXED + "# later\n")
+        self.sh("git", "commit", "-qam", "Touch it on main", "--no-verify")
+        recorded, unrecorded = self.departures()
+        self.assertEqual([d["reason"] for d in recorded], ["only this ordinary commit"])
+        self.assertEqual([d["detail"] for d in unrecorded["value"]], ["Touch it on main"])
+
     def test_a_hook_skip_covers_its_own_commit_and_no_later_one(self):
         self.atelier("impl", "setup")
         self.hand_status()

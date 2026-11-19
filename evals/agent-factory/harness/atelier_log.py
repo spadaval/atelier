@@ -6,8 +6,9 @@ work/libexec/ and puts this script in its place, so every `atelier` call a
 run makes, from any thread or from a Git hook, runs the same binary and
 leaves one line in work/.atelier-calls.jsonl: its arguments, directory,
 exit status and time, the variables that name its caller and ATELIER_SKIP,
-the thread Atelier takes them to name (IDENTITY), and for the pre-push hook,
-the lines Git gave it, one for each ref pushed. The harness and the
+the thread Atelier takes them to name (IDENTITY); for the pre-push hook,
+the lines Git gave it, one for each ref pushed; and for the pre-commit hook,
+the staged tree it judged. The harness and the
 graders (facts.py) read the failed calls and the rules passed from it rather
 than parse a shell command out of a transcript.
 """
@@ -43,6 +44,10 @@ def main():
     # The pre-push hook's input names each ref pushed and its commits, which
     # ties a skip of that hook to what it let through (facts.departures).
     pushed = sys.stdin.read() if sys.argv[1:4] == ["check", "--hook", "pre-push"] else None
+    # The tree the pre-commit hook was given to judge, which is the tree of
+    # the commit it lets through: it ties the hook's call to that commit.
+    staged = subprocess.run(["git", "write-tree"], capture_output=True, text=True).stdout.strip() \
+        if sys.argv[1:4] == ["check", "--hook", "pre-commit"] else None
     proc = subprocess.Popen([str(work / "libexec" / "atelier"), *sys.argv[1:]],
                             stdin=subprocess.PIPE if pushed is not None else None)
     for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
@@ -59,6 +64,7 @@ def main():
                     if n in os.environ},
             "exit": code, "start": start,
             **({"pushed": pushed.splitlines()} if pushed is not None else {}),
+            **({"tree": staged} if staged else {}),
             "seconds": round(time.time() - start, 2)}) + "\n")
     sys.exit(code)
 
