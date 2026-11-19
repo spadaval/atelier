@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-xfsn
 title: Bring every kept case to the new grading, drop the next- prefix, and cut the case whose line can hold
-status: changes_requested
+status: in_review
 mission: atelier-kw8u
 labels: []
 priority: medium
@@ -99,10 +99,12 @@ Done when, line by line:
   commit on main's first-parent line, or origin's, that is no Atelier
   merge; an unapproved, untrivial Atelier merge). A state departure counts
   as recorded only where the skip that let it through is tied to it: the
-  commit's own `Atelier-Skip` trailer, the pre-commit hook run with a skip
-  for that commit (one call, one commit), or a pre-push hook run with a
-  skip whose push to main carried it, which `atelier_log.py` now reads from
-  the hook's input. `departures_unrecorded` fails
+  commit's own `Atelier-Skip` trailer; the pre-commit hook run with a skip
+  for that commit, the call that judged the commit's own tree, one call
+  for one commit whether or not it needed the skip; or a pre-push hook run
+  with a skip for a push to origin whose update of main carried it.
+  `atelier_log.py` now logs the tree each pre-commit hook judged and the
+  refs Git gave each pre-push hook. `departures_unrecorded` fails
   a run; `departures_recorded` is reported, and every rubric but
   `non-atelier-repo`'s has the reported `reasons` question. loop's
   `DepartureTest` walks each kind against the real binary.
@@ -129,7 +131,8 @@ Outside the item's Scope, because its Done when lines needed them:
 logs each thread's task, which `non-atelier-repo`'s judge reads),
 `harness/test_run.py` (scenario names, and a check that read Codex
 transcripts through `shell_grade.py`), `harness/atelier_log.py` (it logs
-the refs the pre-push hook is given), and in `harness/run.py` and
+the tree the pre-commit hook judges and the refs the pre-push hook is
+given), and in `harness/run.py` and
 `harness/judge.py`, the map of old scenario names a regrade reads.
 
 What a reader should know:
@@ -144,9 +147,9 @@ What a reader should know:
   which fails the graded question, where the reply says nothing. That used
   to be a null grade.
 - A hand commit passed by the pre-commit hook with a skip is tied to that
-  hook call by time, the first commit within five seconds of it. A rebased
-  or cherry-picked copy of it gets a new time and reads as unrecorded; one
-  a command made keeps its trailer and stays recorded. A status
+  hook call by its tree and a five-second window. A rebased or
+  cherry-picked copy of it gets a new time and reads as unrecorded; one a
+  command made keeps its trailer and stays recorded. A status
   written by hand that some command could have written (in review to
   approved) passes the binary's hook, so it is no departure here either.
   A run kept from before the call log (2026-11-18) has no skips to match,
@@ -160,3 +163,5 @@ What a reader should know:
 1-l2fa.1: fixed in fc7f27dcf
 1-l2fa.2: fixed in fc7f27dcf
 1-l2fa.3: fixed in 2ffc32071
+2-wpsm.2: fixed in 939b73cc1
+2-wpsm.4: fixed in 939b73cc1
