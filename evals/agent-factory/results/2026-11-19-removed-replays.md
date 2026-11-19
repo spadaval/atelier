@@ -52,7 +52,7 @@ every proxy refused only `ab.chatgpt.com`, Codex's telemetry host.
 ## Setup
 
 - **Binary.** Built from this branch at e5b68aa0d, whose crates are
-  master's (53db5e13e), copied to `/var/tmp/af-evals/bin/atelier-e5b68aa0d`.
+  master's (6850e181e), copied to `/var/tmp/af-evals/bin/atelier-e5b68aa0d`.
 - **Skill.** `skills/agent-factory` as on master, staged from `--ref
   e5b68aa0d`.
 - **Harness.** As on master, with the cases and `harness/removed_tests.py`
