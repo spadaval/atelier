@@ -71,13 +71,14 @@ what there is to decide.
   `Critical:`, `Important:` or `Useful:`; critical and important are `fix
   now` and useful is `defer`; `Shrink:` and `Reject:` stay blocking,
   outside the scale. It holds no guard against rating everything high.
-- [ ] The skill, and the skill with each passage, run in `sol` as two
-  separate matrices of five runs a cell on the review cases: the twelve
-  replayed defects, `vacuous-test-review`, `costly-hardening`, the five
-  cases of atelier-s6xk and the three later-round cases. Each arm is staged
-  from a commit that differs from the skill's in its passage alone, and the
-  results name the commits. The rubric reports, for each finding, which of
-  the four levels the judge gives it beside the reviewer's own.
+- [ ] The skill, and the skill with each passage, run in `sol` as two separate
+  matrices on the review cases, five runs a cell, and three for a replay no
+  review has ever found, topped up to five where any arm finds it: the
+  twelve replayed defects, `vacuous-test-review`, `costly-hardening`, the
+  five cases of atelier-s6xk and the three later-round cases. Each arm is
+  staged from a commit that differs from the skill's in its passage alone,
+  and the results name the commits. The rubric reports, for each finding,
+  which of the four levels the judge gives it beside the reviewer's own.
 - [ ] "What to judge" is merged into the skill where some case passes at
   least two more runs with it in each of the two matrices and no case
   passes fewer in either.
