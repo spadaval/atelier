@@ -141,6 +141,9 @@ class BadLineTest(LedgerCase):
                  "3: bad quoting"),
                 ("q.csv", 'Date;Payee;Amount\n01.10.2026;"Cafe\nNord";"-1,00"x\n',
                  "3: bad quoting"),
+                ("r.csv", 'Date;Payee;Amount\n01.10.2026;Joe"s;-1,00\n', "2: bad quoting"),
+                ("s.csv", 'Date;Payee;Amount\n01.10.2026;"Cafe\nNord\n02.10.2026;X;-1,00\n',
+                 "2: bad quoting"),
                 ("o.qif", "!Type:Bank\rD10/04/2026\rT-1.00\rPX\r^\rDsoon\r",
                  "6: the last record is not ended by ^")]:
             with self.subTest(name=name):
@@ -173,10 +176,12 @@ class BadLineTest(LedgerCase):
                 self.assertEqual(len(budget.load_ledger(self.ledger)), 6)
                 self.ledger.unlink()
 
-    def test_a_payee_may_hold_a_line_break(self):
-        text = 'Date;Payee;Amount\n01.10.2026;"Cafe\nNord";-1,00\n02.10.2026;X;-2,00\n'
+    def test_a_quoted_payee_may_hold_a_line_break_a_quote_or_a_separator(self):
+        text = ('Date;Payee;Amount\n01.10.2026;"Cafe\nNord";-1,00\n'
+                '02.10.2026;"Joe""s; Diner";"-2,00"\n')
         self.assertEqual(self.run_cli("import", self.file("a.csv", text))[0], 0)
-        self.assertEqual([t.payee for t in budget.load_ledger(self.ledger)], ["Cafe\nNord", "X"])
+        self.assertEqual([t.payee for t in budget.load_ledger(self.ledger)],
+                         ["Cafe\nNord", 'Joe"s; Diner'])
 
     def test_a_large_amount_within_the_format_is_read(self):
         self.run_cli("import", self.file("a.csv", "Date;Payee;Amount\n01.10.2026;X;-1234567890123,00\n"))

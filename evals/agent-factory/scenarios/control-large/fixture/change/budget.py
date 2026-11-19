@@ -8,8 +8,6 @@ and out. `import` adds the transactions of Nordbank's CSV and Kestrel Bank's
 QIF statements, skipping those already in the ledger.
 """
 import argparse
-import csv
-import io
 import json
 import re
 import sys
@@ -52,8 +50,10 @@ class StatementError(Exception):
 # -1.234,56 and Kestrel -1,234.56.
 NORDBANK_AMOUNT = re.compile(r"-?(\d{1,3}(\.\d{3})+|\d+),\d{2}")
 KESTREL_AMOUNT = re.compile(r"-?(\d{1,3}(,\d{3})+|\d+)\.\d{2}")
-# A line ends at CRLF, CR or LF, as the csv module reads them.
+# A line ends at CRLF, CR or LF.
 LINE_END = re.compile(r"\r\n|\r|\n")
+# A Nordbank field: quoted, with "" for a quote inside, or holding no quote.
+FIELD = re.compile(r'"((?:[^"]|"")*)"|[^;"\r\n]*')
 
 
 def cents(text, pattern):
@@ -86,36 +86,54 @@ def read_text(path):
         raise StatementError(path, line, "not UTF-8") from None
 
 
+def nordbank_records(path, text):
+    """Each record of a Nordbank export, as a list of (field, line) with the
+    line each field starts on. A quote anywhere but around a whole field is
+    an error on the line of the field it is in."""
+    pos, line = 0, 1
+    while pos < len(text):
+        record = []
+        while True:
+            field = FIELD.match(text, pos)
+            quoted = field.group(1)
+            record.append((quoted.replace('""', '"') if quoted is not None else field.group(0), line))
+            line += len(LINE_END.findall(field.group(0)))
+            pos = field.end()
+            if pos == len(text):
+                break
+            if text[pos] == ";":
+                pos += 1
+                continue
+            end = LINE_END.match(text, pos)
+            if end is None:
+                raise StatementError(path, record[-1][1], "bad quoting")
+            pos, line = end.end(), line + 1
+            break
+        yield record
+
+
 def read_nordbank(path):
     """The transactions in a Nordbank CSV export."""
     found = []
-    reader = csv.reader(io.StringIO(read_text(path), newline=""), delimiter=";", strict=True)
-    try:
-        if next(reader, None) != ["Date", "Payee", "Amount"]:
-            raise StatementError(path, 1, "expected the header Date;Payee;Amount")
-        last = reader.line_num  # the last line of the record read before
-        for row in reader:
-            line, last = last + 1, reader.line_num
-            if not row:
-                continue
-            if len(row) != 3:
-                raise StatementError(path, line, f"expected 3 fields, found {len(row)}")
-            # A quoted field may hold line breaks: the line each field starts on.
-            starts = [line]
-            for field in row[:-1]:
-                starts.append(starts[-1] + len(LINE_END.findall(field)))
-            date = iso_date(row[0], "%d.%m.%Y")
-            if date is None:
-                raise StatementError(path, starts[0], f"bad date {row[0]!r}")
-            amount = cents(row[2], NORDBANK_AMOUNT)
-            if amount is None:
-                raise StatementError(path, starts[2], f"bad amount {row[2]!r}")
-            if not row[1].strip():
-                raise StatementError(path, starts[1], "no payee")
-            found.append(Transaction(date, amount, row[1]))
-    except csv.Error as e:
-        # The reader stops on the line that holds the bad quote.
-        raise StatementError(path, reader.line_num, f"bad quoting: {e}") from None
+    records = nordbank_records(path, read_text(path))
+    header = next(records, None)
+    if header is None or [value for value, _ in header] != ["Date", "Payee", "Amount"]:
+        raise StatementError(path, 1, "expected the header Date;Payee;Amount")
+    for record in records:
+        if [value for value, _ in record] == [""]:
+            continue
+        if len(record) != 3:
+            raise StatementError(path, record[0][1], f"expected 3 fields, found {len(record)}")
+        (date_text, date_line), (payee, payee_line), (amount_text, amount_line) = record
+        date = iso_date(date_text, "%d.%m.%Y")
+        if date is None:
+            raise StatementError(path, date_line, f"bad date {date_text!r}")
+        amount = cents(amount_text, NORDBANK_AMOUNT)
+        if amount is None:
+            raise StatementError(path, amount_line, f"bad amount {amount_text!r}")
+        if not payee.strip():
+            raise StatementError(path, payee_line, "no payee")
+        found.append(Transaction(date, amount, payee))
     return found
 
 
