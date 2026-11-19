@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-scly
 title: Delete a replayed review's build output once it is graded, so a matrix cannot fill the disk
-status: building
+status: in_review
 mission: atelier-kw8u
 labels: []
 priority: medium
