@@ -9,6 +9,7 @@ labels: []
 priority: medium
 blocked_by:
 - atelier-s6xk
+- atelier-ad0z
 implementers: []
 ready:
   by: 'the human, by a side chat on 2026-11-18: tell the main thread about all of this'
