@@ -129,8 +129,9 @@ class BadLineTest(LedgerCase):
                 ("h.qif", "!Type:Bank\nD10/04/2026\nT-1.00\nPX\n^X\n", "5: a record ends with a line of ^ alone"),
                 ("i.csv", 'Date;Payee;Amount\n01.10.2026;"Grocer"x;-1,00\n', "2: bad quoting"),
                 ("j.csv", "", "1: expected the header Date;Payee;Amount"),
-                ("k.qif", "!Type:Bank\nD10/04/2026\nT-1.00\nPX\n^\nMa memo\n",
-                 "6: the last record is not ended by ^"),
+                ("k.qif", "!Type:Bank\nD10/04/2026\nT-1.00\nPX\n^\nMa memo\nT-2.00\n",
+                 "7: the last record is not ended by ^"),
+                ("u.csv", "\n\nDate;Amount\n", "3: expected the header Date;Payee;Amount"),
                 ("l.csv", "Date;Payee;Amount\n01.10.2026;X;-" + "9" * 5000 + ",00\n",
                  "2: bad amount"),
                 ("m.csv", 'Date;Payee;Amount\n31.02.2026;"Cafe\nNord";-1,00\n',
@@ -153,6 +154,11 @@ class BadLineTest(LedgerCase):
                 self.assertEqual((code, out), (1, ""))
                 self.assertTrue(err.startswith(f"{path}:{error}"), err)
                 self.assertFalse(self.ledger.exists())
+
+    def test_ignored_lines_open_no_record(self):
+        text = "!Type:Bank\nD10/04/2026\nT-1.00\nPX\n^\nMa memo\nN1042\n"
+        self.assertEqual(self.run_cli("import", self.file("a.qif", text))[1],
+                         "imported 1, skipped 0 already in the ledger\n")
 
     def test_a_payee_is_kept_as_written(self):
         payee = "Kiosk\u2028Nord "

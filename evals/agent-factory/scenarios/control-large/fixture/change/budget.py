@@ -119,7 +119,8 @@ def read_nordbank(path):
     records = nordbank_records(path, read_text(path))
     header = next(records, None)
     if header is None or [value for value, _ in header] != ["Date", "Payee", "Amount"]:
-        raise StatementError(path, 1, "expected the header Date;Payee;Amount")
+        raise StatementError(path, header[0][1] if header else 1,
+                             "expected the header Date;Payee;Amount")
     for record in records:
         if len(record) != 3:
             raise StatementError(path, record[0][1], f"expected 3 fields, found {len(record)}")
@@ -152,11 +153,11 @@ def read_kestrel(path):
             found.append(kestrel_transaction(path, line, record))
             record, opened = {}, None
             continue
-        opened = opened or line
         if code in "DTP":
             if code in record:
                 raise StatementError(path, line, f"a second {code} line in one record")
             record[code] = (value, line)
+            opened = opened or line
     if opened:
         raise StatementError(path, opened, "the last record is not ended by ^")
     return found

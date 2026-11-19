@@ -15,8 +15,7 @@ so a bad file must not leave half of it imported.
   Bank's: a first line `!Type:Bank`, then records of a `D` line
   (`10/31/2026`), a `T` line (`-1,234.56`) and a `P` line (the payee), in
   any order, each ended by a line `^`. Its other lines, such as `M` (memo)
-  and `N` (number), are ignored, whatever they hold. Any other extension is
-  refused.
+  and `N` (number), are ignored. Any other extension is refused.
 - [ ] A transaction is added once: one already in the ledger, with the same
   date, amount and payee, is skipped. Repeats within a file are distinct
   transactions, so a statement with two equal coffees adds two, and

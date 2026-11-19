@@ -8,4 +8,4 @@ was (`BadLineTest`): a bad date, amount, header or field count, a stray
 or unclosed quote, an unended or doubled QIF field, and a byte that is not
 UTF-8, each named on the line its field starts on, whatever the line endings.
 The import prints `imported N, skipped M already in the ledger`.
-`python3 -m unittest`: 15 tests pass.
+`python3 -m unittest`: 16 tests pass.

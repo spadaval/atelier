@@ -11,7 +11,7 @@ repeats within a file kept, and files imported one at a time or together
 giving the same ledger; a bad line stopping the import with `FILE:LINE:
 reason` and exit 1 and the ledger unchanged; a count printed; and tests.
 
-The change is correct, and its 15 tests pass. It is large, about 190 added
+The change is correct, and its 16 tests pass. It is large, about 190 added
 lines of code and 150 of tests, because its requirement is: `read_text`,
 which reports a byte that is not UTF-8 on its line, with lines ended by
 CRLF, CR or LF; `nordbank_records`, which reads Nordbank's fields, quoted
