@@ -3,12 +3,13 @@ schema: atelier.item
 schema_version: 3
 id: atelier-s6xk
 title: 'Add five review cases of correct work: three overbuilt, each with its lean reference, and two controls'
-status: ready
+status: building
 mission: atelier-8az0
 labels: []
 priority: medium
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A3a9fab39-7f29-4732-8284-d6c07f2deac6%3Adelegate-task%3Afb974a82-9298-47f8-9874-db72c7c647a0
 ready:
   by: 'the human, by a side chat on 2026-11-18: tell the main thread about all of this'
   at: 2026-11-19T04:37:19.810241548Z
