@@ -3,13 +3,14 @@ schema: atelier.item
 schema_version: 3
 id: atelier-aq82
 title: Add the lead's two cases, and rebuild the implementer's case of a Done when that cannot hold
-status: ready
+status: building
 mission: atelier-kw8u
 labels: []
 priority: medium
 blocked_by:
 - atelier-b9o6
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A9d5de7ee-d750-4bea-9d8c-206890e4d262%3Adelegate-task%3Ad87a9fd3-73d5-4bd4-ae46-6a7a92d61723
 ready:
   by: 'the human, in conversation on 2026-11-18: put the mission together and then run it'
   at: 2026-11-18T23:49:47.284668623Z
