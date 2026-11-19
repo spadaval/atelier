@@ -5,47 +5,6 @@ description: Use in repositories tracked with Atelier, to plan or shape work, le
 
 # Agent Factory
 
-Run `atelier status` first. If `atelier` is not found, or `status` fails
-because this is not a Git checkout or has no Atelier config, this is not an
-Atelier repository: stop using this skill and do the task directly.
-
-## Your Role
-
-Read one role file, then follow what `status` prints. Where `status` names
-your role, read that role's file:
-
-- the implementer of an item: [roles/implementer.md](roles/implementer.md);
-- the reviewer of an item or a plan: [roles/reviewer.md](roles/reviewer.md);
-- the lead of a mission: [roles/lead.md](roles/lead.md).
-
-Asked to plan or shape work, such as a mission or a draft item, or to go
-over, sweep or reorder the backlog, read [roles/planner.md](roles/planner.md),
-whatever `status` suggests you start.
-
-Holding nothing else, read the file of the role your task gives you: a task
-to start an item makes you its implementer, and one to lead a mission its
-lead. A garden or audit task also reads
-[procedures/garden.md](procedures/garden.md).
-
-## Who Works With the Human
-
-The planner works with the human in conversation, and builds a spike with them
-when the plan needs one. A gardener takes its focus
-from them when they name one at the start, and settles its run's page with them
-in a session once the run is approved. Every other role
-runs unattended: it never waits on them, and takes a question to the thread
-that started it or to an item labelled `needs-human`, as its role file says.
-
-## Independent Review
-
-Every non-trivial change is reviewed before it merges by a thread that did
-not write it. A change is trivial only when its correctness is evident from
-the diff alone, such as a typo; rewording a document is not trivial. No
-thread approves its own work or settles a finding on it, and an implementer
-passes no rule on its own work: a kept finding is fixed or taken to the
-mission's lead. The lead settles it, and may depart from any of this, a
-review included, with its reason on the command.
-
 ## Starting Another Thread
 
 Atelier never starts an agent. When a command prints a task for another
