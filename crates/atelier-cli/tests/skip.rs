@@ -36,9 +36,11 @@ fn message(at: &Path, rev: &str) -> String {
     git(at, &["log", "-1", "--format=%B", rev])
 }
 
-fn trailers(rules: &[&str]) -> String {
+/// The trailers of a commit in which `thread` passed `rules`.
+fn trailers(thread: &str, rules: &[&str]) -> String {
     let lines = rules.iter().map(|r| format!("Atelier-Skip: {r}: {REASON}"));
-    lines.collect::<Vec<_>>().join("\n")
+    let by = format!("Atelier-Skip-By: {thread}");
+    lines.chain([by]).collect::<Vec<_>>().join("\n")
 }
 
 #[test]
@@ -67,7 +69,7 @@ fn a_skipped_rule_is_printed_and_trailed_in_the_commit_of_start_submit_verdict_a
     assert_eq!(field(&root, ID, "status"), "building");
     assert_eq!(
         message(&root, ID),
-        format!("Start {ID}\n\n{}", trailers(&[&draft]))
+        format!("Start {ID}\n\n{}", trailers("t1", &[&draft]))
     );
 
     // Submitted with nothing ticked and no Report.
@@ -85,7 +87,7 @@ fn a_skipped_rule_is_printed_and_trailed_in_the_commit_of_start_submit_verdict_a
     assert_eq!(field(&root, "HEAD", "status"), "in_review");
     assert_eq!(
         message(&root, "HEAD"),
-        format!("Submit {ID} for review\n\n{}", trailers(&unmet))
+        format!("Submit {ID} for review\n\n{}", trailers("t1", &unmet))
     );
 
     // `verdict changes` with no fix-now finding in the file.
@@ -98,12 +100,13 @@ fn a_skipped_rule_is_printed_and_trailed_in_the_commit_of_start_submit_verdict_a
     // `verdict` makes no commit; the commit it prints carries its skip.
     run_then(&root, &run.stdout);
     assert!(
-        message(&root, "HEAD").ends_with(&format!("changes requested\n\n{}", trailers(&[none]))),
+        message(&root, "HEAD")
+            .ends_with(&format!("changes requested\n\n{}", trailers("t2", &[none]))),
         "{}",
         message(&root, "HEAD")
     );
     let log = atelier(&root, "t9", &["log", ID]).stdout;
-    let line = format!(" changes; in_review -> changes_requested; skip {none}: {REASON}");
+    let line = format!(" changes; in_review -> changes_requested; skip {none}: {REASON} (by t2)");
     assert!(log.lines().last().unwrap().ends_with(&line), "{log}");
 
     // Merged with no approval, after the trailer the pre-push hook knows.
@@ -128,7 +131,7 @@ fn a_skipped_rule_is_printed_and_trailed_in_the_commit_of_start_submit_verdict_a
     assert!(shown.contains("Status: done"), "{shown}");
     assert!(message(&root, "main").ends_with(&format!(
         "\n\nAtelier-Merge: {ID}\n{}",
-        trailers(&[&status, approval])
+        trailers("t1", &[&status, approval])
     )));
 }
 
@@ -167,7 +170,7 @@ fn ready_on_a_record_that_is_not_a_draft_passes_with_a_skip_in_the_commit_it_pri
     assert_eq!(git(&root, &["diff", "--name-only"]), item_path(ID));
     run_then(&root, &run.stdout);
     assert!(
-        message(&root, "HEAD").ends_with(&format!("\n\n{}", trailers(&[&rule]))),
+        message(&root, "HEAD").ends_with(&format!("\n\n{}", trailers("p1", &[&rule]))),
         "{}",
         message(&root, "HEAD")
     );

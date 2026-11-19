@@ -13,9 +13,10 @@ use atelier_core::records::{validate_id, ItemDir, MissionDir};
 use atelier_core::repo::{mission_path, on_base};
 use atelier_core::say::status_name;
 use atelier_core::{
-    disputes, entries, git, item_view, items_of, list as groups, mission_view, narrows_item,
-    narrows_mission, Entry, Filter, Located, Record, Repo,
+    disputes, entries, git, history, item_view, items_of, list as groups, mission_view,
+    narrows_item, narrows_mission, Entry, Filter, Located, Logged, Record, Repo,
 };
+use std::collections::HashSet;
 use view_output::{Change, Whence};
 
 pub fn show(repo: &mut Repo, id: &str) -> Result<Outcome> {
@@ -27,12 +28,14 @@ pub fn show(repo: &mut Repo, id: &str) -> Result<Outcome> {
         let items: Vec<&Entry> = view.items.iter().collect();
         let mut whence = whence(repo, &view.mission, mission_status)?;
         whence.unpublished = unpublished_stop(repo, &view.mission)?;
+        let passed = passed(repo, id)?;
         return Ok(Outcome::Done(view_output::mission(
             &view.dir,
             &whence,
             view.in_progress,
             &items,
             &view.disputes,
+            &passed,
             &view.dir.reviews,
         )));
     }
@@ -48,6 +51,19 @@ pub fn show(repo: &mut Repo, id: &str) -> Result<Outcome> {
         &view.findings,
         &view.open,
     )))
+}
+
+/// Each rule a commit of mission `id` or of its items passed, oldest
+/// first, once for each record it is on: the actions of the mission's log
+/// that carry one.
+fn passed(repo: &mut Repo, id: &str) -> Result<Vec<Logged>> {
+    let actions = history(repo, Some(id), None)?.map_or(Vec::new(), |found| found.actions);
+    let mut seen = HashSet::new();
+    Ok(actions
+        .into_iter()
+        .filter(|logged| !logged.skips.is_empty())
+        .filter(|logged| seen.insert((logged.commit.clone(), logged.id.clone())))
+        .collect())
 }
 
 /// Where `show` read `located`'s record from, and the other branches that

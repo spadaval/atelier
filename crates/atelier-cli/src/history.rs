@@ -4,7 +4,7 @@
 use crate::commands::Outcome;
 use crate::view_output;
 use anyhow::Result;
-use atelier_core::model::{Settlement, Status, Verdict};
+use atelier_core::model::{Settlement, Status, Thread, Verdict};
 use atelier_core::{history, Happened, Logged, Move, Repo};
 use chrono::{DateTime, Utc};
 
@@ -25,7 +25,8 @@ pub fn log(repo: &mut Repo, id: Option<&str>, since: Option<DateTime<Utc>>) -> R
 }
 
 /// `<time> <commit> <id> <action> <thread>`, then what changed, then each
-/// skip, the last two in parts separated by `; `.
+/// skip with the thread that passed it, the last two in parts separated by
+/// `; `.
 pub fn line(logged: &Logged) -> String {
     let thread = logged
         .thread
@@ -39,13 +40,28 @@ pub fn line(logged: &Logged) -> String {
         logged.action.name(),
     );
     let mut parts = changed(&logged.action);
-    parts.extend(logged.skips.iter().map(|skip| format!("skip {skip}")));
+    let by = passed_by(logged.skipped_by.as_ref());
+    parts.extend(
+        logged
+            .skips
+            .iter()
+            .map(|skip| format!("skip {skip} ({by})")),
+    );
     let parts: Vec<String> = parts.iter().map(|part| one_line(part)).collect();
     if !parts.is_empty() {
         line += " ";
         line += &parts.join("; ");
     }
     line + "\n"
+}
+
+/// Who passed a commit's rules, as `log` and `show` say it: `by <thread>`,
+/// or that a commit from before the `Atelier-Skip-By` trailer does not say.
+pub fn passed_by(thread: Option<&Thread>) -> String {
+    match thread {
+        Some(thread) => format!("by {thread}"),
+        None => "thread not recorded".into(),
+    }
 }
 
 /// What changed, in the parts its line shows.
@@ -91,6 +107,7 @@ fn changed(action: &Happened) -> Vec<String> {
         Happened::Drop { status, reason } => {
             [shown(status)].into_iter().chain(reason.clone()).collect()
         }
+        Happened::Passed { .. } => Vec::new(),
     }
 }
 
@@ -119,6 +136,6 @@ fn spelled(status: Status) -> &'static str {
 }
 
 /// `text` with its whitespace made single spaces, so a line stays one.
-fn one_line(text: &str) -> String {
+pub fn one_line(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
 }

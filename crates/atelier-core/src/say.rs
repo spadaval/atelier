@@ -410,35 +410,38 @@ pub fn quoted(word: &str) -> String {
 }
 
 /// The Git command that commits `paths`, and only them, with `message`
-/// and an `Atelier-Skip` trailer for each of `skips`, the rules the command
-/// that wrote them passed, as `<rule>: <reason>`: the commit is the one
-/// place `log` reads a skip from. `at` is the checkout they are in, which
-/// the command names with `-C` when the caller is not at its root (see
-/// [`crate::Repo::git_at`]).
-pub fn commit_line(at: Option<&Path>, paths: &[String], message: &str, skips: &[String]) -> String {
+/// and `trailers`, the [`crate::Skip::trailers`] of the command that wrote
+/// them: the commit is the one place `log` reads a skip from. `at` is the
+/// checkout they are in, which the command names with `-C` when the caller
+/// is not at its root (see [`crate::Repo::git_at`]).
+pub fn commit_line(
+    at: Option<&Path>,
+    paths: &[String],
+    message: &str,
+    trailers: &[String],
+) -> String {
     let git = match at {
         Some(at) => format!("git -C {}", quoted(&at.display().to_string())),
         None => "git".into(),
     };
     let paths: Vec<String> = paths.iter().map(|path| quoted(path)).collect();
     let paths = paths.join(" ");
-    let trailers: String = (skips.iter())
-        .map(|skip| format!(" --trailer {}", quoted(&format!("Atelier-Skip: {skip}"))))
+    let trailers: String = (trailers.iter())
+        .map(|trailer| format!(" --trailer {}", quoted(trailer)))
         .collect();
     format!("{git} add -- {paths} && {git} commit -m \"{message}\"{trailers} -- {paths}")
 }
 
 /// What a planning command prints once it has written `paths`, which are
-/// in the checkout `at` names, as for [`commit_line`] with the rules it
-/// passed, `skips`. `item` is the item whose branch it ran on, when it
-/// settled a finding there.
+/// in the checkout `at` names, as for [`commit_line`] with the trailers of
+/// the rules it passed, `trailers`.
 pub fn planned(
     said: &str,
     guidance: &Guidance,
     at: Option<&Path>,
     paths: &[String],
     message: &str,
-    skips: &[String],
+    trailers: &[String],
 ) -> String {
     let mut text = format!("{said}Wrote, and did not commit:\n");
     for path in paths {
@@ -451,7 +454,7 @@ pub fn planned(
         ),
         Guidance::Own => String::new(),
     };
-    text + &format!("Then: {}\n", commit_line(at, paths, message, skips))
+    text + &format!("Then: {}\n", commit_line(at, paths, message, trailers))
 }
 
 /// What a record write says of how its change reaches the base.

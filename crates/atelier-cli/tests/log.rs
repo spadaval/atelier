@@ -313,7 +313,7 @@ fn a_mission_shows_its_ready_lead_plan_review_and_close_with_its_items_actions()
 }
 
 #[test]
-fn a_skip_ends_the_line_of_the_action_whose_commit_carries_it() {
+fn a_skip_ends_the_line_of_the_action_whose_commit_carries_it_with_its_thread() {
     let scratch = Scratch::new(&[(ID, "draft")]);
     let root = scratch.root();
     let output = atelier_command(&root, "t1", &["start", ID])
@@ -324,8 +324,70 @@ fn a_skip_ends_the_line_of_the_action_whose_commit_carries_it() {
     assert_eq!(
         actions(&root, &log(&root, &[])),
         [format!(
-            "{ID} start t1 draft -> building; skip {ID} is ready (it is draft): {REASON}"
+            "{ID} start t1 draft -> building; skip {ID} is ready (it is draft): {REASON} (by t1)"
         )]
+    );
+}
+
+/// The page `show` prints of mission `id`.
+fn show(root: &Path, id: &str) -> String {
+    let run = atelier(root, "t9", &["show", id]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    run.stdout
+}
+
+#[test]
+fn a_skip_from_before_its_thread_was_recorded_says_so_in_the_log_and_the_missions_page() {
+    let scratch = Scratch::new(&[(ID, "draft")]);
+    let root = scratch.root();
+    write_mission(&root);
+    // Agreed, so that only the item's status is a rule its start passes.
+    let path = format!(".atelier/missions/{MISSION}/mission.md");
+    let agreed = read(&root, &path).replace(
+        "status: draft\nlabels: []\nlead: null\nready: null\n",
+        "status: ready\nlabels: []\nlead: null\nready:\n  by: ada\n  at: 2026-11-10T09:00:00Z\n",
+    );
+    fs::write(root.join(&path), agreed).unwrap();
+    on_base(&root, "Add the mission");
+    // A mission none of whose commits passed a rule says nothing of it.
+    assert!(!show(&root, MISSION).contains("Rules passed"));
+
+    let output = atelier_command(&root, "t1", &["start", ID])
+        .env("ATELIER_SKIP", REASON)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let rule = format!("{ID} is ready (it is draft): {REASON}");
+    let message = git(&root, &["log", "-1", "--format=%B"]);
+    assert!(
+        message.ends_with(&format!("\n\nAtelier-Skip: {rule}\nAtelier-Skip-By: t1")),
+        "{message}"
+    );
+    let commit = short(&root, "HEAD");
+    assert!(
+        show(&root, MISSION).contains(&format!(
+            "\nRules passed:\n  {ID}, start in {commit}, by t1: {rule}\n\nPlan reviews:\n"
+        )),
+        "{}",
+        show(&root, MISSION)
+    );
+
+    // As a binary from before the thread was recorded wrote it.
+    let old = message.replace("\nAtelier-Skip-By: t1", "");
+    git(&root, &["commit", "-q", "--amend", "-m", &old]);
+    let commit = short(&root, "HEAD");
+    assert_eq!(
+        actions(&root, &log(&root, &[ID])),
+        [format!(
+            "{ID} start t1 draft -> building; skip {rule} (thread not recorded)"
+        )]
+    );
+    assert!(
+        show(&root, MISSION).contains(&format!(
+            "\nRules passed:\n  {ID}, start in {commit}, thread not recorded: {rule}\n"
+        )),
+        "{}",
+        show(&root, MISSION)
     );
 }
 
@@ -565,4 +627,349 @@ fn a_version_that_does_not_read_twice_stands_each_time_for_the_version_before_it
         "{actions:?}"
     );
     assert_eq!(actions.len(), 3, "{actions:?}");
+}
+
+/// `atelier` as `thread` with `ATELIER_SKIP` set to `reason`, which must
+/// succeed.
+fn skipping(root: &Path, thread: &str, reason: &str, args: &[&str]) -> Run {
+    let output = atelier_command(root, thread, args)
+        .env("ATELIER_SKIP", reason)
+        .output()
+        .unwrap();
+    let run = Run {
+        code: output.status.code().unwrap_or(-1),
+        stdout: String::from_utf8(output.stdout).unwrap(),
+        stderr: String::from_utf8(output.stderr).unwrap(),
+    };
+    assert_eq!(run.code, 0, "{}{}", run.stdout, run.stderr);
+    run
+}
+
+/// The page's `Rules passed:` lines, none when it has no such section.
+fn rules_passed(page: &str) -> Vec<String> {
+    let Some((_, after)) = page.split_once("\nRules passed:\n") else {
+        return Vec::new();
+    };
+    let section = after.split("\n\n").next().unwrap();
+    section.lines().map(str::to_string).collect()
+}
+
+#[test]
+fn a_proposed_plans_lead_and_merge_and_a_set_of_a_started_item_each_show_their_passed_rule() {
+    let scratch = Scratch::new(&[(ID, "ready")]);
+    let root = scratch.root();
+    // The plan, proposed on its own branch, with the item in it.
+    git(&root, &["switch", "-q", "-c", MISSION]);
+    write_mission(&root);
+    let path = format!(".atelier/missions/{MISSION}/mission.md");
+    fs::write(
+        root.join(&path),
+        read(&root, &path).replace("status: draft", "status: open"),
+    )
+    .unwrap();
+    git(&root, &["add", "-A"]);
+    git(&root, &["commit", "-qm", "Plan the mission"]);
+
+    // Led while still proposed: found on its branch.
+    let lead = "Lead it now";
+    let run = skipping(&root, "lead1", lead, &["lead", MISSION]);
+    run_then(&root, &run.stdout);
+    let led = short(&root, "HEAD");
+    let page = show(&root, MISSION);
+    let passed = rules_passed(&page);
+    assert_eq!(passed.len(), 1, "{page}");
+    assert!(
+        passed[0].starts_with(&format!("  {MISSION}, lead in {led}, by lead1: "))
+            && passed[0].ends_with(&format!(": {lead}")),
+        "{page}"
+    );
+    let lines = actions(&root, &log(&root, &[MISSION]));
+    assert!(
+        lines
+            .iter()
+            .any(|line| line.starts_with(&format!("{MISSION} lead lead1"))
+                && line.ends_with(&format!(": {lead} (by lead1)"))),
+        "{lines:?}"
+    );
+
+    // Merged without its two plan reviews: the merge changes no status,
+    // and its line still shows the rule.
+    let unreviewed = "Ada agreed the plan in conversation";
+    skipping(&root, "p1", unreviewed, &["merge"]);
+    let merged = short(&root, "main");
+    let page = show(&root, MISSION);
+    let passed = rules_passed(&page);
+    assert!(
+        passed.iter().any(|line| line
+            .starts_with(&format!("  {MISSION}, merge in {merged}, by p1: "))
+            && line.ends_with(&format!(": {unreviewed}"))),
+        "{page}"
+    );
+    let lines = actions(&root, &log(&root, &[MISSION]));
+    assert!(
+        lines.iter().any(
+            |line| line.starts_with(&format!("{MISSION} merge p1 skip "))
+                && line.ends_with(&format!(": {unreviewed} (by p1)"))
+        ),
+        "{lines:?}"
+    );
+
+    // A started item's priority set on a backlog branch: no action, and
+    // its rule still shows.
+    git(&root, &["checkout", "-q", "--detach", "main"]);
+    ok(atelier(&root, "t1", &["start", ID]));
+    git(&root, &["checkout", "-q", "--detach", "main"]);
+    ok(atelier(&root, "p1", &["start", "--backlog", "tidy"]));
+    let lower = "Ada lowered it";
+    let run = skipping(&root, "p1", lower, &["set", ID, "--priority", "low"]);
+    run_then(&root, &run.stdout);
+    let set = short(&root, "HEAD");
+    // Its backlog branch merged past a rule of its own, which the merge
+    // commit carries: it names the branch, so the records it changed are
+    // the merge's.
+    ok(atelier(&root, "p1", &["submit"]));
+    append(&root, &item_path(ID), "\nNot committed.\n");
+    let dirty = "Ada keeps the note";
+    skipping(&root, "p1", dirty, &["merge"]);
+    let backlog = short(&root, "main");
+    let rule = format!("{ID} is draft or ready (it is building)");
+    let page = show(&root, MISSION);
+    assert!(
+        rules_passed(&page).contains(&format!("  {ID}, change in {set}, by p1: {rule}: {lower}")),
+        "{page}"
+    );
+    assert!(
+        rules_passed(&page).iter().any(|line| line
+            .starts_with(&format!("  {ID}, merge in {backlog}, by p1: "))
+            && line.ends_with(&format!(": {dirty}"))),
+        "{page}"
+    );
+    let lines = actions(&root, &log(&root, &[ID]));
+    let n = lines.len();
+    assert_eq!(
+        lines[n - 2],
+        format!("{ID} change p1 skip {rule}: {lower} (by p1)"),
+        "{lines:?}"
+    );
+    assert!(
+        lines[n - 1].starts_with(&format!("{ID} merge p1 skip "))
+            && lines[n - 1].ends_with(&format!(": {dirty} (by p1)")),
+        "{lines:?}"
+    );
+}
+
+#[test]
+fn a_record_with_no_action_beside_one_with_an_action_still_shows_the_rule_its_commit_passed() {
+    const OTHER: &str = "demo-cd34";
+    let scratch = Scratch::new(&[(ID, "ready"), (OTHER, "draft")]);
+    let root = scratch.root();
+    write_mission(&root);
+    on_base(&root, "Add the mission");
+    // One ready already, in the mission; one a draft, in none.
+    let again = "Ada reconfirmed the ready item";
+    let run = skipping(&root, "p1", again, &["ready", ID, OTHER, "--by", "ada"]);
+    run_then(&root, &run.stdout);
+    git(&root, &["branch", "-f", "main", "HEAD"]);
+    let commit = short(&root, "HEAD");
+    let rule = format!("{ID} is draft (it is ready): {again}");
+    assert_eq!(
+        actions(&root, &log(&root, &[ID])).last().unwrap(),
+        &format!("{ID} change p1 skip {rule} (by p1)")
+    );
+    let page = show(&root, MISSION);
+    assert!(
+        rules_passed(&page).contains(&format!("  {ID}, change in {commit}, by p1: {rule}")),
+        "{page}"
+    );
+    // The other item's own line carries it too.
+    let other = actions(&root, &log(&root, &[OTHER]));
+    assert_eq!(
+        other.last().unwrap(),
+        &format!("{OTHER} ready p1 draft -> ready; by ada; skip {rule} (by p1)")
+    );
+}
+
+#[test]
+fn a_settlement_keeps_its_passed_rule_beside_the_item_its_commit_creates() {
+    let scratch = Scratch::new(&[(ID, "ready")]);
+    let root = scratch.root();
+    write_mission(&root);
+    write_item(&root, DONE, "done", &["t1"], &[], "Done.");
+    let item =
+        read(&root, &item_path(DONE)).replace("mission: null", &format!("mission: {MISSION}"));
+    fs::write(root.join(item_path(DONE)), item).unwrap();
+    let path = root.join(DONE_REVIEW);
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(
+        path,
+        format!(
+            "---\nschema: atelier.review\nschema_version: 3\nround: 1\ncommit: abc1234\n\
+             reviewers:\n- t2\nmodel: null\nverdict: approve\n\
+             created_at: 2026-11-10T09:00:00Z\n---\n{FINDINGS}"
+        ),
+    )
+    .unwrap();
+    on_base(&root, "Merge demo-d0ne");
+
+    // Taken into a new item, outside the mission, in the base's checkout.
+    git(&root, &["switch", "-q", "main"]);
+    let direct = "Ada authorized recording this directly";
+    let finding = "demo-d0ne/1-aaaa.1";
+    let run = skipping(
+        &root,
+        "p1",
+        direct,
+        &["new", "Translate greeting", "--from", finding],
+    );
+    run_then(&root, &run.stdout);
+    let commit = short(&root, "HEAD");
+    let message = git(&root, &["log", "-1", "--format=%B"]);
+    let rule = message
+        .lines()
+        .find_map(|line| line.strip_prefix("Atelier-Skip: "))
+        .unwrap_or_else(|| panic!("{message}"))
+        .to_string();
+    assert!(rule.ends_with(&format!(": {direct}")), "{message}");
+
+    let settle = actions(&root, &log(&root, &[DONE]));
+    let settle = settle.last().unwrap();
+    assert!(
+        settle.starts_with(&format!("{DONE} settle p1 1-aaaa.1 taken into "))
+            && settle.ends_with(&format!("; skip {rule} (by p1)")),
+        "{settle}"
+    );
+    let page = show(&root, MISSION);
+    assert_eq!(
+        rules_passed(&page),
+        [format!("  {DONE}, settle in {commit}, by p1: {rule}")],
+        "{page}"
+    );
+}
+
+#[test]
+fn a_proposed_mission_fetched_alone_or_ahead_of_its_local_branch_shows_its_passed_rules() {
+    let scratch = Scratch::new(&[(ID, "ready")]);
+    let root = scratch.root();
+    append(
+        &root,
+        ".atelier/config.toml",
+        "\n[forge]\nprovider = \"github\"\nremote = \"origin\"\n",
+    );
+    on_base(&root, "Configure the forge");
+    git(&root, &["switch", "-q", "-c", MISSION]);
+    write_mission(&root);
+    let path = format!(".atelier/missions/{MISSION}/mission.md");
+    fs::write(
+        root.join(&path),
+        read(&root, &path).replace("status: draft", "status: open"),
+    )
+    .unwrap();
+    git(&root, &["add", "-A"]);
+    git(&root, &["commit", "-qm", "Plan the mission"]);
+    let lead = "Lead the proposed mission now";
+    let run = skipping(&root, "p1", lead, &["lead", MISSION]);
+    run_then(&root, &run.stdout);
+    let led = short(&root, "HEAD");
+    let shows = |root: &Path| {
+        let page = show(root, MISSION);
+        let passed = rules_passed(&page);
+        assert_eq!(passed.len(), 1, "{page}");
+        assert!(
+            passed[0].starts_with(&format!("  {MISSION}, lead in {led}, by p1: "))
+                && passed[0].ends_with(&format!(": {lead}")),
+            "{page}"
+        );
+        let lines = actions(root, &log(root, &[MISSION]));
+        assert!(
+            lines
+                .iter()
+                .any(|line| line.starts_with(&format!("{MISSION} lead p1"))
+                    && line.ends_with(&format!(": {lead} (by p1)"))),
+            "{lines:?}"
+        );
+    };
+
+    // Only fetched: the remote-tracking branch alone holds it.
+    git(
+        &root,
+        &[
+            "update-ref",
+            &format!("refs/remotes/origin/{MISSION}"),
+            "HEAD",
+        ],
+    );
+    git(&root, &["checkout", "-q", "--detach", "main"]);
+    git(&root, &["branch", "-qD", MISSION]);
+    shows(&root);
+
+    // The local branch behind the fetched one, before the lead's commit.
+    git(
+        &root,
+        &["branch", "-q", MISSION, &format!("origin/{MISSION}~1")],
+    );
+    shows(&root);
+}
+
+#[test]
+fn a_rule_passed_on_a_backlog_branch_not_merged_yet_shows_on_the_missions_page() {
+    let scratch = Scratch::new(&[(ID, "ready")]);
+    let root = scratch.root();
+    write_mission(&root);
+    on_base(&root, "Add the mission");
+    ok(atelier(&root, "p1", &["start", "--backlog", "tidy"]));
+    let again = "Ada reconfirmed it";
+    let run = skipping(&root, "p1", again, &["ready", ID, "--by", "ada"]);
+    run_then(&root, &run.stdout);
+    let commit = short(&root, "HEAD");
+    git(&root, &["checkout", "-q", "--detach", "main"]);
+    let rule = format!("{ID} is draft (it is ready): {again}");
+    assert_eq!(
+        rules_passed(&show(&root, MISSION)),
+        [format!("  {ID}, change in {commit}, by p1: {rule}")]
+    );
+    assert_eq!(
+        actions(&root, &log(&root, &[MISSION])).last().unwrap(),
+        &format!("{ID} change p1 skip {rule} (by p1)")
+    );
+}
+
+#[test]
+fn an_item_only_on_a_backlog_branch_not_merged_yet_shows_its_passed_rule_on_its_missions_page() {
+    let scratch = Scratch::new(&[(ID, "ready")]);
+    let root = scratch.root();
+    write_mission(&root);
+    let path = format!(".atelier/missions/{MISSION}/mission.md");
+    fs::write(
+        root.join(&path),
+        read(&root, &path).replace("status: draft", "status: open"),
+    )
+    .unwrap();
+    on_base(&root, "Add the mission");
+    ok(atelier(&root, "p1", &["start", "--backlog", "tidy"]));
+    let run = atelier(&root, "p1", &["new", "New greeting", "--in", MISSION]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    run_then(&root, &run.stdout);
+    let added = git(&root, &["diff", "--name-only", "HEAD~1", "HEAD"]);
+    let new = added.split('/').nth(2).unwrap().to_string();
+    let run = atelier(&root, "p1", &["ready", &new, "--by", "ada"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    run_then(&root, &run.stdout);
+    let again = "Ada reconfirmed it";
+    let run = skipping(&root, "p1", again, &["ready", &new, "--by", "ada"]);
+    run_then(&root, &run.stdout);
+    let commit = short(&root, "HEAD");
+    git(&root, &["checkout", "-q", "--detach", "main"]);
+
+    let rule = format!("{new} is draft (it is ready): {again}");
+    let page = show(&root, MISSION);
+    assert!(page.contains(&format!("  {new} ")), "{page}");
+    assert_eq!(
+        rules_passed(&page),
+        [format!("  {new}, change in {commit}, by p1: {rule}")],
+        "{page}"
+    );
+    assert_eq!(
+        actions(&root, &log(&root, &[MISSION])).last().unwrap(),
+        &format!("{new} change p1 skip {rule} (by p1)")
+    );
 }

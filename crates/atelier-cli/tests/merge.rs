@@ -2116,7 +2116,7 @@ fn with_a_skip_a_failing_merge_check_or_uncommitted_change_does_not_stop_the_mer
     let message = git(&root, &["log", "-1", "--format=%B", "main"]);
     assert!(
         message.ends_with(&format!(
-            "\n\nAtelier-Merge: {ID}\n{}\n{}",
+            "\n\nAtelier-Merge: {ID}\n{}\n{}\nAtelier-Skip-By: t1",
             trailer(&rules[0]),
             trailer(&rules[1])
         )),
@@ -2127,7 +2127,7 @@ fn with_a_skip_a_failing_merge_check_or_uncommitted_change_does_not_stop_the_mer
         &["log", "-1", "--format=%(trailers:valueonly)", "main"],
     );
     assert_eq!(parsed.lines().next(), Some(ID), "{parsed}");
-    assert_eq!(parsed.lines().count(), 3, "{parsed}");
+    assert_eq!(parsed.lines().count(), 4, "{parsed}");
     // What was not committed stays in the checkout, not merged.
     assert_eq!(read(&root, "hello.txt"), "hello?\n");
     assert_eq!(git(&root, &["show", "main:hello.txt"]), "hello");
@@ -2273,7 +2273,8 @@ fn with_a_skip_ci_that_failed_or_has_not_finished_passes_and_a_failing_forge_doe
         )
     );
     let message = git(&root, &["log", "-1", "--format=%B", "main"]);
-    assert!(message.ends_with(&trailer(rule)), "{message}");
+    let trailers = format!("{}\nAtelier-Skip-By: t1", trailer(rule));
+    assert!(message.ends_with(&trailers), "{message}");
 
     // Still running: passed at once, without the wait.
     let forge = Forge::new(Some("ci.yml"));

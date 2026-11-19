@@ -1,6 +1,7 @@
 //! What `show`, `list` and `lead` print, and the missions `status` lists.
 //! The wording lives here, beside `output.rs`, so it is cheap to change.
 
+use crate::history::{one_line, passed_by};
 use crate::output::{
     condition, handoff, holder, mission_status_name, priority_name, settled, status_name,
     verdict_name,
@@ -10,7 +11,7 @@ use atelier_core::model::{
     Finding, Mission, MissionStatus, Outcome, Ready, Recommendation, Status, Thread,
 };
 use atelier_core::records::{ItemDir, MissionDir, ReviewFile};
-use atelier_core::{Disputes, Entry, Filter, Group, Judged, Overview, LIFECYCLE};
+use atelier_core::{Disputes, Entry, Filter, Group, Judged, Logged, Overview, LIFECYCLE};
 use std::time::SystemTime;
 
 /// Where `show` read a record from, and the other unmerged branches that
@@ -397,6 +398,7 @@ pub fn mission(
     in_progress: bool,
     items: &[&Entry],
     disputed: &Disputes,
+    passed: &[Logged],
     reviews: &[ReviewFile],
 ) -> String {
     let mission = &dir.mission;
@@ -429,12 +431,35 @@ pub fn mission(
         true => "  None.\n".to_string(),
         false => disputes(disputed),
     };
+    text += &rules_passed(passed);
     text += "\nPlan reviews:\n";
     if reviews.is_empty() {
         text += "  None.\n";
     }
     for review in reviews {
         text += &review_line(review);
+    }
+    text
+}
+
+/// Each rule `passed`, its action's commit carries, one line each:
+/// `<id>, <action> in <commit>, by <thread>: <rule>: <reason>`. Nothing
+/// when none was passed.
+fn rules_passed(passed: &[Logged]) -> String {
+    if passed.is_empty() {
+        return String::new();
+    }
+    let mut text = "\nRules passed:\n".to_string();
+    for logged in passed {
+        let by = passed_by(logged.skipped_by.as_ref());
+        let action = logged.action.name();
+        for skip in &logged.skips {
+            let skip = one_line(skip);
+            text += &format!(
+                "  {}, {action} in {}, {by}: {skip}\n",
+                logged.id, logged.commit
+            );
+        }
     }
     text
 }
