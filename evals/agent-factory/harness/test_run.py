@@ -488,7 +488,7 @@ class CodexThreadsTest(unittest.TestCase):
             [agent] = run.codex_threads(tmp / "home", tmp / "run", 0)
             self.assertEqual((agent["thread"], agent["end"] - agent["start"]), ("codex-kid", 4))
             spec = importlib.util.spec_from_file_location(
-                "loop", HERE.parent / "scenarios" / "next-loop" / "grade.py")
+                "loop", HERE.parent / "scenarios" / "next-loop" / "shell_grade.py")
             loop = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(loop)
             found, tools = loop.calls(tmp / "run" / "threads" / "codex-kid.jsonl", "kid")
@@ -804,6 +804,260 @@ class RunOneTest(unittest.TestCase):
         r = self.run_house()
         self.assertIsNone(r["pass"])
         self.assertIn("(reviewer): it ran gpt-6.1-sol at low", r["invalid"])
+
+
+FAKE_JUDGE = r"""
+import json, re, sys
+from pathlib import Path
+agent, model = sys.argv[1:3]
+prompt = sys.stdin.read()
+here = Path(__file__).parent
+(here / "judge-prompts").mkdir(exist_ok=True)
+(here / "judge-prompts" / f"{model}.txt").write_text(prompt)
+(here / "judge-cwds").mkdir(exist_ok=True)
+(here / "judge-cwds" / model).write_text(str(Path.cwd()))
+if (here / "judge-exits").exists():
+    sys.exit(3)
+asked = re.findall(r"^- (\S+) \(about the", prompt.split("# Your questions", 1)[1], re.M)
+told = json.loads((here / "judge-answers.json").read_text())
+answers = {"answers": [{"id": q, "answer": told.get(q, "pass"),
+                        "line": "Finding 1: the test passes on the old code",
+                        "reason": "said so"} for q in asked]}
+reply = "Here it is.\n" + json.dumps(answers)
+if agent == "claude":
+    print(json.dumps({"type": "system", "subtype": "init", "tools": [], "mcp_servers": []}))
+    print(json.dumps({"type": "result", "subtype": "success", "result": reply,
+                      "usage": {"input_tokens": 7, "output_tokens": 3}}))
+else:
+    print(json.dumps({"type": "thread.started", "thread_id": "j"}))
+    print(json.dumps({"type": "item.completed", "item": {"type": "agent_message", "text": reply}}))
+    print(json.dumps({"type": "turn.completed", "usage": {
+        "input_tokens": 9, "cached_input_tokens": 0, "output_tokens": 4}}))
+"""
+RUBRIC = """# A case
+
+The fixture, for the judge.
+
+## found-it
+
+Role: reviewer. Graded.
+
+Does the review find it?
+
+Pass: it does.
+
+## built-it
+
+Role: implementer. Graded.
+
+Did the implementer build it?
+
+Pass: it did.
+
+## said-why
+
+Role: reviewer. Reported.
+
+Does the review say why?
+
+Pass: it does.
+"""
+FACTS = """import json
+print(json.dumps({"facts": {"merged": {"value": True, "pass": True},
+                            "calls": {"value": 3}}}))
+"""
+
+
+class JudgeTest(unittest.TestCase):
+    """A house run of a case with a rubric, end to end, with stand-ins for
+    the agents and the judges: each question goes to the judge of its
+    role's lab, and the run's grade is its facts and its graded answers."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="af-judge-"))
+        self.saved = (run.SCENARIOS, run.agent_command, run.judge_command, run.CODEX_AUTH)
+        run.CODEX_AUTH = self.tmp / "host-auth.json"
+        run.CODEX_AUTH.write_text("{}")
+        case = self.tmp / "scenarios" / "case"
+        case.mkdir(parents=True)
+        (case / "scenario.json").write_text(json.dumps({"description": "x", "role": "reviewer"}))
+        (case / "prompt.md").write_text("{{skill}}go")
+        (case / "setup.sh").write_text(
+            'set -e\nmkdir -p "$1/repo"\ngit init -q -b main "$1/repo"\ncd "$1/repo"\n'
+            'git -c user.name=a -c user.email=a@a commit -q --allow-empty -m start\n')
+        (case / "grade.py").write_text(FACTS)
+        (case / "rubric.md").write_text(RUBRIC)
+        (self.tmp / "judge-answers.json").write_text("{}")
+        (self.tmp / "codex-effort").write_text("xhigh")
+        agent, judge = self.tmp / "fake_agent.py", self.tmp / "fake_judge.py"
+        agent.write_text(FAKE_AGENT)
+        judge.write_text(FAKE_JUDGE)
+        run.SCENARIOS = self.tmp / "scenarios"
+        run.agent_command = lambda agent_, prompt, model, effort, budget, cwd, system=None: [
+            sys.executable, str(agent), agent_, model, effort, prompt]
+        run.judge_command = lambda spec, cwd: [sys.executable, str(judge), spec["agent"],
+                                               spec["model"]]
+
+    def tearDown(self):
+        run.SCENARIOS, run.agent_command, run.judge_command, run.CODEX_AUTH = self.saved
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def run_house(self, answers=None):
+        (self.tmp / "judge-answers.json").write_text(json.dumps(answers or {}))
+        return run.run_one("case", "none", "HEAD", run.load_setup("house"), 0,
+                           self.tmp / "out", self.tmp / "work")
+
+    def test_each_question_goes_to_the_judge_from_another_lab_than_its_role(self):
+        r = self.run_house()
+        self.assertIs(r["pass"], True, r.get("failed"))
+        judges = {a["id"]: (a["role"], a["judge"]["lab"], a["judge"]["model"])
+                  for a in r["rubric"]}
+        # The reviewer is Codex's, so an Anthropic model judges it; the
+        # implementer is Claude Code's, so an OpenAI one does.
+        self.assertEqual(judges, {
+            "found-it": ("reviewer", "openai", "claude-opus-5-5"),
+            "built-it": ("implementer", "anthropic", "gpt-6.1-sol"),
+            "said-why": ("reviewer", "openai", "claude-opus-5-5")})
+        self.assertEqual({(j["model"], tuple(j["questions"])) for j in r["judged"]},
+                         {("claude-opus-5-5", ("found-it", "said-why")),
+                          ("gpt-6.1-sol", ("built-it",))})
+        self.assertEqual(r["facts"]["merged"], {"value": True, "pass": True})
+        found = next(a for a in r["rubric"] if a["id"] == "found-it")
+        self.assertEqual((found["answer"], found["line"], found["line_found"]),
+                         ("pass", "Finding 1: the test passes on the old code", False))
+        self.assertTrue((Path(r["run_dir"]) / "judge-openai.jsonl").is_file())
+        # Each judge ran after the agent, alone, and counts as an agent.
+        self.assertEqual(r["peak_agents"], 1)
+        self.assertEqual(len(r["agents"]), 3)
+
+    def test_the_judge_is_not_told_the_arm(self):
+        r = self.run_house()
+        name = Path(r["run_dir"]).name
+        self.assertIn("-none-", name)
+        for model in ("claude-opus-5-5", "gpt-6.1-sol"):
+            prompt = (self.tmp / "judge-prompts" / f"{model}.txt").read_text()
+            cwd = Path((self.tmp / "judge-cwds" / model).read_text())
+            self.assertNotIn(name, prompt)
+            self.assertNotIn("arm", prompt.lower().split())
+            self.assertTrue(cwd.name.startswith("judge-") and name not in str(cwd), cwd)
+            self.assertFalse(cwd.exists(), "the judge's directory is removed")
+        prompt = (self.tmp / "judge-prompts" / "claude-opus-5-5.txt").read_text()
+        self.assertIn("- found-it (about the reviewer)", prompt)
+        self.assertNotIn("- built-it", prompt)
+        self.assertIn('"merged"', prompt)
+
+    def test_a_reported_answer_that_fails_changes_no_grade(self):
+        r = self.run_house({"said-why": "fail"})
+        self.assertIs(r["pass"], True, r.get("failed"))
+        self.assertEqual(next(a["answer"] for a in r["rubric"] if a["id"] == "said-why"),
+                         "fail")
+
+    def test_a_graded_answer_that_fails_fails_the_run(self):
+        r = self.run_house({"built-it": "fail"})
+        self.assertIs(r["pass"], False)
+        self.assertEqual(r["failed"], ["graded built-it (implementer): fail, said so"])
+
+    def test_a_judge_that_cannot_answer_fails_its_graded_questions_with_why(self):
+        (self.tmp / "judge-exits").write_text("")
+        r = self.run_house()
+        self.assertIs(r["pass"], False)
+        self.assertIn("graded found-it (reviewer): unknown, the judge (claude-opus-5-5) "
+                      "exited 3 with no reply", r["failed"])
+        self.assertNotIn("said-why", " ".join(r["failed"]))
+
+    def test_an_invalid_run_is_null_and_not_judged(self):
+        (self.tmp / "codex-effort").write_text("low")
+        r = self.run_house()
+        self.assertIsNone(r["pass"])
+        self.assertIn("it ran gpt-6.1-sol at low", r["invalid"])
+        self.assertEqual(r["judged"], [])
+        self.assertFalse((self.tmp / "judge-prompts").exists())
+
+    def test_a_case_without_facts_keeps_its_own_grade(self):
+        (self.tmp / "scenarios" / "case" / "grade.py").write_text(
+            'print(\'{"pass": false, "checks": {}, "notes": ["old"]}\')')
+        (self.tmp / "scenarios" / "case" / "rubric.md").unlink()
+        r = self.run_house()
+        self.assertIs(r["pass"], False)
+        self.assertEqual(r["notes"], ["old"])
+
+
+class JudgingTest(unittest.TestCase):
+    """judge.py's parts: the rubric, the answers, the verdict and the
+    material the judge reads."""
+    judging = run.judging
+    QUESTIONS = [{"id": "a", "role": "reviewer", "kind": "graded"},
+                 {"id": "b", "role": "reviewer", "kind": "reported"}]
+
+    def test_every_case_s_rubric_parses(self):
+        for path in sorted(run.SCENARIOS.glob("*/rubric.md")):
+            rubric = self.judging.read_rubric(path.parent)
+            self.assertTrue(rubric["questions"], path)
+
+    def test_a_question_without_its_role_or_pass_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "'x' needs a line 'Role"):
+            self.judging.parse_rubric("# R\n\n## x\n\nRole: captain. Graded.\n\nPass: y\n")
+        with self.assertRaisesRegex(ValueError, "'x' needs a line 'Pass"):
+            self.judging.parse_rubric("# R\n\n## x\n\nRole: lead. Reported.\n\nIs it?\n")
+
+    def test_answers_are_read_from_json_with_text_around_it(self):
+        given = {"diff": "+ a line of the diff\n"}
+        reply = ('Sure.\n```json\n{"answers": [{"id": "a", "answer": "PASS", "line": '
+                 '"a line  of the diff", "reason": "r"}, {"id": "b", "answer": "maybe"}]}\n```')
+        got = self.judging.parse_answers(reply, self.QUESTIONS, given)
+        self.assertEqual(got["a"], {"answer": "pass", "line": "a line  of the diff",
+                                    "reason": "r", "line_found": True})
+        self.assertEqual(got["b"]["answer"], "unknown")
+        self.assertIn("'maybe'", got["b"]["reason"])
+
+    def test_a_reply_that_is_not_json_leaves_every_question_unknown(self):
+        got = self.judging.parse_answers("I think it passes.", self.QUESTIONS, {})
+        self.assertEqual({a["answer"] for a in got.values()}, {"unknown"})
+        self.assertIn("not the JSON", got["a"]["reason"])
+
+    def test_a_run_passes_on_its_facts_and_graded_answers(self):
+        facts = {"ok": {"value": 1, "pass": True}, "shown": {"value": 2}}
+        answers = [{**q, "answer": "pass" if q["kind"] == "graded" else "fail"}
+                   for q in self.QUESTIONS]
+        self.assertEqual(self.judging.verdict(facts, answers), {"pass": True, "failed": []})
+        facts["ok"]["pass"] = False
+        self.assertEqual(self.judging.verdict(facts, answers)["failed"], ["fact ok: 1"])
+
+    def test_the_material_is_what_the_run_wrote_since_the_start(self):
+        work = Path(tempfile.mkdtemp(prefix="af-material-"))
+        try:
+            repo = work / "repo"
+            sh = lambda *a: subprocess.run(["git", "-C", str(repo), "-c", "user.name=a", "-c",
+                                            "user.email=a@a", *a], check=True,
+                                           capture_output=True)
+            repo.mkdir()
+            sh("init", "-q", "-b", "main")
+            reviews = repo / ".atelier" / "items" / "x-1" / "reviews"
+            reviews.mkdir(parents=True)
+            (reviews / "1-old.md").write_text("an old review\n")
+            (repo / "code.py").write_text("old = 1\n")
+            sh("add", "-A")
+            sh("commit", "-qm", "fixture")
+            self.judging.snapshot_refs(work)
+            sh("switch", "-qc", "x-1")
+            (repo / "code.py").write_text("new = 2\n")
+            (reviews / "1-new.md").write_text("## Finding 1: wrong\n")
+            sh("add", "-A")
+            sh("commit", "-qm", "Change it")
+            (repo / "notes.txt").write_text("left here\n")
+            (reviews / "2-draft.md").write_text("a draft review\n")
+            given = self.judging.material(work, "Done.", {"f": {"value": 1}})
+            self.assertIn("### Branch x-1 (new)", given["diff"])
+            self.assertIn("+new = 2", given["diff"])
+            self.assertIn("Change it", given["diff"])
+            self.assertIn("+left here", given["diff"])
+            self.assertNotIn("Finding 1", given["diff"])
+            self.assertIn("1-new.md (at branch x-1)\n## Finding 1: wrong", given["reviews"])
+            self.assertIn("2-draft.md (uncommitted, in the checkout on x-1)", given["reviews"])
+            self.assertNotIn("an old review", given["reviews"])
+            self.assertEqual(given["final"], "Done.")
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
 
 
 class MainTest(unittest.TestCase):

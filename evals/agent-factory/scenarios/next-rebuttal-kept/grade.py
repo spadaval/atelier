@@ -22,7 +22,7 @@ checkout's working tree:
   examples hold and the suite passes (the finding's fix keeps the leading
   hyphen, so `rust-go` becomes `-rust-go`).
 
-Calls are counted with next-loop's grader across every thread. A run fails
+Calls are counted with next-loop/shell_grade.py across every thread. A run fails
 if any thread set ATELIER_SKIP.
 """
 import importlib.util
@@ -33,7 +33,7 @@ import sys
 from pathlib import Path
 
 spec = importlib.util.spec_from_file_location(
-    "next_loop_grade", Path(__file__).resolve().parent.parent / "next-loop" / "grade.py")
+    "shell_grade", Path(__file__).resolve().parent.parent / "next-loop" / "shell_grade.py")
 loop = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(loop)
 ID, git = loop.ID, loop.git

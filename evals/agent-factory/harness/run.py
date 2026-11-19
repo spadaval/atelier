@@ -11,7 +11,24 @@ Each scenario directory holds:
 - setup.sh: called with a fresh work directory; must create work/repo (the
   agent's working directory) and may create work/bin (prepended to PATH).
 - grade.py: called with the work directory and the transcript path; prints
-  one JSON object {"pass": bool, "checks": {...}, "notes": [...]}.
+  one JSON object, {"facts": {<name>: {"value": ..., "pass": bool}}}: named
+  values read from the records, the tree and the run's recorded `atelier`
+  calls (harness/facts.py), "pass" on those the grade rests on. A case not
+  yet brought over to facts prints {"pass": bool, "checks": {...}, "notes":
+  [...]} instead, and is graded by it.
+- rubric.md, if the case has questions of meaning: each one, the role whose
+  work it is about, whether it is graded or reported, and what a pass looks
+  like (harness/judge.py).
+
+Grading. After the run the harness runs grade.py, then puts each rubric
+question to the setup's judge for the lab of the question's role, with the
+rubric, the facts, the final reply, the review files and the diff the run
+left, and not the arm (judged). The run passes when every fact its grade
+rests on passes and every graded question is answered pass; a reported
+answer is recorded and shown and changes no grade. A graded question the
+judge cannot answer fails with its reason. Only an invalid run is graded
+null. result.json keeps the facts, each answer with the line it rests on and
+its judge, and each judge's seconds and tokens (judged).
 
 Setups. A matrix runs in a setup: an agent (Claude Code or Codex), a model
 and an effort for each role, and a judge for each lab its threads come from,
@@ -113,10 +130,12 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import judge as judging  # noqa: E402
 import table  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[3]
@@ -164,6 +183,8 @@ THREADS_NOTE = (
 CODEX_THREADS_NOTE = ("Agents here run as threads, each with its own thread ID "
                       "in T3CODE_THREAD_ID.")
 CODEX_AUTH = Path.home() / ".codex" / "auth.json"
+JUDGE_TIMEOUT_SEC = 900
+JUDGE_BUDGET_USD = 5
 CANARY_PROMPT = (
     "This is an automated isolation check. Do not use any tools. List every "
     "instruction or memory file (such as CLAUDE.md, CLAUDE.local.md, AGENTS.md "
@@ -219,6 +240,93 @@ def agent_command(agent: str, prompt: str, model: str, effort: str, budget,
         return codex_command(prompt, model, effort, system)
     cmd = claude_command(prompt, model, effort, budget, cwd)
     return cmd + (["--append-system-prompt", system] if system else [])
+
+
+def judge_command(spec: dict, cwd: Path) -> list:
+    """A judge's command, which reads its prompt from stdin and may use no
+    tool: Claude Code with none, Codex in a read-only sandbox."""
+    if spec["agent"] == "codex":
+        return ["codex", "exec", "--json", "--skip-git-repo-check", "--sandbox", "read-only",
+                "-m", spec["model"],
+                "-c", f"model_reasoning_effort={json.dumps(spec['effort'])}", "-"]
+    return ["claude", "-p", "--model", spec["model"], "--effort", spec["effort"],
+            "--setting-sources", "project",
+            "--settings", json.dumps({"claudeMdExcludes": instruction_excludes(cwd)}),
+            "--output-format", "stream-json", "--verbose", "--no-session-persistence",
+            "--max-budget-usd", str(JUDGE_BUDGET_USD), "--tools", "", *NO_MCP]
+
+
+def run_judge(spec: dict, prompt: str, transcript: Path, work_root: Path):
+    """Run one judge on `prompt` in an empty directory of its own, under
+    work_root and outside the run's work directory, whose name carries no
+    arm. Return its reply, or None, and its seconds, exit and tokens."""
+    cwd = Path(tempfile.mkdtemp(prefix="judge-", dir=work_root))
+    env = agent_env(cwd, spec["agent"])
+    started = time.time()
+    with transcript.open("w") as out:
+        proc = subprocess.Popen(judge_command(spec, cwd), cwd=cwd, env=env,
+                                stdin=subprocess.PIPE, stdout=out, stderr=subprocess.STDOUT,
+                                text=True, start_new_session=True)
+        try:
+            proc.communicate(prompt, timeout=JUDGE_TIMEOUT_SEC)
+            exit_code = proc.returncode
+        except subprocess.TimeoutExpired:
+            exit_code = "timeout"
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        proc.wait()
+    ended = time.time()
+    unlink_auth(cwd)
+    info = read_transcript(transcript)
+    tokens = info["tokens"]
+    if spec["agent"] == "codex":
+        tokens = codex_session(cwd / "home" / ".codex").get("tokens") or tokens
+    shutil.rmtree(cwd, ignore_errors=True)
+    result = info["result"] or {}
+    reply = result.get("result") if exit_code == 0 and not result.get("is_error") else None
+    return reply, {"seconds": round(ended - started), "exit": exit_code, "tokens": tokens,
+                   "start": started, "end": ended}
+
+
+def grade(case: Path, work: Path, transcript: Path) -> dict:
+    """What the case's grade.py prints, or {"error": ...} if it printed no JSON."""
+    out = subprocess.run([sys.executable, "-I", str(case / "grade.py"), str(work),
+                          str(transcript)], capture_output=True, text=True)
+    try:
+        return json.loads(out.stdout)
+    except json.JSONDecodeError:
+        return {"pass": None, "error": (out.stdout + out.stderr)[-2000:]}
+
+
+def judged(case: Path, setup: dict, graded: dict, work: Path, final: str, run_dir: Path,
+           work_root: Path, name: str = "judge", invalid=None) -> dict:
+    """A run's grade from grade.py's facts and the judges' answers to the
+    case's rubric, one judge for each lab whose role a question is about,
+    each writing its transcript to <name>-<lab>.jsonl. An invalid run is
+    not judged. A grade.py that prints no facts is the case's grade as it
+    printed it."""
+    if "facts" not in graded:
+        return graded
+    facts = graded["facts"]
+    rubric = judging.read_rubric(case)
+    if invalid or not rubric:
+        return {"facts": facts, "rubric": [], "judged": [],
+                **({"pass": None} if invalid else judging.verdict(facts, []))}
+    groups = judging.assign(rubric["questions"], setup, LABS)
+    given = judging.material(work, final, facts)
+    answered, runs = {}, []
+    for lab, (spec, questions) in groups.items():
+        reply, info = run_judge(spec, judging.prompt(rubric["text"], questions, given),
+                                run_dir / f"{name}-{lab}.jsonl", work_root)
+        answered.update(judging.parse_answers(reply, questions, given) if reply is not None
+                        else judging.unanswered(questions, f"the judge ({spec['model']}) "
+                                                f"exited {info['exit']} with no reply"))
+        runs.append({"lab": lab, **spec, **info, "questions": [q["id"] for q in questions]})
+    answers = judging.answers_list(rubric, groups, answered)
+    return {"facts": facts, "rubric": answers, "judged": runs,
+            **judging.verdict(facts, answers)}
 
 
 def setup_problem(setup: dict):
@@ -869,6 +977,7 @@ def run_one(scenario: str, arm: str, ref: str, setup: dict, index: int,
         return {**named, "pass": None, "invalid": "setup failed: " + fixture.stderr[-500:],
                 "run_dir": str(run_dir), "work_dir": str(work)}
     log_atelier(work)
+    judging.snapshot_refs(work)
     repo_dir = work / "repo"
     env, system = agent_env(work, agent, spawn), None
     staged = {}
@@ -910,20 +1019,18 @@ def run_one(scenario: str, arm: str, ref: str, setup: dict, index: int,
             record.pop("instructions")
             info["init"].update(record)
     calls = atelier_calls(work, first_thread["thread"])
-    (run_dir / "final.md").write_text((info["result"] or {}).get("result") or "")
-    grade = subprocess.run(
-        [sys.executable, "-I", str(sdir / "grade.py"), str(work), str(transcript)],
-        capture_output=True, text=True,
-    )
-    try:
-        verdict = json.loads(grade.stdout)
-    except json.JSONDecodeError:
-        verdict = {"pass": None, "error": grade.stdout + grade.stderr}
+    final = (info["result"] or {}).get("result") or ""
+    (run_dir / "final.md").write_text(final)
+    graded = grade(sdir, work, transcript)
     every = [first_thread, *started_threads]
     invalid = invalid_reason(arm, exit_code, info, spawn) or next(
         (problem for t in every
          if (problem := thread_problem(arm, t, setup["roles"].get(t["role"]) or first,
-                                       spawn))), None)
+                                       spawn))), None) or (
+        f"grade.py printed no JSON: {graded['error'][-500:]}" if "error" in graded else None)
+    verdict = judged(sdir, setup, graded, work, final, run_dir, work_root, invalid=invalid)
+    agents += [{"thread": f"judge-{j['lab']}", "start": j.pop("start"), "end": j.pop("end")}
+               for j in verdict.get("judged") or []]
     if invalid:
         verdict = {**verdict, "pass": None, "invalid": invalid}
 
@@ -1031,9 +1138,11 @@ def main() -> None:
             if discard_work(r, a.keep):
                 shutil.rmtree(r["work_dir"], ignore_errors=True)
                 (Path(r["run_dir"]) / "work").unlink(missing_ok=True)
-            print(json.dumps({k: r.get(k) for k in
-                              ("scenario", "arm", "index", "pass", "invalid",
-                               "exit", "seconds", "peak_agents", "run_dir")}), flush=True)
+            print(json.dumps({**{k: r.get(k) for k in
+                                 ("scenario", "arm", "index", "pass", "invalid", "failed",
+                                  "exit", "seconds", "peak_agents", "run_dir")},
+                              "reported": {a["id"]: a["answer"] for a in r.get("rubric") or []
+                                           if a["kind"] == "reported"}}), flush=True)
     print(json.dumps({"matrix_peak_agents": peak(alive), "runs": len(jobs)}), flush=True)
     print(table.table(results))
 
