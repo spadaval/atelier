@@ -347,6 +347,7 @@ pub struct DoneWhen {
 pub enum ResponseLine {
     Fixed { finding: String, commit: String },
     Rebutted { finding: String, fact: String },
+    NotBuilt { finding: String, reason: String },
 }
 
 /// `GET /api/inbox`.

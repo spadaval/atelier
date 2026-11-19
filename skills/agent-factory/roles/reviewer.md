@@ -14,6 +14,11 @@ one-line reason:
   it reaches users or other repositories but shows and can be undone; high,
   silent wrong results, lost data or a security hole.
 
+A fix-now finding blocks the merge. The implementer must fix it, rebut it,
+or take it to the mission's lead as not worth building. A finding at `defer`
+or `no action` blocks nothing, and the implementer may leave it with a basic
+reason.
+
 Then judge whether the value is worth the rest. If a much smaller change gets
 most of it, record a fix-now finding whose title opens `Shrink:` and names
 that change. If the cost outweighs the value, record one that opens
@@ -29,3 +34,10 @@ nothing, tell whoever started you, and stop.
 Otherwise judge the rebuttal's fact or test. If it holds, withdraw the
 finding; if not, keep it. A rebuttal gets one try: a finding already kept
 once stays kept, however the author answers it again.
+
+## Findings Not Built
+
+A carried finding the author answered `not built: <reason>` is real by the
+author's own word, and went to the mission's lead, who rules on it. Leave it
+as your file has it and do not judge it again. It does not stop your
+approval of the rest, and `merge` holds the item until the lead rules.

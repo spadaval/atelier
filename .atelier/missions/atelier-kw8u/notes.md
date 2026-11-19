@@ -83,3 +83,16 @@ what this mission's Scope leaves out: the brief the binary prints for a
 later round, the implementer's exits from a finding, a passage that asks
 which requirement each new part serves, and cases of correct but overbuilt
 work with their controls.
+
+## 2026-11-19: replayed reviews filled the disk
+
+A kept replay run holds about 2.7 GB of Rust build output, and the harness
+keeps every failing one. atelier-ad0z's matrix and atelier-id3v's `house`
+replays filled this host's root disk twice; the T3 Code server runs on it.
+At 05:31 the lead deleted the build output of 53 finished runs under
+`/var/tmp/af-evals`, 71 GB, leaving 146 GB free, and touched no run of the
+last 30 minutes and no result.
+
+atelier-scly, which atelier-ad0z's implementer filed, is readied, and
+atelier-oiwy waits on it: that item runs the replayed reviews ten times
+over and would fill the disk again.

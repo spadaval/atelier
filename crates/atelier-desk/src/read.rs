@@ -798,6 +798,10 @@ pub fn item(repo: &mut Repo, id: &str) -> Result<Option<ItemPage>> {
                 finding: finding.to_string(),
                 fact,
             },
+            atelier_core::model::Response::NotBuilt { finding, reason } => ResponseLine::NotBuilt {
+                finding: finding.to_string(),
+                reason,
+            },
         });
     Ok(Some(ItemPage {
         commit: repo.base_tip.clone(),

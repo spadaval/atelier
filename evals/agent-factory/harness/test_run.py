@@ -350,6 +350,29 @@ class LimitTest(unittest.TestCase):
         self.assertFalse(run.discard_work({"pass": None, "work_dir": "w"}, keep=False))
         self.assertFalse(run.discard_work({"pass": False, "work_dir": "w"}, keep=False))
 
+    def test_only_cargo_target_directories_are_build_output(self):
+        work = Path(tempfile.mkdtemp(prefix="af-build-output-"))
+        self.addCleanup(shutil.rmtree, work, ignore_errors=True)
+        tag = "Signature: 8a477f597d28d172789f06886806bc55\n"
+        for target in ("repo/target", "tmp/checkout/target", "repo/.git/target"):
+            (work / target / "debug").mkdir(parents=True)
+            (work / target / "CACHEDIR.TAG").write_text(tag)
+            (work / target / ".rustc_info.json").write_text("{}")
+        # Cargo's registry cache carries the tag too, and is no build output.
+        (work / "home/.cargo/registry").mkdir(parents=True)
+        (work / "home/.cargo/registry/CACHEDIR.TAG").write_text(tag)
+        outside = Path(tempfile.mkdtemp(prefix="af-build-output-outside-"))
+        self.addCleanup(shutil.rmtree, outside, ignore_errors=True)
+        (outside / "CACHEDIR.TAG").write_text(tag)
+        (outside / ".rustc_info.json").write_text("{}")
+        (work / "tmp/linked").symlink_to(outside)
+        self.assertEqual(sorted(p.relative_to(work).as_posix() for p in run.build_outputs(work)),
+                         ["repo/target", "tmp/checkout/target"])
+        run.drop_build_output(work)
+        self.assertEqual(run.build_outputs(work), [])
+        self.assertTrue((work / "home/.cargo/registry/CACHEDIR.TAG").is_file())
+        self.assertTrue((outside / "CACHEDIR.TAG").is_file())
+
     def test_the_peak_counts_overlapping_agents(self):
         self.assertEqual(run.peak([{"start": 0, "end": 10}, {"start": 1, "end": 4},
                                    {"start": 4, "end": 9}]), 2)
@@ -845,6 +868,15 @@ if Path(__file__).with_name(f"{agent}-limit").exists():
         print(json.dumps({"type": "turn.failed", "error": {
             "message": "You've hit your usage limit. Try again at 5:00 PM."}}))
     sys.exit(1)
+if Path(__file__).with_name("builds").exists():
+    # A replay's reviewer builds in repo/target, and once more in a target
+    # of its own under tmp/, as one did on 2026-11-19, beside its notes.
+    for target in (Path.cwd() / "target", Path(os.environ["TMPDIR"]) / "base-target"):
+        (target / "debug" / "deps").mkdir(parents=True)
+        (target / "debug" / "deps" / "libatelier.rlib").write_bytes(b"0" * 4096)
+        (target / "CACHEDIR.TAG").write_text("Signature: 8a477f597d28d172789f06886806bc55\n")
+        (target / ".rustc_info.json").write_text("{}")
+    (Path(os.environ["TMPDIR"]) / "notes.md").write_text("the reviewer's notes")
 final = "ok"
 if Path(__file__).with_name("final-link").exists():
     # A final reply that links a review file, as agents' replies do.
@@ -1195,6 +1227,18 @@ class JudgeTest(unittest.TestCase):
         r = self.run_house({"built-it": "fail"})
         self.assertIs(r["pass"], False)
         self.assertEqual(r["failed"], ["graded built-it (implementer): fail, said so"])
+
+    def test_a_failing_run_keeps_its_work_directory_without_its_build_output(self):
+        (self.tmp / "builds").write_text("")
+        r = self.run_house({"found-it": "fail"})
+        self.assertIs(r["pass"], False)
+        self.assertFalse(run.discard_work(r, keep=False))
+        work = Path(r["work_dir"])
+        self.assertFalse((work / "repo" / "target").exists())
+        self.assertFalse((work / "tmp" / "base-target").exists())
+        self.assertEqual((work / "tmp" / "notes.md").read_text(), "the reviewer's notes")
+        self.assertTrue((work / "repo" / ".git").is_dir())
+        self.assertTrue((Path(r["run_dir"]) / "result.json").is_file())
 
     def test_a_judge_that_cannot_answer_fails_its_graded_questions_with_why(self):
         (self.tmp / "judge-exits").write_text("")

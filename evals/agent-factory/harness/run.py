@@ -141,7 +141,8 @@ later fix; a run whose transcript shows the fix anyway is invalid
 (proxy_refused). A confined scenario cannot have threads. One with "cargo":
 true has its crates fetched into --work-root's cargo-home before the run,
 which then builds offline in its own target directory, and counts against
---cargo-jobs.
+--cargo-jobs. Once a run is graded, every cargo target directory under its
+work directory is deleted, whatever its grade (drop_build_output).
 """
 
 import argparse
@@ -1172,54 +1173,83 @@ def run_one(scenario: str, arm: str, ref: str, setup: dict, index: int,
                    "end": time.time()}] + delegated
     seconds = agents[0]["end"] - started
 
-    info = read_transcript(transcript)
-    first_thread = {"thread": agents[0]["thread"], "role": role, **first,
-                    "seconds": round(seconds), "exit": exit_code,
-                    "tokens": info["tokens"], "init": info["init"]}
-    started_threads = [thread_facts(t, setup, run_dir, work) for t in delegated]
-    if agent == "codex":
-        home = work / "home" / ".codex"
-        agents += codex_threads(home, run_dir, agents[0]["end"], started_threads)
-        if info["init"] is not None:
-            record = codex_session(home)
-            first_thread["tokens"] = record.pop("tokens") or first_thread["tokens"]
-            record.pop("instructions")
-            info["init"].update(record)
-    calls = atelier_calls(work, first_thread["thread"])
-    final = (info["result"] or {}).get("result") or ""
-    (run_dir / "final.md").write_text(final)
-    graded = grade(sdir, work, transcript)
-    every = [first_thread, *started_threads]
-    invalid = run_limit(transcript, run_dir) or invalid_reason(arm, exit_code, info, spawn) or next(
-        (problem for t in every
-         if (problem := thread_problem(arm, t, setup["roles"].get(t["role"]) or first,
-                                       spawn))), None) or (
-        f"grade.py printed no JSON: {graded['error'][-500:]}" if "error" in graded else None) or (
-        replay.leak(sdir, [transcript, *sorted((run_dir / "threads").glob("*.jsonl"))])
-        if (sdir / "case.toml").is_file() else None)
-    verdict = judged(sdir, setup, graded, work, final, run_dir, work_root, invalid=invalid)
-    agents += [{"thread": f"judge-{j['lab']}", "start": j.pop("start"), "end": j.pop("end")}
-               for j in verdict.get("judged") or []]
-    if invalid:
-        verdict = {**verdict, "pass": None, "invalid": invalid}
+    try:
+        info = read_transcript(transcript)
+        first_thread = {"thread": agents[0]["thread"], "role": role, **first,
+                        "seconds": round(seconds), "exit": exit_code,
+                        "tokens": info["tokens"], "init": info["init"]}
+        started_threads = [thread_facts(t, setup, run_dir, work) for t in delegated]
+        if agent == "codex":
+            home = work / "home" / ".codex"
+            agents += codex_threads(home, run_dir, agents[0]["end"], started_threads)
+            if info["init"] is not None:
+                record = codex_session(home)
+                first_thread["tokens"] = record.pop("tokens") or first_thread["tokens"]
+                record.pop("instructions")
+                info["init"].update(record)
+        calls = atelier_calls(work, first_thread["thread"])
+        final = (info["result"] or {}).get("result") or ""
+        (run_dir / "final.md").write_text(final)
+        graded = grade(sdir, work, transcript)
+        every = [first_thread, *started_threads]
+        invalid = run_limit(transcript, run_dir) or invalid_reason(arm, exit_code, info, spawn) or next(
+            (problem for t in every
+             if (problem := thread_problem(arm, t, setup["roles"].get(t["role"]) or first,
+                                           spawn))), None) or (
+            f"grade.py printed no JSON: {graded['error'][-500:]}" if "error" in graded else None) or (
+            replay.leak(sdir, [transcript, *sorted((run_dir / "threads").glob("*.jsonl"))])
+            if (sdir / "case.toml").is_file() else None)
+        verdict = judged(sdir, setup, graded, work, final, run_dir, work_root, invalid=invalid)
+        agents += [{"thread": f"judge-{j['lab']}", "start": j.pop("start"), "end": j.pop("end")}
+                   for j in verdict.get("judged") or []]
+        if invalid:
+            verdict = {**verdict, "pass": None, "invalid": invalid}
 
-    result = {
-        **named, "skill_ref": staged.get(agent),
-        "skill_dir": skill_dir if arm == "skill" else None,
-        "atelier": os.environ.get("EVAL_ATELIER"),
-        "roles": setup["roles"], "judges": setup["judges"],
-        "exit": exit_code, "seconds": round(seconds), "run_dir": str(run_dir),
-        "work_dir": str(work), "init": info["init"],
-        "tokens": {k: sum(t["tokens"][k] for t in every) for k in ("in", "cached_in", "out")},
-        "threads": [{k: v for k, v in t.items() if k != "init"} for t in every],
-        "atelier_calls": len(calls),
-        "atelier_failed": [c for c in calls if c["exit"] != 0],
-        **({"proxy_refused": confine.refused(work)} if confined else {}),
-        "agents": agents, "peak_agents": peak(agents),
-        **verdict,
-    }
-    (run_dir / "result.json").write_text(json.dumps(result, indent=1))
-    return result
+        result = {
+            **named, "skill_ref": staged.get(agent),
+            "skill_dir": skill_dir if arm == "skill" else None,
+            "atelier": os.environ.get("EVAL_ATELIER"),
+            "roles": setup["roles"], "judges": setup["judges"],
+            "exit": exit_code, "seconds": round(seconds), "run_dir": str(run_dir),
+            "work_dir": str(work), "init": info["init"],
+            "tokens": {k: sum(t["tokens"][k] for t in every) for k in ("in", "cached_in", "out")},
+            "threads": [{k: v for k, v in t.items() if k != "init"} for t in every],
+            "atelier_calls": len(calls),
+            "atelier_failed": [c for c in calls if c["exit"] != 0],
+            **({"proxy_refused": confine.refused(work)} if confined else {}),
+            "agents": agents, "peak_agents": peak(agents),
+            **verdict,
+        }
+        (run_dir / "result.json").write_text(json.dumps(result, indent=1))
+        return result
+    finally:
+        # Pass, fail or harness error, the run's build output goes once
+        # grading is over; the rest of its work directory stays.
+        drop_build_output(work)
+
+
+def build_outputs(work: Path) -> list:
+    """Each cargo target directory under a run's work directory: one that
+    holds cargo's CACHEDIR.TAG and .rustc_info.json, wherever the agent put
+    it (repo/target, or a CARGO_TARGET_DIR of its own under tmp/). Cargo's
+    registry cache, tagged too, has no .rustc_info.json. Symlinks are not
+    followed, and .git directories are not searched."""
+    found = []
+    for root, dirs, files in os.walk(work):
+        if "CACHEDIR.TAG" in files and ".rustc_info.json" in files:
+            found.append(Path(root))
+            dirs.clear()
+        else:
+            dirs[:] = [d for d in dirs if d != ".git"]
+    return found
+
+
+def drop_build_output(work: Path) -> None:
+    """Delete a run's build output once it is graded, whether the run passed
+    or not, so a matrix of replayed reviews, each building in a target of
+    about 2.5G, cannot fill the disk. Grading reads no build output."""
+    for target in build_outputs(work):
+        shutil.rmtree(target, ignore_errors=True)
 
 
 def discard_work(result: dict, keep: bool) -> bool:
@@ -1296,7 +1326,8 @@ def main() -> None:
     p.add_argument("--work-root", type=Path, default=DEFAULT_WORK_ROOT,
                    help="where work directories are made; must be outside $HOME")
     p.add_argument("--keep", action="store_true",
-                   help="keep work directories (default: keep only on failure)")
+                   help="keep work directories, without their build output "
+                   "(default: keep only on failure)")
     a = p.parse_args()
     if inside(a.work_root, Path.home()):
         p.error(f"--work-root {a.work_root} is inside $HOME, where the user's "

@@ -1,0 +1,61 @@
+# A removal replay (harness/replay.py, graded as removed_tests.py says):
+# atelier-s2ei's change, reviewed again. It was approved and merged, and
+# what it built was later taken out as unneeded. `row`, `reason`, `part`,
+# `gone`, `defect` and the commits are read only by the judge and the tests;
+# the fixture holds the item's Goal, Done when, Context and Report, and the
+# change. The Report is the item's Close Reason, recorded a minute after
+# the change. The fields the shared setup names for a defect hold the
+# removal: `defect` is the part later removed with design.md's reason,
+# `fix` the commit that removed it and `defect_item` that commit's item.
+
+table = "The redesign also removed these from the old tool, as it stood at 0.4.0"
+row = "`merge`'s `--push`, `--wait`, `--timeout`, `--sync`, `--check` and `--json`"
+reason = "Pushing follows from the config; the wait for CI has a fixed bound and needs no flag; catching up is `git merge`; what merge would check is in `status`"
+part = "`atelier merge --sync`, the whole of the change: the flag, `merge_sync.rs`, and its rerun of receipts after the catch-up merge"
+gone = "merge_sync"
+item = "atelier-s2ei"
+base = "3e99b96b5633e8905e02cc2528962db5d48ffb64"
+change = "3ae56002515ca057646a06298192355d37ebd78f"
+fix = "819024c75c6632d2e9462779e5dbe596008dd50d"
+defect_item = "atelier-u1ko"
+defect = """
+The part later removed: `atelier merge --sync`, the whole of this change.
+It went in the rewrite to 0.5, when the old workspace was deleted.
+docs/design.md, under Tried and removed, gives the reason for the `merge`
+flags it went with: "Pushing follows from the config; the wait for CI has
+a fixed bound and needs no flag; catching up is `git merge`; what merge
+would check is in `status`". For `--sync`, the reason is that catching up
+is `git merge`.
+"""
+
+id = "atelier-q2vt"
+title = "Add atelier merge --sync to bring the base in, re-prove and report approval survival"
+goal = """
+Orchestrators hand-built the same macro 44+ times: commit records, `git merge master`, rerun both evidence suites, record evidence, `atelier merge`, `land`, push only on success. One command should do the catch-up step and say whether the approval survived (clean merge) or which conflict-resolved files need re-review.
+"""
+done_when = [
+  "`atelier merge <id> --sync` merges the base into the owner branch, reruns the recorded evidence commands, records their receipts, and either reports the approval as kept (clean merge) or lists the conflict-resolved paths that need a fresh approval, ending in a verdict.",
+  "Tests cover a clean merge, a conflicted merge, and a failing rerun.",
+]
+context = """
+Found in the 2026-10-17 retrospective of the 10-15..10-17 atelier runs (sessions b32c39e6, 9a04974d, d483b55c, bf433168). o3lm: 78 `git merge master` invocations, 52 merge commits, 25 suite reruns labelled 'after merging master'.
+"""
+report = """
+Added `atelier merge <id> --sync`: it merges the base into the owner branch, reruns current command-backed receipts, commits the new receipts, reports whether the approval survived, and ends in `merge: passed` or `merge: refused — N checks (codes)`. It integrates nothing.
+
+### Deviations
+- A stale approval is reported (first failing commit and the hand-resolved or edited paths) but does not make the verdict refused; only `sync_conflict`, `sync_rerun_failed` and early refusals do.
+- Resume case: if the base is already merged and HEAD is that merge commit, reruns use receipts current at its first parent. An already-synced branch reruns nothing.
+- Dirty checkout is refused by the existing `merge_checkout_dirty`, not a new code.
+
+### Decisions
+Four decision notes on the item: one command under both strategies; conflict leaves the merge in progress and resumes; rerun scope and failure recording; approval survival reuses one rule.
+
+### Surprises
+`approval_is_current_to` now delegates to new `approval_stale_edge` (returns the failing commit and paths), so there is still one rule. `capture` was split into `capture_record` plus printing, and `split_command` inverts `format_command`. `owned_branch` was extracted from `merge_once`.
+
+### Open items
+- Review outstanding.
+- A conflict resolved by hand and committed, then `--sync`, relies on the first-parent heuristic; a resolution followed by further commits before the sync reruns nothing.
+- Evidence reruns run in the caller's working directory, like `evidence record`.
+"""

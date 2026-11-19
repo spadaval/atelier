@@ -1,6 +1,7 @@
-use crate::model::{is_open, Decision, Finding, FindingName, ReviewName, Verdict};
+use crate::model::{is_open, Decision, Finding, FindingName, Response, ReviewName, Verdict};
 use crate::records::body::section;
 use crate::records::{ids, ItemDir, MissionDir, Problem, ReviewFile};
+use crate::review::waits_on_lead;
 use std::path::Path;
 
 /// What is wrong with `items` and `missions`, which are every item and
@@ -16,7 +17,7 @@ pub fn validate(items: &[ItemDir], missions: &[MissionDir]) -> Vec<Problem> {
             let message = "the mission has no `## Outcome` section";
             problems.push(Problem::new(&dir.path, "Outcome", message));
         }
-        let _ = reviews(&dir.reviews, &[], &mut problems);
+        let _ = reviews(&dir.reviews, &[], &[], &mut problems);
     }
     for dir in items {
         validate_item(dir, items, missions, &mut problems);
@@ -81,7 +82,7 @@ fn validate_item(
         problems.push(p);
         Vec::new()
     });
-    let named = reviews(&dir.reviews, &decisions, problems);
+    let named = reviews(&dir.reviews, &decisions, &responses, problems);
     let mut problem =
         |field: &str, message: String| problems.push(Problem::new(&dir.path, field, message));
     for decision in &decisions {
@@ -103,12 +104,13 @@ fn validate_item(
 }
 
 /// What is wrong with the reviews of one item or mission, given its
-/// decisions. Returns whether a finding name is one of theirs, counting
+/// decisions and responses. Returns whether a finding name is one of theirs, counting
 /// every name in a review whose findings do not read, which is reported
 /// once.
 fn reviews<'a>(
     reviews: &'a [ReviewFile],
     decisions: &[Decision],
+    responses: &[Response],
     problems: &mut Vec<Problem>,
 ) -> impl Fn(&FindingName) -> bool + 'a {
     let mut findings: Vec<Finding> = Vec::new();
@@ -138,8 +140,10 @@ fn reviews<'a>(
                     problems.push(Problem::new(&review.path, field, message));
                 }
             }
+            // One answered `not built` waits on the lead, and `merge` holds it.
             if review.review.verdict == Some(Verdict::Approve)
                 && is_open(finding, &findings, decisions)
+                && waits_on_lead(&finding.name, &findings, responses).is_none()
             {
                 let message = format!("approve, while fix-now finding {} is open", finding.name);
                 problems.push(Problem::new(&review.path, "verdict", message));

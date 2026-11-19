@@ -1,13 +1,16 @@
 //! The disagreements the records hold, which `list --disputed`, `show
 //! <mission>` and a lead's `status` print: each rebuttal in an item's
-//! Responses with what the next round made of it, and each round of a
-//! plan's review whose reviewers gave different verdicts. They are found,
-//! never enforced: nothing refuses or warns on one.
+//! Responses with what the next round made of it, each round of a plan's
+//! review whose reviewers gave different verdicts, and each open fix-now
+//! finding answered `not built`, which waits on the lead. The first two
+//! are found, never enforced: nothing refuses or warns on one. The third
+//! `merge` holds until the lead rules.
 
 use crate::model::{
     FindingName, Now, Outcome, Recommendation, Response, ReviewName, Status, Thread, Verdict,
 };
 use crate::records::{ItemDir, MissionDir, Problem};
+use crate::review::waits_on_lead;
 use crate::view::Located;
 
 /// What a later round's reviewer made of a rebutted finding it carries.
@@ -51,17 +54,49 @@ pub struct SplitRound {
     pub reviews: Vec<(ReviewName, Option<Thread>, Option<String>, Verdict)>,
 }
 
+/// An open fix-now finding the implementer answered `not built`: the
+/// question to the lead, which `merge` holds until the lead rules.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NotBuilt {
+    pub item: String,
+    pub mission: Option<String>,
+    pub finding: FindingName,
+    pub title: String,
+    /// Why it was not built, as Responses gives it.
+    pub reason: String,
+}
+
 /// The disagreements of some items and missions.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Disputes {
     pub rebuttals: Vec<Rebuttal>,
     pub plans: Vec<SplitRound>,
+    pub not_built: Vec<NotBuilt>,
 }
 
 impl Disputes {
     pub fn is_empty(&self) -> bool {
-        self.rebuttals.is_empty() && self.plans.is_empty()
+        self.rebuttals.is_empty() && self.plans.is_empty() && self.not_built.is_empty()
     }
+}
+
+/// Each open fix-now finding of `item` that waits on the lead, in the
+/// order of its reviews.
+pub fn not_built(item: &ItemDir) -> Result<Vec<NotBuilt>, Problem> {
+    let (findings, responses) = (item.findings()?, item.responses()?);
+    let mut found = Vec::new();
+    for finding in item.open_findings()? {
+        if let Some(reason) = waits_on_lead(&finding.name, &findings, &responses) {
+            found.push(NotBuilt {
+                item: item.item.id.clone(),
+                mission: item.item.mission.clone(),
+                reason: reason.to_string(),
+                finding: finding.name,
+                title: finding.title,
+            });
+        }
+    }
+    Ok(found)
 }
 
 /// Each finding of `item` whose line in Responses is a rebuttal, in the
@@ -152,6 +187,9 @@ pub fn disputes(
         let of = mission.is_none_or(|id| record.item.mission.as_deref() == Some(id));
         if of && record.item.status != Status::Dropped {
             disputes.rebuttals.extend(rebuttals(record)?);
+            if record.item.status != Status::Done {
+                disputes.not_built.extend(not_built(record)?);
+            }
         }
     }
     for dir in missions {

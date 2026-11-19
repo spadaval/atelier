@@ -121,9 +121,14 @@ held on all 30 runs read by hand.
   raised where its final reply asks the person who started it. All 21
   stopped lead runs (`sol`, no skill) asked leave to start a subagent; I
   read each reply.
-- **The README** is 276 lines, from 464 at this branch's start and 234 when
-  the plan merged. The harness detail it dropped is in `harness/run.py`'s
-  docstring; the old `next-` names are one sentence.
+- **The README** is 429 lines, from 649 on master and 234 when the plan
+  merged. The harness detail it dropped is in `harness/run.py`'s docstring;
+  the old `next-` names are one sentence. Master gained 18 cases from
+  mission atelier-8az0 while the matrix ran (`three-findings`, the sized
+  reviews, the removal replays and the later rounds). They were not in this
+  matrix; the README gives each the results its own item recorded, marks
+  the setups and arms it has not run in, and keeps the ones that passed
+  every run for what they guard.
 
 Checked: `git diff --check`, every relative link in the README and the
 results file resolves. No code changed, so no tests were run.

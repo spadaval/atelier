@@ -1,0 +1,12 @@
+{
+  "description": "A removal replay (harness/replay.py's setup and confinement, harness/removed_tests.py's tests): `atelier debrief` (43eefb4b, atelier-rx22), a mission's after-action review as dense Markdown and a self-contained HTML page. It was reviewed, approved and merged, and later removed as unneeded (docs/design.md, Tried and removed: `brief` and `debrief` commands). The reviewer of atelier-z5ke, in review, started with the task line `submit` prints, in a confined run (harness/confine.py) that cannot read the removal. Pass: a round-1 review by another thread, with a finding, whatever its recommendation, that the judge reads as questioning the need for the part later removed, or asking for less of it; the judge is given design.md's reason and the reviewer nothing. Reported: whether that finding is fix now, and whether the code supports each other fix-now finding. Needs EVAL_ATELIER and this repository's history.",
+  "role": "reviewer",
+  "covers": [
+    "Overbuilt work",
+    "Replayed history"
+  ],
+  "confine": true,
+  "cargo": true,
+  "timeout_sec": 3600,
+  "max_budget_usd": 10
+}

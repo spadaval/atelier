@@ -1,5 +1,6 @@
 //! A disputed finding, driven through the new binary: a rebuttal the next
-//! reviewer withdraws, or keeps and then lowers; what `list --disputed`,
+//! reviewer withdraws, or keeps and then lowers; a finding answered `not
+//! built`, which waits on the lead until it rules; what `list --disputed`,
 //! `show <mission>` and a lead's `status` say of each; and the records
 //! that `escalate` and `decide` wrote before they were removed, which still
 //! read as they did.
@@ -65,8 +66,12 @@ fn disputed(root: &Path, args: &[&str]) -> String {
     run.stdout
 }
 
-const HEADING: &str = "Disputed: each rebutted finding with what the next round made of it, \
-                       and each plan-review round whose reviewers' verdicts differ.\n";
+const HEADING: &str = "Disputed: each open finding not built, which waits on the lead; each \
+                       rebutted finding with what the next round made of it; and each \
+                       plan-review round whose reviewers' verdicts differ.\n";
+
+const NOTHING: &str = "no finding was rebutted or is waiting on the lead as not built, and no \
+                       plan-review round's reviewers disagreed.\n";
 
 #[test]
 fn a_rebuttal_the_next_reviewer_withdraws_closes_its_finding() {
@@ -74,7 +79,7 @@ fn a_rebuttal_the_next_reviewer_withdraws_closes_its_finding() {
     let root = scratch.root();
     assert_eq!(
         disputed(&root, &[]),
-        "Nothing is disputed: no finding was rebutted, and no plan-review round's reviewers disagreed.\n"
+        format!("Nothing is disputed: {NOTHING}")
     );
     rebut(&root, &finding);
     let rebuttal = |next: &str| {
@@ -123,7 +128,8 @@ fn a_rebuttal_the_next_reviewer_keeps_has_had_its_one_try_until_a_reviewer_lower
     assert!(
         status.contains(&format!(
             "  [ ] Finding {carrier} (fix now): No period (a reviewer kept its rebuttal, and a \
-             rebuttal gets one try: fix it, or take it to your mission's lead)\n"
+             rebuttal gets one try: fix it, or answer it `not built: <reason>` for your mission's \
+             lead to rule on)\n"
         )),
         "{status}"
     );
@@ -336,12 +342,12 @@ fn a_missions_disputes_are_listed_for_it_shown_with_it_and_told_to_its_lead() {
     for at in [&root, &base] {
         assert_eq!(
             disputed(at, &["--mission", "demo-m1ss"]),
-            format!("Disputed in mission demo-m1ss: each rebutted finding with what the next round made of it, and each plan-review round whose reviewers' verdicts differ.\n{rebuttal}{split}")
+            format!("Disputed in mission demo-m1ss: each open finding not built, which waits on the lead; each rebutted finding with what the next round made of it; and each plan-review round whose reviewers' verdicts differ.\n{rebuttal}{split}")
         );
     }
     assert_eq!(
         disputed(&base, &["--mission", "demo-zz99"]),
-        "Nothing is disputed in mission demo-zz99: no finding was rebutted, and no plan-review round's reviewers disagreed.\n"
+        format!("Nothing is disputed in mission demo-zz99: {NOTHING}")
     );
     let shown = atelier(&base, "lead1", &["show", "demo-m1ss"]).stdout;
     assert!(
@@ -434,4 +440,194 @@ fn a_lead_rules_for_the_implementer_by_merging_past_a_kept_finding_with_its_reas
         let line = format!("  {ID}, merge in {commit}, by lead1: {rule}: {RULING}");
         assert!(passed.lines().any(|shown| shown == line), "{shown}");
     }
+}
+
+const REASON: &str = "a period needs a style guide this repository does not have";
+
+/// The lead's line of what waits on its ruling in `status`.
+const WAITING: &str = "Waiting on your ruling: each finding a reviewer asked to fix now, which \
+                       its implementer did not build and says why. `atelier merge` holds the \
+                       item until you rule. To have it built, tell the implementer. To merge \
+                       without it, run `ATELIER_SKIP=\"<ruling>\" atelier merge` on the \
+                       item's branch once a reviewer approves the rest.\n";
+
+/// t1, on the branch it holds, answers `finding` `not built` and submits.
+fn not_built(root: &Path, finding: &str) {
+    append(
+        root,
+        &item_path(ID),
+        &format!("\n### Responses\n\n- {finding}: not built: {REASON}\n"),
+    );
+    let run = atelier(root, "t1", &["submit"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+}
+
+#[test]
+fn a_finding_not_built_waits_on_the_lead_until_it_rules_and_its_reviewer_does_not_judge_it() {
+    const RULING: &str = "No style guide yet; it merges without the period";
+    let scratch = led();
+    let root = scratch.root();
+    let base = scratch.worktree("base");
+    git(&base, &["switch", "-q", "main"]);
+    fs::write(root.join("hello.txt"), "hello\n").unwrap();
+    git(&root, &["add", "hello.txt"]);
+    git(&root, &["commit", "-qm", "Say hello"]);
+    finish_and_submit(&root, "t1");
+    request_changes(&root);
+    let finding = format!("{}.1", review_of(&root, 1).0);
+    not_built(&root, &finding);
+    assert_eq!(field(&root, "HEAD", "status"), "in_review");
+
+    // The lead is shown the line as soon as it is submitted, apart from
+    // what is merely disputed, and so is anyone who lists the disputes.
+    let waits = |name: &str| {
+        format!("  {ID}/{name} (waits on the lead): No period\n    Not built: {REASON}\n")
+    };
+    let status = atelier(&base, "lead1", &["status"]).stdout;
+    assert!(
+        status.contains(&format!("{WAITING}{}", waits(&finding))),
+        "{status}"
+    );
+    assert!(
+        disputed(&base, &["--mission", "demo-m1ss"]).contains(&waits(&finding)),
+        "{}",
+        disputed(&base, &["--mission", "demo-m1ss"])
+    );
+    assert!(!atelier(&root, "t1", &["status"])
+        .stdout
+        .contains("Waiting on your ruling"));
+
+    // The next round's reviewer is told it waits on the lead, and does not
+    // judge it: it can neither ask for changes on it nor is stopped from
+    // approving the rest by it.
+    let brief = atelier(&root, "r2", &["review", ID]);
+    assert_eq!(brief.code, 0, "{}", brief.stderr);
+    assert!(
+        brief.stdout.contains(
+            "A finding the author answered `not built` is real by the author's own word and was \
+             taken to the mission's lead, who rules on it. Leave it as your file has it and do \
+             not judge it again: it does not stop `atelier verdict approve`, and `atelier merge` \
+             holds it until the lead rules.\n"
+        ),
+        "{}",
+        brief.stdout
+    );
+    assert!(
+        (brief.stdout).contains(&format!("  The author's response: not built: {REASON}\n")),
+        "{}",
+        brief.stdout
+    );
+    let (stem, path) = review_of(&root, 2);
+    let text = read(&root, &path);
+    assert!(
+        text.contains(&format!(
+            "Was: {finding}\nResponse: not built: {REASON}\nNow: kept\n<!-- It waits on the \
+             mission's lead, who rules on it: leave it as it is. -->\n"
+        )),
+        "{text}"
+    );
+    // The reviewer's status points at approve, the verdict it can record.
+    let status = atelier(&root, "r2", &["status"]).stdout;
+    assert!(
+        status.ends_with("Then: atelier verdict approve (or `atelier verdict changes`, once your file holds a fix-now finding)\n"),
+        "{status}"
+    );
+    assert!(!status.contains("[ ]"), "{status}");
+    let refused = verdict(&root, "r2", &["verdict", "changes"]);
+    assert_eq!(refused.code, 1, "{}{}", refused.stdout, refused.stderr);
+    assert!(
+        refused
+            .stderr
+            .contains("Your review file holds an open fix-now finding"),
+        "{}",
+        refused.stderr
+    );
+    let run = verdict(&root, "r2", &["verdict", "approve"]);
+    assert_eq!(run.code, 0, "{}{}", run.stdout, run.stderr);
+    assert_eq!(field(&root, "HEAD", "status"), "approved");
+
+    // Approved, it still waits, under its carrier's name. The implementer
+    // is told why merge holds it and whose ruling it waits on, and its
+    // merge is refused.
+    let carrier = format!("{stem}.1");
+    let rule = format!(
+        "No fix-now finding waits on the lead; {carrier} does: No period (not built: {REASON})"
+    );
+    let status = atelier(&root, "t1", &["status"]).stdout;
+    assert!(
+        status.contains(&format!("To merge it:\n  [ ] {rule}\n")),
+        "{status}"
+    );
+    assert!(
+        status.contains(
+            "A finding answered `not built` waits on the lead of the item's mission, or with no \
+             mission on the thread that started its implementer; the implementer passes no rule \
+             on its own work. The lead rules: to have it built, it tells the implementer, who \
+             fixes it and runs `atelier submit`; to merge without it, it gives its ruling as the \
+             reason on this branch: `ATELIER_SKIP=\"<ruling>\" atelier merge`.\n"
+        ),
+        "{status}"
+    );
+    let refused = atelier(&root, "t1", &["merge"]);
+    assert_eq!(refused.code, 1, "{}{}", refused.stdout, refused.stderr);
+    assert!(refused.stderr.contains(&rule), "{}", refused.stderr);
+    assert_eq!(field(&root, "HEAD", "status"), "approved");
+    let status = atelier(&base, "lead1", &["status"]).stdout;
+    assert!(
+        status.contains(&format!("{WAITING}{}", waits(&carrier))),
+        "{status}"
+    );
+
+    // The lead's ruling is its reason, and passes the rule.
+    let output = atelier_command(&root, "lead1", &["merge"])
+        .env("ATELIER_SKIP", RULING)
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8(output.stdout.clone()).unwrap();
+    assert!(output.status.success(), "{stdout}{output:?}");
+    assert!(
+        stdout.contains(&format!("Skipped with ATELIER_SKIP: {rule}: {RULING}\n")),
+        "{stdout}"
+    );
+    assert!(atelier(&root, "t9", &["show", ID])
+        .stdout
+        .contains("Status: done"));
+    let status = atelier(&base, "lead1", &["status"]).stdout;
+    assert!(!status.contains("Waiting on your ruling"), "{status}");
+}
+
+#[test]
+fn a_finding_not_built_and_then_fixed_no_longer_waits_on_the_lead() {
+    let (scratch, finding) = changes_requested();
+    let root = scratch.root();
+    not_built(&root, &finding);
+    assert!(disputed(&root, &[]).contains("(waits on the lead)"));
+    // The next round's reviewer approves the rest past it.
+    assert_eq!(atelier(&root, "r2", &["review", ID]).code, 0);
+    let run = verdict(&root, "r2", &["verdict", "approve"]);
+    assert_eq!(run.code, 0, "{}{}", run.stdout, run.stderr);
+    let carrier = format!("{}.1", review_of(&root, 2).0);
+    // Told to build it after all, the implementer fixes it, and its answer
+    // is its own line now, which the next round judges.
+    fs::write(root.join("hello.txt"), "hello.\n").unwrap();
+    git(&root, &["add", "hello.txt"]);
+    git(&root, &["commit", "-qm", "Add the period"]);
+    let fix = git(&root, &["rev-parse", "--short", "HEAD"]);
+    append(
+        &root,
+        &item_path(ID),
+        &format!("- {carrier}: fixed in {fix}\n"),
+    );
+    let run = atelier(&root, "t1", &["submit"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(!disputed(&root, &[]).contains("(waits on the lead)"));
+    assert_eq!(atelier(&root, "r3", &["review", ID]).code, 0);
+    let (_, path) = review_of(&root, 3);
+    let text = read(&root, &path);
+    assert!(
+        text.contains(&format!(
+            "Was: {carrier}\nResponse: fixed in {fix}\nNow: kept\n<!-- Set Now:"
+        )),
+        "{text}"
+    );
 }

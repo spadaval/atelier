@@ -1,0 +1,10 @@
+{
+  "description": "The reviewer of exp-c5v1, in review: a correct change whose item asks for `report --csv`, built as a pluggable exporter registry with CSV, TSV, JSON and Markdown and `--format` and `--no-header`. Its lean reference, a `--csv` flag over csv.writer, is in lean/. Started with the task line `submit` prints. Pass: round 1's review, by another thread, records a verdict, approve or changes; no file outside the review files changed; the judge reads a finding, whatever its recommendation, as naming the unneeded generality (graded). Whether that finding is fix now is reported. Needs EVAL_ATELIER set to the atelier binary under test.",
+  "role": "reviewer",
+  "covers": [
+    "Overbuilt work",
+    "Unneeded generality"
+  ],
+  "timeout_sec": 1200,
+  "max_budget_usd": 5
+}

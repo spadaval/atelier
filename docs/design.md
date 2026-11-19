@@ -149,8 +149,13 @@ The item lives in a directory named for its `id`. Sections are `##`
 headings: Goal, Done when, Scope, Report; Goal and Done when are
 required. Report has `### Validation` and `### Responses` subsections when
 they apply. Responses holds one line per open fix-now finding, optionally
-as a list item: `2-m2bn.1: fixed in <commit>` or
-`2-m2bn.1: rebutted: <fact>`.
+as a list item: `2-m2bn.1: fixed in <commit>`,
+`2-m2bn.1: rebutted: <fact>` or `2-m2bn.1: not built: <reason>`. The
+third says the finding is real and was not built, and why; on an open
+fix-now finding it is the question to the mission's lead (see [Findings
+not built](#findings-not-built)). An installed binary from before
+2026-11-19 refuses it as a line of no form; an item without one reads as
+it did.
 
 The front matter has no field for why an item ended without a merge, so
 the body holds it. `drop` writes `Dropped: <reason>`, the reason on one
@@ -290,7 +295,30 @@ A carrying finding that says fixed, withdrawn or decided, or kept at defer
 or no action, is not itself open. So a fix-now finding is settled without a
 fix only by a reviewer: by withdrawing it, or by lowering it.
 A review whose verdict is approve while one of its own findings is open is
-refused.
+refused, unless that finding waits on the lead.
+
+#### Findings not built
+
+An open fix-now finding waits on the lead when the implementer's answer to
+it is `not built` (`atelier_core::waits_on_lead`). Its answer is its own
+line in Responses or, where it has none, a `not built` line on a finding it
+carries: the question stands until the implementer answers the carrying
+finding otherwise. An older `fixed in` or `rebutted:` line answered a
+finding a later round kept, so it is not the carrying finding's answer, as
+before. `submit` counts that answer, so a finding still waiting needs no
+new line. The next round's brief and template say the finding waits on the
+lead and is not the reviewer's to judge again; the carrying finding starts
+`Now: kept`, and neither `verdict approve` nor the record check of an
+approval counts it as open, while `verdict changes` on it alone is refused.
+`merge` refuses while one is open (`Condition::WaitsOnLead`). That refusal
+is a rule, and the lead's ruling to merge without the finding is the
+reason that passes it, `ATELIER_SKIP="<ruling>" atelier merge` on the
+item's branch, which the merge commit keeps. To have it built, the lead
+tells the implementer, who answers it `fixed in` and submits. The lead's
+`status` lists each such finding apart from what is merely disputed, and
+`show <mission>` and `list --disputed` list it with the disputes. Nothing
+checks that whoever passes the rule is the lead: the skill says the
+implementer passes no rule on its own work.
 
 A finding is deferred when its recommendation is defer, a carrying
 finding's included, or a decision deferred it, by a `Decided: defer` line or
@@ -520,7 +548,8 @@ Two facts are checked live and never stored:
 
 Of the rules in the product specification's Review section, the binary
 enforces three, through the action table: an author never reviews its own
-item; `verdict approve` is refused while a fix-now finding is open; and
+item; `verdict approve` is refused while a fix-now finding is open, except
+one that waits on the lead, which `merge` holds instead; and
 only a reviewer settles a fix-now finding without a fix, by withdrawing it
 or keeping it at a lower recommendation with its reason, and what a
 decision settled before `decide` was removed is not reopened. Two it does
@@ -540,12 +569,22 @@ from the missions on the base. `list --disputed` lists them across every
 item, open or done, read as `status` reads it, and leaves out a dropped
 item's; `--mission <id>` narrows it to one mission's items and plan. `show
 <mission>` lists the mission's under Disputed, and a lead's `status` under
-each mission it leads. Nothing refuses or warns on any of them. The review brief carries no merge check results, since nothing
+each mission it leads. Nothing refuses or warns on any of them. A finding
+not built is listed with them, and is the one `merge` holds. The review brief carries no merge check results, since nothing
 records them. Where the base's config names a forge it names the branch's
 open pull request, where CI's result can be read, looked up with the code
 `submit` and `merge` use and bounded as `merge`'s question under its lock
 is; when the forge has none or does not answer, the brief says so in one
 line and `review` goes on.
+
+Round 1's brief asks the reviewer to review the whole change. From round 2
+on, the brief says what the round is for (atelier-d73k): how many rounds
+have reviewed the whole change before it, and that this round checks the
+earlier findings and what changed since the last round's review, with that
+diff first and the whole change's diff after it. It says a new finding in
+code that did not change since then blocks only if the work would come out
+wrong without it, and is otherwise recorded as `defer`. Both diffs are
+always given, so nothing in the change is kept from a later reviewer.
 
 ## Threads and roles
 
@@ -1759,7 +1798,9 @@ carried here when the ADRs were deleted on 2026-11-11; Git keeps the ADR.
 | A new crate is made when a second program needs part of the core without the rest. Until then, a module (2026-11-14, atelier-dy62) | The core was three crates for about 8,000 lines that nothing used apart. The split put same-named files in different crates, which agents guessed wrong, and left helpers out of reach of the crate below |
 | The T3 Code extension lives in this repository, under `t3-extension/`, outside the `atelier` release, as the Desk is (ADR 0032). `atelier` still has no Node step in its build or release (2026-11-16, atelier-n4g7) | It talks to the Desk over the Desk's host contract, and every change to it so far also changed the Desk, so one item and one review should cover both sides |
 | The T3 Code extension is released on its own tags, `t3-extension-v<version>`, as a bundle of its files and installer with a checksum. The release builds no Rust and runs no test: it publishes only when CI passed, with the extension's job, on the last merge at or before the tag that changed what that job tests. It is never the repository's latest release, and `dist` runs `atelier`'s release only for `v*` tags (`tag-namespace`, so its workflow is `v-release.yml`) (2026-11-16, atelier-451s) | The extension changes more often than `atelier`, and a device should download five script files without a clone of a Rust project. CI already tested the commit, so the release trusts that run instead of repeating it |
+| A later round's brief says what the round is for: how many rounds have reviewed the whole change, that this round checks the earlier findings and what changed since, with that diff before the whole change's, and that a new finding in code that did not change blocks only if the work would come out wrong without it (2026-11-19, atelier-d73k, mission atelier-8az0) | Until then round 4's brief repeated round 1's instruction word for word. In a survey of 143 Sol reviews on 2026-11-18, the share of findings that were critical or important fell from 75% in round 1 to 39% from round 3 on, and 18 findings were another case of a gap already reported on the item; atelier-v958 took eight rounds. The whole change's diff stays, since seven of the 18 findings from round 3 on were still important. Two round-2 cases ran with the brief before and after, 80 Sol reviews ([results](../evals/agent-factory/results/2026-11-19-later-round-brief.md)): a cosmetic flaw in unchanged code blocked in none with either brief, and a defect there blocked in all with both, so the planted flaws showed no narrowing and no hiding. With the new brief no review reported a crash in the last week of year 9999 in changed code, which 12 of 40 had reported with the old one |
 | A lead is in charge of its mission (2026-11-18, atelier-mtzj). The process is its default: it does itself what needs no review, sends the rest to an implementer, and has each change reviewed by a thread that did not write it. It may depart from any of that, a review included, by giving its reason with `ATELIER_SKIP`, and never silently. It settles a dispute between an implementer and a reviewer either way and records the ruling, and it may drop an item or the mission when the work turns out much harder than planned, saying in the Result what was not done. It may not do more or other than the plan asks. An implementer passes no rule on its own work, and takes a kept finding it cannot fix to the lead | The human said on 2026-11-18 that a lead is responsible for finishing its mission and may do more or less anything to get there. Atelier is the one with the clipboard: it notes everything down and complains about process, and it is not in charge. Three things keep a lead in check: the process its instructions give it, a stated reason for every departure, and knowing the record will be read. That reaches as far as merging a change nobody reviewed, said out loud. They chose to try this and restrict it later if leads push bad code through. The skill had said the opposite, "You write no code" and a disputed finding "is not yours to settle", and sent a kept finding back to be fixed even where the fix broke a Done when line, which left an item that could never merge |
+| An implementer may answer a fix-now finding `not built: <reason>`, which takes it straight to the mission's lead, and `merge` holds the item until the lead rules (2026-11-19, atelier-hlsw). A wrong finding is still rebutted, and one that does not block may be left with a basic reason. No command comes back: the lead's ruling to merge without it is the reason that passes `merge`'s rule, and to have it built the lead tells the implementer | The human's design of 2026-11-18, first tried with `escalate` and `decide` (f684caa15, 2026-11-08), which were removed as unused. The new evidence that design asked for: a survey of every Sol review since the cutover found 27 of 117 fix-now findings useful or nit, all 27 built and none rebutted. In atelier-zwh1's case run on 2026-11-19, ten runs a cell from two commits that differ in this change alone (`7a73e7b4b`, `af618c727`), Opus implementers in `house` built the finding not worth building in 6 of 10 runs before and 0 of 10 after. Sol built it in none either way, but before it rebutted it with a fact that did not refute it, and the next reviewer deferred it, so the lead was never asked; after, all twenty runs in both setups answered it `not built` and stopped for the lead. The real defect was fixed in all 40 ([results](../evals/agent-factory/results/2026-11-19-say-no.md)) |
 
 Three points of the design went beyond what they had confirmed when it was
 written, and were put to them with it:

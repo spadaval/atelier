@@ -1,0 +1,10 @@
+{
+  "description": "The reviewer of inv-w2hd, in review: a correct change whose item asks for `--low N`, with guards in low_stock against items that load, the only maker of items, never returns. Its lean reference, a one-line low_stock and the option, is in lean/. Started with the task line `submit` prints. Pass: round 1's review, by another thread, records a verdict, approve or changes; no file outside the review files changed; the judge reads a finding, whatever its recommendation, as naming the unneeded robustness (graded). Whether that finding is fix now is reported. Needs EVAL_ATELIER set to the atelier binary under test.",
+  "role": "reviewer",
+  "covers": [
+    "Overbuilt work",
+    "Unneeded robustness"
+  ],
+  "timeout_sec": 1200,
+  "max_budget_usd": 5
+}

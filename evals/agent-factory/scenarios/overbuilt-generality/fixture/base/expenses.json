@@ -1,0 +1,9 @@
+[
+  {"date": "2026-09-28", "category": "travel", "cents": 18900},
+  {"date": "2026-10-02", "category": "groceries", "cents": 4235},
+  {"date": "2026-10-05", "category": "travel", "cents": 12000},
+  {"date": "2026-10-09", "category": "groceries", "cents": 3150},
+  {"date": "2026-10-14", "category": "books", "cents": 2499},
+  {"date": "2026-10-21", "category": "rent", "cents": 95000},
+  {"date": "2026-11-01", "category": "rent", "cents": 95000}
+]

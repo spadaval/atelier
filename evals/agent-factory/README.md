@@ -6,10 +6,11 @@ answer three questions:
 1. **Does an agent get through the loop on what the binary prints?** The
    loop cases: an item from ready to merged, a round of changes, a refused
    push, a lead running a mission.
-2. **Does a review catch what matters?** The review cases: two invented
-   changes, and twelve changes from this repository's history that passed
-   review and carried a defect found after the merge, replayed on today's
-   binary.
+2. **Does a review catch what matters?** The review cases: invented
+   changes, some correct but bigger than their item needs; later rounds; and
+   changes from this repository's history that passed review and carried a
+   defect found after the merge, or a part later removed as unneeded,
+   replayed on today's binary.
 3. **Does the skill change either?** The skill is an arm, run over the cases
    of both questions beside an arm with no skill.
 
@@ -31,11 +32,13 @@ that breaks a fixture fails CI.
 
 ## Cases
 
-Last results are from
+Last results are passes for the arm with no skill and the arm with it.
+Unless a row says otherwise they are from
 [results/2026-11-19-both-setups.md](results/2026-11-19-both-setups.md):
-five runs a cell, three for a replay, as passes for the arm with no skill
-and the arm with it. A case that every run of every cell passed is kept
-only where the table says what it guards.
+five runs a cell, three for a defect replay. A case added since has only
+the results its own item ran, and "not run" marks a setup or arm it has not
+had. A case that every run of every cell passed is kept only where the
+table says what it guards.
 
 ### Loop cases
 
@@ -51,6 +54,11 @@ only where the table says what it guards.
 | `lead-stalled-item` | 1 | The lead of three items, one in changes requested on a right finding that takes real work, held by a thread that is gone | The two ready items work on main; the third is merged with the grader's currency test passing, dropped with a reason, or raised; the judge finds nothing left hanging | 0 / 5 | 5 / 5 |
 | `kept-finding-wrong` | 1 | The lead, after round 2's reviewer kept a finding that is wrong on the facts and whose fix breaks a Done when example | Done on main with both examples holding, and a ruling on record with its reason | 1 / 5 | 5 / 5 |
 | `kept-finding-right` | 1 | The same with the finding right, and the implementer's rebuttal confidently wrong | Both examples hold on main by the grader's own test | 0 / 5 | 5 / 5 |
+| `three-findings` | 1 | The implementer of an item in changes requested with three fix-now findings: one right, one true but not worth building (it needs exchange rates the repository lacks), one wrong on the facts | The right one is fixed by the grader's test, the costly one is not built, the wrong one is rebutted; the judge finds the costly one taken to the lead with a true reason | not run / 10 of 10 | not run / 10 of 10 |
+
+`three-findings` ran with the skill only, ten runs a cell, after
+atelier-hlsw's `not built` answer
+([results/2026-11-19-say-no.md](results/2026-11-19-say-no.md)).
 
 What the four cases that every run passed guard:
 
@@ -83,6 +91,34 @@ The two invented reviews, each the first agent in the reviewer's role:
 `costly-hardening` passed 5 of 5 with the skill in both setups and 0 of 5
 without it: the skill's clearest effect on a review.
 
+The sized reviews ask whether a reviewer can tell correct work that is
+bigger than its item needs ([Sized reviews](#sized-reviews)), and the later
+rounds whether round 2's brief narrows where a reviewer looks without
+hiding a defect ([Later rounds](#later-rounds)). Both ran only in `sol`,
+ten runs a cell; the later rounds only with the skill, on the brief
+atelier-d73k left.
+
+| Case | Question | The change reviewed | Pass | `sol` none / skill |
+| --- | --- | --- | --- | --- |
+| `overbuilt-generality` | 2 | `report --csv`, built as a pluggable exporter registry with three more formats | A finding names the unneeded generality (judged) | 10 / 10 |
+| `overbuilt-layer` | 2 | `tag` and `list --tag`, through a repository protocol and a service over one JSON file | A finding names the unneeded layer | 10 / 10 |
+| `overbuilt-robustness` | 2 | `--low N`, guarding against items its only source never returns | A finding names the unneeded robustness | 9 / 10 |
+| `control-large` | 2 | A correct 340-line import of two banks' formats, each part named by a Done when line | No finding asks for less | 10 / 10 |
+| `control-lean` | 2 | A correct 9-line `done ID` command | No finding asks for less | 10 / 10 |
+| `later-round-cosmetic` | 2 | Round 2, where code round 1 reviewed has a wrong docstring | No fix-now finding asks to correct it | not run / 10 |
+| `later-round-wrong` | 2 | Round 2, where that code sorts in the wrong order, which no test sees | A fix-now finding names the order | not run / 10 |
+| `later-round-fix-wrong` | 2 | Round 2, where the fix's new `parse_day` refuses real dates on the 30th and 31st | A fix-now finding names the refused dates | not run / 10 |
+
+Each of these passed every run but `overbuilt-robustness`'s one, and each
+is kept for what it guards. The two controls are what let the overbuilt
+cases mean anything: a reviewer that asks for less of every change passes
+those. With the skill every overbuilt finding was fix now (30 of 30),
+against 20 of 29 without it, the effect of `roles/reviewer.md`'s `Shrink:`
+passage; `blocks` reports it. The later rounds guard the brief the binary
+prints for round 2: a change to it shows here if it starts hiding a
+defect, in code the fix left or in the fix itself, or blocking on a
+docstring.
+
 The replayed reviews, each from
 [defects.md](../../docs/architecture/quality/scorecard-baseline/defects.md).
 A run passes when a round-1 fix-now finding names the known defect
@@ -107,6 +143,24 @@ reported.
 Each cell is out of three. A replay that no run of any cell passes is kept:
 it is a defect review missed once, and a reviewer that finds it is the
 result the case exists for.
+
+The removal replays ([Removal replays](#removal-replays)) replay a change
+whose part this repository later took out as unneeded. A run passes when a
+finding, whatever its recommendation, questions the need for that part or
+asks for less of it (judged). They ran only in `sol`, five runs a cell
+([results/2026-11-19-removed-replays.md](results/2026-11-19-removed-replays.md)).
+
+| Case | The change reviewed | The part later removed | `sol` none / skill |
+| --- | --- | --- | --- |
+| `removed-merge-sync` | atelier-s2ei (3ae56002) | `merge --sync`: catching up is `git merge` | 0 / 0 |
+| `removed-merge-wait` | atelier-vqoy (bc495ebb) | `merge --push`, `--wait` and `--timeout`: a command that sleeps for minutes fights the harness | 0 / 0 |
+| `removed-base-exemption` | atelier-mbrf (cb30c86b) | A trivial exemption pinning a base commit with no owner: `start --new` and `merge --trivial` cover it | 0 / 0 |
+| `removed-debrief` | atelier-rx22 (43eefb4b) | `atelier debrief`: the Desk shows a mission | 0 / 0 |
+| `removed-decision-notes` | atelier-fip8 (7a371ee7) | Typed decision notes and `work decisions`, removed with decision records | 0 / 0 |
+
+No review questioned a removed part in any of 50 runs. In each change the
+part is what its item asked for, and every Done when line names it, so a
+reviewer checking the change against its item finds nothing to cut.
 
 Twelve of atelier's 15 after-merge rows replay. Row 28 (atelier-cej5) is a
 timeout seen only on macOS CI under load; row 57 (atelier-ov97) is a
@@ -176,6 +230,88 @@ and fix commits, the defect in a sentence, and the item's text as it stood.
   lacks is answered unknown, not unsupported.
 - A reviewer may build with cargo, offline, in its own `target/`.
 
+## Removal replays
+
+The five removal replays (atelier-ad0z) run on the setup, confinement and
+judge of the defect replays, with no change to either. Each replays a
+change whose part a row of Tried and removed in
+[docs/design.md](../../docs/design.md#tried-and-removed) names.
+
+- Each `case.toml` holds the fields `harness/replay.py` names for a defect,
+  holding the removal: `defect` is the part later removed with design.md's
+  reason, `fix` the commit that removed it, and `defect_item` its item. It
+  also names the `table` and `row` of Tried and removed, the row's
+  `reason`, the `part`, and `gone`, a string the change added under
+  `crates/` that the removal took out. All five went in 819024c75, which
+  deleted the old workspace at the rewrite to 0.5; `--one-way` went first,
+  in 60b995d1e.
+- They share one rubric, which tells the judge that the later fix is the
+  whole old workspace's deletion, cut short. Whether the finding that
+  questions the part is fix now is the reported `blocks`, and whether the
+  code supports each other fix-now finding is the reported
+  `others-supported`.
+- [harness/removed_tests.py](harness/removed_tests.py) checks that each
+  case names its row with design.md's reason, that its base is the
+  change's parent, that the removal comes after and takes `gone` out of
+  `crates/`, and that recorded reviews grade as the rubric says.
+
+The other rows of Tried and removed do not replay, each for one of these
+reasons: no single change built it (records on a separate branch, review
+providers and Forgejo across 13 commits, the evidence records); its change
+is too large for one review (the SQLite cache's rebuild, 3,152 lines;
+evidence gates, 3,864; the light path, 3,249; `bundle`, 2,236; `serve` and
+the site crate, 1,994); the shared setup drops what it configures
+(transition actions in `.atelier/workflow.yaml`, the workflow file and
+crate, the closeout gates under `.atelier-state/`); the change has no item
+to review against (sessions and `land` in f072b36ec, `prune` in
+3508231b2, `migrate` in 195a353dc, `doctor` among the first day's work);
+it was never in the tree (the hard limit on lines of code) or never built
+(atelier-to83's options); or it was not removed as unneeded (a plan as its
+own branch, restored on 2026-11-13; the nine `work` views and `review`
+subcommands, folded into today's commands; strategy files and ADRs, which
+are documents).
+
+## Sized reviews
+
+The five sized cases (atelier-s6xk) each track a small Python tool with
+one item whose change is correct, whose suite passes, and whose new tests
+fail on main; the agent is its reviewer. Every item's Scope allows new
+modules, so a reviewer cannot call the extra parts out of scope instead of
+unneeded.
+
+- They share one setup, [harness/sized.sh](harness/sized.sh), which builds
+  the fixture from the case's `fixture/` (`case.sh`, `item.md`,
+  `report.md`, the tree on main in `base/` and the change in `change/`),
+  one grader, [harness/sized.py](harness/sized.py), and one set of tests,
+  [harness/sized_tests.py](harness/sized_tests.py). Each case's rubric says
+  what its change holds and, in an overbuilt case, what its unneeded part
+  is.
+- An overbuilt case's `lean/` holds the smaller change that meets the same
+  Goal and Done when. `test_grade.py` checks that the Done when's tests
+  pass on it and on the change and fail on main, and that none of its code
+  is in the fixture. The reviewer never sees it.
+- Whether a passing overbuilt run's finding is fix now is the reported
+  `blocks`, which changes no grade.
+
+## Later rounds
+
+The three later-round cases (atelier-d73k, atelier-t5tc) share one item, a
+`week DATE` command for a timesheet tool, built by
+[harness/later_round.sh](harness/later_round.sh) from
+[harness/later-round/](harness/later-round/): round 1's change, a round-1
+review with two real fix-now findings, and a fix of both, answered under
+Responses and submitted again. The agent is round 2's reviewer. Each case
+gives `week_lines` from its `fixture/week_lines.py`, the same at both
+rounds' commits: in `later-round-cosmetic` its code is right and its
+docstring wrong, and in `later-round-wrong` the reverse. In
+`later-round-fix-wrong` `week_lines` is right, and `fixture/fix.patch`
+makes the fix's new `parse_day` refuse real dates. They share one grader,
+[harness/later_round.py](harness/later_round.py), and its tests,
+[harness/later_round_tests.py](harness/later_round_tests.py), and run with
+the binary before and after a change to the brief
+([results/2026-11-19-later-round-brief.md](results/2026-11-19-later-round-brief.md),
+[results/2026-11-19-later-round-fix.md](results/2026-11-19-later-round-fix.md)).
+
 ## Running
 
 Build `atelier` and copy it, so a rebuild cannot change it under a running
@@ -188,11 +324,15 @@ mkdir -p /var/tmp/af-evals/bin && cp target/debug/atelier /var/tmp/af-evals/bin/
 export EVAL_ATELIER=/var/tmp/af-evals/bin/atelier-$sha
 run=evals/agent-factory/harness/run.py
 loop="loop loop-changes non-atelier-repo settle-within-authority \
-  kept-finding-wrong kept-finding-right lead-looks-trivial lead-stalled-item \
-  done-when-conflict vacuous-test-review costly-hardening"
+  kept-finding-wrong kept-finding-right three-findings lead-looks-trivial \
+  lead-stalled-item done-when-conflict vacuous-test-review costly-hardening \
+  overbuilt-generality overbuilt-layer overbuilt-robustness control-large control-lean \
+  later-round-cosmetic later-round-wrong later-round-fix-wrong"
 replays="approval-follow-up base-record-commits base-done-claims merge-sync \
   brief-transitions hierarchy-rules project-slug quiet-tokens priority-contract \
-  readiness-blockers after-merge-checks touched-claims"
+  readiness-blockers after-merge-checks touched-claims \
+  removed-merge-sync removed-merge-wait removed-base-exemption removed-debrief \
+  removed-decision-notes"
 for setup in sol house; do
   python3 $run $loop --setup $setup --ref $sha --runs 5 --out <out>/$setup
   python3 $run refused-push --setup $setup --ref $sha --runs 5 --jobs 1 --out <out>/$setup-push
@@ -252,8 +392,10 @@ below without starting an agent.
   `result.json`, which names its setup, binary and skill commit, and gives
   each thread's role, model, effort, seconds and tokens, its failed
   `atelier` calls, and the grade. Work directories of passing runs are
-  deleted unless `--keep`. `results.jsonl` gathers a matrix's runs, and
-  `harness/table.py` prints its cells.
+  deleted unless `--keep`. Every graded run loses its cargo build output,
+  `--keep` or not; a replay's is about 2.5G, and on 2026-11-19 keeping it
+  filled this host's disk (atelier-scly). `results.jsonl` gathers a
+  matrix's runs, and `harness/table.py` prints its cells.
 
 ## Results
 
@@ -271,6 +413,17 @@ text.
 - [2026-11-18-replayed-reviews.md](results/2026-11-18-replayed-reviews.md)
   and [2026-11-18-nine-more-replays.md](results/2026-11-18-nine-more-replays.md):
   the first replays and what one costs.
+- [2026-11-18-three-findings.md](results/2026-11-18-three-findings.md) and
+  [2026-11-19-say-no.md](results/2026-11-19-say-no.md): an implementer
+  with three findings, before and after atelier-hlsw's `not built`.
+- [2026-11-19-overbuilt-told-apart.md](results/2026-11-19-overbuilt-told-apart.md):
+  the sized reviews.
+- [2026-11-19-removed-replays.md](results/2026-11-19-removed-replays.md):
+  the removal replays.
+- [2026-11-19-later-round-brief.md](results/2026-11-19-later-round-brief.md)
+  and [2026-11-19-later-round-fix.md](results/2026-11-19-later-round-fix.md):
+  the later rounds, before and after atelier-d73k's brief.
 - [2026-11-19-both-setups.md](results/2026-11-19-both-setups.md): both
-  setups, both arms and every case; the skill before atelier-mtzj; and in
-  `sol` the skill cut to its Starting Another Thread section.
+  setups, both arms and every case built before these; the skill before
+  atelier-mtzj; and in `sol` the skill cut to its Starting Another Thread
+  section.

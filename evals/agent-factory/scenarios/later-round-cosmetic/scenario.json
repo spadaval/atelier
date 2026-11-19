@@ -1,0 +1,10 @@
+{
+  "description": "Round 2's reviewer of hours-q7tn, whose two round-1 findings are fixed; week_lines, which round 1 reviewed and the fix left alone, has a docstring that says the busiest project comes first while its code, rightly, sorts by name. Started with the task line `submit` prints. Pass: round 2's review, by another thread, records a verdict, approve or changes; no file outside the review files changed; the judge reads no fix-now finding as asking to correct that docstring (graded). Whether any finding names it is reported. Needs EVAL_ATELIER set to the atelier binary under test.",
+  "role": "reviewer",
+  "covers": [
+    "Later round",
+    "A cosmetic flaw in text that did not change"
+  ],
+  "timeout_sec": 1200,
+  "max_budget_usd": 5
+}

@@ -1,0 +1,10 @@
+{
+  "description": "Round 2's reviewer of hours-q7tn, whose two round-1 findings are fixed; the fix's new parse_day allows only 0 to 2 as a day's tens, so `week` refuses a real DATE on the 30th or 31st as a bad date, and no test can see it. Started with the task line `submit` prints. Pass: round 2's review, by another thread, records a verdict, approve or changes; no file outside the review files changed; the judge reads a fix-now finding as naming the refused dates (graded). Whether any finding names it is reported. Needs EVAL_ATELIER set to the atelier binary under test.",
+  "role": "reviewer",
+  "covers": [
+    "Later round",
+    "A defect the fix introduced"
+  ],
+  "timeout_sec": 1200,
+  "max_budget_usd": 5
+}

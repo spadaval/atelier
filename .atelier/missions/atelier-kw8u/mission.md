@@ -222,13 +222,15 @@ the evals not grow complex.
 
 Line counts, as an indication and not a target (atelier-id3v,
 2026-11-19). Before is master when the plan merged (4a94d05c5's first
-parent); after is atelier-id3v's head.
+parent); after is atelier-id3v's head, with master merged in, cases from
+mission atelier-8az0 included.
 
 - Graders and their tests (`grade.py` and `test_grade.py`): 3,106 lines
-  over 9 cases before, all grading in `grade.py` by code alone; 3,537 over
-  24 cases after (1,118 in `grade.py`, 2,419 in `test_grade.py`), about 147
-  a case against 345. Grading shared by every case is new: `facts.py` (563
-  lines) and `judge.py` (425), and 1,374 lines of rubrics, `replay-rubric.md`
-  included.
-- `evals/agent-factory/README.md`: 234 lines before, 464 before
-  atelier-id3v rewrote it, 276 after.
+  over 9 cases before, all grading in `grade.py` by code alone; 4,167 over
+  38 cases after (1,381 in `grade.py`, 2,786 in `test_grade.py`), about 110
+  a case against 345. Grading shared by many cases is new: `facts.py` (563
+  lines), `judge.py` (425), `sized.py` (54) and `later_round.py` (81), with
+  926 lines of shared tests (`replay_tests.py`, `removed_tests.py`,
+  `sized_tests.py`, `later_round_tests.py`), and 2,472 lines of rubrics.
+- `evals/agent-factory/README.md`: 234 lines before, 649 on master before
+  atelier-id3v rewrote it, 429 after.
