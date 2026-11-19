@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-b9o6
 title: Grade a run by facts from its records and a rubric that a model from another lab reads
-status: changes_requested
+status: in_review
 mission: atelier-kw8u
 labels: []
 priority: medium
@@ -164,3 +164,14 @@ the material. It took 3 to 10 seconds and 5k to 8k tokens in per run.
 All the runs agree, so this sample shows the judge does not mislead on these
 cases; it does not test a hard call. atelier-id3v's thirty-run read covers
 that.
+
+Since round 1, an answer whose quoted line is not in the material counts as
+unknown. All 76 saved answers above quote a line that is, so the table
+stands.
+
+### Responses
+
+1-0nu9.1: fixed in d8f2cf036
+1-0nu9.2: fixed in d8f2cf036
+1-0nu9.3: fixed in d8f2cf036
+1-0nu9.4: fixed in d8f2cf036
