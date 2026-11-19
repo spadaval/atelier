@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-nv22
 title: List every rule a mission's commits passed, with its reason and thread, in atelier show <mission>
-status: changes_requested
+status: in_review
 mission: atelier-kw8u
 labels: []
 priority: medium
@@ -143,6 +143,15 @@ rule passed on a backlog branch not merged yet; both fail without the fix.
 are clean, and `evals/agent-factory/test.sh` passes. `show atelier-kw8u`
 here takes about 1.9 s, from 1.2 s, for the larger walk.
 
+Round 6 (cac67983b): an item's mission is read as `show` finds its record:
+on the base, else on its own branch, else on the first unmerged named
+branch, by name, that adds it. An item only on a backlog branch not merged
+yet now counts as its mission's. The test
+`log::an_item_only_on_a_backlog_branch_not_merged_yet_shows_its_passed_rule_on_its_missions_page`
+covers it and fails without the fix. `cargo nextest run` passes (399
+tests), clippy, fmt and `git diff --check` are clean, and
+`evals/agent-factory/test.sh` passes.
+
 ### Responses
 
 - 1-36z8.1: fixed in 58e7250fd
@@ -150,3 +159,4 @@ here takes about 1.9 s, from 1.2 s, for the larger walk.
 - 2-1o5j.3: fixed in 56a9a34b9
 - 3-176y.2: fixed in 3065cc45a
 - 4-q6v2.2: fixed in 0de0b98c9
+- 5-wlv1.1: fixed in cac67983b
