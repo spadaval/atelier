@@ -1,9 +1,10 @@
-"""Tests both later-round cases run (harness/later_round.sh and
+"""Tests the later-round cases run (harness/later_round.sh and
 later_round.py), from their test_grade.py:
 
     class LaterRoundTest(later_round_tests.LaterRoundCase):
         case = HERE
         wrong = True   # later-round-wrong; False for later-round-cosmetic
+        in_fix = True  # later-round-fix-wrong, with wrong = True
 
 They build the case's fixture and grade recorded reviews, with no model.
 The item is in round 2: round 1's two fix-now findings are answered as
@@ -12,7 +13,9 @@ fixed, the suite passes, and the tests the change adds fail on main.
 fix commit leaves it alone. In later-round-wrong it lists the projects by
 hours where the Done when asks for alphabetical order, which the suite
 cannot see; in later-round-cosmetic it lists them by name, and only its
-docstring is wrong. A review the judge passes passes, whatever its verdict;
+docstring is wrong. In later-round-fix-wrong `week_lines` is right, and the
+fix commit's `parse_day` refuses a DATE on the 30th or 31st, which the
+suite cannot see either. A review the judge passes passes, whatever its verdict;
 one the judge fails, an unrecorded review, a review by the implementer and
 a change outside the review files fail. EVAL_ATELIER names the binary
 under test.
@@ -60,6 +63,7 @@ def week_lines(source: str) -> str:
 class LaterRoundCase(loop.Fixture):
     case = None
     wrong = None
+    in_fix = False
 
     def setUp(self):
         if self.case is None:
@@ -95,6 +99,10 @@ class LaterRoundCase(loop.Fixture):
         self.sh("git", "commit", "-qm", f"Review {ID}: {verdict}")
 
     def on_flaw(self, recommendation):
+        if self.in_fix:
+            return FINDING.format(title="week refuses a DATE on the 30th or 31st as a bad date",
+                                  recommendation=recommendation,
+                                  body="`parse_day` in hours.py allows only [0-2] as a day's tens.")
         title = ("week lists the projects busiest first, not in alphabetical order" if self.wrong
                  else "week_lines's docstring says the busiest project comes first")
         return FINDING.format(title=title, recommendation=recommendation,
@@ -148,16 +156,35 @@ class LaterRoundCase(loop.Fixture):
         rows = [(date(2026, 11, 2), "alpha", 1.0), (date(2026, 11, 3), "beta", 5.0)]
         lines = hours.week_lines(rows, date(2026, 11, 4))
         doc = hours.week_lines.__doc__
-        if self.wrong:
+        if self.in_fix:
+            self.assertEqual(lines, ["alpha 1.0", "beta 5.0", "total 6.0"])
+            self.assertIn("alphabetical order", doc)
+            for day in ("2026-11-30", "2026-12-31"):
+                with self.subTest(day):
+                    self.assertIsNone(hours.parse_day(day))
+                    out = subprocess.run(
+                        [sys.executable, "hours.py", "week", day], cwd=self.repo,
+                        capture_output=True, text=True)
+                    self.assertEqual((out.stdout, out.stderr, out.returncode),
+                                     ("", f"bad date: {day}\n", 2))
+            self.assertEqual(hours.parse_day("2026-11-29"), date(2026, 11, 29))
+        elif self.wrong:
             self.assertEqual(lines, ["beta 5.0", "alpha 1.0", "total 6.0"])
             self.assertIn("alphabetical order", doc)
         else:
             self.assertEqual(lines, ["alpha 1.0", "beta 5.0", "total 6.0"])
             self.assertIn("busiest project first", doc)
 
-    def test_the_cases_differ_only_in_week_lines(self):
+    def test_the_cases_differ_only_in_week_lines_and_the_fix_patch(self):
         fixture = self.case / "fixture"
-        self.assertEqual(sorted(p.name for p in fixture.iterdir()), ["week_lines.py"])
+        self.assertEqual(sorted(p.name for p in fixture.iterdir()),
+                         ["fix.patch", "week_lines.py"] if self.in_fix else ["week_lines.py"])
+
+    def test_the_flaw_is_in_code_the_fix_changed_only_in_its_case(self):
+        fix = git(self.repo, "diff", self.round_1, "HEAD", "--", "hours.py")
+        self.assertNotIn("def parse_day", git(self.repo, "show", f"{self.round_1}:hours.py"))
+        self.assertIn("+def parse_day", fix)
+        self.assertEqual("[0-2][0-9]" in fix, self.in_fix)
 
     # The grade.
 

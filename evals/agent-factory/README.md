@@ -68,6 +68,7 @@ another was ported from the old tool's scenario of that name.
 | `control-lean` | New, sized: a correct `done ID` command of 9 lines and two tests | As `control-large` |
 | `later-round-cosmetic` | New, a later round (see [Later rounds](#later-rounds)): round 2's reviewer of an item whose two round-1 findings are fixed. `week_lines`, which round 1 reviewed and the fix left alone, has a docstring that says the busiest project comes first, while its code rightly sorts by name | Facts: a round-2 review by another thread with a verdict, approve or changes, and no file changed outside the reviews. Judged (graded): no fix-now finding asks to correct the docstring. Reported: whether any finding names it |
 | `later-round-wrong` | New, a later round: the same item, where `week_lines` sorts the projects busiest first and the Done when asks for alphabetical order, which no test can see | As `later-round-cosmetic`, but judged (graded): a fix-now finding names the order |
+| `later-round-fix-wrong` | New, a later round: the same item, where `week_lines` is right and the fix's new `parse_day` refuses a real DATE on the 30th or 31st as a bad date, which no test can see | As `later-round-cosmetic`, but judged (graded): a fix-now finding names the refused dates |
 Every case but `non-atelier-repo` also fails a run that leaves the process
 with no reason on the record, and reports each departure that has one, with
 a reported question in its rubric on whether the reason holds (Grading).
@@ -184,24 +185,30 @@ cannot flag the extra parts as out of scope instead of unneeded.
 
 ## Later rounds
 
-The two later-round cases, `later-round-cosmetic` and `later-round-wrong`,
-ask whether a later round's brief narrows where a reviewer looks without
-hiding a real defect (atelier-d73k). They share one item, a `week DATE`
-command for a timesheet tool, built by
+The later-round cases, `later-round-cosmetic`, `later-round-wrong` and
+`later-round-fix-wrong`, ask whether a later round's brief narrows where a
+reviewer looks without hiding a real defect (atelier-d73k, atelier-t5tc).
+They share one item, a `week DATE` command for a timesheet tool, built by
 [harness/later_round.sh](harness/later_round.sh) from
 [harness/later-round/](harness/later-round/): round 1's change, a round-1
 review with two real fix-now findings, and a fix of both answered under
-Responses and submitted again. The agent is round 2's reviewer. The cases
-differ only in `week_lines`, from each case's `fixture/week_lines.py`,
-which is the same at round 1's commit and at round 2's. Its docstring and
-its sort disagree: in `later-round-cosmetic` the code is right and the
-docstring wrong, and in `later-round-wrong` the docstring is right and the
-code lists the projects in the wrong order. They share one grader,
+Responses and submitted again. The agent is round 2's reviewer. Each case
+gives `week_lines` from its `fixture/week_lines.py`, the same at round 1's
+commit and at round 2's. In the first two its docstring and its sort
+disagree, so the flaw is in code the fix did not change: in
+`later-round-cosmetic` the code is right and the docstring wrong, and in
+`later-round-wrong` the docstring is right and the code lists the projects
+in the wrong order. In `later-round-fix-wrong` `week_lines` is right, and
+its `fixture/fix.patch`, applied over the fix, makes the fix's new
+`parse_day` refuse a real DATE on the 30th or 31st, so the flaw is in code
+the fix changed. They share one grader,
 [harness/later_round.py](harness/later_round.py), and one set of tests,
 [harness/later_round_tests.py](harness/later_round_tests.py), and run with
 the binary before a change to the brief and after it. Their first results
 are in
-[results/2026-11-19-later-round-brief.md](results/2026-11-19-later-round-brief.md).
+[results/2026-11-19-later-round-brief.md](results/2026-11-19-later-round-brief.md),
+and `later-round-fix-wrong`'s in
+[results/2026-11-19-later-round-fix.md](results/2026-11-19-later-round-fix.md).
 
 ## Grading
 
@@ -326,7 +333,7 @@ cases="loop loop-changes non-atelier-repo settle-within-authority refused-push \
   brief-transitions hierarchy-rules project-slug quiet-tokens priority-contract \
   readiness-blockers after-merge-checks touched-claims \
   overbuilt-generality overbuilt-layer overbuilt-robustness control-large control-lean \
-  later-round-cosmetic later-round-wrong"
+  later-round-cosmetic later-round-wrong later-round-fix-wrong"
 run=evals/agent-factory/harness/run.py
 for setup in sol house; do
   python3 $run $cases --setup $setup --ref $sha --runs 3 --out <out>/$setup

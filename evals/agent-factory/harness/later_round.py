@@ -1,7 +1,8 @@
-"""Grade a later-round case's facts: later-round-cosmetic and
-later-round-wrong. Their rubric.md asks the judge whether a finding names
-the flaw in `week_lines`, text round 1 reviewed and the fix left alone, and
-whether one blocks on it.
+"""Grade a later-round case's facts: later-round-cosmetic,
+later-round-wrong and later-round-fix-wrong. Their rubric.md asks the judge
+whether a finding names the case's flaw, and whether one blocks on it: in
+the first two it is in `week_lines`, text round 1 reviewed and the fix left
+alone, and in the third in the fix's `parse_day`.
 
 Usage: later_round.py <case dir> <work dir>. From round 2's review files on
 the item's branch and in the checkouts on it: each review's reviewers,
