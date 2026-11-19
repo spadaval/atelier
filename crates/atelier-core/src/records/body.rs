@@ -271,7 +271,7 @@ pub(crate) fn responses(file: &Path, body: &str) -> Result<Vec<Response>, Proble
 
 fn response(line: &str) -> Result<Response, String> {
     let form = || {
-        format!("`{line}` is not `<finding>: fixed in <commit>` or `<finding>: rebutted: <fact>`")
+        format!("`{line}` is not `<finding>: fixed in <commit>`, `<finding>: rebutted: <fact>` or `<finding>: not built: <reason>`")
     };
     let (finding, reply) = line
         .strip_prefix("- ")
@@ -288,6 +288,11 @@ fn response(line: &str) -> Result<Response, String> {
         Ok(Response::Rebutted {
             finding,
             fact: fact.to_string(),
+        })
+    } else if let Some(reason) = reply.strip_prefix("not built: ") {
+        Ok(Response::NotBuilt {
+            finding,
+            reason: reason.to_string(),
         })
     } else {
         Err(form())

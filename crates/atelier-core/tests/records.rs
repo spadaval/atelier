@@ -50,6 +50,7 @@ It prints them.
 
 2-m2bn.1: fixed in 0123abc
 - 2-m2bn.2: rebutted: the Scope is printed by `show`
+- 2-m2bn.3: not built: a second brief is larger than the change
 
 ## Decisions
 
@@ -663,7 +664,7 @@ fn a_dropped_record_gives_the_reason_on_the_first_line_of_its_report_or_result()
         .section("Report")
         .unwrap()
         .contains("It prints them.\n\n### Responses"));
-    assert_eq!(item.responses().unwrap().len(), 2);
+    assert_eq!(item.responses().unwrap().len(), 3);
     assert_eq!(
         store.mission("atelier-icv4").unwrap().dropped(),
         Some("no time")
@@ -766,11 +767,15 @@ fn findings_are_named_by_review_stem_and_number() {
     assert_eq!(findings[2].now, Some(Now::Kept));
 
     let responses = dir.responses().unwrap();
-    assert_eq!(responses.len(), 2);
+    assert_eq!(responses.len(), 3);
     assert!(matches!(&responses[0], Response::Fixed { finding, commit }
         if finding.to_string() == "2-m2bn.1" && commit == "0123abc"));
     assert!(matches!(&responses[1], Response::Rebutted { finding, fact }
         if finding.to_string() == "2-m2bn.2" && fact == "the Scope is printed by `show`"));
+    assert!(
+        matches!(&responses[2], Response::NotBuilt { finding, reason }
+        if finding.to_string() == "2-m2bn.3" && reason == "a second brief is larger than the change")
+    );
 
     let decisions = dir.decisions().unwrap();
     assert_eq!(decisions.len(), 1);
@@ -1224,4 +1229,18 @@ fn config_refuses_what_it_does_not_know() {
     )
     .unwrap_err();
     assert_eq!(error.field, "slug");
+}
+
+#[test]
+fn a_response_line_of_no_form_names_the_three_forms() {
+    let item = "items/atelier-06jc/item.md";
+    let problems = problems_after(&[(item, "not built: a second", "left out: a second")]);
+    assert_one_problem(
+        &problems,
+        item,
+        "Responses",
+        "`- 2-m2bn.3: left out: a second brief is larger than the change` is not \
+         `<finding>: fixed in <commit>`, `<finding>: rebutted: <fact>` or \
+         `<finding>: not built: <reason>`",
+    );
 }

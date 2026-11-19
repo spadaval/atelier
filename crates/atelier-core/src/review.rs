@@ -10,7 +10,7 @@ pub struct Carried {
     /// The text of each finding in its chain, oldest first: the one first
     /// raised, then each that carried it as kept.
     pub texts: Vec<(FindingName, String)>,
-    /// The author's line for it in the Report's Responses.
+    /// The author's line for it in the Report's Responses, by [`answer`].
     pub response: Option<Response>,
 }
 
@@ -34,6 +34,39 @@ pub fn chain<'a>(name: &FindingName, findings: &'a [Finding]) -> Vec<&'a Finding
         chain.push(found);
     }
     chain
+}
+
+/// How the implementer answered open finding `name`: its own line in
+/// Responses; or, where it has none, a `not built` line on a finding it
+/// carries, since that question still waits on the lead. An older line of
+/// another form answered a finding a later round kept, so it is not this
+/// one's answer.
+pub fn answer<'a>(
+    name: &FindingName,
+    findings: &[Finding],
+    responses: &'a [Response],
+) -> Option<&'a Response> {
+    for (at, finding) in chain(name, findings).into_iter().enumerate() {
+        let Some(response) = responses.iter().find(|r| *r.finding() == finding.name) else {
+            continue;
+        };
+        let not_built = matches!(response, Response::NotBuilt { .. });
+        return (at == 0 || not_built).then_some(response);
+    }
+    None
+}
+
+/// The reason open fix-now finding `name` was not built, while that waits
+/// on the mission's lead: its answer, by [`answer`], is `not built`.
+pub fn waits_on_lead<'a>(
+    name: &FindingName,
+    findings: &[Finding],
+    responses: &'a [Response],
+) -> Option<&'a str> {
+    match answer(name, findings, responses)? {
+        Response::NotBuilt { reason, .. } => Some(reason),
+        _ => None,
+    }
 }
 
 /// The findings that round `round`'s review file carries from the rounds
@@ -74,10 +107,7 @@ fn carry(
             continue;
         }
         let texts = chain(&finding.name, &findings).into_iter().rev();
-        let response = responses
-            .iter()
-            .find(|response| *response.finding() == finding.name)
-            .cloned();
+        let response = answer(&finding.name, &findings, responses).cloned();
         carried.push(Carried {
             finding: finding.clone(),
             texts: texts.map(|f| (f.name.clone(), text(&f.name))).collect(),

@@ -505,4 +505,6 @@ Nine more, one `sol` review each, are
 [results/2026-11-18-nine-more-replays.md](results/2026-11-18-nine-more-replays.md).
 What an implementer does today with three findings, one right, one not worth
 building and one wrong, is
-[results/2026-11-18-three-findings.md](results/2026-11-18-three-findings.md).
+[results/2026-11-18-three-findings.md](results/2026-11-18-three-findings.md),
+and the same case with atelier-hlsw's `not built` and without it, in `sol`
+and `house`, is [results/2026-11-19-say-no.md](results/2026-11-19-say-no.md).

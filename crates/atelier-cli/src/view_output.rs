@@ -251,10 +251,17 @@ fn judged(judged: &Judged) -> String {
     }
 }
 
-/// Each disagreement of `disputes`, two lines for a rebuttal and one for a
-/// split plan round, indented under a heading the caller gives.
+/// Each disagreement of `disputes`, two lines for a rebuttal and for a
+/// finding not built, and one for a split plan round, indented under a
+/// heading the caller gives.
 fn disputes(disputes: &Disputes) -> String {
     let mut text = String::new();
+    for found in &disputes.not_built {
+        text += &format!(
+            "  {}/{} (waits on the lead): {}\n    Not built: {}\n",
+            found.item, found.finding, found.title, found.reason
+        );
+    }
     for rebuttal in &disputes.rebuttals {
         let next = match rebuttal.judged.as_slice() {
             [] => "not yet reviewed".to_string(),
@@ -290,9 +297,9 @@ fn disputes(disputes: &Disputes) -> String {
 pub fn disputed(found: &Disputes, mission: Option<&str>) -> String {
     let of = mission.map_or(String::new(), |id| format!(" in mission {id}"));
     if found.is_empty() {
-        return format!("Nothing is disputed{of}: no finding was rebutted, and no plan-review round's reviewers disagreed.\n");
+        return format!("Nothing is disputed{of}: no finding was rebutted or is waiting on the lead as not built, and no plan-review round's reviewers disagreed.\n");
     }
-    format!("Disputed{of}: each rebutted finding with what the next round made of it, and each plan-review round whose reviewers' verdicts differ.\n{}", disputes(found))
+    format!("Disputed{of}: each open finding not built, which waits on the lead; each rebutted finding with what the next round made of it; and each plan-review round whose reviewers' verdicts differ.\n{}", disputes(found))
 }
 
 /// The handoff for each item of `items` a thread could start now, other
@@ -646,9 +653,21 @@ pub fn led(led: &[(MissionDir, Vec<Entry>, Disputes)]) -> String {
             dir.mission.title,
             by_status(&items, true),
         );
-        if !disputed.is_empty() {
+        if !disputed.not_built.is_empty() {
+            text += "Waiting on your ruling: each finding a reviewer asked to fix now, which its implementer did not build and says why. `atelier merge` holds the item until you rule. To have it built, tell the implementer. To merge without it, run `ATELIER_SKIP=\"<ruling>\" atelier merge` on the item's branch once a reviewer approves the rest.\n";
+            let only = Disputes {
+                not_built: disputed.not_built.clone(),
+                ..Disputes::default()
+            };
+            text += &disputes(&only);
+        }
+        if !disputed.rebuttals.is_empty() || !disputed.plans.is_empty() {
             text += "Disputed in this mission (nothing waits on these; you settle each, either way, and record your ruling):\n";
-            text += &disputes(disputed);
+            let rest = Disputes {
+                not_built: Vec::new(),
+                ..disputed.clone()
+            };
+            text += &disputes(&rest);
         }
         text += &start_threads(&items);
     }

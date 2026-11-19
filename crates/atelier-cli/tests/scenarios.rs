@@ -837,7 +837,10 @@ fn a_verdict_needs_its_finding_state_and_commits_the_file_with_the_status() {
     assert!(
         status.contains(&format!(
             "Answer each finding with one line under `### Responses` in the Report, and nothing \
-             else there, such as `{stem}.1: fixed in <commit>` or `{stem}.1: rebutted: <fact>`. "
+             else there: `{stem}.1: fixed in <commit>`; `{stem}.1: rebutted: <fact>` where it is \
+             wrong, which the next round's reviewer keeps or withdraws; or `{stem}.1: not built: \
+             <reason>` where it is real and not worth building, which takes it to your mission's \
+             lead, who rules on it.\n"
         )),
         "{status}"
     );
@@ -933,12 +936,13 @@ fn later_rounds_carry_each_open_finding_under_its_latest_name_until_it_closes() 
     assert!(
         status.contains(&format!(
             "  [ ] Finding {second}.1 (fix now): No period (a reviewer kept its rebuttal, and a \
-             rebuttal gets one try: fix it, or take it to your mission's lead)\n"
+             rebuttal gets one try: fix it, or answer it `not built: <reason>` for your mission's \
+             lead to rule on)\n"
         )),
         "{status}"
     );
     assert!(
-        status.contains("A rebuttal goes to the next round's reviewer, who keeps the finding or withdraws it.\n"),
+        status.contains("rebutted: <fact>` where it is wrong, which the next round's reviewer keeps or withdraws;"),
         "{status}"
     );
     assert!(!status.contains(&format!("{first}.1")), "{status}");
