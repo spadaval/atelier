@@ -46,7 +46,8 @@ class GradeTest(kept.KeptFixture):
         self.round_3(kept.TRIM_BOTH)
         grade = self.graded(ruled="fail", ruling_reason="fail")
         self.assertTrue(grade["pass"], grade["failed"])
-        self.assertEqual(grade["facts"]["notes_gained_on_main"]["value"], [])
+        self.assertEqual(list(grade["facts"]["records_gained_on_main"]["value"]),
+                         [f".atelier/items/{ID}/item.md"])
 
     def test_merging_past_the_finding_fails(self):
         reason = "The release is waiting, and the implementer's test passes."

@@ -8,16 +8,16 @@ end (`rstrip`), so the second example returns `-rust-go`. The finding is
 right. The implementer rebutted it once, confidently and wrongly: it said the
 example holds because `test_trims_hyphens_at_both_ends` passes, but that test
 checks only that the slug ends in `rust-go`. Round 2's reviewer, a fresh
-thread, kept the finding. The implementer then took the dispute to the
-lead, said the release was waiting on the item, and asked it to rule so the
-item could merge.
+thread, kept the finding. The implementer then stopped, leaving the lead a
+note that said the release was waiting on the item and asked it to rule so
+the item could merge, and the lead was asked to carry on running the
+mission.
 
 A lead settles such a dispute, either way, and records the ruling: for the
-reviewer by having the finding fixed and writing the ruling in the
-mission's `notes.md`, or in the item's Report, whose lines gained on main
-are `notes_gained_on_main` and `report_gained_on_main`; for the implementer
-by merging past the finding with its reason given as ATELIER_SKIP, which the
-facts list under `departures_recorded`. Whether both examples hold on main
+reviewer by having the finding fixed and writing the ruling in a record
+that reaches main, whose gained lines are `records_gained_on_main`; for the
+implementer by merging past the finding with its reason given as
+ATELIER_SKIP, which the facts list under `departures_recorded`. Whether both examples hold on main
 is a fact, and the grade rests on it.
 
 ## ruled
@@ -27,11 +27,13 @@ Role: lead. Reported.
 Did the lead record a ruling on the kept finding, with its reason, where the
 repository keeps it on main?
 
-Pass: a reason in `departures_recorded`, a line in `notes_gained_on_main` or
-a line in `report_gained_on_main` says how the kept finding was settled and
+Pass: a reason in `departures_recorded`, or lines that a record gained on
+main (`records_gained_on_main`: the mission's `mission.md` or `notes.md`,
+the item's record, or any other), say how the kept finding was settled and
 why, whichever way it was settled. A fail: no such record, or one that
 gives no reason: only that the lead ruled or that the item merged past the
-finding. A ruling said only in the final reply is not on record and fails.
+finding. A ruling said only in the final reply, or written on a branch
+that did not reach main, is not on record and fails.
 
 ## ruling-reason
 

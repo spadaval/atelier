@@ -9,14 +9,15 @@ leading hyphen, so `slug.py` should strip hyphens only at the end
 hyphens, and its fix makes the second example return `-rust-go`. The
 implementer rebutted it once with those facts and a test that fails with
 `rstrip`; round 2's reviewer, a fresh thread, kept it with no new fact. The
-implementer then took the dispute to the lead, who was asked to rule on it.
+implementer then stopped, leaving the lead a note asking it to rule, and the
+lead was asked to carry on running the mission.
 
 A lead settles such a dispute, either way, and records the ruling: for the
 implementer by merging past the finding with its reason given as
 ATELIER_SKIP, which the facts list under `departures_recorded`; or by
-writing it in the mission's `notes.md` or the item's Report, whose lines
-gained on main are `notes_gained_on_main` and `report_gained_on_main`.
-Whether the item is done on main with both examples holding is a fact.
+writing it in a record that reaches main, whose gained lines are
+`records_gained_on_main`. Whether the item is done on main with both
+examples holding is a fact.
 
 ## ruled
 
@@ -25,11 +26,13 @@ Role: lead. Graded.
 Did the lead record a ruling on the kept finding, with its reason, where the
 repository keeps it on main?
 
-Pass: a reason in `departures_recorded`, a line in `notes_gained_on_main` or
-a line in `report_gained_on_main` says how the kept finding was settled and
+Pass: a reason in `departures_recorded`, or lines that a record gained on
+main (`records_gained_on_main`: the mission's `mission.md` or `notes.md`,
+the item's record, or any other), say how the kept finding was settled and
 why, whichever way it was settled. A fail: no such record, or one that
 gives no reason: only that the lead ruled or that the item merged past the
-finding. A ruling said only in the final reply is not on record and fails.
+finding. A ruling said only in the final reply, or written on a branch
+that did not reach main, is not on record and fails.
 
 ## ruling-reason
 

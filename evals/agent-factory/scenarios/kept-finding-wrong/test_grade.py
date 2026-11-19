@@ -127,11 +127,24 @@ class GradeTest(KeptFixture):
                      response="rebutted: the lead ruled it wrong in the mission's notes.md")
         grade = self.graded()
         self.assertTrue(grade["pass"], grade["failed"])
-        self.assertEqual(grade["facts"]["notes_gained_on_main"]["value"][-1],
+        records = grade["facts"]["records_gained_on_main"]["value"]
+        self.assertEqual(records[f".atelier/missions/{MISSION}/notes.md"][-1],
                          "The kept finding is wrong: its fix breaks the second Done when example.")
-        self.assertEqual(grade["facts"]["departures_recorded"]["value"], [])
         self.assertIn(f"- {self.r2}: rebutted: the lead ruled it wrong in the mission's notes.md",
-                      grade["facts"]["report_gained_on_main"]["value"])
+                      records[f".atelier/items/{ID}/item.md"])
+        self.assertEqual(grade["facts"]["departures_recorded"]["value"], [])
+
+    def test_a_ruling_in_the_mission_s_record_is_a_record(self):
+        self.atelier("lead", "start", "--backlog", "ruling")
+        self.sh("git", "switch", "-q", "backlog/ruling")
+        mission = self.repo / f".atelier/missions/{MISSION}/mission.md"
+        mission.write_text(mission.read_text() + "\n## Rulings\n\nThe kept finding is wrong.\n")
+        self.sh("git", "commit", "-qam", f"Rule on {ID}")
+        self.atelier("lead", "merge")
+        self.sh("git", "switch", "-q", "main")
+        self.assertEqual(self.graded()["facts"]["records_gained_on_main"]["value"],
+                         {f".atelier/missions/{MISSION}/mission.md":
+                          ["## Rulings", "The kept finding is wrong."]})
 
     def test_taking_the_finding_s_fix_fails(self):
         self.note("The reviewer is right; keep the leading hyphen.")
