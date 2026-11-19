@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-ufbm
 title: Try the per-part question as a passage, and keep it if reviewers name the unneeded part more often
-status: ready
+status: dropped
 mission: atelier-8az0
 labels: []
 priority: medium
@@ -50,3 +50,7 @@ change does not need.
 
 `skills/agent-factory/roles/reviewer.md`, and
 `evals/agent-factory/results/`.
+
+## Report
+
+Dropped: No case can test it. atelier-s6xk's built cases are at their ceiling with the skill, 30 of 30, and in atelier-ad0z's five real cases every part later removed traces to a Done when line, so asking which requirement a part serves cannot find it. The excess was in the plans.
