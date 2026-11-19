@@ -57,6 +57,12 @@ with a recorded reason.
   from one of two commits that differ in this change alone. The results
   name both commits and give each of the three findings apart. The change
   stays where the real defect is fixed no less often with it.
+- [ ] The same two arms are also run in `house`, ten runs a cell. The
+  survey's 27 findings that were built without need were built by Opus and
+  Fable, and atelier-zwh1's ten Sol implementers built none: they rebutted
+  the finding that was true and not worth building, and a reviewer then
+  deferred it. So `sol` cannot show the caving this change is for, and
+  `house` may.
 - [ ] `docs/design.md` records the decision, its date, and the evidence.
 
 ## Scope
