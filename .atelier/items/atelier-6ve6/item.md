@@ -3,13 +3,15 @@ schema: atelier.item
 schema_version: 3
 id: atelier-6ve6
 title: Give the replay judge the base-tree files a finding cites
-status: draft
+status: ready
 mission: atelier-kw8u
 labels: []
 priority: medium
 blocked_by: []
 implementers: []
-ready: null
+ready:
+  by: 'the lead of atelier-kw8u: both change what the replayed reviews measure, so they come before the matrix'
+  at: 2026-11-19T02:52:02.027431283Z
 trivial: null
 caused_by: null
 created_at: 2026-11-19T02:50:32.636385898Z

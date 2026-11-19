@@ -20,3 +20,12 @@ Implementer replays and a replayed mission are not taken up: a confined run
 cannot start a second thread, grading would need each fix's regression
 test ported to the old code, and the three changes sit on bases 19 hours
 apart.
+
+## 2026-11-18: two replay fixes before the matrix
+
+atelier-z8rg replayed nine more defects and filed two deferred findings as
+draft items. The lead readied both and made atelier-id3v wait on them,
+because each changes what the replayed reviews measure: atelier-s63j takes
+old process instructions out of two fixtures, and atelier-6ve6 stops the
+judge counting a sound finding as unsupported for want of the file it
+cites.
