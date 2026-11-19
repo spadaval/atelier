@@ -139,4 +139,3 @@ Departures and open points:
   said "two exits" and "cannot dismiss a finding", which would contradict
   the skill.
 - As in atelier-zwh1, no lead runs in the case, so no run shows a ruling.
-
