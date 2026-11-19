@@ -26,12 +26,14 @@ mod skip;
 mod view;
 mod work;
 
-pub use disputed::{disputes, rebuttals, split_rounds, Disputes, Judged, Rebuttal, SplitRound};
+pub use disputed::{
+    disputes, not_built, rebuttals, split_rounds, Disputes, Judged, NotBuilt, Rebuttal, SplitRound,
+};
 pub use identity::identity;
 pub use log::{history, Happened, History, Logged, Move, PassedOver};
 pub use plan::{ready, Done};
 pub use repo::{Links, Repo, Walked};
-pub use review::{carried, carried_plan, Carried};
+pub use review::{answer, carried, carried_plan, waits_on_lead, Carried};
 pub use show::{annotate, annotate_all, item_view, mission_view, ItemView, MissionView};
 pub use skip::{refused, Refused, Skip, VARIABLE as SKIP_VARIABLE};
 pub use view::{

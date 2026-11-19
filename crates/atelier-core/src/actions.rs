@@ -8,7 +8,7 @@ use crate::model::{
     Status, Thread, Verdict,
 };
 use crate::records::{validate, ItemDir, MissionDir, Problem, ReviewFile};
-use crate::review::chain;
+use crate::review::{answer, chain, waits_on_lead};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
@@ -562,6 +562,14 @@ pub enum Condition {
         finding: FindingName,
         title: String,
     },
+    /// An open fix-now finding was answered `not built`, so it waits on the
+    /// mission's lead, whose skip of this rule is the ruling to merge
+    /// without it.
+    WaitsOnLead {
+        finding: FindingName,
+        title: String,
+        reason: String,
+    },
     /// No review of the latest round approves the item.
     NoApproval,
     /// The approval no longer covers the head: since the commit it
@@ -778,7 +786,7 @@ pub fn unmet_mission(action: Action, facts: &MissionFacts) -> Result<Vec<Conditi
             };
             let findings = mission.findings()?;
             unmet = invalid(validate(&[], std::slice::from_ref(mission)), file);
-            unmet.extend(verdict(action, file, &findings, &[]));
+            unmet.extend(verdict(action, file, &findings, &[], &[]));
         }
         _ => {}
     }
@@ -792,10 +800,12 @@ fn invalid(problems: Vec<Problem>, file: &ReviewFile) -> Vec<Condition> {
     own.map(Condition::Invalid).collect()
 }
 
-/// What a verdict in `file` needs, given every finding and decision of its
-/// item or mission: `changes` an open fix-now finding of the file's own,
-/// and `approve` none open among the file's and those of earlier rounds,
-/// so also none the file should carry and does not. Another file of the
+/// What a verdict in `file` needs, given every finding, decision and
+/// response of its item or mission: `changes` an open fix-now finding of
+/// the file's own, and `approve` none open among the file's and those of
+/// earlier rounds, so also none the file should carry and does not. A
+/// finding answered `not built` waits on the lead, not on the reviewer, so
+/// it counts for neither: `merge` holds it instead. Another file of the
 /// same round is another reviewer's, working blind, so what it carries
 /// does not close a finding for this one.
 fn verdict(
@@ -803,6 +813,7 @@ fn verdict(
     file: &ReviewFile,
     findings: &[Finding],
     decisions: &[Decision],
+    responses: &[Response],
 ) -> Vec<Condition> {
     let seen: Vec<Finding> = findings
         .iter()
@@ -810,7 +821,9 @@ fn verdict(
         .cloned()
         .collect();
     let mut unmet = decided(file, &seen, decisions);
-    let mut open = seen.iter().filter(|f| is_open(f, &seen, decisions));
+    let mut open = seen.iter().filter(|f| {
+        is_open(f, &seen, decisions) && waits_on_lead(&f.name, &seen, responses).is_none()
+    });
     if matches!(action, Action::VerdictChanges | Action::PlanVerdictChanges) {
         if !open.any(|f| f.name.review == file.name) {
             unmet.push(Condition::NoOpenFinding);
@@ -906,7 +919,7 @@ pub fn unmet(action: Action, facts: &Facts) -> Result<Vec<Condition>, Problem> {
                 responses.iter().any(rebuttal)
             };
             for finding in item.open_findings()? {
-                if !responses.iter().any(|r| *r.finding() == finding.name) {
+                if answer(&finding.name, &findings, &responses).is_none() {
                     let carried = chain(&finding.name, &findings).into_iter().skip(1);
                     unmet.push(Condition::NoResponse {
                         rebutted: carried.into_iter().any(|f| rebutted(&f.name)),
@@ -926,8 +939,9 @@ pub fn unmet(action: Action, facts: &Facts) -> Result<Vec<Condition>, Problem> {
                 return Ok(unmet);
             };
             let (findings, decisions) = (item.findings()?, item.decisions()?);
+            let responses = item.responses()?;
             unmet = invalid(validate(std::slice::from_ref(item), &[]), file);
-            unmet.extend(verdict(action, file, &findings, &decisions));
+            unmet.extend(verdict(action, file, &findings, &decisions, &responses));
         }
         Action::Close => {
             if facts.branch {
@@ -952,6 +966,16 @@ pub fn unmet(action: Action, facts: &Facts) -> Result<Vec<Condition>, Problem> {
             unmet.extend(mission_dropped(facts));
             let checkout = facts.checkout;
             if action == Action::Merge {
+                let (findings, responses) = (item.findings()?, item.responses()?);
+                for finding in item.open_findings()? {
+                    if let Some(reason) = waits_on_lead(&finding.name, &findings, &responses) {
+                        unmet.push(Condition::WaitsOnLead {
+                            finding: finding.name,
+                            title: finding.title,
+                            reason: reason.to_string(),
+                        });
+                    }
+                }
                 match approval(item) {
                     None => unmet.push(Condition::NoApproval),
                     Some(review) => {

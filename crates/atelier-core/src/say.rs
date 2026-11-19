@@ -99,7 +99,7 @@ pub fn condition_text(id: &str, condition: &Condition) -> String {
             format!("Finding {finding} (fix now): {title}")
         }
         Condition::NoResponse { finding, title, rebutted: true } => format!(
-            "Finding {finding} (fix now): {title} (a reviewer kept its rebuttal, and a rebuttal gets one try: fix it, or take it to your mission's lead)"
+            "Finding {finding} (fix now): {title} (a reviewer kept its rebuttal, and a rebuttal gets one try: fix it, or answer it `not built: <reason>` for your mission's lead to rule on)"
         ),
         Condition::FormerImplementer => format!("You have never implemented {id}"),
         Condition::Decided(finding) => format!(
@@ -109,6 +109,9 @@ pub fn condition_text(id: &str, condition: &Condition) -> String {
         Condition::OpenFinding { finding, title } => {
             format!("No fix-now finding is open; {finding} is: {title}")
         }
+        Condition::WaitsOnLead { finding, title, reason } => format!(
+            "No fix-now finding waits on the lead; {finding} does: {title} (not built: {reason})"
+        ),
         Condition::NoApproval => "A review of the latest round approves it (none does)".into(),
         Condition::Stale { round, commit, changed } => format!(
             "The approval still covers the head: since {}, which round {round} reviewed, nothing changed outside this item's directory, nor its Goal, Done when or Scope (changed: {})",
@@ -282,7 +285,13 @@ pub fn needs(action: Action, status: Status, id: &str, unmet: &[Condition]) -> S
             Condition::NoResponse { finding, .. } => Some(finding),
             _ => None,
         }) {
-            text += &format!("Answer each finding with one line under `### Responses` in the Report, and nothing else there, such as `{finding}: fixed in <commit>` or `{finding}: rebutted: <fact>`. A rebuttal goes to the next round's reviewer, who keeps the finding or withdraws it.\n");
+            text += &format!("Answer each finding with one line under `### Responses` in the Report, and nothing else there: `{finding}: fixed in <commit>`; `{finding}: rebutted: <fact>` where it is wrong, which the next round's reviewer keeps or withdraws; or `{finding}: not built: <reason>` where it is real and not worth building, which takes it to your mission's lead, who rules on it.\n");
+        }
+        if unmet
+            .iter()
+            .any(|c| matches!(c, Condition::WaitsOnLead { .. }))
+        {
+            text += "A finding answered `not built` waits on the lead of the item's mission, or with no mission on the thread that started its implementer; the implementer passes no rule on its own work. The lead rules: to have it built, it tells the implementer, who fixes it and runs `atelier submit`; to merge without it, it gives its ruling as the reason on this branch: `ATELIER_SKIP=\"<ruling>\" atelier merge`.\n";
         }
         if unmet
             .iter()

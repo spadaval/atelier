@@ -124,8 +124,10 @@ function ItemDetail({ repo, page }: { repo: string; page: ItemPage }) {
                     <>
                       fixed in <span className="mono">{shortCommit(r.commit)}</span>
                     </>
-                  ) : (
+                  ) : r.kind === "rebutted" ? (
                     <>rebutted: {r.fact}</>
+                  ) : (
+                    <>not built: {r.reason}</>
                   )}
                 </li>
               ))}

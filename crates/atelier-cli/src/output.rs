@@ -983,8 +983,15 @@ fn response(response: Option<&Response>) -> String {
     match response {
         Some(Response::Fixed { commit, .. }) => format!("fixed in {commit}"),
         Some(Response::Rebutted { fact, .. }) => format!("rebutted: {fact}"),
+        Some(Response::NotBuilt { reason, .. }) => format!("not built: {reason}"),
         None => "none in the Report".into(),
     }
+}
+
+/// Whether the author answered `carried` `not built`, so it waits on the
+/// lead and not on the reviewer.
+fn waits(carried: &Carried) -> bool {
+    matches!(carried.response, Some(Response::NotBuilt { .. }))
 }
 
 /// The body of a new review file: a Summary to write, then each finding
@@ -1000,8 +1007,12 @@ pub fn template(carried: &[Carried], item: bool) -> String {
             true => format!("Response: {}\n", response(carried.response.as_ref())),
             false => String::new(),
         };
+        let comment = match waits(carried) {
+            true => "It waits on the mission's lead, who rules on it: leave it as it is.",
+            false => "Set Now: to fixed, withdrawn or kept. To keep it for later work instead, set Recommendation: to defer or no action and add a line that says why.",
+        };
         text += &format!(
-            "\n## Finding {number}: {title}\nRecommendation: fix now\nWas: {finding}\n{response}Now: kept\n<!-- Set Now: to fixed, withdrawn or kept. To keep it for later work instead, set Recommendation: to defer or no action and add a line that says why. -->\n"
+            "\n## Finding {number}: {title}\nRecommendation: fix now\nWas: {finding}\n{response}Now: kept\n<!-- {comment} -->\n"
         );
     }
     text
@@ -1095,6 +1106,9 @@ fn carried_findings(carried: &[Carried], reviewer: bool, item: bool) -> String {
             ""
         };
         text += &format!("Your review file carries each as a finding of its own{with}. Judge it, then set the finding's `Now:` line to `fixed`, to `withdrawn` (the rebuttal holds, or the finding was wrong), or leave it `kept` (it still stands, and stays a fix-now finding). A finding that is right but not for this item stays `kept` with its `Recommendation:` lowered to `defer` or `no action` and a line that says why.\n");
+        if carried.iter().any(waits) {
+            text += "A finding the author answered `not built` is real by the author's own word and was taken to the mission's lead, who rules on it. Leave it as your file has it and do not judge it again: it does not stop `atelier verdict approve`, and `atelier merge` holds it until the lead rules.\n";
+        }
     }
     for (number, carried) in (1..).zip(carried) {
         text += &format!(

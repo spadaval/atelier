@@ -95,12 +95,20 @@ pub enum Response {
         finding: FindingName,
         fact: String,
     },
+    /// The finding is real and was not built, for `reason`. On a fix-now
+    /// finding it is the question to the mission's lead, who rules on it.
+    NotBuilt {
+        finding: FindingName,
+        reason: String,
+    },
 }
 
 impl Response {
     pub fn finding(&self) -> &FindingName {
         match self {
-            Response::Fixed { finding, .. } | Response::Rebutted { finding, .. } => finding,
+            Response::Fixed { finding, .. }
+            | Response::Rebutted { finding, .. }
+            | Response::NotBuilt { finding, .. } => finding,
         }
     }
 }
