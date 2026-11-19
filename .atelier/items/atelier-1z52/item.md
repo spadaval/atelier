@@ -3,14 +3,15 @@ schema: atelier.item
 schema_version: 3
 id: atelier-1z52
 title: Replay three changes whose defect was found after merge as review cases, and report what one review costs
-status: ready
+status: building
 mission: atelier-kw8u
 labels: []
 priority: medium
 blocked_by:
 - atelier-b9o6
 - atelier-8e8e
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3Adfff1aea-5166-4f31-a652-65819a65bb75%3Adelegate-task%3Ab5915a39-b98f-42ba-891e-26f39f0866dc
 ready:
   by: 'the human, in conversation on 2026-11-18: put the mission together and then run it'
   at: 2026-11-18T23:49:47.284668623Z
