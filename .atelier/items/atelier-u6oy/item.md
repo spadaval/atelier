@@ -35,10 +35,19 @@ made, and the new item reaches the base with that branch's merge.
   proposed with its branch, as it shows any record waiting to merge.
 - [ ] The new item joins no mission unless `--in` names one, and is not
   held by the thread that filed it.
-- [ ] A reviewer, who works in the implementer's checkout, can file the
-  same way, and the approval of the head it reviewed is not made stale by
-  a commit that only adds an item's record. A test holds it, or the Report
-  says why the approval must go stale and what the reviewer does instead.
+- [ ] A reviewer of an item, who works in the implementer's checkout, can
+  file the same way. The brief `atelier review` prints says so in place of
+  "change no other file", and a test follows that brief as printed: the
+  review and the filed item are both committed, and the filed item reaches
+  the base with the merge.
+- [ ] A commit that only adds a new item's record does not make the
+  approval of the branch's own item stale, whoever makes it and whether
+  before or after `verdict approve`; `atelier merge` goes through with no
+  further round, and a test holds it. Any other change to another item's
+  record still makes the approval stale, as now.
+- [ ] A plan reviewer, in a detached checkout of its own, is told by its
+  brief to publish its verdict first and then file an unrelated problem on
+  a backlog branch, so the plan under review and the verdict are untouched.
 - [ ] Dropping a started item whose branch holds newly filed items loses
   none silently: `drop` carries them to the base with the drop's own
   record change, or names each in what it prints. A test holds whichever
@@ -50,7 +59,8 @@ made, and the new item reaches the base with that branch's merge.
 ## Scope
 
 The rule for `new` in the pre-commit hook and wherever `crates/` holds the
-action table; `drop` for a started item; those documents. `new` still
+action table; the briefs `atelier review` prints; `drop` for a started
+item; those documents. `new` still
 commits nothing and merges nothing. Not `set`, `close`, `drop` of another
 item or `lead` on an item's branch: only adding a new item's record. Not
 the skill's instruction to use this (atelier-8phx).

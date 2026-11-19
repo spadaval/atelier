@@ -53,7 +53,8 @@ the five others the installed binary serves hold 216 draft and 147 ready.
 
 An item is open from the moment it is filed. Its statuses are `open`, then
 the started ones, then `done` or `dropped`; there is no `draft`, no `ready`
-and no `ready` command. `start` takes any open item whose blockers are met.
+and no `ready` command. `start` takes any open item that is on the base and
+whose blockers are met.
 An item in a mission needs nothing after the plan merges, and a gardener
 starts its run without readying it.
 
@@ -67,19 +68,27 @@ Each role's instructions say to file a problem found outside the work in
 hand and carry on, and an eval case shows that saying so changes what an
 agent does.
 
-Records written before the change still read: `draft` and `ready` both
-read as `open`, in this repository and in every other the binary serves,
-with no conversion run. Two things are given up, and the human chose both.
+Records written before the change still read: an item's `draft` and
+`ready` both read as `open`, in this repository and in every other the
+binary serves, with no conversion run. This is about items only. A mission
+in the old form reads as it does now: its `ready` is `open`, and its
+`draft` stays proposed and cannot be led or have its items started. The
+other five repositories hold eight such draft missions, and the binary's
+action table writes a proposed mission as an item's `draft` today, so the
+two must be separated before the item's status goes. Two things are given up, and the human chose both.
 The Desk and the extension no longer split loose items into "next" and
-"later", since that split was the ready mark. And the gardener's numbers
-lose the time an item spent ready before it started.
+"later", since that split was the ready mark. Both keep showing and
+counting every unstarted item from the merge that changes the binary on. And the gardener's page
+loses its "waiting to start" number: time spent open is the backlog's age,
+not a wait, so the cell goes and nothing replaces it.
 
 ## Success criteria
 
-- no-gate: in a fixture repository, an item made by `atelier new` is
-  started by `atelier start <id>` with no command between them, and
-  `atelier ready` on any record is refused with a line that says items
-  need no go-ahead.
+- no-gate: in a fixture repository, an item made by `atelier new` and
+  merged to the base on the branch it was filed on is started by `atelier
+  start <id>` with no readying and no approval between. An item still on
+  an unmerged branch cannot be started, as now. `atelier ready` on any
+  record is refused with a line that says items need no go-ahead.
 - one-word: outside the code that reads old records and the tests of it,
   nothing in `crates/`, `desk/src`, `t3-extension/src`, `skills/`,
   `docs/product.md`, `AGENTS.md` or the current-state parts of
@@ -88,13 +97,19 @@ lose the time an item spent ready before it started.
 - old-records-read: `atelier list` and `atelier check` succeed in
   astromech, life-on-rails, cosplay-studio, demiurge and worldcrafter with
   the new binary and no change to their records, and an item a human
-  readied still says who, wherever `atelier show` said it before.
+  readied still says who, wherever `atelier show` said it before. Each
+  mission stored as `draft` in those repositories still shows as proposed,
+  and `atelier lead` and `atelier start` of one of its items are refused
+  as before.
 - file-where-you-are: in a fixture, an implementer on its item's branch
   runs `atelier new`, commits, and after `atelier merge` the new item is
   open on the base; before the merge `atelier list` shows it as proposed.
 - none-lost: in a fixture, dropping a started item whose branch holds a
   newly filed item either carries that item to the base or names it in
   what `drop` prints, and a test holds whichever it is.
+- approval-holds: a commit on an item's branch that only adds a new
+  item's record, made after that item was approved, leaves the approval
+  standing, and `atelier merge` goes through with no further round.
 - told-to-file: the eval case of atelier-8phx is run with and without the
   skill's new line, at least five runs per arm in the `house` setup, and
   the results give for each arm how many runs filed the planted problem
