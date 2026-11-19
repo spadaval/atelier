@@ -48,10 +48,10 @@ class StatementError(Exception):
         super().__init__(f"{path}:{line}: {reason}")
 
 
-# Amounts with two decimals and optional thousands groups: Nordbank writes
-# -1.234,56 and Kestrel -1,234.56.
-NORDBANK_AMOUNT = re.compile(r"-?(\d{1,3}(\.\d{3})+|\d+),\d{2}")
-KESTREL_AMOUNT = re.compile(r"-?(\d{1,3}(,\d{3})+|\d+)\.\d{2}")
+# Amounts with two decimals and optional thousands groups, below a trillion:
+# Nordbank writes -1.234,56 and Kestrel -1,234.56.
+NORDBANK_AMOUNT = re.compile(r"-?(\d{1,3}(\.\d{3}){1,3}|\d{1,12}),\d{2}")
+KESTREL_AMOUNT = re.compile(r"-?(\d{1,3}(,\d{3}){1,3}|\d{1,12})\.\d{2}")
 
 
 def cents(text, pattern):
@@ -101,7 +101,7 @@ def read_nordbank(path):
                 raise StatementError(path, line, f"bad amount {row[2]!r}")
             if not row[1].strip():
                 raise StatementError(path, line, "no payee")
-            found.append(Transaction(date, amount, row[1].strip()))
+            found.append(Transaction(date, amount, row[1]))
     except csv.Error as e:
         raise StatementError(path, reader.line_num, f"bad quoting: {e}") from None
     return found
@@ -109,9 +109,9 @@ def read_nordbank(path):
 
 def read_kestrel(path):
     """The transactions in a Kestrel Bank QIF export."""
-    found, record = [], {}
-    lines = read_text(path).splitlines()
-    if not lines or lines[0] != "!Type:Bank":
+    found, record, opened = [], {}, None
+    lines = [text.removesuffix("\r") for text in read_text(path).split("\n")]
+    if lines[0] != "!Type:Bank":
         raise StatementError(path, 1, "expected the first line !Type:Bank")
     for line, text in enumerate(lines[1:], start=2):
         if not text:
@@ -121,14 +121,15 @@ def read_kestrel(path):
             if value:
                 raise StatementError(path, line, "a record ends with a line of ^ alone")
             found.append(kestrel_transaction(path, line, record))
-            record = {}
-        elif code in "DTP":
+            record, opened = {}, None
+            continue
+        opened = opened or line
+        if code in "DTP":
             if code in record:
                 raise StatementError(path, line, f"a second {code} line in one record")
             record[code] = (value, line)
-    if record:
-        raise StatementError(path, min(at for _, at in record.values()),
-                             "the last record is not ended by ^")
+    if opened:
+        raise StatementError(path, opened, "the last record is not ended by ^")
     return found
 
 
@@ -148,7 +149,7 @@ def kestrel_transaction(path, end, record):
         raise StatementError(path, amount_line, f"bad amount {amount_text!r}")
     if not payee.strip():
         raise StatementError(path, payee_line, "no payee")
-    return Transaction(date, amount, payee.strip())
+    return Transaction(date, amount, payee)
 
 
 READERS = {".csv": read_nordbank, ".qif": read_kestrel}

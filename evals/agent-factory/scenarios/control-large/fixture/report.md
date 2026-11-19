@@ -7,4 +7,4 @@ written, so a bad line, reported as `FILE:LINE: reason`, leaves it as it
 was (`BadLineTest`): a bad date, amount, header or field count, bad CSV
 quoting, an unended or doubled QIF field, and a byte that is not UTF-8.
 The import prints `imported N, skipped M already in the ledger`.
-`python3 -m unittest`: 11 tests pass.
+`python3 -m unittest`: 12 tests pass.

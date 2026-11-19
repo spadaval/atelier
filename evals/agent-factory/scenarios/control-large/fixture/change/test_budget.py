@@ -128,13 +128,22 @@ class BadLineTest(LedgerCase):
                 ("g.qif", "", "1: expected the first line !Type:Bank"),
                 ("h.qif", "!Type:Bank\nD10/04/2026\nT-1.00\nPX\n^X\n", "5: a record ends with a line of ^ alone"),
                 ("i.csv", 'Date;Payee;Amount\n01.10.2026;"Grocer"x;-1,00\n', "2: bad quoting"),
-                ("j.csv", "", "1: expected the header Date;Payee;Amount")]:
+                ("j.csv", "", "1: expected the header Date;Payee;Amount"),
+                ("k.qif", "!Type:Bank\nD10/04/2026\nT-1.00\nPX\n^\nMa memo\n",
+                 "6: the last record is not ended by ^"),
+                ("l.csv", "Date;Payee;Amount\n01.10.2026;X;-1234567890123,00\n",
+                 "2: bad amount '-1234567890123,00'")]:
             with self.subTest(name=name):
                 path = self.file(name, text)
                 code, out, err = self.run_cli("import", path)
                 self.assertEqual((code, out), (1, ""))
                 self.assertTrue(err.startswith(f"{path}:{error}"), err)
                 self.assertFalse(self.ledger.exists())
+
+    def test_a_payee_is_kept_as_written(self):
+        payee = "Kiosk\u2028Nord "
+        self.run_cli("import", self.file("a.qif", f"!Type:Bank\nD10/04/2026\nT-1.00\nP{payee}\n^\n"))
+        self.assertEqual(budget.load_ledger(self.ledger), [Transaction("2026-10-04", -100, payee)])
 
     def test_a_byte_that_is_not_utf8_names_its_line(self):
         path = self.root / "oct.csv"
