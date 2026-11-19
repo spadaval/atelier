@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-1z52
 title: Replay three changes whose defect was found after merge as review cases, and report what one review costs
-status: in_review
+status: approved
 mission: atelier-kw8u
 labels: []
 priority: medium
