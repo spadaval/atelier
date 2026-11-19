@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-1tkg
 title: 'Add two cases of a lead ruling on a kept finding: one the reviewer has wrong, one it has right'
-status: approved
+status: in_review
 mission: atelier-kw8u
 labels: []
 priority: medium
