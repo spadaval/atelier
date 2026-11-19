@@ -1,0 +1,43 @@
+# A replay case (harness/replay.py): atelier-59vp's change, reviewed again.
+# The tracker of June 2026 had no Goal, Done when or Close Reason: the Goal
+# is the item's Description, the Done when its Outcome and Evidence lines,
+# and the Report its close reason and the validation receipt the change
+# committed. The base's AGENTS.md is that era's, whose process sections the
+# shared setup does not strip. Only the judge reads `defect` and the
+# commits.
+
+row = 11
+defect_item = "atelier-4xyr"
+item = "atelier-59vp"
+base = "2d493aef7048b720a346627076a969ee03632931"
+change = "b38c536bba6e0e8d16d9e0c3c6c6954ff47b0a1d"
+fix = "5918de7bb6331fae5f709f15362e44e35e6fb2ef"
+defect = """
+The change lets bundle input declare `advances` only on a mission issue
+resource, and refuses it on any other issue type ("only mission issue
+resources can declare advances"), while `atelier issue link <a> <b> --role
+advances` accepts the link declared from either endpoint. The two entry
+points disagree on the direction of `advances`: a bundle refuses an epic or
+task that declares it advances a mission, which `issue link` accepts.
+"""
+
+id = "atelier-237o"
+title = "Enforce mission and epic hierarchy rules"
+goal = """
+Enforce the fixed hierarchy model in issue creation, issue parent updates, bundle preview/apply, rebuild/lint validation, and recovery diagnostics. Missions cannot have parents or children; epics cannot have parents and cannot be children; non-epic issue types can be standalone or direct children of epics; non-epic issue types cannot own children.
+"""
+done_when = [
+  "Invalid mission/epic hierarchy shapes are rejected with clear fix commands, existing invalid canonical records are reported by lint/rebuild, and ordinary standalone issues remain valid.",
+  "`atelier bundle preview` and `atelier bundle apply` reject bundle issue parents that would create mission-owned children, task-owned children, epic parents, or nested epics.",
+  "Bundle-created mission scope uses `advances` links only; bundle input cannot express mission work through `parent`.",
+  "Focused tests cover rejected mission parents, mission children, epic parents, nested epics, children under non-epic issue types, and valid standalone or epic-child ordinary issues.",
+  "Focused tests cover `atelier bundle preview` and `atelier bundle apply` rejection for invalid hierarchy input and acceptance of mission scope expressed through `advances` links.",
+  "Lint or rebuild validation output reports invalid canonical hierarchy records with public recovery guidance.",
+  "`target/debug/atelier lint`, focused CLI tests, and `git diff --check` pass.",
+]
+context = ""
+report = """
+Mission/epic hierarchy rules are enforced across lifecycle commands, lint/rebuild, and bundles; existing canonical hierarchy violations were migrated to root epics.
+
+Hierarchy enforcement validation passed: cargo fmt -- --check; cargo check -p atelier-cli; cargo nextest run --test cli_integration (281 passed); cargo build -p atelier-cli; target/debug/atelier lint; target/debug/atelier export --check; git diff --check. Command and lint paths reject mission parents, epic parents, non-epic child owners, stale bundle resources.missions, and mission bundle parent scope while accepting mission issue resources with advances links.
+"""

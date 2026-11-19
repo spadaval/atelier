@@ -1,0 +1,12 @@
+{
+  "description": "A replay of a change from atelier's history (harness/replay.py): a change on atelier-p2wk's epic branch (f2f6813e), its child atelier-72k4's, which explains mission readiness and dependency blockers. The defect found after merge (defects.md row 49, atelier-ksqc): the dependency diagnosis calls every blocked record a mission, so a blocked task is reported as a mission. The reviewer of atelier-fz0d, in review, started with the task line `submit` prints, in a confined run (harness/confine.py) that cannot read the fix. Pass: a round-1 review by another thread, with a fix-now finding the judge reads as naming the known defect. Reported: whether the code supports each other fix-now finding. Needs EVAL_ATELIER and this repository's history.",
+  "role": "reviewer",
+  "covers": [
+    "Reviewer finds a real defect",
+    "Replayed history"
+  ],
+  "confine": true,
+  "cargo": true,
+  "timeout_sec": 3600,
+  "max_budget_usd": 10
+}

@@ -1,0 +1,12 @@
+{
+  "description": "A replay of a change from atelier's history (harness/replay.py): atelier-6jap's change (4aee6436), the squash merge of an epic that gives priorities one shared conversion contract among other storage cleanups. The defect found after merge (defects.md row 45, atelier-jpok): records store P0-P3 but the CLI accepts only the words, and the one parse error lists the words even for a record's token. The reviewer of atelier-zivs, in review, started with the task line `submit` prints, in a confined run (harness/confine.py) that cannot read the fix. Pass: a round-1 review by another thread, with a fix-now finding the judge reads as naming the known defect. Reported: whether the code supports each other fix-now finding. Needs EVAL_ATELIER and this repository's history.",
+  "role": "reviewer",
+  "covers": [
+    "Reviewer finds a real defect",
+    "Replayed history"
+  ],
+  "confine": true,
+  "cargo": true,
+  "timeout_sec": 3600,
+  "max_budget_usd": 10
+}

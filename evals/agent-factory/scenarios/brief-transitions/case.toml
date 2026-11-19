@@ -1,0 +1,41 @@
+# A replay case (harness/replay.py): a later change on atelier-7u4o's
+# branch, reviewed again. The base holds the item's brief view; the change
+# makes it show argument-only transitions as allowed. Only the judge reads
+# `defect` and the commits; the fixture holds the item's Goal, Done when,
+# Context (with its Scope) and Report, and the change. The Report is the
+# item's Close Reason without its claim that review approved it.
+
+row = 10
+defect_item = "atelier-4775"
+item = "atelier-7u4o"
+base = "d2dd80301a5f571a57e21c4d68a14e0b72387bf9"
+change = "c86e45e88f4a4e3db6c3b97b3564fa293e32a8d9"
+fix = "923dccf95267d480e1770eb6b70ba207d3f8454b"
+defect = """
+The change makes brief `issue show` count a transition whose only gap is a
+required argument (such as `close`, which needs `--reason`) as allowed, with
+its flag, but `issue show --full`'s Transition Readiness and the `issue
+transition <id>` options view still call the same transition blocked
+(`missing required field close_reason`). The views disagree about one issue:
+the brief one says `close --reason` is allowed while the full one says close
+is blocked.
+"""
+
+id = "atelier-nnzy"
+title = "Make issue show brief by default and accept several IDs"
+goal = """
+Agents trim `issue show` with `| head`, `| sed -n 1,40p` and section-extracting `sed` ranges, and loop over IDs to piece a hierarchy together. The default view is too long for routine use (about 10 lines of transition readiness alone), and there is no way to see several items at once.
+"""
+done_when = [
+  "`issue show <id>` defaults to a dense view: title line, status, parent and children, blockers, mission, Goal and Done when, and a one-line transition summary (allowed transitions by name; blocked ones with their reason); `--full` gives today's view.",
+  "`issue show <id> <id>...` prints each in the brief view.",
+  "Tests cover both, and `docs/product/human-cli-output.md` describes the brief view.",
+]
+context = """
+Scope: `issue show` rendering, its flags, and tests.
+
+ADR 0022 output principle. Transcript evidence: `issue show ... | sed -n '1,30p'`, `sed -n '/Hierarchy/,/^$/p'` loops.
+"""
+report = """
+issue show is brief by default with --full for the old view and accepts several IDs; suites pass after merging master.
+"""

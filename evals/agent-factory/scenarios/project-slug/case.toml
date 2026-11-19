@@ -1,0 +1,39 @@
+# A replay case (harness/replay.py): atelier-2oor's change, reviewed again.
+# Its Done when asks for the slug the defect comes from, so a review finds
+# it only by questioning that line. Only the judge reads `defect` and the
+# commits; the fixture holds the item's Goal, Done when, Context (with its
+# Scope) and Report, and the change.
+
+row = 12
+defect_item = "atelier-5qcs"
+item = "atelier-2oor"
+base = "e2c0360025961bd1da744a637f833c4428d47e57"
+change = "960d3c7669bc663fb59497513a6c3807575a4dde"
+fix = "44c42defafa11e7b5cec0809ef35425a511411bb"
+defect = """
+`atelier init` takes the default `project_slug` from the name of the
+directory it runs in. In a linked worktree, or any checkout whose directory
+is not named for the repository (such as `astromech-atelier`), it mints
+every record ID under that name (`astromech-atelier-xxxx`), which cannot be
+changed cheaply once records exist. The repository's name is the origin
+remote's, or the main worktree's directory.
+"""
+
+id = "atelier-6o6g"
+title = "Mint record IDs from the configured project slug"
+goal = """
+New record IDs use `project_slug` from `.atelier/config.toml`, and `init` derives a default slug from the repository directory name with an override flag.
+"""
+done_when = [
+  "`issue create`, `bundle apply` and every other minting path use the configured slug (tests with a non-`atelier` slug).",
+  "`atelier init` in a directory named `astromech` writes `project_slug = \"astromech\"`; `--slug` overrides it; invalid slugs are refused before writing.",
+  "Existing `atelier-` records stay valid in a repo with a different slug.",
+]
+context = """
+Scope: record ID generation, init, project config, and docs that describe them.
+
+External evaluation 2026-10-15 on astromech: IDs were minted from `DEFAULT_PROJECT_SLUG` in crates/atelier-records/src/record_id.rs; only evidence.rs read ProjectConfig.project_slug.
+"""
+report = """
+IDs come from project_slug. RecordStore::for_project is required for allocation (fail closed), init derives the slug from the directory name with --slug override, and slugs may contain hyphens. Tests: new_records_use_the_configured_slug_and_legacy_ids_stay_valid (astromech issue create, bundle apply, legacy atelier- record linked and checked), init_derives_the_slug_from_the_directory_and_accepts_an_override, record_id unit tests.
+"""
