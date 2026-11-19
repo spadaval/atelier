@@ -7,8 +7,8 @@ It is three things in one repository:
 
 - **`atelier`**, a command-line tracker that agents use. It keeps its
   records as Markdown in Git, tells each agent thread what it holds and the
-  next command, and merges a change once an agent that did not write it has
-  approved it.
+  next command, and merges a change to the code once an agent that did not
+  write it has approved it.
 - **[Agent Factory](skills/agent-factory)**, a skill that teaches agents how
   to decide: how to plan, implement, review, lead a mission and tend a
   repository.
@@ -29,10 +29,10 @@ holds its own missions, items and reviews.
 
 ## One change, from start to merge
 
-An item is one change, on one branch, with one review. This is one item in a
-scratch repository, with every line as the tool printed it and `[...]` where
-output is cut. The threads are named `alice`, `bob` and `carol` here; a real
-thread is named by its harness's ID.
+An item is one change, on one branch, reviewed as a whole. This is one item
+in a scratch repository, in the tool's own output, with long lines wrapped
+and `[...]` where output is cut. The threads are named `alice`, `bob` and
+`carol` here; a real thread is named by its harness's ID.
 
 ```console
 $ atelier start --new "Greet the user by name"
@@ -47,7 +47,8 @@ it. Then it submits:
 ```console
 $ atelier submit
 Submitted demo-m82p for review.
-A reviewer must be a thread other than yours, and starting it is your job: [...] Give it fresh context, not a fork of yours, and give it this task:
+A reviewer must be a thread other than yours, and starting it is your job:
+[...] Give it fresh context, not a fork of yours, and give it this task:
   Run atelier review demo-m82p and follow what it prints.
 Then wait for its verdict, and run `atelier status`.
 ```
@@ -58,7 +59,8 @@ own tool, and the new thread gets the task line and nothing else:
 ```console
 $ atelier review demo-m82p
 You are the reviewer of demo-m82p (thread bob), round 1.
-Review the change on branch demo-m82p as someone who did not write it: [...] The author's reasoning is left out on purpose; judge what is there.
+Review the change on branch demo-m82p as someone who did not write it: [...]
+The author's reasoning is left out on purpose; judge what is there.
 [... the item's Goal, Done when and Report, and the diff to read ...]
 Your review file: .atelier/items/demo-m82p/reviews/1-yf33.md
 [...]
@@ -76,18 +78,16 @@ Status: changes requested in round 1
 To return it to review:
   [ ] Finding 1-yf33.1 (fix now): A name with a space is cut at the first word
 Answer each finding with one line under `### Responses` in the Report, [...]
-`atelier submit` commits only the item's directory, so commit your change first.
+`atelier submit` commits only the item's directory, so commit your change
+first.
 Then: atelier submit
 ```
 
 It fixes the finding and submits again. A third thread reviews round 2 and
-approves, and the implementer merges:
+approves. The history so far is in Git, and `atelier log` reads it from
+there:
 
 ```console
-$ atelier merge
-main's config.toml names no merge check, so none ran.
-Merged demo-m82p into main with merge commit dcf9f0b; it is done.
-
 $ atelier log
 2026-11-19T05:04:12Z fc5e675 demo-m82p start alice new -> building
 2026-11-19T05:04:22Z 9447b82 demo-m82p submit alice building -> in_review
@@ -98,21 +98,18 @@ $ atelier log
 2026-11-19T05:04:39Z 28c0d6b demo-m82p verdict carol 2-8om1 approve; in_review -> approved
 ```
 
-`log` keeps no file of its own. It reads that history from Git, where the
-item, both reviews and the change now sit together on `main`.
+The implementer merges:
 
-```mermaid
-stateDiagram-v2
-    direction LR
-    [*] --> draft: new
-    draft --> ready: ready
-    ready --> building: start
-    building --> in_review: submit
-    in_review --> changes_requested: verdict changes
-    changes_requested --> in_review: submit
-    in_review --> approved: verdict approve
-    approved --> done: merge
+```console
+$ atelier merge
+main's config.toml names no merge check, so none ran.
+Merged demo-m82p into main with merge commit dcf9f0b; it is done.
 ```
+
+The item, both reviews and the change now sit together on `main`.
+
+An item that is planned ahead takes two more steps first: `new` writes it as
+a draft, and `ready` records who said it should start now.
 
 ## What the tool does
 
@@ -147,11 +144,22 @@ change, so any commit shows the code and what was agreed about it.
 
 Only a merge writes the base branch. Every change, to code or to records, is
 made on a branch that `atelier start` creates, so Atelier works on a
-repository whose base is protected. `atelier list` and `atelier show` read
-the base and every branch the clone has fetched, and say which one each
-record came from.
+repository whose base is protected. There are three kinds of branch: one
+named for an item, which holds its change and its records; one named for a
+new mission, which holds its plan; and `backlog/<slug>`, for record changes
+tied to neither, such as filing a bug or making an item ready. A branch
+merges on what it holds:
 
-### Every change is reviewed by an agent that did not write it
+| A branch that | Merges once |
+| --- | --- |
+| Changes code: any path outside `.atelier/`, or `config.toml` | An independent review approves its head. Only an item's branch may change code. |
+| Adds a mission, or changes a mission's plan | Two plan reviews approve it, from threads that did not plan it |
+| Changes only records, and no plan | `atelier check` passes on the merged tree. It needs no review. |
+
+`atelier list` and `atelier show` read the base and every branch the clone
+has fetched, and say which one each record came from.
+
+### Every change to the code is reviewed by an agent that did not write it
 
 - A thread that has implemented an item can never review it. The tool
   refuses, and prints the task to give a fresh thread.
@@ -326,8 +334,9 @@ the state it leaves behind:
   was found after merge, to see whether a review catches it now.
 
 A run compares an arm with the skill against one without it, and a model
-from another lab than the agent's judges whatever a script cannot. CI checks
-on every change that each scenario still sets up and grades.
+from another lab than the agent's judges whatever a script cannot. On every
+change to the binary, the skill or the evals, CI checks that each scenario
+still sets up and grades.
 
 ## Why it is built this way
 
@@ -370,7 +379,7 @@ work, but nothing tests it. Windows is not supported.
 
 ## Track a repository
 
-Atelier needs one file. Commit `.atelier/config.toml` on your base branch:
+Atelier needs one file, `.atelier/config.toml`, on your base branch:
 
 ```toml
 schema_version = 3
@@ -388,20 +397,23 @@ remote = "origin"
 ci_workflow = "ci.yml"   # optional; without it `merge` waits for no CI
 ```
 
-Then, in the clone:
+Commit it together with your harness's session hooks, and push, before you
+install the Git hooks. Once they are installed, the base takes nothing but
+merges:
 
 ```console
+$ atelier setup claude     # or `atelier setup codex`, which writes .codex/
+$ git add .atelier .claude && git commit -m "Track with Atelier" && git push
 $ atelier setup            # the Git hooks, in this clone
-$ atelier setup claude     # or codex: run `atelier status` at session start
 $ atelier status
 You are thread alice, on the base branch main.
 Nothing is ready to start.
 ```
 
-Commit the harness's settings file that `setup claude` or `setup codex`
-wrote, install the skill, and tell an agent what you want. For one change
-asked for directly it runs `atelier start --new "<title>"`. For a batch it
-plans a mission with you, with `atelier start --mission "<title>"`.
+Run `atelier setup` once in every other clone. Then install the skill and
+tell an agent what you want. For one change asked for directly it runs
+`atelier start --new "<title>"`. For a batch it plans a mission with you,
+with `atelier start --mission "<title>"`.
 
 ## Who it is for
 
