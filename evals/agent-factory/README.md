@@ -60,6 +60,11 @@ another was ported from the old tool's scenario of that name.
 | `readiness-blockers` | A replay: the reviewer of a change on atelier-p2wk's epic branch (f2f6813e), its child atelier-72k4's, which explains readiness and dependency blockers | As `approval-follow-up`, for its defect: the diagnosis calls every blocked record a mission, a blocked task included (atelier-ksqc) |
 | `after-merge-checks` | A replay: the reviewer of atelier-n0qh's change (902a5a63), which marks after-merge checks on their Done when line and shows them until ticked on the base | As `approval-follow-up`, for its defect: the tick on the base makes `land` refuse for an item whose review had a fixed fix-now finding (atelier-secy) |
 | `touched-claims` | A replay: the reviewer of a review fix on atelier-37uq's branch (6f742c79), which makes land's touched-claims walk follow `advances` links | As `approval-follow-up`, for its defect: adding an issue to a mission re-checks every done issue of that mission (atelier-ss25) |
+| `overbuilt-generality` | New, a sized review (see [Sized reviews](#sized-reviews)): the reviewer of a correct change whose item asks for `report --csv` and which builds a pluggable exporter registry with three more formats and two more options | Facts: a round-1 review by another thread with a verdict, approve or changes, and no file changed outside the reviews. Judged (graded): a finding, whatever its recommendation, names the unneeded generality. Reported: whether that finding is fix now |
+| `overbuilt-layer` | New, sized: a correct change whose item asks for `tag` and `list --tag`, built through a repository protocol, two repositories and a service over one JSON file | As `overbuilt-generality`, for the unneeded layer |
+| `overbuilt-robustness` | New, sized: a correct change whose item asks for `--low N`, guarding against items that `load`, the only maker of items, never returns | As `overbuilt-generality`, for the unneeded robustness |
+| `control-large` | New, sized: a correct change of about 240 lines, importing two banks' statement formats, each part named by a Done when line | Facts as `overbuilt-generality`. Judged (graded): no finding asks for less. Reported: whether such a finding is fix now |
+| `control-lean` | New, sized: a correct `done ID` command of 9 lines and two tests | As `control-large` |
 Every case but `non-atelier-repo` also fails a run that leaves the process
 with no reason on the record, and reports each departure that has one, with
 a reported question in its rubric on whether the reason holds (Grading).
@@ -139,6 +144,38 @@ each: the item's Description, its Outcome and Evidence lines, and its close
 reason with the validation receipt the change committed.
 `readiness-blockers` holds the text of the child item that made the change,
 since defects.md credits its epic.
+
+## Sized reviews
+
+The five sized cases, from `overbuilt-generality` to `control-lean`, ask
+whether a reviewer can tell correct work that is bigger than its item needs
+(atelier-s6xk). In each, a small Python tool is tracked by Atelier with one
+item whose change is correct, whose suite passes, and whose new tests fail
+on main; the agent is its reviewer. Three changes are overbuilt: by
+generality nothing asks for, by a layer nothing needs, and by robustness
+against inputs that cannot happen. Two are controls: one large because its
+item is, and one lean. Every item's Scope allows new modules, so a reviewer
+cannot flag the extra parts as out of scope instead of unneeded.
+
+- They share one setup, [harness/sized.sh](harness/sized.sh), which builds
+  the fixture from the case's `fixture/`: `case.sh` (the item's ID, slug,
+  title and the change's commit message), `item.md` (Goal, Done when and
+  Scope), `report.md`, the tree on main (`base/`) and the files the change
+  writes (`change/`). They share one grader,
+  [harness/sized.py](harness/sized.py), and one set of tests,
+  [harness/sized_tests.py](harness/sized_tests.py). Each case's own rubric
+  says what its change holds and, in an overbuilt case, what its unneeded
+  part is.
+- An overbuilt case's lean reference is in its `lean/`: the files that,
+  over main's tree, make the smaller change meeting the same Goal and Done
+  when. Its test files are the Done when's tests. `test_grade.py` checks
+  that they pass on the reference and on the change, and fail on main, and
+  that no file of the reference's code is in the fixture. The reviewer
+  never sees it, and the judge reads it only as the rubric describes it.
+- A run of an overbuilt case passes when the judge reads a finding,
+  whatever its recommendation, as naming the unneeded part. A run of a
+  control passes when no finding asks for less. Whether that finding is
+  fix now is the reported `blocks`, which changes no grade.
 
 ## Grading
 
@@ -261,7 +298,8 @@ cases="loop loop-changes non-atelier-repo settle-within-authority refused-push \
   vacuous-test-review costly-hardening \
   approval-follow-up base-record-commits base-done-claims merge-sync \
   brief-transitions hierarchy-rules project-slug quiet-tokens priority-contract \
-  readiness-blockers after-merge-checks touched-claims"
+  readiness-blockers after-merge-checks touched-claims \
+  overbuilt-generality overbuilt-layer overbuilt-robustness control-large control-lean"
 run=evals/agent-factory/harness/run.py
 for setup in sol house; do
   python3 $run $cases --setup $setup --ref $sha --runs 3 --out <out>/$setup

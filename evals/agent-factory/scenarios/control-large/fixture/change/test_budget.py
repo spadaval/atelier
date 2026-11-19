@@ -1,0 +1,135 @@
+import contextlib
+import io
+import tempfile
+import unittest
+from pathlib import Path
+
+import budget
+from budget import Transaction
+
+NORDBANK = """Date;Payee;Amount
+01.10.2026;Employer;2.500,00
+02.10.2026;Grocer;-42,50
+03.10.2026;Café Lumen;-3,20
+03.10.2026;Café Lumen;-3,20
+"""
+KESTREL = """!Type:Bank
+D10/04/2026
+T-1,234.56
+PLandlord
+NRent October
+^
+PHardware Store
+MShelf brackets
+T-12.99
+D10/05/2026
+^
+"""
+
+
+class LedgerCase(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.root = Path(self.dir.name)
+        self.ledger = self.root / "ledger.json"
+
+    def tearDown(self):
+        self.dir.cleanup()
+
+    def run_cli(self, *argv):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = budget.main(["--ledger", str(self.ledger), *argv])
+        return code, out.getvalue(), err.getvalue()
+
+    def file(self, name, text):
+        path = self.root / name
+        path.write_text(text, encoding="utf-8")
+        return str(path)
+
+
+class SummaryTest(LedgerCase):
+    def test_summary(self):
+        budget.save_ledger(self.ledger, [Transaction("2026-10-01", 250000, "Employer"),
+                                         Transaction("2026-10-02", -4250, "Grocer"),
+                                         Transaction("2026-10-03", -105, "Bakery")])
+        self.assertEqual(self.run_cli("summary"),
+                         (0, "3 transactions, in 2500.00, out -43.55\n", ""))
+
+    def test_an_empty_ledger(self):
+        self.assertEqual(self.run_cli("summary")[1], "0 transactions, in 0.00, out 0.00\n")
+
+
+class FormatTest(LedgerCase):
+    def test_nordbank_csv(self):
+        code, out, _ = self.run_cli("import", self.file("oct.csv", NORDBANK))
+        self.assertEqual((code, out), (0, "imported 4, skipped 0 already in the ledger\n"))
+        self.assertEqual(budget.load_ledger(self.ledger), [
+            Transaction("2026-10-01", 250000, "Employer"),
+            Transaction("2026-10-02", -4250, "Grocer"),
+            Transaction("2026-10-03", -320, "Café Lumen"),
+            Transaction("2026-10-03", -320, "Café Lumen")])
+
+    def test_kestrel_qif_in_any_order_ignoring_other_lines(self):
+        self.assertEqual(self.run_cli("import", self.file("oct.qif", KESTREL))[0], 0)
+        self.assertEqual(budget.load_ledger(self.ledger), [
+            Transaction("2026-10-04", -123456, "Landlord"),
+            Transaction("2026-10-05", -1299, "Hardware Store")])
+
+    def test_another_extension_is_refused(self):
+        path = self.file("oct.ofx", "")
+        self.assertEqual(self.run_cli("import", path),
+                         (1, "", f"{path}:1: unknown format: Nordbank's is .csv, Kestrel's .qif\n"))
+
+
+class OnceTest(LedgerCase):
+    def test_importing_again_adds_none_and_repeats_are_kept(self):
+        path = self.file("oct.csv", NORDBANK)
+        self.run_cli("import", path)
+        self.assertEqual(self.run_cli("import", path)[1],
+                         "imported 0, skipped 4 already in the ledger\n")
+        self.assertEqual(len(budget.load_ledger(self.ledger)), 4)
+
+    def test_an_overlapping_export_adds_only_the_new_ones(self):
+        self.run_cli("import", self.file("early.csv", NORDBANK))
+        later = "Date;Payee;Amount\n03.10.2026;Café Lumen;-3,20\n06.10.2026;Grocer;-18,00\n"
+        self.assertEqual(self.run_cli("import", self.file("later.csv", later))[1],
+                         "imported 1, skipped 1 already in the ledger\n")
+
+    def test_one_at_a_time_or_together_is_the_same(self):
+        later = "Date;Payee;Amount\n03.10.2026;Café Lumen;-3,20\n06.10.2026;Grocer;-18,00\n"
+        files = [self.file("early.csv", NORDBANK), self.file("later.csv", later),
+                 self.file("oct.qif", KESTREL)]
+        for path in files:
+            self.run_cli("import", path)
+        one_at_a_time = budget.load_ledger(self.ledger)
+        self.ledger.unlink()
+        self.run_cli("import", *files)
+        self.assertEqual(budget.load_ledger(self.ledger), one_at_a_time)
+
+
+class BadLineTest(LedgerCase):
+    def test_a_bad_line_names_its_file_and_line_and_changes_nothing(self):
+        budget.save_ledger(self.ledger, [Transaction("2026-09-30", -500, "Bakery")])
+        before = self.ledger.read_text()
+        bad = self.file("bad.qif", "!Type:Bank\nD10/04/2026\nT-12,34\nPLandlord\n^\n")
+        code, out, err = self.run_cli("import", self.file("oct.csv", NORDBANK), bad)
+        self.assertEqual((code, out, err), (1, "", f"{bad}:3: bad amount '-12,34'\n"))
+        self.assertEqual(self.ledger.read_text(), before)
+
+    def test_bad_lines(self):
+        for name, text, error in [
+                ("a.csv", "Date;Amount\n", "1: expected the header Date;Payee;Amount"),
+                ("b.csv", NORDBANK + "31.02.2026;Grocer;-1,00\n", "6: bad date '31.02.2026'"),
+                ("c.csv", NORDBANK + "07.10.2026;Grocer\n", "6: expected 3 fields, found 2"),
+                ("d.qif", "!Type:Bank\nD10/04/2026\nT-1.00\n^\n", "4: the record has no P (payee) line"),
+                ("e.qif", "!Type:Bank\nD10/04/2026\nT-1.00\nPX\n", "2: the last record is not ended by ^"),
+                ("f.qif", "!Type:Bank\nD10/04/2026\nD10/05/2026\n", "3: a second D line in one record")]:
+            with self.subTest(name=name):
+                path = self.file(name, text)
+                self.assertEqual(self.run_cli("import", path), (1, "", f"{path}:{error}\n"))
+                self.assertFalse(self.ledger.exists())
+
+
+if __name__ == "__main__":
+    unittest.main()
