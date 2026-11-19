@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-id3v
 title: Run both setups and both arms, write the results, and rewrite the README around the three questions
-status: in_review
+status: approved
 mission: atelier-kw8u
 labels: []
 priority: medium
