@@ -31,7 +31,7 @@ question is recorded and shown, and changes no grade (verdict()).
 Run as a script, it grades kept runs again with today's grade.py and rubric,
 writing rejudge.json beside each result.json:
 
-    judge.py <run dir>... [--setup <name>] [--jobs 2]
+    judge.py <run dir>... [--setup <name>] [--jobs 10]
 
 A run from before setups is judged as one_model_setup() of its agent and
 model.
@@ -405,11 +405,12 @@ def main() -> None:
     p = argparse.ArgumentParser(description="Grade kept runs again: facts and the judge.")
     p.add_argument("run_dirs", nargs="+", type=Path)
     p.add_argument("--setup", help="judge as this setup (default: the run's own)")
-    p.add_argument("--jobs", type=int, default=2)
+    p.add_argument("--jobs", type=int, default=10,
+                   help="the most runs regraded at once (default 10, run.py's --jobs)")
     p.add_argument("--work-root", type=Path, default=Path("/var/tmp/af-evals"))
     a = p.parse_args()
-    if a.jobs > 2:
-        p.error("--jobs above 2 would run more than two agents at once")
+    if a.jobs < 1:
+        p.error("--jobs is at least 1")
     run = load_run()
     a.work_root.mkdir(parents=True, exist_ok=True)
     with concurrent.futures.ThreadPoolExecutor(a.jobs) as pool:

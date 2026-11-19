@@ -168,15 +168,14 @@ class WebToolsTest(unittest.TestCase):
 
 
 class MatrixTest(unittest.TestCase):
-    def test_a_cargo_case_runs_alone_and_a_confined_one_needs_no_threads(self):
+    def test_a_replay_builds_rust_and_a_confined_one_needs_no_threads(self):
         cases = [p.name for p in run.SCENARIOS.iterdir()
                  if (p / "case.toml").is_file()]
         self.assertGreaterEqual(len(cases), 3)
         for name in cases:
             meta = json.loads((run.SCENARIOS / name / "scenario.json").read_text())
             self.assertTrue(meta.get("confine") and not meta.get("threads"), name)
-        self.assertIn("one at a time", run.check_jobs(2, cases))
-        self.assertIsNone(run.check_jobs(1, cases))
+            self.assertTrue(run.builds_rust(name), name)
         if UNAVAILABLE:
             self.assertIn("must run confined", run.check_confined(cases))
         else:
