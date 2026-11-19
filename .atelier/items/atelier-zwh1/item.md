@@ -3,12 +3,13 @@ schema: atelier.item
 schema_version: 3
 id: atelier-zwh1
 title: 'Add the case of three findings: one to fix, one to take to the lead, one to rebut'
-status: ready
+status: building
 mission: atelier-8az0
 labels: []
 priority: medium
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A3a9fab39-7f29-4732-8284-d6c07f2deac6%3Adelegate-task%3A5344b3d6-09be-4eaf-9c97-45d3d65d460d
 ready:
   by: 'the human, by a side chat on 2026-11-18: tell the main thread about all of this'
   at: 2026-11-19T04:37:19.810241548Z
