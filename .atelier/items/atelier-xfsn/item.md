@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-xfsn
 title: Bring every kept case to the new grading, drop the next- prefix, and cut the case whose line can hold
-status: changes_requested
+status: in_review
 mission: atelier-kw8u
 labels: []
 priority: medium
@@ -95,7 +95,9 @@ Done when, line by line:
   `ATELIER_SKIP`, a Git hook's included, and each `merge --trivial`, with
   reason and thread) and `unrecorded` (a hook changed or `core.hooksPath`
   set; a commit the binary's own pre-commit hook refuses, replayed on its
-  parent in a scratch checkout, which catches a status written by hand; a
+  first parent in a scratch clone, merges included, with a merge's
+  `MERGE_HEAD` and main at its incoming parent as Git gave them to the
+  hook, which catches a status written by hand; a
   commit on main's first-parent line, or origin's, that is no Atelier
   merge; an unapproved, untrivial Atelier merge). A state departure counts
   as recorded only where the skip that let it through is tied to it: the
@@ -165,3 +167,4 @@ What a reader should know:
 1-l2fa.3: fixed in 2ffc32071
 2-wpsm.2: fixed in 939b73cc1
 2-wpsm.4: fixed in 939b73cc1
+3-en8y.3: fixed in 240ab81d2
