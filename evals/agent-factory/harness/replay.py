@@ -19,9 +19,9 @@ case.toml, which names:
 build() makes the fixture: this repository's tree at `base`, read with `git
 archive` from the checkout running the harness, which needs its history
 (CI's evals job fetches it all). The old tracker's files (DROPPED) are left
-out, and so are AGENTS.md's sections on the old tool's process
-(PROCESS_SECTIONS), since today's binary tracks the fixture with new
-records: one item, `id`, with the Goal and Done when it had. The change,
+out, and AGENTS.md keeps only its map of the product and its build commands
+(product_map), since today's binary tracks the fixture with new records: one
+item, `id`, with the Goal and Done when it had. The change,
 `git diff base change` outside DROPPED, is committed on the item's branch
 with its own message, and the item is submitted for review by its
 implementer. The fixture has no remote, its history ends at the change, and
@@ -45,10 +45,16 @@ import tomllib
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
-# The old tracker's records, its skill and its hooks, left out of a fixture.
-DROPPED = (".atelier", ".agents", ".claude", ".codex")
-# AGENTS.md's sections on the old tool's process, left out of a fixture.
-PROCESS_SECTIONS = ("Current Mission", "Process Sources", "Merge Policy")
+# The old tracker's records, skill and hooks, and the files that told its
+# process (every era's CONTRIBUTING.md and pull request template, and June
+# 2026's AGENTFACTORY.md), left out of a fixture.
+DROPPED = (".atelier", ".agents", ".claude", ".codex", "AGENTFACTORY.md", "CONTRIBUTING.md",
+           ".github/PULL_REQUEST_TEMPLATE.md")
+# What names the old tracker's process in AGENTS.md: the `atelier` command,
+# the tracker's or the agents' files, the Agent Factory skill, the evidence
+# records the tracker kept until October 2026, or how a change merged.
+PROCESS = re.compile(r"`(~/)?\.?(atelier|agents|claude|codex)\b|agent.?factory|\bevidence\b"
+                     r"|\bmerge|pull request", re.I)
 IMPLEMENTER = "thread-5e1f0a7c"
 IDENTITY = {"GIT_AUTHOR_NAME": "Dana Dev", "GIT_AUTHOR_EMAIL": "dana@example.com",
             "GIT_COMMITTER_NAME": "Dana Dev", "GIT_COMMITTER_EMAIL": "dana@example.com"}
@@ -92,11 +98,80 @@ def has_history(case: dict):
     return None
 
 
-def strip_process(text: str) -> str:
-    """AGENTS.md without its PROCESS_SECTIONS."""
-    parts = re.split(r"(?m)^(?=## )", text)
-    return "".join(p for p in parts
-                   if not any(p.startswith(f"## {name}\n") for name in PROCESS_SECTIONS))
+def dropped(path: str) -> bool:
+    """Whether a path of the tree is one DROPPED leaves out."""
+    return any(path == d or path.startswith(f"{d}/") for d in DROPPED)
+
+
+def blocks(text: str) -> list:
+    """Markdown's blocks, each (kind, lines): a "heading", a list "item"
+    with its indented lines, a "text" paragraph, a "fence" of a code block,
+    or one "code" line in it."""
+    out, fenced = [], False
+    for line in text.split("\n"):
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+            out.append(["fence", line])
+        elif fenced:
+            out.append(["code", line])
+        elif not line.strip():
+            out.append(["blank"])
+        elif re.match(r"#+ ", line):
+            out.append(["heading", line])
+        elif re.match(r"\s*([-*]|\d+\.) ", line):
+            out.append(["item", line])
+        elif out and (out[-1][0] == "text" or out[-1][0] == "item" and line[0].isspace()):
+            out[-1].append(line)
+        else:
+            out.append(["text", line])
+    return [(b[0], b[1:]) for b in out if b[0] != "blank"]
+
+
+def product_map(text: str, exists) -> str:
+    """AGENTS.md as a map of the product and its build commands, whatever
+    its headings: a list item, paragraph or code line stays only if it names
+    a `cargo` or `git` command or a file the fixture holds (`exists` says
+    which), and names nothing of the old tracker's process (PROCESS). The
+    title stays, and a section's heading stays if anything under it does."""
+
+    def keeps(lines):
+        joined = " ".join(lines)
+        named = [n.rstrip("/") for n in re.findall(r"`([^`]+)`", joined)]
+        return not PROCESS.search(joined) and (
+            any(re.match(r"(cargo|git) ", n) for n in named)
+            or any(not dropped(n) and exists(n) for n in named))
+
+    out, last, heading, fence, code = [], None, None, None, []
+    for kind, lines in blocks(text):
+        if kind == "heading" and lines[0].startswith("# "):
+            out.append(lines[0])
+            last, heading = "heading", None
+            continue
+        if kind == "heading":
+            heading = lines[0]
+            continue
+        if kind == "code":
+            # A code line is a command, unquoted.
+            code += lines if keeps([f"`{lines[0].strip()}`"]) else []
+            continue
+        if kind == "fence" and fence is None:
+            fence, code = lines[0], []
+            continue
+        if kind == "fence":
+            block, fence = [fence, *code, lines[0]] if code else None, None
+        else:
+            block = lines if keeps(lines) else None
+        if block is None:
+            continue
+        if heading:
+            out.append(heading)
+            last, heading = "heading", None
+        if kind == "item" and last == "item":
+            out[-1] += "\n" + "\n".join(block)
+        else:
+            out.append("\n".join(block))
+        last = kind
+    return "\n\n".join(out) + "\n"
 
 
 def item_record(case: dict) -> str:
@@ -132,7 +207,7 @@ def build(case_dir: Path, work: Path, atelier: Path) -> None:
     subprocess.run(["tar", "-x", "-C", str(repo)], input=archive, check=True)
     agents = repo / "AGENTS.md"
     if agents.is_file():
-        agents.write_text(strip_process(agents.read_text()))
+        agents.write_text(product_map(agents.read_text(), lambda p: (repo / p).exists()))
 
     env = {k: v for k, v in os.environ.items() if k not in (
         "ATELIER_SKIP", "CLAUDE_CODE_SESSION_ID", "CODEX_SESSION_ID", "CODEX_THREAD_ID",

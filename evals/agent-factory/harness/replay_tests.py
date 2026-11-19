@@ -138,20 +138,17 @@ class ReplayCase(unittest.TestCase):
             out = subprocess.run(["git", "-C", str(cwd), "ls-tree", "-r", ref],
                                  check=True, capture_output=True, text=True).stdout
             return {line.split("\t")[1]: line.split()[2] for line in out.splitlines()
-                    if line.split("\t")[1].split("/")[0] not in replay.DROPPED}
+                    if not replay.dropped(line.split("\t")[1])}
 
         here, then = blobs(self.repo, "main"), blobs(replay.REPO, d["base"])
         agents = here.pop("AGENTS.md", None), then.pop("AGENTS.md", None)
         self.assertEqual(here, then)
-        if agents[1]:
-            text = (self.repo / "AGENTS.md").read_text()
-            for name in replay.PROCESS_SECTIONS:
-                self.assertNotIn(f"## {name}\n", text)
+        self.assertEqual(bool(agents[0]), bool(agents[1]))
         self.assertEqual(blobs(self.repo, self.id), {**blobs(replay.REPO, d["change"]),
                                                      **({"AGENTS.md": agents[0]}
                                                         if agents[0] else {})})
         tracked = self.git("ls-tree", "-r", "--name-only", self.id).split()
-        self.assertFalse([p for p in tracked if p.split("/")[0] in replay.DROPPED
+        self.assertFalse([p for p in tracked if replay.dropped(p)
                           and not p.startswith(f".atelier/items/{self.id}/")
                           and p != ".atelier/config.toml"])
         self.assertEqual(self.git("remote").strip(), "")
@@ -167,6 +164,24 @@ class ReplayCase(unittest.TestCase):
         for line in d["done_when"]:
             self.assertIn(words(f"- [x] {line}"), words(record))
         self.assertIn(f"Then: atelier review {self.id}", self.atelier("rev", "status"))
+
+    def test_the_fixture_holds_none_of_the_old_trackers_process_text(self):
+        """Whatever its era's headings: no guidance file of the old tracker,
+        and no line of AGENTS.md or CLAUDE.md that names its commands, its
+        skill, its files, its evidence or its merges, while AGENTS.md keeps
+        the base's test command."""
+        for name in ("AGENTFACTORY.md", "CONTRIBUTING.md", ".agents",
+                     ".github/PULL_REQUEST_TEMPLATE.md"):
+            self.assertFalse((self.repo / name).exists(), name)
+        old = re.compile(r"\batelier [a-z]|[Aa]gent.?[Ff]actory|AGENTFACTORY|\.agents\b"
+                         r"|\.atelier/|[Ee]vidence|[Mm]erge|[Pp]ull request")
+        for name in ("AGENTS.md", "CLAUDE.md"):
+            path = self.repo / name
+            text = path.read_text() if path.is_file() else ""
+            self.assertFalse([line for line in text.splitlines() if old.search(line)], name)
+        base = replay.git("show", f"{self.data['base']}:AGENTS.md", check=False)
+        if "cargo nextest run" in base:
+            self.assertIn("cargo nextest run", (self.repo / "AGENTS.md").read_text())
 
     def test_nothing_of_the_fix_or_the_case_file_is_in_the_fixture(self):
         found = replay.markers(self.data) + [words(self.data["defect"]), str(self.case)]

@@ -81,10 +81,16 @@ when, Context and Report as they stood. They share one setup,
 
 - The fixture is this repository's tree at the base, read from the
   harness's own checkout, which needs the whole history. The old tracker's
-  files (`.atelier/`, `.agents/`, `.claude/`) and AGENTS.md's sections on
-  its process are left out. Today's binary tracks it with one new item, the
-  change is committed on that item's branch, and the item is submitted for
-  review. It has no remote and no history after the change.
+  files (`.atelier/`, `.agents/`, `.claude/`, `.codex/`) are left out, and
+  so are the files that told its process: `CONTRIBUTING.md`, the pull
+  request template and June 2026's `AGENTFACTORY.md`. AGENTS.md keeps only
+  the lines that name a file the fixture holds or a `cargo` or `git`
+  command, and none that names the `atelier` command, the tracker's files,
+  the Agent Factory skill, its evidence, merges or pull requests, whatever
+  the era's headings.
+  Today's binary tracks it with one new item, the change is committed on
+  that item's branch, and the item is submitted for review. It has no
+  remote and no history after the change.
 - The run is confined ([harness/confine.py](harness/confine.py)), since the
   repository is public, this host holds other checkouts of it, and the case
   files name the fix. Under bubblewrap it sees only its own work directory,
@@ -127,12 +133,7 @@ Goal, Done when or Close Reason. Their `case.toml` says what stands in for
 each: the item's Description, its Outcome and Evidence lines, and its close
 reason with the validation receipt the change committed.
 `readiness-blockers` holds the text of the child item that made the change,
-since defects.md credits its epic. `hierarchy-rules` and
-`priority-contract` start in June 2026, whose AGENTS.md gives that era's
-process under headings the setup does not strip (`Start Here` and
-`Common Commands`, which name commands today's binary lacks), and
-`priority-contract`'s tree holds that era's `AGENTFACTORY.md`. Both arms
-see the same text.
+since defects.md credits its epic.
 
 ## Grading
 
@@ -406,7 +407,13 @@ its own when it ends.
   them still wants reading by hand: the mission's judge-holds criterion
   reads thirty.
 
-Recorded runs are in [results/](results/).
+Recorded runs are in [results/](results/). The replays recorded before
+atelier-s63j ran on fixtures that still held some of the old tracker's
+process: each kept `CONTRIBUTING.md` and the pull request template;
+`after-merge-checks`, `brief-transitions`, `merge-sync` and `quiet-tokens`
+kept AGENTS.md's `Missions` section, which names `atelier work missions`;
+and `hierarchy-rules` and `priority-contract` kept June 2026's whole
+AGENTS.md process, and `priority-contract` its `AGENTFACTORY.md`.
 The skill against no skill on the binary at the cutover, with the cuts it
 led to, is [results/2026-11-11-next-skill.md](results/2026-11-11-next-skill.md).
 The smoke run that showed the matrix runs on the branch model is
