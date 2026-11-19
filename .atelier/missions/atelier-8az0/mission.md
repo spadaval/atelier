@@ -3,7 +3,7 @@ schema: atelier.mission
 schema_version: 3
 id: atelier-8az0
 title: 'Reviews that block only what matters: a later round''s brief, a way for the implementer to say no, and proof a reviewer can tell overbuilt work'
-status: open
+status: done
 labels: []
 lead: 0b3307d5-85cd-4102-be6c-51da3b535c89
 planners:
@@ -154,3 +154,52 @@ levels or their three rules, which atelier-oiwy holds; or keep the whole
 change's diff from a later round's reviewer.
 
 ## Result
+
+Closed on 2026-11-19 with six items done and one dropped. Two of the three
+things the Why names are fixed, and the third is explained and not fixed.
+
+**An implementer can say no, and it stops the caving the survey found.** A
+finding that blocks may be answered `<finding>: not built: <reason>`,
+which takes it to the mission's lead (atelier-hlsw). On the case of three
+findings (atelier-zwh1), ten runs a cell, the two arms differing in this
+change alone: with Sol in every role 8 of 10 passed before and 10 of 10
+after; in `house`, where Opus implements, 4 of 10 before and 10 of 10
+after. Opus built the finding that was not worth building in 6 of 10 runs
+before and in none after. The real defect was fixed in all 40 runs.
+
+**A later round's brief says what the round is for, and hides nothing.**
+From round 2 the brief gives how many rounds have reviewed the whole
+change and shows what changed since first (atelier-d73k). A real defect in
+code the fix did not change blocked in 20 of 20 reviews with each brief,
+and one the fix introduced in 20 of 20 with each (atelier-t5tc). It did
+not show the narrowing it was for: the cosmetic flaw blocked in 0 of 20
+with each brief, since Sol did not block on it to begin with. An unplanted
+crash that hardly matters was reported by 12 of 40 reviews with the old
+brief and none of 40 with the new. Whether rounds per item fall is for real
+use to show.
+
+**A reviewer can tell overbuilt work, and that is not why no review asks
+for less.** On five built cases, Sol at `high` named the unneeded part in
+29 of 30 reviews with no skill and 30 of 30 with it, and asked for less in
+0 of 40 control reviews; the skill turns the finding from one that blocks
+in 20 of 30 into 30 of 30 (atelier-s6xk). On five real changes this
+repository built and later removed as unneeded, no review of 50 questioned
+the part (atelier-ad0z): a Done when line asked for each. The excess was in
+the plans, where an item's reviewer does not look.
+
+Against each criterion:
+
+- later-round-brief: met.
+- narrows-without-hiding: half met. It hides nothing; no narrowing was
+  shown.
+- say-no, reason-on-record, texts-agree, same-base: met.
+- overbuilt-told-apart: met.
+- per-part-passage: not tried. atelier-ufbm was dropped: the built cases
+  are at their ceiling, and in the real ones every part traces to a
+  requirement, so no case could test it. atelier-b0vb asks the human
+  whether to try the question on plans.
+- still-gated: met. CI's `evals` job passed on master at 4e15f8e7c.
+
+The lead added two items the plan did not hold, atelier-ad0z and
+atelier-t5tc, each to test what an earlier item's runs could not, and a
+`house` run to atelier-hlsw. Nothing was merged past a rule.
