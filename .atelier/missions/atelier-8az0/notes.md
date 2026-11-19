@@ -30,3 +30,14 @@ replays changes this repository built and later removed as unneeded, and
 made atelier-ufbm wait on it. Whether the passage may be kept on those
 cases is the human's to say, since it changes a criterion of the plan; the
 lead has asked.
+
+## 2026-11-19: the later round's brief may narrow too far
+
+atelier-d73k: in 80 Sol reviews the cosmetic flaw blocked in none with
+either brief, so the brief showed no narrowing there, and the real defect
+in unchanged code blocked in all with either. But a crash nobody planted,
+in a line the fix changed, was reported by 12 of 40 reviews with the old
+brief and by none of 40 with the new. The lead added atelier-t5tc to put an
+important defect in the fix itself and compare the two briefs, with a
+revert of the brief if it is found less often in both matrices. The shared
+binary is not reinstalled with the new brief until then.

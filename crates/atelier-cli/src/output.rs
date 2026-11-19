@@ -1054,31 +1054,33 @@ pub fn brief_pull_request(id: &str, found: &Result<Option<PullRequest>, ForgeErr
 }
 
 pub fn brief(brief: &Brief) -> String {
-    let Brief { id, round, .. } = *brief;
+    let Brief {
+        id, round, commit, ..
+    } = *brief;
     let mut text = String::new();
     if brief.path.is_some() {
         text += &format!(
-            "You are the reviewer of {id} (thread {}), round {round}.\n\
-             Review the change on branch {id} as someone who did not write it: check that it meets each Done when line, that it is correct, and that the Report's claims hold. Read the code, run what proves it, and write down each problem you find. The author's reasoning is left out on purpose; judge what is there.\n\n",
+            "You are the reviewer of {id} (thread {}), round {round}.\n",
             brief.caller
         );
+        text += &match brief.previous {
+            None => format!("Review the change on branch {id} as someone who did not write it: check that it meets each Done when line, that it is correct, and that the Report's claims hold. {LOOK}\n\n"),
+            Some(_) => later_round(round),
+        };
     }
     text += &format!("Item {id}: {}\n", brief.title);
     for (heading, content) in &brief.sections {
         text += &format!("\n## {heading}\n{}", content.trim_end());
         text += "\n";
     }
-    text += &format!(
-        "\nThe change, at commit {commit}:\n  git diff {base}...{commit}\n",
-        commit = brief.commit,
-        base = brief.base
-    );
-    if let Some(previous) = brief.previous {
-        text += &format!(
-            "What changed since the last round's review:\n  git diff {previous} {}\n",
-            brief.commit
-        );
-    }
+    let whole = format!("  git diff {}...{commit}\n", brief.base);
+    text += &match brief.previous {
+        None => format!("\nThe change, at commit {commit}:\n{whole}"),
+        Some(previous) => format!(
+            "\nWhat changed since the last round's review, at commit {commit}:\n  git diff {previous} {commit}\n\
+             The whole change:\n{whole}"
+        ),
+    };
     text += brief.pull_request.as_deref().unwrap_or_default();
     text += &carried_findings(brief.carried, brief.path.is_some(), true);
     let Some(path) = brief.path else {
@@ -1090,6 +1092,24 @@ pub fn brief(brief: &Brief) -> String {
         "the change merges",
         "writes it and the item's new status and prints the Git command that commits the two",
     ) + "Run that command; your review is then done.\n"
+}
+
+/// How every round's reviewer is to look.
+const LOOK: &str = "Read the code, run what proves it, and write down each problem you find. The author's reasoning is left out on purpose; judge what is there.";
+
+/// What a reviewer in `round`, after the first, is told the round is for:
+/// the earlier rounds read the whole change, so this one checks their
+/// findings and what changed since, and a new finding in code that did
+/// not change blocks only where the work would come out wrong without it.
+fn later_round(round: u32) -> String {
+    let earlier = match round - 1 {
+        1 => "One round has".to_string(),
+        n => format!("{n} rounds have"),
+    };
+    format!(
+        "{earlier} reviewed the whole change before this one. This round checks the earlier findings and what changed since the last round's review: judge each open finding below, and check that the commits since then are correct, that the change still meets each Done when line, and that the Report's claims hold. {LOOK}\n\
+         A new finding in code that did not change since the last round's review blocks only if the work would come out wrong without it: record that one as `fix now`, and any other as `defer`, for later work.\n\n"
+    )
 }
 
 /// The open findings of earlier rounds that a review carries, with the

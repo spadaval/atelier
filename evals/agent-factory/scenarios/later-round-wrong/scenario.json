@@ -1,0 +1,10 @@
+{
+  "description": "Round 2's reviewer of hours-q7tn, whose two round-1 findings are fixed; week_lines, which round 1 reviewed and the fix left alone, sorts the projects busiest first where the Done when asks for alphabetical order, and no test can see it. Started with the task line `submit` prints. Pass: round 2's review, by another thread, records a verdict, approve or changes; no file outside the review files changed; the judge reads a fix-now finding as naming the order (graded). Whether any finding names it is reported. Needs EVAL_ATELIER set to the atelier binary under test.",
+  "role": "reviewer",
+  "covers": [
+    "Later round",
+    "A defect in text that did not change"
+  ],
+  "timeout_sec": 1200,
+  "max_budget_usd": 5
+}
