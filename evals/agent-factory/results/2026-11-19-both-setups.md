@@ -25,7 +25,8 @@ runs, five a cell and three a cell for a replayed review.
   it in 12 of 72. The largest gap is `touched-claims`: found in 5 of 6
   reviews without the skill and 0 of 6 with it, where every skill review
   approved. Eight replays were found by no review in any cell. The judge
-  could not support 3 of 362 fix-now findings.
+  found none of the 362 fix-now findings unsupported; in 18 of 144 reviews
+  it could not tell for some of them, for want of the code they rest on.
 - **The lead in charge.** No planted defect reached main in any run of a
   lead's case, no departure went unrecorded in one, and no lead run stopped
   with nothing raised. The skill before atelier-mtzj passed every lead run
@@ -42,10 +43,13 @@ runs, five a cell and three a cell for a replayed review.
 ## Setup
 
 - **Binary.** Built from master at 4f36b1fa6 (`atelier 0.7.0`), copied to
-  `/var/tmp/af-evals/bin/atelier-4f36b1fa6`. Master's crates did not change
-  over the matrix.
+  `/var/tmp/af-evals/bin/atelier-4f36b1fa6`, and every run used that copy.
+  Master moved on during the matrix: atelier-hlsw and atelier-d73k, merged
+  at about 02:55 on 2026-11-19, changed its crates, and atelier-hlsw its
+  skill. These results are of the pinned binary and skill, not of master
+  after them.
 - **Skill.** `skill`: `--ref 4f36b1fa6`, `skills/agent-factory`, unchanged
-  since atelier-mtzj merged (42f8dcbbc). `before mtzj`: `--ref 95062f53a`,
+  from atelier-mtzj's merge (42f8dcbbc) to that commit. `before mtzj`: `--ref 95062f53a`,
   that merge's first parent. `threads-only`: `--ref 3f9dfda5b` on branch
   `eval/skill-threads-only`, never to be merged: `SKILL.md`'s frontmatter
   and its Starting Another Thread section, and no role or procedure files.
@@ -151,10 +155,12 @@ What each difference rests on:
 ## The replayed reviews
 
 "Found" is the judge's answer to `found` out of three reviews; fix-now
-findings are summed over them, and "Unsupported" is the judge's count of
-fix-now findings other than the defect that the code does not support.
-"Unknown" counts the runs where `others-supported` was answered unknown,
-for material the judge lacked.
+findings are summed over them, and "Unsupported" counts fix-now findings
+other than the defect that the judge found the code does not support,
+where it answered `others-supported` fail. "Unknown" counts the runs where
+it answered unknown, for material it lacked; their findings are counted
+neither supported nor unsupported. Of the 144 answers, 126 were pass, 18
+unknown and none fail.
 
 | Setup | Case | Arm | Found | Fix-now findings | Unsupported | Unknown | Median s | Median tokens in | Median tokens out |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -177,19 +183,19 @@ for material the judge lacked.
 | sol | project-slug | none | 0 of 3 | 4 | 0 | 0 | 234 | 1.20M | 7.0k |
 | sol | project-slug | skill | 0 of 3 | 3 | 0 | 0 | 213 | 1.21M | 6.1k |
 | sol | quiet-tokens | none | 1 of 3 | 6 | 0 | 1 | 202 | 1.31M | 5.8k |
-| sol | quiet-tokens | skill | 0 of 3 | 5 | 1 | 3 | 216 | 1.20M | 6.8k |
+| sol | quiet-tokens | skill | 0 of 3 | 5 | 0 | 3 | 216 | 1.20M | 6.8k |
 | sol | readiness-blockers | none | 0 of 3 | 22 | 0 | 0 | 326 | 1.76M | 9.8k |
 | sol | readiness-blockers | skill | 0 of 3 | 20 | 0 | 1 | 337 | 2.02M | 11.3k |
 | sol | touched-claims | none | 2 of 3 | 2 | 0 | 0 | 145 | 0.38M | 4.2k |
 | sol | touched-claims | skill | 0 of 3 | 0 | 0 | 0 | 107 | 0.43M | 2.8k |
 
 - sol none: found 6 of 36; fix-now findings 85; unsupported 0; others-supported unknown in 3 runs
-- sol skill: found 5 of 36; fix-now findings 86; unsupported 1; others-supported unknown in 5 runs
+- sol skill: found 5 of 36; fix-now findings 86; unsupported 0; others-supported unknown in 5 runs
 
 | Setup | Case | Arm | Found | Fix-now findings | Unsupported | Unknown | Median s | Median tokens in | Median tokens out |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | house | after-merge-checks | none | 0 of 3 | 6 | 0 | 0 | 305 | 1.45M | 10.4k |
-| house | after-merge-checks | skill | 0 of 3 | 9 | 1 | 1 | 375 | 1.65M | 14.3k |
+| house | after-merge-checks | skill | 0 of 3 | 9 | 0 | 1 | 375 | 1.65M | 14.3k |
 | house | approval-follow-up | none | 0 of 3 | 0 | 0 | 0 | 124 | 0.44M | 3.8k |
 | house | approval-follow-up | skill | 0 of 3 | 0 | 0 | 0 | 125 | 0.41M | 3.4k |
 | house | base-done-claims | none | 3 of 3 | 6 | 0 | 0 | 241 | 0.79M | 8.4k |
@@ -199,7 +205,7 @@ for material the judge lacked.
 | house | brief-transitions | none | 0 of 3 | 0 | 0 | 0 | 271 | 1.14M | 9.2k |
 | house | brief-transitions | skill | 0 of 3 | 0 | 0 | 0 | 266 | 1.13M | 8.5k |
 | house | hierarchy-rules | none | 0 of 3 | 15 | 0 | 1 | 662 | 4.62M | 19.6k |
-| house | hierarchy-rules | skill | 0 of 3 | 16 | 1 | 1 | 431 | 1.96M | 14.6k |
+| house | hierarchy-rules | skill | 0 of 3 | 16 | 0 | 1 | 431 | 1.96M | 14.6k |
 | house | merge-sync | none | 0 of 3 | 10 | 0 | 0 | 365 | 1.51M | 13.2k |
 | house | merge-sync | skill | 0 of 3 | 12 | 0 | 1 | 559 | 2.65M | 17.2k |
 | house | priority-contract | none | 3 of 3 | 11 | 0 | 0 | 293 | 1.80M | 11.2k |
@@ -214,7 +220,7 @@ for material the judge lacked.
 | house | touched-claims | skill | 0 of 3 | 0 | 0 | 0 | 178 | 0.71M | 6.7k |
 
 - house none: found 11 of 36; fix-now findings 96; unsupported 0; others-supported unknown in 3 runs
-- house skill: found 7 of 36; fix-now findings 95; unsupported 2; others-supported unknown in 7 runs
+- house skill: found 7 of 36; fix-now findings 95; unsupported 0; others-supported unknown in 7 runs
 
 What each difference rests on:
 
@@ -235,8 +241,9 @@ What each difference rests on:
   `merge-sync`, `project-slug`, `readiness-blockers` and
   `after-merge-checks`. `approval-follow-up` and `brief-transitions` drew
   no fix-now finding in any of their 24 reviews.
-- **Unsupported:** 1 of 171 fix-now findings in `sol` and 2 of 191 in
-  `house`. A cell's median review took 84 s to 11 minutes and 0.4M to
+- **Unsupported:** none of 171 fix-now findings in `sol` or of 191 in
+  `house`, with the judge unable to tell in 8 and 10 reviews. A cell's
+  median review took 84 s to 11 minutes and 0.4M to
   4.6M tokens in, most of them cached.
 
 ## The lead in charge
