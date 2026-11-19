@@ -185,13 +185,16 @@ def forward(sock: str, port: int, cmd: list) -> int:
 
 def program_binds(cmd: list, env: dict) -> list:
     """The agent's program, resolved on the run's PATH, as the directory to
-    bind read-only: its own directory, or for a program in a bin/ directory
-    (a Codex release) the directory above it."""
+    bind read-only: its own directory (Claude Code's versions/), or for a
+    Codex release, releases/<version>/bin/codex, the release, which holds its
+    resources beside bin/. Nothing wider: a program in ~/.local/bin binds
+    that directory, not ~/.local."""
     found = shutil.which(cmd[0], path=env.get("PATH"))
     if not found:
         return []
     real = Path(found).resolve()
-    return [real.parent.parent if real.parent.name == "bin" else real.parent]
+    release = real.parent.name == "bin" and real.parent.parent.parent.name == "releases"
+    return [real.parent.parent if release else real.parent]
 
 
 def claude_masks() -> list:

@@ -129,6 +129,28 @@ class ConfinedRunTest(unittest.TestCase):
         self.assertEqual(out.stdout.strip(), "", out.stdout)
 
 
+class ProgramBindsTest(unittest.TestCase):
+    """The agent's program is bound by its own directory, never wider."""
+
+    def test_each_layout_binds_only_the_program_s_own_directory(self):
+        root = Path(tempfile.mkdtemp(prefix="binds-"))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        layouts = {
+            "claude": (root / "share/claude/versions/2.1.325", root / "share/claude/versions"),
+            "codex": (root / "codex/releases/0.169.0/bin/codex", root / "codex/releases/0.169.0"),
+            "tool": (root / "local/bin/tool", root / "local/bin"),
+        }
+        for name, (program, bound) in layouts.items():
+            program.parent.mkdir(parents=True, exist_ok=True)
+            program.write_text("#!/bin/sh\n")
+            program.chmod(0o755)
+            link = root / "path" / name
+            link.parent.mkdir(exist_ok=True)
+            link.symlink_to(program)
+            self.assertEqual(confine.program_binds([name], {"PATH": str(link.parent)}),
+                             [bound], name)
+
+
 class WebToolsTest(unittest.TestCase):
     """A confined run is offered no web search or fetch of its agent's own."""
 
