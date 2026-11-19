@@ -167,7 +167,7 @@ base the forge merged into.
 | `ready` | Nobody | `ready` | A thread runs `start` |
 | `building` | Implementer | `start` | Done when lines are ticked, the Report is written, and `submit` runs |
 | `in_review` | Reviewer | `submit` | The reviewer runs `verdict` |
-| `changes_requested` | Implementer | `verdict changes` | Each open fix-now finding is fixed or rebutted, and `submit` runs |
+| `changes_requested` | Implementer | `verdict changes` | Each open fix-now finding is fixed, rebutted or answered not built, and `submit` runs |
 | `approved` | Implementer | `verdict approve` | The merge checks pass on the head, and `merge` runs; or the approval went stale, and `submit` runs again |
 | `done` | Nobody | The merge of its branch, or `close` | Never |
 | `dropped` | Nobody | `drop` | Never |
@@ -274,7 +274,7 @@ in the checkout that has the base out, it writes nothing and names the
 | --- | --- |
 | `status` | Who this thread is, what it holds, what each thing needs, and the next command. On the base with nothing held: the ready items `start` would accept now, one line counting the other ready items by what stops them, missions in progress and what waits on the human, which is not listed as ready. For a mission's lead, its mission, what each item needs, and what is disputed in it. |
 | `show <id>` | An item in full, with a summary of each review: its round, reviewer, model, the commit it reviewed and its verdict, and each finding's name, recommendation, state and title. A finding's text is in its review file. For a mission, the whole mission on one page: whether it is proposed, agreed, done or dropped, its outcome and criteria, its items grouped by status with who holds each and what blocks each, what is disputed in it as `list --disputed` gives it, and its reviews by round. Either says which ref the record was read from, and, for a fetched ref, how long ago the remote was fetched. |
-| `list` | With no flags, all open work on the base, grouped by mission and then by label, and apart from it what is proposed: missions on unmerged branches and record changes waiting to merge, each with its branch. Narrowed by `--ready`, `--blocked`, `--needs-human`, `--proposed`, `--mission <id>`, `--label <l>`, `--mine` and `--deferred`; `--done` shows finished missions and items instead. `--disputed` lists instead, across open and done items, each finding whose Response is `rebutted` with what the next round made of it (kept, withdrawn, fixed, kept at defer or no action, or not yet reviewed), and each plan-review round whose reviewers gave different verdicts; `--mission <id>` narrows it. Nothing refuses or warns on any of them. |
+| `list` | With no flags, all open work on the base, grouped by mission and then by label, and apart from it what is proposed: missions on unmerged branches and record changes waiting to merge, each with its branch. Narrowed by `--ready`, `--blocked`, `--needs-human`, `--proposed`, `--mission <id>`, `--label <l>`, `--mine` and `--deferred`; `--done` shows finished missions and items instead. `--disputed` lists instead, across open and done items, each open fix-now finding answered `not built`, which waits on the lead, each finding whose Response is `rebutted` with what the next round made of it (kept, withdrawn, fixed, kept at defer or no action, or not yet reviewed), and each plan-review round whose reviewers gave different verdicts; `--mission <id>` narrows it. Nothing refuses or warns on any of them. |
 | `log` | The history of actions, read from Git, one line each and oldest first: when, the commit, which item or mission, the action, the thread where the record holds one, what changed, and any rule its commit skipped. For everything, one item, or one mission with its plan reviews and its items, and only actions `--since` a time. It adds nothing up. |
 | `check` | Validates every record. The Git hooks and CI run it. |
 
@@ -339,7 +339,9 @@ It lists only what is not met: a finding already answered is not shown. A
 Done when line that wraps over several lines of the record is shown whole; a
 wrapped line that begins `#123` is text, not a heading. It
 gives the round of an item in review or with changes requested. A finding
-whose rebuttal a reviewer kept says the rebuttal has had its one try. On
+whose rebuttal a reviewer kept says the rebuttal has had its one try. A
+finding answered `not built` stops the merge until the lead rules, and
+`status` says how the lead rules. On
 an approved item it names, before `Then: atelier merge`, the merge checks the
 base's `config.toml` lists, which `merge` runs on the merged tree. It does not
 say when they last passed, since nothing records that.
@@ -473,16 +475,22 @@ record is committed on the base.
   pull request where a forge is configured, where CI's result can be read.
   It carries no author reasoning beyond the Report.
 - **Recommendations.** Fix now, defer, or no action.
-- **A fix-now finding has two exits.** The implementer fixes it. Or it
-  rebuts it with a fact or a test in the Report's Responses, and the next
-  reviewer, who must be a fresh one, judges the rebuttal: it withdraws the
-  finding, keeps it, or, when the finding is right but not for this item,
-  keeps it at defer or no action with a line that says why. A rebuttal gets
-  one try.
-- **The implementer cannot dismiss a finding.** A reviewer settles one
-  without a fix, by withdrawing it or lowering it, and so does the mission's
-  lead, who rules on a kept finding either way and records the ruling. The
-  implementer passes no rule on its own work.
+- **A fix-now finding blocks the merge, and has three exits.** The
+  implementer fixes it. Where it is wrong, the implementer rebuts it with a
+  fact or a test in the Report's Responses, and the next reviewer, who must
+  be a fresh one, judges the rebuttal: it withdraws the finding, keeps it,
+  or, when the finding is right but not for this item, keeps it at defer or
+  no action with a line that says why. A rebuttal gets one try. Where it is
+  real and not worth building, the implementer answers it `not built:
+  <reason>`, which takes it straight to the mission's lead: the lead's
+  `status` shows it, the next reviewer leaves it alone, and `merge` holds
+  the item until the lead rules. With no mission, the thread that started
+  the implementer rules. A finding at defer or no action blocks nothing,
+  and the implementer may leave it with a basic reason.
+- **The implementer does not ignore a fix-now finding.** A reviewer settles
+  one without a fix, by withdrawing it or lowering it, and so does the
+  mission's lead, who rules on a kept finding or one not built, either way,
+  and records the ruling. The implementer passes no rule on its own work.
 - **A question is advice.** An implementer that cannot settle something asks
   the thread that started it, or an advisor, as a working model asks a
   stronger one at a decision point and carries on. Nothing records the
