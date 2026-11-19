@@ -37,6 +37,15 @@ after the cutover with the rest of its fixtures; Git keeps them.
 | `approval-follow-up` | A replay (see [Replayed reviews](#replayed-reviews)): the reviewer of atelier-cafy's change (ffabdab9), which keeps an approval current when an out-of-scope follow-up issue is filed after it | Facts: a round-1 review by another thread. Judged (graded): a fix-now finding names the known defect, that the rule holds only in the commit that creates the issue, so a later link or edit still stales the approval (atelier-iaas). Reported: whether the code supports each other fix-now finding |
 | `base-record-commits` | A replay: the reviewer of atelier-3mjv's change (74077b1a), which lets record-only commits land on the base | As `approval-follow-up`, for its defect: a record-only commit on the base may take a work item to done outside review (atelier-fj1t) |
 | `base-done-claims` | A replay: the reviewer of atelier-fj1t's change (4402d727), which makes `land` refuse a done claim made on the base outside review | As `approval-follow-up`, for its defect: `land` counts only commits an approval's pin contains, so a close after approval, which `merge` accepts, is refused by `land` (atelier-uw4x) |
+| `merge-sync` | A replay: the reviewer of atelier-s2ei's change (3ae56002), which adds `atelier merge --sync` to merge the base in, rerun current receipts and report whether the approval survived | As `approval-follow-up`, for its defect: a rerun receipt's summary nests the old receipt's whole body (atelier-3xq4) |
+| `brief-transitions` | A replay: the reviewer of a later change on atelier-7u4o's branch (c86e45e8), which has brief `issue show` count a transition that needs only an argument as allowed | As `approval-follow-up`, for its defect: `issue show --full` and the transition options view still call it blocked (atelier-4775) |
+| `hierarchy-rules` | A replay: the reviewer of atelier-59vp's change (b38c536b), which enforces the mission and epic hierarchy in commands, lint and bundles | As `approval-follow-up`, for its defect: a bundle may declare `advances` only on a mission, while `issue link` accepts it from either end (atelier-4xyr) |
+| `project-slug` | A replay: the reviewer of atelier-2oor's change (960d3c76), which mints IDs from the configured slug and has `init` take it from the directory's name, as its Done when asks | As `approval-follow-up`, for its defect: in a linked worktree, `init` mints every ID under the worktree directory's name (atelier-5qcs) |
+| `quiet-tokens` | A replay: the reviewer of atelier-pr4k's change (4b300310), which makes `--quiet` print one documented token on every command | As `approval-follow-up`, for its defect: a refused quiet `start` or `issue transition` still prints the whole report on stdout (atelier-fnak) |
+| `priority-contract` | A replay: the reviewer of atelier-6jap's change (4aee6436), an epic's squash merge that gives priorities one shared conversion contract among other storage cleanups | As `approval-follow-up`, for its defect: records store `P0`-`P3`, the CLI accepts only the words, and the parse error lists the words even for a record (atelier-jpok) |
+| `readiness-blockers` | A replay: the reviewer of a change on atelier-p2wk's epic branch (f2f6813e), its child atelier-72k4's, which explains readiness and dependency blockers | As `approval-follow-up`, for its defect: the diagnosis calls every blocked record a mission, a blocked task included (atelier-ksqc) |
+| `after-merge-checks` | A replay: the reviewer of atelier-n0qh's change (902a5a63), which marks after-merge checks on their Done when line and shows them until ticked on the base | As `approval-follow-up`, for its defect: the tick on the base makes `land` refuse for an item whose review had a fixed fix-now finding (atelier-secy) |
+| `touched-claims` | A replay: the reviewer of a review fix on atelier-37uq's branch (6f742c79), which makes land's touched-claims walk follow `advances` links | As `approval-follow-up`, for its defect: adding an issue to a mission re-checks every done issue of that mission (atelier-ss25) |
 
 Each scenario directory holds `scenario.json`, `prompt.md`, `setup.sh`,
 `grade.py` and `test_grade.py`, and a judged case `rubric.md`. The contract
@@ -76,6 +85,33 @@ when, Context and Report as they stood. They share one setup,
 - A replay reviewer may build with cargo. Its crates are fetched into
   `<work root>/cargo-home` first, it builds offline in its own `target/`,
   and the cases run one at a time (`--jobs 1`).
+
+Twelve of atelier's 15 after-merge rows in defects.md replay. Three do not:
+
+- Row 28 (atelier-cej5, from atelier-7b6e's 98f4ffb5): its defect cannot be
+  seen from the change. A parity test takes 7.6 s on Linux and passes; it
+  crossed nextest's 60-second limit only on macOS CI under the full suite's
+  load.
+- Row 57 (atelier-ov97, from atelier-nexd's 1a2df4a1): its diff is more than
+  one reviewer can hold, 2,453 changed lines, most of them a rewrite of the
+  debrief's 1,350-line renderer.
+- Row 69 (atelier-vo0z, from atelier-7v9q's f62a2a3b): its change and fix
+  touch no crate, only the release workflow and dist's targets, and the
+  shared tests read both under `crates/`. Its defect, Linux archives that
+  need glibc 2.35, shows only on an older host, and the item's own Report
+  named it as an open item, so review knew of it.
+
+Three cases start from trees older than the October tracker, which had no
+Goal, Done when or Close Reason. Their `case.toml` says what stands in for
+each: the item's Description, its Outcome and Evidence lines, and its close
+reason with the validation receipt the change committed.
+`readiness-blockers` holds the text of the child item that made the change,
+since defects.md credits its epic. `hierarchy-rules` and
+`priority-contract` start in June 2026, whose AGENTS.md gives that era's
+process under headings the setup does not strip (`Start Here` and
+`Common Commands`, which name commands today's binary lacks), and
+`priority-contract`'s tree holds that era's `AGENTFACTORY.md`. Both arms
+see the same text.
 
 ## Grading
 
@@ -209,7 +245,9 @@ The replay cases run one at a time, since their reviewers may build with
 cargo:
 
 ```bash
-replays="approval-follow-up base-record-commits base-done-claims"
+replays="approval-follow-up base-record-commits base-done-claims merge-sync \
+  brief-transitions hierarchy-rules project-slug quiet-tokens priority-contract \
+  readiness-blockers after-merge-checks touched-claims"
 for setup in sol house; do
   python3 $run $replays --setup $setup --ref $sha --runs 1 --jobs 1 --out <out>
 done
@@ -352,3 +390,5 @@ The smoke run that showed the matrix runs on the branch model is
 [results/2026-11-17-branch-model-smoke.md](results/2026-11-17-branch-model-smoke.md).
 The first replayed reviews, and what one costs, are
 [results/2026-11-18-replayed-reviews.md](results/2026-11-18-replayed-reviews.md).
+Nine more, one `sol` review each, are
+[results/2026-11-18-nine-more-replays.md](results/2026-11-18-nine-more-replays.md).
