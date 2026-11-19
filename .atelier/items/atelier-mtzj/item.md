@@ -106,8 +106,8 @@ binary prints to a lead says the same. Commit d41675df5.
   2026-11-13 dispute row marked as superseded, and the kept-finding
   passage updated.
 
-Word count of `SKILL.md` and `roles/`: 1,231 before, 1,508 after
-(`SKILL.md` 446 to 487, `lead.md` 169 to 377, `implementer.md` 86 to 114).
+Word count of `SKILL.md` and `roles/`: 1,231 before, 1,533 after
+(`SKILL.md` 446 to 487, `lead.md` 169 to 402, `implementer.md` 86 to 114).
 
 Validation: `cargo nextest run -p atelier-cli -p atelier-core` passes (325
 tests), `cargo clippy --all-targets -- -D warnings` and `cargo fmt --check`
@@ -129,3 +129,16 @@ implementers, so the lead's merge in the new test shows as `t1`'s. The test
 says so and pins `t1`; nv22, which records the thread that passed a rule,
 should change that assertion to `lead1`.
 
+Round 2 (commit 214d5b328): a command that only writes files (`ready`,
+`set`, `close`, `verdict`) now prints a commit line carrying an
+`Atelier-Skip` trailer for each rule it passed, so the reason reaches Git
+and `atelier log`. `tests/skip.rs` shows it for `ready` and for `verdict`,
+whose skip now ends its line in `atelier log`. `docs/design.md` (the
+bypass and what `log` does not show) and `docs/product.md` say so.
+`cargo nextest run -p atelier-cli -p atelier-core` (325), clippy, fmt and
+`evals/agent-factory/test.sh` pass again.
+
+### Responses
+
+- 1-zfhi.1: fixed in 214d5b328
+- 1-zfhi.2: fixed in 214d5b328
