@@ -49,10 +49,13 @@ once.
    command says who may run it, and `status` tells each thread what it holds
    and what comes next.
 4. **Roles in tension.** A lead judges for the product as a whole, an
-   implementer gets one change right, a reviewer comes fresh. No thread holds
-   two of these on the same work.
-5. **Independent review is not negotiable.** Rounds of review are not a cost
-   to cut. Records and relays are.
+   implementer gets one change right, a reviewer comes fresh. By default no
+   thread holds two of these on the same work; a lead that takes an item
+   over says why.
+5. **Independent review is the default.** Rounds of review are not a cost
+   to cut. Records and relays are. A lead is responsible for finishing its
+   mission and may merge past a review, with its reason on the record and
+   never silently.
 6. **Trusted agents.** Show state before refusing. A refusal names the way
    out, and the way past: every rule can be skipped on purpose, with a
    reason.
@@ -476,8 +479,10 @@ record is committed on the base.
   finding, keeps it, or, when the finding is right but not for this item,
   keeps it at defer or no action with a line that says why. A rebuttal gets
   one try.
-- **The implementer cannot dismiss a finding.** Only a reviewer settles one
-  without a fix, by withdrawing it or lowering it, and nothing else can.
+- **The implementer cannot dismiss a finding.** A reviewer settles one
+  without a fix, by withdrawing it or lowering it, and so does the mission's
+  lead, who rules on a kept finding either way and records the ruling. The
+  implementer passes no rule on its own work.
 - **A question is advice.** An implementer that cannot settle something asks
   the thread that started it, or an advisor, as a working model asks a
   stronger one at a decision point and carries on. Nothing records the
@@ -487,9 +492,10 @@ record is committed on the base.
   `rebutted` Response with the next round's judgment of it, and a plan-review
   round whose reviewers differ. `list --disputed` prints them, `show
   <mission>` and the lead's `status` give a lead its mission's, and the
-  gardener reads them first. Nothing blocks on them. A lead steps in with the
-  lever it owns: it moves the disputed work out of the item's Scope into an
-  item of its own.
+  gardener reads them first. Nothing blocks on them. A lead settles one either
+  way: it merges past the finding with its ruling as the skip's reason, has
+  the implementer fix it, or moves the disputed work out of the item's
+  Scope into an item of its own.
 - **The skill applies two of these rules:** a rebuttal's one try and the
   fresh reviewer for a rebuttal. The tool refuses neither; `status` shows the
   round and the one-try rule.
@@ -604,7 +610,8 @@ ATELIER_SKIP="the reviewer is down and the human said to merge" atelier merge
 
 - The reason is required; an empty one is refused.
 - The skip is printed. Where Atelier makes the commit, as `merge` does, the
-  commit message gets a line naming the rule and the reason. A skip in a
+  commit message gets a line naming the rule and the reason; where a command
+  only writes files, the commit line it prints carries that line. A skip in a
   hook shows in the transcript, as the variable on the Git command.
 - Every refusal names the proper way out first and the skip second.
 - A record Atelier cannot parse cannot be skipped past. That is not a rule;

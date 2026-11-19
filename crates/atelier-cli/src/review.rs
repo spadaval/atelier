@@ -173,7 +173,12 @@ fn plan_review(repo: &mut Repo, id: &str) -> Result<Outcome> {
     // HEAD for a new review.
     let reviewed = round.review.map_or(&commit, |file| &file.review.commit);
     let Some(plan) = repo.mission_at(reviewed, id)? else {
-        let line = output::commit_line(repo.git_at(), &[mission_dir(id)], &format!("Plan {id}"));
+        let line = output::commit_line(
+            repo.git_at(),
+            &[mission_dir(id)],
+            &format!("Plan {id}"),
+            &[],
+        );
         return Ok(Outcome::Refused(output::plan_not_committed(
             id, reviewed, &line,
         )));
@@ -298,7 +303,12 @@ fn plan_verdict(repo: &mut Repo, verdict: Verdict, model: Option<String>) -> Res
     let mut written = file.clone();
     written.review = review;
     written.write().context("cannot write the review file")?;
-    let line = output::commit_line(repo.git_at(), std::slice::from_ref(&path), &message);
+    let line = output::commit_line(
+        repo.git_at(),
+        std::slice::from_ref(&path),
+        &message,
+        &repo.skip.passed(),
+    );
     let landing = landing(repo, &id)?;
     Ok(Outcome::Done(output::plan_verdict_recorded(
         &id, name.round, verdict, &path, &line, &landing,
@@ -371,7 +381,7 @@ pub fn verdict(repo: &mut Repo, verdict: Verdict, model: Option<String>) -> Resu
         .write_item(&item)
         .context("cannot write the item's record")?;
     let paths = [item_path(&id), review_path];
-    let line = output::commit_line(repo.git_at(), &paths, &message);
+    let line = output::commit_line(repo.git_at(), &paths, &message, &repo.skip.passed());
     Ok(Outcome::Done(output::verdict_recorded(
         &id,
         file.name.round,

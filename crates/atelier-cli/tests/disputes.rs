@@ -123,7 +123,7 @@ fn a_rebuttal_the_next_reviewer_keeps_has_had_its_one_try_until_a_reviewer_lower
     assert!(
         status.contains(&format!(
             "  [ ] Finding {carrier} (fix now): No period (a reviewer kept its rebuttal, and a \
-             rebuttal gets one try: fix it)\n"
+             rebuttal gets one try: fix it, or take it to your mission's lead)\n"
         )),
         "{status}"
     );
@@ -286,17 +286,17 @@ fn led() -> Scratch {
          created_at: 2026-11-10T09:00:00Z\n---\n\n## Outcome\n\nGreetings.\n",
     )
     .unwrap();
-    let review = |verdict: &str, by: &str, model: &str, body: &str| {
+    let review = |round: u32, verdict: &str, by: &str, model: &str, body: &str| {
         format!(
-            "---\nschema: atelier.review\nschema_version: 3\nround: 1\ncommit: abc1234\n\
+            "---\nschema: atelier.review\nschema_version: 3\nround: {round}\ncommit: abc1234\n\
              reviewers:\n- {by}\nmodel: {model}\nverdict: {verdict}\n\
              created_at: 2026-11-10T09:00:00Z\n---\n\n## Summary\n\ns\n{body}"
         )
     };
     let reviews = [
-        ("1-aaaa", review("approve", "p1", "gpt-6.1-sol", "")),
-        ("1-bbbb", review("changes", "p2", "null", NO_PERIOD)),
-        ("2-cccc", review("approve", "p2", "null", "")),
+        ("1-aaaa", review(1, "approve", "p1", "gpt-6.1-sol", "")),
+        ("1-bbbb", review(1, "changes", "p2", "null", NO_PERIOD)),
+        ("2-cccc", review(2, "approve", "p2", "null", "")),
     ];
     for (stem, text) in reviews {
         fs::write(root.join(format!("{dir}/reviews/{stem}.md")), text).unwrap();
@@ -351,8 +351,8 @@ fn a_missions_disputes_are_listed_for_it_shown_with_it_and_told_to_its_lead() {
     let status = atelier(&base, "lead1", &["status"]).stdout;
     assert!(
         status.contains(&format!(
-            "Disputed in this mission (nothing waits on these; a lead steps in by moving disputed \
-             work out of an item's Scope into an item of its own):\n{rebuttal}{split}"
+            "Disputed in this mission (nothing waits on these; you settle each, either way, and \
+             record your ruling):\n{rebuttal}{split}"
         )),
         "{status}"
     );
@@ -360,4 +360,62 @@ fn a_missions_disputes_are_listed_for_it_shown_with_it_and_told_to_its_lead() {
     assert!(!atelier(&root, "t1", &["status"])
         .stdout
         .contains("Disputed"));
+}
+
+#[test]
+fn a_lead_rules_for_the_implementer_by_merging_past_a_kept_finding_with_its_reason() {
+    const RULING: &str = "The finding asks for a period the Goal does not want; ruled for t1";
+    let scratch = led();
+    let root = scratch.root();
+    fs::write(root.join("hello.txt"), "hello\n").unwrap();
+    git(&root, &["add", "hello.txt"]);
+    git(&root, &["commit", "-qm", "Say hello"]);
+    finish_and_submit(&root, "t1");
+    request_changes(&root);
+    rebut(&root, &format!("{}.1", review_of(&root, 1).0));
+    judge(&root, "r2", 2, |text| text.to_string(), "changes");
+
+    // Without a reason the lead is refused, as anyone would be.
+    let refused = atelier(&root, "lead1", &["merge"]);
+    assert_eq!(refused.code, 1, "{}{}", refused.stdout, refused.stderr);
+    assert_eq!(field(&root, "HEAD", "status"), "changes_requested");
+
+    let output = atelier_command(&root, "lead1", &["merge"])
+        .env("ATELIER_SKIP", RULING)
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8(output.stdout.clone()).unwrap();
+    assert!(output.status.success(), "{stdout}{output:?}");
+    let rules = [
+        format!("You hold {ID} as its implementer (t1 does)"),
+        format!("{ID} is approved (it is changes requested)"),
+        "A review of the latest round approves it (none does)".to_string(),
+    ];
+    for rule in &rules {
+        assert!(
+            stdout.contains(&format!("Skipped with ATELIER_SKIP: {rule}: {RULING}\n")),
+            "{stdout}"
+        );
+    }
+    assert!(atelier(&root, "t9", &["show", ID])
+        .stdout
+        .contains("Status: done"));
+    // The dispute stays listed, and the merge's line in the log ends with
+    // each rule the ruling passed. The trailer does not yet say which
+    // thread passed them, so the line names the implementer; atelier-nv22
+    // records the lead.
+    assert!(
+        disputed(&root, &[]).contains(&format!("{ID}/")),
+        "{}",
+        disputed(&root, &[])
+    );
+    let log = atelier(&root, "t9", &["log", ID]).stdout;
+    let merge = log.lines().last().unwrap();
+    assert!(
+        merge.contains(&format!(" {ID} merge t1 changes_requested -> done; skip ")),
+        "{log}"
+    );
+    for rule in &rules {
+        assert!(merge.contains(&format!("; skip {rule}: {RULING}")), "{log}");
+    }
 }

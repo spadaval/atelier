@@ -99,7 +99,7 @@ pub fn condition_text(id: &str, condition: &Condition) -> String {
             format!("Finding {finding} (fix now): {title}")
         }
         Condition::NoResponse { finding, title, rebutted: true } => format!(
-            "Finding {finding} (fix now): {title} (a reviewer kept its rebuttal, and a rebuttal gets one try: fix it)"
+            "Finding {finding} (fix now): {title} (a reviewer kept its rebuttal, and a rebuttal gets one try: fix it, or take it to your mission's lead)"
         ),
         Condition::FormerImplementer => format!("You have never implemented {id}"),
         Condition::Decided(finding) => format!(
@@ -261,7 +261,7 @@ pub fn handoff(who: &str, tasks: &[String], then: &str) -> String {
 /// `leads`, is not offered the item.
 pub fn visiting(id: &str, leads: Option<&str>, offer: &str) -> String {
     match leads {
-        Some(mission) => format!("You lead mission {mission}, which {id} is in: its implementer builds it, so you do not take it over.\n"),
+        Some(mission) => format!("You lead mission {mission}, which {id} is in: its implementer builds it, and you take it over only with your reason in its Report.\n"),
         None => offer.to_string(),
     }
 }
@@ -409,28 +409,36 @@ pub fn quoted(word: &str) -> String {
     }
 }
 
-/// The Git command that commits `paths`, and only them, with `message`.
-/// `at` is the checkout they are in, which the command names with `-C`
-/// when the caller is not at its root (see [`crate::Repo::git_at`]).
-pub fn commit_line(at: Option<&Path>, paths: &[String], message: &str) -> String {
+/// The Git command that commits `paths`, and only them, with `message`
+/// and an `Atelier-Skip` trailer for each of `skips`, the rules the command
+/// that wrote them passed, as `<rule>: <reason>`: the commit is the one
+/// place `log` reads a skip from. `at` is the checkout they are in, which
+/// the command names with `-C` when the caller is not at its root (see
+/// [`crate::Repo::git_at`]).
+pub fn commit_line(at: Option<&Path>, paths: &[String], message: &str, skips: &[String]) -> String {
     let git = match at {
         Some(at) => format!("git -C {}", quoted(&at.display().to_string())),
         None => "git".into(),
     };
     let paths: Vec<String> = paths.iter().map(|path| quoted(path)).collect();
     let paths = paths.join(" ");
-    format!("{git} add -- {paths} && {git} commit -m \"{message}\" -- {paths}")
+    let trailers: String = (skips.iter())
+        .map(|skip| format!(" --trailer {}", quoted(&format!("Atelier-Skip: {skip}"))))
+        .collect();
+    format!("{git} add -- {paths} && {git} commit -m \"{message}\"{trailers} -- {paths}")
 }
 
 /// What a planning command prints once it has written `paths`, which are
-/// in the checkout `at` names, as for [`commit_line`]. `item` is the item
-/// whose branch it ran on, when it settled a finding there.
+/// in the checkout `at` names, as for [`commit_line`] with the rules it
+/// passed, `skips`. `item` is the item whose branch it ran on, when it
+/// settled a finding there.
 pub fn planned(
     said: &str,
     guidance: &Guidance,
     at: Option<&Path>,
     paths: &[String],
     message: &str,
+    skips: &[String],
 ) -> String {
     let mut text = format!("{said}Wrote, and did not commit:\n");
     for path in paths {
@@ -443,7 +451,7 @@ pub fn planned(
         ),
         Guidance::Own => String::new(),
     };
-    text + &format!("Then: {}\n", commit_line(at, paths, message))
+    text + &format!("Then: {}\n", commit_line(at, paths, message, skips))
 }
 
 /// What a record write says of how its change reaches the base.

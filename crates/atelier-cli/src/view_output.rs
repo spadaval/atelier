@@ -622,7 +622,7 @@ pub fn led(led: &[(MissionDir, Vec<Entry>, Disputes)]) -> String {
             by_status(&items, true),
         );
         if !disputed.is_empty() {
-            text += "Disputed in this mission (nothing waits on these; a lead steps in by moving disputed work out of an item's Scope into an item of its own):\n";
+            text += "Disputed in this mission (nothing waits on these; you settle each, either way, and record your ruling):\n";
             text += &disputes(disputed);
         }
         text += &start_threads(&items);

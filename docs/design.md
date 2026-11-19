@@ -633,7 +633,7 @@ or that none does yet, and tells the implementer of a building item whose
 Goal or Done when lines are empty, as after `start --new`, to write them
 first. That line is orientation, not a condition of `submit`. An open
 finding whose rebuttal a reviewer kept says that a rebuttal has had its one
-try, so the exit left is a fix. An approved item says
+try, so the exits left are a fix or the mission's lead. An approved item says
 since when, in the implementer's and the lead's `status` and in `show`:
 the time of the commit on its branch that set the approving review's
 verdict, which `git log -S` finds; nothing stores it. Away from the item's
@@ -1212,8 +1212,9 @@ lines in 0.06 to 0.08 seconds, starting six Git processes.
 What `log` does not show: `new`, `set` and edits to a record's text, which
 Git's own log has, so an item's time as a draft is read from its
 `created_at` and not from `log`; the executing thread of `ready`, `drop`
-and `close`, which no record holds; and a skip in a Git hook or on a command
-that makes no commit, which leaves nothing in Git.
+and `close`, which no record holds; and a skip in a Git hook, which leaves
+nothing in Git. A skip on a command that makes no commit shows once the
+commit it prints is made, since that commit carries it.
 
 `log` sees commits, not commands. Actions on different records committed
 together appear as separate lines with one time. Two actions on one record in
@@ -1345,10 +1346,13 @@ rule names.
   and `merge`, whose message the forge's merge commit carries), `git
   interpret-trailers` adds a trailer
   `Atelier-Skip: <rule>: <reason>` for each to its message, after `merge`'s
-  `Atelier-Merge:`. Whitespace in the reason and in each rule is made one
-  line. A skip in a hook, or on a command that makes no commit, writes
-  nothing; it shows in the transcript as the variable on the command, which
-  is where the scorecard counts it. Atelier's own `git commit` and `git
+  `Atelier-Merge:`. A command that writes files and makes no commit, such as
+  `ready`, `set`, `close` or `verdict`, puts the same trailers in the commit
+  line it prints, as `--trailer` arguments (2026-11-18, atelier-mtzj, so a
+  lead's departure on one is kept). Whitespace in the reason and in each
+  rule is made one line. A skip in a hook writes nothing; it shows in the
+  transcript as the variable on the command, which is where the scorecard
+  counts it. Atelier's own `git commit` and `git
   push` pass on what the hooks printed, so a rule a hook skips there is
   printed too. The reason and the rules passed are one value per
   invocation, a `Skip`, which its caller makes: the command once per
@@ -1711,7 +1715,7 @@ carried here when the ADRs were deleted on 2026-11-11; Git keeps the ADR.
 | Items keep `draft` and `ready` (2026-11-13) | They record intent: agreed to exist, or agreed to start now. Readying a mission never readied its items, so a lead can hold later work until earlier work has shown what it shows |
 | `lead` stays a field on the mission, as attribution (2026-11-13) | The Desk shows who leads. It reaches the base by the record-only path once per mission. It is not a lock, and a second lead loses at merge |
 | `escalate` and `decide` are removed (2026-11-13, atelier-xbog) | They served two jobs. Advice needs no record: the implementer asks the thread that started it, as Claude's advisor tool lets a working model ask a stronger one and carry on. A disputed finding already has a path: a rebuttal in Responses, settled by a fresh reviewer. Nothing has used either command since the cutover |
-| A disagreement is found, not enforced (2026-11-13) | The records hold it already: a `rebutted` Response with the next round's `Now: kept` or `Now: withdrawn`, and a plan-review round whose reviewers differ. `list --disputed` prints them, `show <mission>` gives a lead its mission's, and the gardener reads them first. Nothing blocks on them. A lead steps in with the lever it owns: it moves the disputed work out of the item's Scope into an item of its own |
+| A disagreement is found, not enforced (2026-11-13) | The records hold it already: a `rebutted` Response with the next round's `Now: kept` or `Now: withdrawn`, and a plan-review round whose reviewers differ. `list --disputed` prints them, `show <mission>` gives a lead its mission's, and the gardener reads them first. Nothing blocks on them. Until 2026-11-18 a lead stepped in only by moving the disputed work out of the item's Scope into an item of its own; since then it settles a dispute either way, under "A lead is in charge of its mission" |
 | A lead's notes are ordinary record changes (2026-11-13) | Two or three per mission, in `notes.md`, through the record-only path |
 | Record-only changes take about a minute (2026-11-13) | A tracker in Git cannot be instant, and does not need to be. Each repository's CI must give records a fast path, which is a line of the readiness checklist |
 | With a forge, a merge finishes as the forge's merge of the pull request (2026-11-13) | So it works on a protected base and with human reviewers, where `merge` stops with status 3 until they approve. With no forge, `merge` moves the base locally |
@@ -1722,6 +1726,7 @@ carried here when the ADRs were deleted on 2026-11-11; Git keeps the ADR.
 | A new crate is made when a second program needs part of the core without the rest. Until then, a module (2026-11-14, atelier-dy62) | The core was three crates for about 8,000 lines that nothing used apart. The split put same-named files in different crates, which agents guessed wrong, and left helpers out of reach of the crate below |
 | The T3 Code extension lives in this repository, under `t3-extension/`, outside the `atelier` release, as the Desk is (ADR 0032). `atelier` still has no Node step in its build or release (2026-11-16, atelier-n4g7) | It talks to the Desk over the Desk's host contract, and every change to it so far also changed the Desk, so one item and one review should cover both sides |
 | The T3 Code extension is released on its own tags, `t3-extension-v<version>`, as a bundle of its files and installer with a checksum. The release builds no Rust and runs no test: it publishes only when CI passed, with the extension's job, on the last merge at or before the tag that changed what that job tests. It is never the repository's latest release, and `dist` runs `atelier`'s release only for `v*` tags (`tag-namespace`, so its workflow is `v-release.yml`) (2026-11-16, atelier-451s) | The extension changes more often than `atelier`, and a device should download five script files without a clone of a Rust project. CI already tested the commit, so the release trusts that run instead of repeating it |
+| A lead is in charge of its mission (2026-11-18, atelier-mtzj). The process is its default: it does itself what needs no review, sends the rest to an implementer, and has each change reviewed by a thread that did not write it. It may depart from any of that, a review included, by giving its reason with `ATELIER_SKIP`, and never silently. It settles a dispute between an implementer and a reviewer either way and records the ruling, and it may drop an item or the mission when the work turns out much harder than planned, saying in the Result what was not done. It may not do more or other than the plan asks. An implementer passes no rule on its own work, and takes a kept finding it cannot fix to the lead | The human said on 2026-11-18 that a lead is responsible for finishing its mission and may do more or less anything to get there. Atelier is the one with the clipboard: it notes everything down and complains about process, and it is not in charge. Three things keep a lead in check: the process its instructions give it, a stated reason for every departure, and knowing the record will be read. That reaches as far as merging a change nobody reviewed, said out loud. They chose to try this and restrict it later if leads push bad code through. The skill had said the opposite, "You write no code" and a disputed finding "is not yours to settle", and sent a kept finding back to be fixed even where the fix broke a Done when line, which left an item that could never merge |
 
 Three points of the design went beyond what they had confirmed when it was
 written, and were put to them with it:
