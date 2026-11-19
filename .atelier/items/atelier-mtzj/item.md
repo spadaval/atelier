@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-mtzj
 title: 'Put the lead in charge in the skill: the process as its default, and any departure said with its reason'
-status: in_review
+status: approved
 mission: atelier-kw8u
 labels: []
 priority: medium
