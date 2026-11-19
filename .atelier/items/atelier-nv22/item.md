@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-nv22
 title: List every rule a mission's commits passed, with its reason and thread, in atelier show <mission>
-status: in_review
+status: changes_requested
 mission: atelier-kw8u
 labels: []
 priority: medium
