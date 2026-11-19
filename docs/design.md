@@ -1618,7 +1618,7 @@ What is still to come:
   everything as it was, and another item's merge completes meanwhile.
   Changes made during the wait are judged under the lock: a new base, a new
   merge check, a branch gone stale.
-- A fresh-agent scenario, run by the eval harness (`next-loop` in
+- A fresh-agent scenario, run by the eval harness (`loop` in
   `evals/agent-factory/`): an agent given only "run `atelier status`" takes
   a ready item to done. It is run with Claude Opus and with a Codex model.
 

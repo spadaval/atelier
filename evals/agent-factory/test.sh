@@ -9,10 +9,6 @@
 # Usage: evals/agent-factory/test.sh [<atelier binary>]
 # The binary defaults to target/debug/atelier; build it first with
 # `cargo build -p atelier-cli`.
-#
-# next-done-when-rewrite's setup times a real benchmark and refuses on a host
-# fast enough to meet its 50 ms target with a linear scan (it takes about
-# 70 ms on a 2022 laptop).
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)

@@ -1,0 +1,12 @@
+{
+  "description": "loop's fixture one round of review later: slug-k3fa is in changes_requested, held by the agent's own thread, with a round-1 review by another thread whose one fix-now finding is a real defect (leading hyphens are kept). No skill or instructions; the prompt is only \"Run `atelier status` and do what it says.\" Each agent runs as a thread with its own T3CODE_THREAD_ID and can start another with `delegate`. Pass, by facts: the item is done on main by an Atelier merge; a round-2 review approves it from a thread that neither implemented it nor reviewed round 1, and marks the carried finding fixed; the Report's Responses answers the finding; the tests pass on main, cover both Done when examples and fail on the code round 1 reviewed; and no item labelled needs-human was filed. Nothing leaves the process without a recorded reason (a departure with its reason, such as a rule passed with ATELIER_SKIP or an item merged as trivial, is reported, and the judge says whether the reason holds). Failed `atelier` calls are reported from the call log. Needs EVAL_ATELIER set to the atelier binary under test.",
+  "role": "implementer",
+  "covers": [
+    "fresh-agent-loop"
+  ],
+  "threads": true,
+  "timeout_sec": 2400,
+  "thread_timeout_sec": 1500,
+  "max_budget_usd": 15,
+  "thread_budget_usd": 10
+}

@@ -316,12 +316,12 @@ class LimitTest(unittest.TestCase):
         self.assertIn("plugins = false", config)
 
     def test_jobs_above_two_and_threads_above_one_are_refused(self):
-        self.assertIn("above 2", run.check_jobs(3, ["next-vacuous-test-review"]))
-        self.assertIsNone(run.check_jobs(2, ["next-vacuous-test-review",
-                                             "next-costly-hardening"]))
-        self.assertIn("--jobs 1", run.check_jobs(2, ["next-vacuous-test-review", "next-loop"]))
-        self.assertIsNone(run.check_jobs(1, ["next-loop"]))
-        refused = subprocess.run([sys.executable, str(HERE / "run.py"), "next-loop",
+        self.assertIn("above 2", run.check_jobs(3, ["vacuous-test-review"]))
+        self.assertIsNone(run.check_jobs(2, ["vacuous-test-review",
+                                             "costly-hardening"]))
+        self.assertIn("--jobs 1", run.check_jobs(2, ["vacuous-test-review", "loop"]))
+        self.assertIsNone(run.check_jobs(1, ["loop"]))
+        refused = subprocess.run([sys.executable, str(HERE / "run.py"), "loop",
                                   "--jobs", "2", "--out", str(self.tmp / "out")],
                                  capture_output=True, text=True)
         self.assertEqual(refused.returncode, 2)
@@ -487,14 +487,11 @@ class CodexThreadsTest(unittest.TestCase):
             (tmp / "run").mkdir()
             [agent] = run.codex_threads(tmp / "home", tmp / "run", 0)
             self.assertEqual((agent["thread"], agent["end"] - agent["start"]), ("codex-kid", 4))
-            spec = importlib.util.spec_from_file_location(
-                "loop", HERE.parent / "scenarios" / "next-loop" / "shell_grade.py")
-            loop = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(loop)
-            found, tools = loop.calls(tmp / "run" / "threads" / "codex-kid.jsonl", "kid")
-            self.assertEqual(found, [("kid", "/bin/bash -lc 'atelier review slug-k3fa'", 1,
-                                      "Nothing changed.")])
-            self.assertEqual([r["refused"] for r in loop.tally(found)], [1])
+            written = [json.loads(line) for line in
+                       (tmp / "run" / "threads" / "codex-kid.jsonl").read_text().splitlines()]
+            self.assertIn({"type": "item.completed", "item": {
+                "type": "command_execution", "command": "/bin/bash -lc 'atelier review slug-k3fa'",
+                "exit_code": 1, "aggregated_output": "Nothing changed."}}, written)
             self.assertTrue((tmp / "run" / "sessions" / "rollout-b-kid.jsonl").is_file())
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
@@ -1027,6 +1024,32 @@ class JudgeTest(unittest.TestCase):
         self.assertEqual((r["pass"], out["previous_pass"], out["pass"]), (False, False, True))
         self.assertEqual(len(out["judged"]), 2)
 
+    def test_regrading_a_run_saved_under_a_case_s_old_name_grades_it_as_renamed(self):
+        r = self.run_house({"built-it": "fail"})
+        result = Path(r["run_dir"]) / "result.json"
+        result.write_text(json.dumps({**json.loads(result.read_text()), "scenario": "next-case"}))
+        saved = dict(run.RENAMED)
+        run.RENAMED.update({"next-case": "case", "next-gone": None})
+        try:
+            (self.tmp / "judge-answers.json").write_text("{}")
+            out = self.judging.rejudge(run, Path(r["run_dir"]), None, self.tmp / "work")
+            self.assertIs(out["pass"], True)
+            result.write_text(json.dumps({**json.loads(result.read_text()),
+                                          "scenario": "next-gone"}))
+            out = self.judging.rejudge(run, Path(r["run_dir"]), None, self.tmp / "work")
+            self.assertEqual(out["error"], "next-gone was deleted")
+        finally:
+            run.RENAMED.clear()
+            run.RENAMED.update(saved)
+
+    def test_every_renamed_case_is_a_case_today(self):
+        for old, new in run.RENAMED.items():
+            with self.subTest(old=old):
+                self.assertTrue(new is None or (Path(run.__file__).resolve().parents[1]
+                                                / "scenarios" / new / "grade.py").is_file())
+        self.assertIsNone(run.case_dir("next-done-when-rewrite"))
+        self.assertEqual(run.case_dir("next-rebuttal-kept").name, "next-rebuttal-kept")
+
     def test_a_case_without_facts_keeps_its_own_grade(self):
         (self.tmp / "scenarios" / "case" / "grade.py").write_text(
             'print(\'{"pass": false, "checks": {}, "notes": ["old"]}\')')
@@ -1154,7 +1177,7 @@ class MainTest(unittest.TestCase):
         shutil.rmtree(self.work_root, ignore_errors=True)
 
     def main(self, *args):
-        sys.argv = ["run.py", "next-vacuous-test-review", "--arms", "none",
+        sys.argv = ["run.py", "vacuous-test-review", "--arms", "none",
                     "--out", str(self.tmp / "out"), "--work-root", str(self.work_root),
                     *args]
         out = io.StringIO()
@@ -1165,7 +1188,7 @@ class MainTest(unittest.TestCase):
     def test_house_checks_both_agents_and_sol_one(self):
         printed = self.main("--setup", "house")
         self.assertEqual(self.canaries, ["claude", "codex"])
-        self.assertIn("| house | next-vacuous-test-review | none | 1 of 1 | 0 | 10 | 1.0k | 10 |",
+        self.assertIn("| house | vacuous-test-review | none | 1 of 1 | 0 | 10 | 1.0k | 10 |",
                       printed)
         self.canaries.clear()
         self.main("--setup", "sol")

@@ -366,14 +366,17 @@ def load_run():
 
 
 def rejudge(run, run_dir: Path, setup_name, work_root: Path) -> dict:
-    """Grade a kept run again with today's grade.py and rubric. A run the
+    """Grade a kept run again with today's grade.py and rubric, the case's
+    under a name it had when the run was saved included. A run the
     harness found invalid stays invalid: graded null, with its reason, and
     not judged."""
     result = json.loads((run_dir / "result.json").read_text())
     work = (run_dir / "work").resolve()
     if not (work / "repo").is_dir():
         return {"run_dir": str(run_dir), "error": "its work directory is gone"}
-    case = run.SCENARIOS / result["scenario"]
+    case = run.case_dir(result["scenario"])
+    if case is None:
+        return {"run_dir": str(run_dir), "error": f"{result['scenario']} was deleted"}
     setup = run.load_setup(setup_name or result["setup"]) if (setup_name or (
         result.get("setup") and (run.SETUPS / f"{result['setup']}.json").is_file())) \
         else run.one_model_setup(result.get("agent", "claude"), result["model"],

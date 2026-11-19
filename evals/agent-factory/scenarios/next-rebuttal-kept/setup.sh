@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# next-loop-changes' repository two rounds later. The agent's thread
+# loop-changes' repository two rounds later. The agent's thread
 # (T3CODE_THREAD_ID) fixed round 1's finding; round 2's reviewer marked it
 # fixed and raised a new fix-now finding that is wrong on the facts (README.md
 # says nothing of leading hyphens, and the second Done when example needs them
@@ -11,8 +11,8 @@ set -euo pipefail
 work=$1
 : "${T3CODE_THREAD_ID:?set T3CODE_THREAD_ID to the thread the agent runs as}"
 here=$(cd "$(dirname "$0")" && pwd)
-bash "$here/../next-loop-changes/setup.sh" "$work"
-source "$here/../next-loop/lib.sh"
+bash "$here/../loop-changes/setup.sh" "$work"
+source "$here/../loop/lib.sh"
 impl=$T3CODE_THREAD_ID
 export PATH="$work/bin:$PATH"
 cd "$work/repo"
