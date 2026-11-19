@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-6ve6
 title: Give the replay judge the base-tree files a finding cites
-status: in_review
+status: approved
 mission: atelier-kw8u
 labels: []
 priority: medium
