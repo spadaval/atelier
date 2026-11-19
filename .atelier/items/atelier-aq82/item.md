@@ -171,3 +171,20 @@ lead can start threads without asking, such as `house` (Claude Code and
 `delegate`), or more runs, are what would show whether the no-skill lead
 merges the obvious line as trivial or stops on the stalled item. One run per
 arm is not enough to say the skill arm always passes.
+
+After round 1, `done-when-conflict` counts a deleted `sample.csv` or item
+record as changed, and reads ticks and code from the item's checkout with
+its uncommitted changes (a line ticked in the branch's record or the
+checkout's counts). `lead-stalled-item` gives the judge each `needs-human`
+item's title and body, and its new graded question `currency-raised` passes
+an unmerged, undropped currency item only where one of them raises its
+question. `test.sh` passes. `harness/judge.py` regraded the four saved runs
+of these two cases with the new graders: every grade is unchanged, and the
+no-skill lead-stalled-item run now also fails `currency-raised`.
+
+### Responses
+
+- 1-ylk8.1: fixed in 2e7dec46b
+- 1-ylk8.2: fixed in 2e7dec46b
+- 1-ylk8.3: fixed in 2e7dec46b
+- 1-ylk8.4: fixed in 2e7dec46b
