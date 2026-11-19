@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-s6xk
 title: 'Add five review cases of correct work: three overbuilt, each with its lean reference, and two controls'
-status: in_review
+status: approved
 mission: atelier-8az0
 labels: []
 priority: medium
