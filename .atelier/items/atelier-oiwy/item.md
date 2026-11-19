@@ -29,13 +29,18 @@ keep what the runs support.
 The human asked for a fifth on 2026-11-18: a rule against nits. Nothing
 today says which findings deserve `fix now`. The review brief names the
 three recommendations with no test for choosing one, and `roles/reviewer.md`
-says to "report every other finding you can support as well". Nothing
-narrows what a reviewer raises in a later round. The old skill had both
-rules (`git show ff6b56fe4:skills/agent-factory/procedures/review.md`, lines
-56 to 98) and they were cut with no case that exercised them. This
-mission's own plan review showed the cost: 12 findings over four rounds,
-every one `fix now`, the last on three lines of the final item, each
-costing a full round.
+says to "report every other finding you can support as well". The old skill
+had such a rule (`git show ff6b56fe4:skills/agent-factory/procedures/review.md`,
+lines 56 to 98) and it was cut with no case that exercised it.
+
+Later that day they replaced the rule's wording with a scale of their own,
+after a survey of every Sol review of an item since the cutover: 143
+reviews, 136 findings, each classified by Opus agents. All 136 were right
+on the facts. Of 117 marked `fix now`, 27 were useful or nit (23%), and all
+27 were built. Sol never marked a critical or important finding as less.
+The files are in `~/.cache/af-evals/review-survey-2026-11-18/`. What a
+later round is for is no longer this passage's: it goes to the brief the
+binary prints, in a mission that follows this one.
 
 ## Done when
 
@@ -47,26 +52,37 @@ costing a full round.
   control is far away and the recorder is running; and the rule against
   nits in `roles/reviewer.md`. Each is brought to today's commands and says
   nothing the binary prints.
-- [ ] The rule against nits says two things. A finding is `fix now` only if
-  the work would come out wrong or unsafe without it; otherwise it is
-  `defer` or `no action`, and when unsure, `defer`. And after round 1 a
-  reviewer checks that the earlier findings are fixed and that the fixes
-  broke nothing; a new finding on text that did not change is `defer`
-  unless it is serious.
-- [ ] Two small round-2 review cases are added for it, each a fixture,
-  facts and a rubric: round 1's findings are fixed, and text that did not
-  change holds a flaw. In one the flaw is cosmetic, and the case passes
-  when the review approves or defers it. In the other the flaw makes the
-  work come out wrong, and the case passes when the review holds a fix-now
-  finding for it. The review cases' rubric also reports, for each fix-now
-  finding, whether the work would come out wrong or unsafe without it.
+- [ ] The rule against nits is the human's scale of four levels. Critical:
+  a Done when line does not hold, or the change does not do what its Goal
+  says; the finding names the line. Important: the change does its job, but
+  gives a wrong result, loses something or misleads, in a case that will
+  happen in normal use, or its proof does not show what it claims; the
+  finding names the case. Useful: real, and the change is still right to
+  merge without it, such as a rare case, a problem that was there before,
+  or a better way to write code that works. Nit: style, naming, or wording
+  that changes no meaning; it is not filed.
+- [ ] It gives three rules. Severity is what breaks, not how big the fix
+  is. A problem the change did not cause or worsen is useful at most. What
+  a tool already reports is not a finding.
+- [ ] It needs no change to a record: a finding's title opens `Critical:`,
+  `Important:` or `Useful:`, and the Recommendation follows it. Critical
+  and important are `fix now`, and useful is `defer`. `Shrink:` and
+  `Reject:` stay blocking, outside the scale. It holds no guard against a
+  reviewer rating everything high; the human asked for none ahead of
+  seeing it happen.
+- [ ] The review cases' rubric reports, for each finding, which of the four
+  levels the judge gives it, beside the reviewer's own.
 - [ ] Each runs by `--ref` as an arm of its own, in both setups, on the
-  cases that can tell: the review cases for the first and fifth, the two
-  round-2 cases as well for the fifth, the lead's cases and the mission
-  case for the second and fourth, the implementer's cases for the third.
-  The results file gives each cell beside the same cell without the
-  passage, with time and tokens. For the fifth it also gives the fix-now
-  findings per review and how many of the known defects were still found.
+  cases that can tell: the review cases for the first and fifth, the lead's
+  cases and the mission case for the second and fourth, the implementer's
+  cases for the third. The results file gives each cell beside the same
+  cell without the passage, with time and tokens.
+- [ ] The fifth is not kept on passes, since it aims at a number no case
+  passes or fails on. The results give, with and without it and in each of
+  the two matrices, the fix-now findings per review, how many of them the
+  judge rates useful or nit, and how many of the known defects were found.
+  It is merged where the second number falls in both matrices and the
+  third falls in neither.
 - [ ] Each arm is run as two separate matrices of at least five runs per
   cell. A passage is merged into the skill where some cell passes at least
   two more runs with it in each of the two, and no cell passes fewer in
@@ -76,7 +92,6 @@ costing a full round.
 
 ## Scope
 
-`skills/agent-factory/SKILL.md` and `roles/`; two new directories under
-`evals/agent-factory/scenarios/`; `evals/agent-factory/results/` and
-`README.md`. The five branches are not merged; a kept passage is merged on
+`skills/agent-factory/SKILL.md` and `roles/`; the review cases' rubrics;
+`evals/agent-factory/results/` and `README.md`. The five branches are not merged; a kept passage is merged on
 this item's branch.
