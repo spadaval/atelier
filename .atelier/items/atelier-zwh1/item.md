@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-zwh1
 title: 'Add the case of three findings: one to fix, one to take to the lead, one to rebut'
-status: building
+status: in_review
 mission: atelier-8az0
 labels: []
 priority: medium
