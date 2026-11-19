@@ -9,7 +9,8 @@ tree at the base, tracked by today's binary with the item in review and the
 change on its branch, with no remote and no history after the change;
 nothing of the fix or the case file is in it; a recorded review grades as
 the rubric says; the judge is given the defect and the fix's diff and the
-reviewer is not; and a transcript that shows the fix makes a run invalid.
+reviewer is not; the judge is given the lines of an unchanged base file a
+finding cites; and a transcript that shows the fix makes a run invalid.
 EVAL_ATELIER names the binary under test.
 """
 import importlib.util
@@ -227,6 +228,41 @@ class ReplayCase(unittest.TestCase):
         task = (self.case / "prompt.md").read_text()
         for marker in replay.markers(self.data) + [self.data["fix"][:7], "defect"]:
             self.assertNotIn(marker, task)
+
+    def test_a_finding_that_rests_on_an_unchanged_base_file_can_be_checked(self):
+        d = self.data
+        touched = set(replay.git("diff", "--name-only", d["base"], d["change"]).split())
+        rubric = judging.read_rubric(self.case)
+        text = words(rubric["text"])
+
+        def rule(path):
+            """A line of `path` at the base, its number and text, that
+            nothing else the judge reads holds."""
+            lines = replay.git("show", f"{d['base']}:{path}").splitlines()
+            for n, line in enumerate(lines[30:], 31):
+                if len(line.strip()) > 30 and words(line) not in text:
+                    return n, line
+            return None
+
+        path, (n, line) = next((p, r) for p in sorted(replay.git(
+            "ls-tree", "-r", "--name-only", d["base"], "--", "docs").split())
+            if p.endswith(".md") and p not in touched and (r := rule(p)))
+        self.review(FOUND.format(title="The change breaks a rule it leaves alone",
+                                 body=f"The rule at `{path}:{n}` forbids it."), "changes")
+        given = judging.material(self.work, "Done.", self.facts(), rubric["context"])
+        self.assertIn(words(line), words(given["cited"]))
+        self.assertIn(words(d["done_when"][0]), words(given["cited"]), "the item is given")
+        prompt = judging.prompt(rubric["text"], rubric["questions"], given)
+        self.assertIn(line, prompt)
+        self.assertNotIn(self.work.name, prompt)
+        reply = json.dumps({"answers": [{"id": "others-supported", "answer": "pass",
+                                         "line": line.strip(), "reason": "Supported."}]})
+        [question] = [q for q in rubric["questions"] if q["id"] == "others-supported"]
+        answer = judging.parse_answers(reply, [question], given)["others-supported"]
+        self.assertEqual((answer["answer"], answer["line_found"]), ("pass", True))
+        # Without the cited file, the same quote rests on nothing.
+        answer = judging.parse_answers(reply, [question], {**given, "cited": ""})
+        self.assertEqual(answer["others-supported"]["answer"], "unknown")
 
     def test_a_transcript_that_shows_the_fix_or_a_web_search_is_invalid(self):
         path = self.root / "transcript.jsonl"

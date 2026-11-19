@@ -60,7 +60,9 @@ seconds and 13k to 42k tokens in.
   never creates commits. The rule is in the fixture's ADR 0019 (decision 3),
   PRODUCT_INTENT.md and `docs/architecture/quality/standards.md`. The judge is given
   the two diffs, not the tree, so it could not see the rule. I count 0 of 3
-  unsupported.
+  unsupported. Since atelier-6ve6 the judge is given the files a review
+  cites, and re-judging this run (`harness/judge.py`, `rejudge.json`)
+  counts 0 of 3 too.
 - `after-merge-checks` ran twice. In the first run (12671f230: changes, 3
   fix-now findings, not found, 3.5 min, 799k in), Finding 1 said that the
   Agent Factory lines of the Done when were unmet, and checked them against

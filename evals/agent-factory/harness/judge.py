@@ -18,7 +18,8 @@ setup's judge for that role's lab (run.LABS), a model from another lab, so a
 setup whose threads come from two labs has two judges, each asked its own
 questions in one call. The judge is given the rubric, the facts grade.py
 printed, the first agent's final reply, the review files the run wrote and
-the diff it left (material()). It is not told the arm, and it runs in an
+the diff it left (material()), and in a replay case the item and the files
+its reviews cite (replay.cited). It is not told the arm, and it runs in an
 empty directory of its own whose name does not carry one.
 
 It answers each question pass or fail with the line of that material its
@@ -229,9 +230,15 @@ def material(work: Path, final: str, facts: dict, context: str = "") -> dict:
     """What the judge reads besides the rubric, blinded to the arm (blind).
     A quoted line is checked against this same text, and against the
     rubric's `context`, a replay case's diffs, which the rubric's text
-    already carries into the prompt."""
+    already carries into the prompt. A replay case, one with a `context`,
+    is also given the item and the files its reviews cite (replay.cited),
+    so a finding that rests on a rule outside the diffs can be checked."""
     given = {"facts": json.dumps(facts, indent=1), "final": final.strip() or "(none)",
              "reviews": review_files(work), "diff": run_diff(work)}
+    if context:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import replay
+        given["cited"] = replay.cited(work, given["reviews"])
     return {k: blind(v, work) for k, v in given.items()} | (
         {"context": context} if context else {})
 
@@ -275,13 +282,13 @@ Reply with only this JSON object, and nothing after it:
 # The diff the run left
 
 {diff}
-"""
+{cited}"""
 
 
 def prompt(rubric_text: str, questions: list, given: dict) -> str:
     return PROMPT.format(rubric=rubric_text.strip(),
                          ids="\n".join(f"- {q['id']} (about the {q['role']})" for q in questions),
-                         **given)
+                         **{"cited": "", **given})
 
 
 def parse_answers(reply: str, questions: list, given: dict) -> dict:
