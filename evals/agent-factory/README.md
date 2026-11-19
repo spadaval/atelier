@@ -604,7 +604,11 @@ its own when it ends.
   `result.json`, with `work` linking to its work directory. Work
   directories are deleted for passing runs unless `--keep` is given or the
   grader set `needs_hand_grade`. The
-  harness keeps the others, but the system may age out `/var/tmp`
+  harness keeps the others without their build output: once a run is
+  graded, whatever its grade and even with `--keep`, each cargo target
+  directory under its work directory is deleted, `repo/target` and any the
+  agent made elsewhere, such as under `tmp/`. A replayed review's is about
+  2.5G. The system may also age out `/var/tmp`
   (systemd-tmpfiles commonly removes files there after 30 days). To keep
   them longer, pass a `--work-root` that nothing cleans, outside `$HOME`.
   `results.jsonl` gathers every run.
