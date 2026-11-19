@@ -5,10 +5,6 @@ description: Use in repositories tracked with Atelier, to plan or shape work, le
 
 # Agent Factory
 
-Run `atelier status` first. If `atelier` is not found, or `status` fails
-because this is not a Git checkout or has no Atelier config, this is not an
-Atelier repository: stop using this skill and do the task directly.
-
 ## Your Role
 
 Read one role file, then follow what `status` prints. Where `status` names
