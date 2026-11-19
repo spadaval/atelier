@@ -3,12 +3,13 @@ schema: atelier.item
 schema_version: 3
 id: atelier-t5tc
 title: Show whether the later round's brief hides an important defect in code the fix changed
-status: ready
+status: building
 mission: atelier-8az0
 labels: []
 priority: medium
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3Af63a076b-801f-4619-9867-64e0090d639a%3Adelegate-task%3A3bd376d8-91d7-4033-a04c-b16bdb0a00a2
 ready:
   by: 'the lead of atelier-8az0: the mission''s Outcome says the brief hides nothing, and atelier-d73k''s runs cannot show it for code the fix changed'
   at: 2026-11-19T07:58:15.274648583Z
