@@ -29,3 +29,11 @@ because each changes what the replayed reviews measure: atelier-s63j takes
 old process instructions out of two fixtures, and atelier-6ve6 stops the
 judge counting a sound finding as unsupported for want of the file it
 cites.
+
+## 2026-11-18: what a Codex thread is told
+
+atelier-aq82 found that a no-skill Codex lead still stops to ask leave to
+start a subagent, so its lead cells measure that and nothing else. The
+harness tells a Claude Code thread how to start another and tells a Codex
+thread nothing. The lead added atelier-69oh to tell both the same, and made
+atelier-id3v wait on it.
