@@ -30,37 +30,100 @@ harness history.
 
 ## Done when
 
-- [ ] One matrix in `sol` and one in `house`, each with both arms and every
+- [x] One matrix in `sol` and one in `house`, each with both arms and every
   case, is recorded in `evals/agent-factory/results/`. Each table gives
   passes, median seconds and tokens per cell, and the file says how many
   runs each difference it names rests on. A cell has five runs, and a
   replayed review three, since those are read across the twelve cases. Runs
   go side by side within the caps atelier-u708 sets.
-- [ ] In `sol`, the cases whose first agent starts threads are also run
+- [x] In `sol`, the cases whose first agent starts threads are also run
   with a third arm: a skill that holds only `SKILL.md`'s Starting Another
   Thread section, from a branch that is not merged. Codex adds a rule of its
   own that a thread starts no subagent unless the user, an `AGENTS.md` or a
   skill asks (atelier-69oh), and T3 Code's Codex threads keep it. This arm
   tells what the skill adds beyond that one sentence, and the file gives it
   beside the other two.
-- [ ] The lead's cases and the mission case are also run with the skill as
+- [x] The lead's cases and the mission case are also run with the skill as
   it was before atelier-mtzj, by `--ref`, in both setups. For each cell the
   file gives the runs where a planted defect reached main, the runs that
   stopped with nothing raised, the departures with no recorded reason, and
   each recorded departure with the judge's reading of its reason. Nothing is
   reverted on a count: the human reads it.
-- [ ] Thirty runs, drawn across cases and both verdicts, are read by the
+- [x] Thirty runs, drawn across cases and both verdicts, are read by the
   thread that writes the results. The file lists every run where its reading
   differs from the judge's, and there are at most two.
-- [ ] The README is rewritten around the three questions. Its table says,
+- [x] The README is rewritten around the three questions. Its table says,
   for each case, which question it answers and its last result in each
   setup. A case that passed every run of every cell is cut, or the table
   says what it guards. It says the planner, the gardener, the backlog
   procedure and the readiness checklist are unmeasured.
-- [ ] The mission's Result gives the line counts of the graders and the
+- [x] The mission's Result gives the line counts of the graders and the
   README before and after, as an indication and not a target.
 
 ## Scope
 
 `evals/agent-factory/results/` and `README.md`, and the scenarios where a
 case is cut.
+
+## Report
+
+The matrix ran in both setups with both arms on every case: 469 graded
+runs in `evals/agent-factory/results/2026-11-19-both-setups.md`.
+In `sol` the skill took the lead's cases from 4 of 25 to 25 of 25, and the
+skill cut to its Starting Another Thread section did the same, so in `sol`
+the skill's effect on passes is lifting Codex's own subagent rule. In
+`house` every lead run passed in both arms, and the skill cut a lead's time
+and tokens in all five cases. On reviews the skill took `costly-hardening`
+from 0 of 10 to 10 of 10, and did not help on the replays: 17 of 72 known
+defects found without it, 12 of 72 with it, with `touched-claims` at 5 of 6
+against 0 of 6. The skill before atelier-mtzj passed every lead run too, at
+more cost. No planted defect reached main in a lead's case, and the judge
+held on all 30 runs read by hand.
+
+- **The lead changed a Done when line.** On 2026-11-18 (03:44 UTC on
+  2026-11-19), after the human lifted the limit of two eval agents, the
+  lead replaced "Only one matrix runs on this host at a time" with "Runs go
+  side by side within the caps atelier-u708 sets" and asked for it to be
+  made on this branch (a54b69b12). Master, atelier-u708 included, was
+  merged in, not rebased (91adbdf18).
+- **Reused and remade.** The first 40 `sol` runs went one at a time before
+  atelier-u708 landed; all 40 were kept by the rerun on the same setup,
+  binary and skill commit. None of the 469 ended on a rate limit or a spent
+  allowance, so none was rerun for one. Twelve runs were made again: three
+  `costly-hardening` runs with no skill that OpenAI ended as "flagged for
+  possible cybersecurity risk" (one in `sol`, two attempts at one `house`
+  run), three cut short when the old matrix was stopped, and six `house`
+  replays that ran out of disk.
+- **`refused-push` ran on its own.** Its cells ran in an invocation of
+  their own at `--jobs 1` in each setup, beside the rest, since its
+  fixture's server binds port 8080.
+- **The disk filled.** At 04:08 on 2026-11-19 this host's disk was full:
+  my replay runs' work directories held 132G, since the harness keeps a
+  failing run's work directory and a replay's holds about 2.5G of cargo
+  output. I deleted the `target/` of my finished runs (125G), set aside the
+  three graded replays that had seen "No space left on device"
+  (`house-replays/discarded-enospc.jsonl` beside the runs), and made them
+  again with a cleaner deleting finished replays' `target/`. Filed as
+  atelier-scly in this mission, merged as a draft (PR #257).
+- **Which cases got the third arm.** "Cases whose first agent starts
+  threads" is read as the seven whose pass needs another thread: `loop`,
+  `loop-changes` and the five lead cases. `refused-push`,
+  `done-when-conflict` and `non-atelier-repo` run as threads but pass with
+  none started. The arm's skill is commit 3f9dfda5b on
+  `eval/skill-threads-only`, pushed and never to be merged. "The lead's
+  cases and the mission case" is read as the five lead cases.
+- **No case is cut.** `loop-changes`, `done-when-conflict`,
+  `non-atelier-repo` and `vacuous-test-review` passed all 20 of their runs.
+  The README says what each guards, in a list beside its table. Eight
+  replays were found by no review; the README keeps them, as defects review
+  missed.
+- **Stopped with nothing raised.** The results count a stopped run as
+  raised where its final reply asks the person who started it. All 21
+  stopped lead runs (`sol`, no skill) asked leave to start a subagent; I
+  read each reply.
+- **The README** is 276 lines, from 464 at this branch's start and 234 when
+  the plan merged. The harness detail it dropped is in `harness/run.py`'s
+  docstring; the old `next-` names are one sentence.
+
+Checked: `git diff --check`, every relative link in the README and the
+results file resolves. No code changed, so no tests were run.

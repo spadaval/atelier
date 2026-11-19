@@ -219,3 +219,16 @@ human set no limit on what a matrix may cost, and asked on 2026-11-18 that
 the evals not grow complex.
 
 ## Result
+
+Line counts, as an indication and not a target (atelier-id3v,
+2026-11-19). Before is master when the plan merged (4a94d05c5's first
+parent); after is atelier-id3v's head.
+
+- Graders and their tests (`grade.py` and `test_grade.py`): 3,106 lines
+  over 9 cases before, all grading in `grade.py` by code alone; 3,537 over
+  24 cases after (1,118 in `grade.py`, 2,419 in `test_grade.py`), about 147
+  a case against 345. Grading shared by every case is new: `facts.py` (563
+  lines) and `judge.py` (425), and 1,374 lines of rubrics, `replay-rubric.md`
+  included.
+- `evals/agent-factory/README.md`: 234 lines before, 464 before
+  atelier-id3v rewrote it, 276 after.
