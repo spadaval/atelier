@@ -73,7 +73,7 @@ Records written before the change still read: an item's `draft` and
 binary serves, with no conversion run. This is about items only. A mission
 in the old form reads as it does now: its `ready` is `open`, and its
 `draft` stays proposed and cannot be led or have its items started. The
-other five repositories hold eight such draft missions, and the binary's
+other five repositories hold nine such draft missions, and the binary's
 action table writes a proposed mission as an item's `draft` today, so the
 two must be separated before the item's status goes. Two things are given up, and the human chose both.
 The Desk and the extension no longer split loose items into "next" and
