@@ -52,3 +52,20 @@ lifts it from the rest of the skill, atelier-id3v runs a third arm in
 `sol`: a skill that holds only the Starting Another Thread section. The
 lead also set the matrix's size: five runs a cell, three for a replayed
 review, one matrix on the host at a time.
+
+## 2026-11-18: the human lifted the limit of two eval agents
+
+The plan's Authority says the lead may not raise the limit of two eval
+agents alive at once. The human lifted it on 2026-11-18, by a side chat on
+the lead's thread, after reading that the matrix would take about a day:
+"Why not parallelize?" and then "tell the main thread to go nuts". The
+limit was theirs, set on 2026-11-10 for mission atelier-qr5s, and the plan
+carried it forward. The plan's text is left as it is and this note is the
+record of their word against it.
+
+The lead added atelier-u708, which makes the cap a setting by kind of run: three
+at once for runs that build Rust and six for the others. Within one run
+nothing changes. atelier-id3v's line "Only one matrix runs on this host at
+a time", which the lead added the same day, goes: its implementer is told
+to change it on the item's branch and to run the rest of the matrix with
+the new caps once atelier-u708 merges, keeping the runs already made.
