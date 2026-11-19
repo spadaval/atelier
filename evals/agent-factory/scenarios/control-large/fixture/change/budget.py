@@ -90,11 +90,10 @@ def read_nordbank(path):
     """The transactions in a Nordbank CSV export."""
     found = []
     reader = csv.reader(io.StringIO(read_text(path), newline=""), delimiter=";", strict=True)
-    last = 0  # the last line of the record read before
     try:
         if next(reader, None) != ["Date", "Payee", "Amount"]:
             raise StatementError(path, 1, "expected the header Date;Payee;Amount")
-        last = reader.line_num
+        last = reader.line_num  # the last line of the record read before
         for row in reader:
             line, last = last + 1, reader.line_num
             if not row:
@@ -115,7 +114,8 @@ def read_nordbank(path):
                 raise StatementError(path, starts[1], "no payee")
             found.append(Transaction(date, amount, row[1]))
     except csv.Error as e:
-        raise StatementError(path, last + 1, f"bad quoting: {e}") from None
+        # The reader stops on the line that holds the bad quote.
+        raise StatementError(path, reader.line_num, f"bad quoting: {e}") from None
     return found
 
 

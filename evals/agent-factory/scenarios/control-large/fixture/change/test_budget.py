@@ -139,6 +139,8 @@ class BadLineTest(LedgerCase):
                  "3: bad amount 'bad'"),
                 ("n.csv", 'Date;Payee;Amount\n01.10.2026;X;-1,00\n02.10.2026;"Cafe;-1,00\n',
                  "3: bad quoting"),
+                ("q.csv", 'Date;Payee;Amount\n01.10.2026;"Cafe\nNord";"-1,00"x\n',
+                 "3: bad quoting"),
                 ("o.qif", "!Type:Bank\rD10/04/2026\rT-1.00\rPX\r^\rDsoon\r",
                  "6: the last record is not ended by ^")]:
             with self.subTest(name=name):
