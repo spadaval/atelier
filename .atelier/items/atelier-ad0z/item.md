@@ -3,12 +3,13 @@ schema: atelier.item
 schema_version: 3
 id: atelier-ad0z
 title: Replay changes that were built and later removed as unneeded, as review cases
-status: ready
+status: building
 mission: atelier-8az0
 labels: []
 priority: medium
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3Af63a076b-801f-4619-9867-64e0090d639a%3Adelegate-task%3Add0281b0-8064-44ea-9b0d-bdc765676394
 ready:
   by: 'the lead of atelier-8az0: atelier-s6xk''s cases are at their ceiling, so they cannot test the passage atelier-ufbm tries'
   at: 2026-11-19T06:37:15.609718336Z
