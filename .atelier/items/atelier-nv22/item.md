@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-nv22
 title: List every rule a mission's commits passed, with its reason and thread, in atelier show <mission>
-status: changes_requested
+status: in_review
 mission: atelier-kw8u
 labels: []
 priority: medium
@@ -114,7 +114,16 @@ item and the merge of that backlog branch, each in `show` and `log`.
 `cargo nextest run` passes (394 tests), clippy, fmt and `git diff --check`
 are clean, and `evals/agent-factory/test.sh` passes.
 
+Round 3 (56a9a34b9): the fallback line is made for each record the commit
+changed with no action of its own, not only when the whole commit has
+none, so a batch `ready` of an item ready already beside a draft shows the
+rule on both. The test
+`log::a_record_with_no_action_beside_one_with_an_action_still_shows_the_rule_its_commit_passed`
+covers it. `cargo nextest run` passes (395 tests), clippy, fmt and `git
+diff --check` are clean, and `evals/agent-factory/test.sh` passes.
+
 ### Responses
 
 - 1-36z8.1: fixed in 58e7250fd
 - 1-36z8.2: fixed in 58e7250fd
+- 2-1o5j.3: fixed in 56a9a34b9
