@@ -712,12 +712,16 @@ else:
 if prompt.startswith("FIRST"):
     subprocess.run(["atelier", "submit"], stdout=sys.stderr)
     subprocess.run(["delegate", "reviewer", "review it"], stdout=sys.stderr)
+final = "ok"
+if Path(__file__).with_name("final-link").exists():
+    # A final reply that links a review file, as agents' replies do.
+    final = f"Wrote [the review]({Path.cwd()}/.atelier/items/x-1/reviews/1-ab.md)."
 if agent == "claude":
-    print(json.dumps({"type": "result", "subtype": "success", "result": "done",
+    print(json.dumps({"type": "result", "subtype": "success", "result": final,
                       "usage": {"input_tokens": 10, "cache_read_input_tokens": 90,
                                 "output_tokens": 5}}))
 else:
-    print(json.dumps({"type": "item.completed", "item": {"type": "agent_message", "text": "ok"}}))
+    print(json.dumps({"type": "item.completed", "item": {"type": "agent_message", "text": final}}))
     if Path(__file__).with_name("codex-fails").exists():
         # Usage recorded, then the turn fails: exec prints no usage for it.
         print(json.dumps({"type": "turn.failed", "error": {"message": "stopped"}}))
@@ -949,6 +953,20 @@ class JudgeTest(unittest.TestCase):
         self.assertNotIn("- built-it", prompt)
         self.assertIn('"merged"', prompt)
 
+    def test_a_final_reply_s_links_are_blinded_and_still_quotable(self):
+        (self.tmp / "final-link").write_text("")
+        r = self.run_house()
+        name = Path(r["run_dir"]).name
+        self.assertIn(name, (Path(r["run_dir"]) / "final.md").read_text())
+        for model in ("claude-opus-5-5", "gpt-6.1-sol"):
+            prompt = (self.tmp / "judge-prompts" / f"{model}.txt").read_text()
+            self.assertNotIn(name, prompt)
+            self.assertNotIn(str(self.tmp / "work"), prompt)
+            self.assertIn("Wrote [the review](/work/repo/.atelier/items/x-1/reviews/1-ab.md).",
+                          prompt)
+        # The judge quoted the blinded line, which the material holds.
+        self.assertIs(r["pass"], True, r.get("failed"))
+
     def test_a_reported_answer_that_fails_changes_no_grade(self):
         r = self.run_house({"said-why": "fail"})
         self.assertIs(r["pass"], True, r.get("failed"))
@@ -970,7 +988,11 @@ class JudgeTest(unittest.TestCase):
 
     def test_a_malformed_reply_fails_the_graded_questions_and_keeps_the_result(self):
         for reply, why in (('{"answers": [', "was not the JSON asked for"),
-                           ('{"answers": 7}', "held no list of answers")):
+                           ('{"answers": 7}', "held no list of answers"),
+                           ('{"answers": [{"id": [], "answer": "pass", "line": "ok"}]}',
+                            "held no answer to it"),
+                           ('{"answers": [{"id": {}, "answer": "pass", "line": "ok"}]}',
+                            "held no answer to it")):
             (self.tmp / "judge-reply").write_text(reply)
             r = self.run_house()
             self.assertIs(r["pass"], False)

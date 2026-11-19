@@ -202,10 +202,25 @@ def review_files(work: Path) -> str:
     return "\n".join(parts) or "(The run wrote no review file.)"
 
 
+# What stands for the run's work directory in the judge's material.
+WORK = "/work"
+
+
+def blind(text: str, work: Path) -> str:
+    """`text` with the run's work directory written as WORK, and its name,
+    which the run directory shares, as "run": both name the arm."""
+    work = Path(work)
+    for path in sorted({str(work), str(work.resolve())}, key=len, reverse=True):
+        text = text.replace(path, WORK)
+    return text.replace(work.name, "run").replace(work.resolve().name, "run")
+
+
 def material(work: Path, final: str, facts: dict) -> dict:
-    """What the judge reads besides the rubric."""
-    return {"facts": json.dumps(facts, indent=1), "final": final.strip() or "(none)",
-            "reviews": review_files(work), "diff": run_diff(work)}
+    """What the judge reads besides the rubric, blinded to the arm (blind).
+    A quoted line is checked against this same text."""
+    given = {"facts": json.dumps(facts, indent=1), "final": final.strip() or "(none)",
+             "reviews": review_files(work), "diff": run_diff(work)}
+    return {k: blind(v, work) for k, v in given.items()}
 
 
 PROMPT = """You are the judge of one run of an evaluation case. An AI agent, and any
@@ -278,7 +293,7 @@ def parse_answers(reply: str, questions: list, given: dict) -> dict:
         why = "the judge's reply was not the JSON asked for" if parsed is None \
             else "the judge's reply held no list of answers"
         return unanswered(questions, why)
-    by_id = {a.get("id"): a for a in listed if isinstance(a, dict)}
+    by_id = {a["id"]: a for a in listed if isinstance(a, dict) and isinstance(a.get("id"), str)}
     given_text = " ".join(" ".join(given.values()).split())
     out = {}
     for q in questions:
