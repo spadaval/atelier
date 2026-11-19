@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-41zk
 title: 'Rewrite the README to show what Atelier does: the loop, the records, missions, the Desk and the T3 Code extension'
-status: changes_requested
+status: in_review
 mission: null
 labels: []
 priority: medium
@@ -106,9 +106,16 @@ The cause and the reproduction are in atelier-3sym, filed on
 where the seven lines are the whole history; I ran it again at that commit
 with the base unmerged and it printed the same lines.
 
+**Round 2.** Finding 5 holds: the Codex alternative staged `.claude`, which
+it never wrote. The steps now name the Codex command and its path beside
+each Claude one. I ran the Codex path against a local bare remote with
+0.7.0: `atelier setup codex`, `git add .atelier .codex`, commit, push, then
+`atelier setup` and `status`. The push went through.
+
 ### Responses
 
 1-68ip.1: fixed in a53a0ff2a
 1-68ip.2: fixed in a53a0ff2a
 1-68ip.3: fixed in a53a0ff2a
 1-68ip.4: fixed in a53a0ff2a
+2-9ovw.5: fixed in 587c4b06a
