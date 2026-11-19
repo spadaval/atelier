@@ -20,8 +20,9 @@ only Codex's own telemetry host.
   4d5ebd22c), copied to `/var/tmp/af-evals/bin/atelier-12671f230`.
 - **Skill.** `--ref 12671f230`, and `b480f58d3` for the second
   `after-merge-checks` run. Both are `skills/agent-factory` as on master.
-- **Harness.** Unchanged from master. Codex CLI 0.169; the judge Claude
-  Code on `claude-opus-5-5` at high.
+- **Harness.** As on master at 4d5ebd22c, before atelier-xfsn added the
+  rubric's reported `reasons` question, so these runs have no answer to it.
+  Codex CLI 0.169; the judge Claude Code on `claude-opus-5-5` at high.
 - **Reviewer.** `sol`: Codex `gpt-6.1-sol` at high, in every run.
 - **Runs.** `~/.cache/af-evals/runs/z8rg-replay/` and, for the second
   `after-merge-checks` run, `z8rg-replay-2/`, `--jobs 1 --keep`. Every
