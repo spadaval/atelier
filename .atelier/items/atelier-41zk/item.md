@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-41zk
 title: 'Rewrite the README to show what Atelier does: the loop, the records, missions, the Desk and the T3 Code extension'
-status: changes_requested
+status: in_review
 mission: null
 labels: []
 priority: medium
@@ -48,7 +48,7 @@ Out: `docs/`, `CONTRIBUTING.md`, `AGENTS.md` and the other READMEs.
 The README now shows what Atelier does: one item's loop in the tool's own
 output, a section for each thing the tool, the skill, the Desk, the extension
 and the evals do, and why it was rewritten. It grew from 50 lines to about
-430. Install and platform support are kept as they were.
+440. Install and platform support are kept as they were.
 
 **Where the words come from.** `docs/product.md` and `docs/product/desk.md`
 as they stand on `master`, `skills/agent-factory`, `evals/agent-factory/README.md`,
@@ -84,6 +84,31 @@ go stale.
 - A script resolved every relative link target and every `src` and `srcset`
   in the README against the tree: none missing.
 - `git diff --check` is clean.
-- Not checked: how GitHub renders the page. The Mermaid state diagram and
-  the `<picture>` elements were not rendered locally. The pull request shows
-  both.
+- GitHub's rendering of the branch's README, read in headless Chromium after
+  round 1 was submitted: the `<picture>` elements show the screenshot for
+  the colour scheme. Long transcript lines ran off the code blocks, so they
+  are wrapped now, and the Mermaid state diagram drew too small to read with
+  its labels over each other, so a sentence replaces it.
+- The setup order in "Track a repository", run against a local bare remote
+  with 0.7.0: `atelier setup claude`, one commit of `.atelier` and
+  `.claude`, `git push`, then `atelier setup`. The push went through, and
+  `status` and `check` printed what the README shows.
+
+**Round 1.** Findings 1, 2 and 4 hold as written and are fixed.
+
+Finding 3 is right that the walkthrough hid the merge from the log, and
+wrong on one fact: nothing was cut. `atelier log` in that scratch repository
+prints those seven lines after the merge and no eighth. 0.7.0 drops the
+`merge` line of the first item merged in a repository whose base held no
+record before it; a second item merged in the same repository got its line.
+The cause and the reproduction are in atelier-3sym, filed on
+`backlog/log-first-merge`. The walkthrough now runs `log` before `merge`,
+where the seven lines are the whole history; I ran it again at that commit
+with the base unmerged and it printed the same lines.
+
+### Responses
+
+1-68ip.1: fixed in a53a0ff2a
+1-68ip.2: fixed in a53a0ff2a
+1-68ip.3: fixed in a53a0ff2a
+1-68ip.4: fixed in a53a0ff2a
