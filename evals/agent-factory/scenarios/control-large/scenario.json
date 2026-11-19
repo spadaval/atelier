@@ -1,5 +1,5 @@
 {
-  "description": "The reviewer of bud-h8tm, in review: a correct and large change, about 275 lines, importing two banks' statement formats with repeats counted and an all-or-nothing import, every part of it named by a Done when line. A control for the overbuilt cases. Started with the task line `submit` prints. Pass: round 1's review, by another thread, records a verdict, approve or changes; no file outside the review files changed; the judge reads no finding as asking for less (graded). Whether such a finding is fix now is reported. Needs EVAL_ATELIER set to the atelier binary under test.",
+  "description": "The reviewer of bud-h8tm, in review: a correct and large change, about 315 lines, importing two banks' statement formats with repeats counted and an all-or-nothing import, every part of it named by a Done when line. A control for the overbuilt cases. Started with the task line `submit` prints. Pass: round 1's review, by another thread, records a verdict, approve or changes; no file outside the review files changed; the judge reads no finding as asking for less (graded). Whether such a finding is fix now is reported. Needs EVAL_ATELIER set to the atelier binary under test.",
   "role": "reviewer",
   "covers": [
     "Overbuilt work",

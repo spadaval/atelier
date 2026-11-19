@@ -48,10 +48,12 @@ class StatementError(Exception):
         super().__init__(f"{path}:{line}: {reason}")
 
 
-# Amounts with two decimals and optional thousands groups, below a trillion:
-# Nordbank writes -1.234,56 and Kestrel -1,234.56.
-NORDBANK_AMOUNT = re.compile(r"-?(\d{1,3}(\.\d{3}){1,3}|\d{1,12}),\d{2}")
-KESTREL_AMOUNT = re.compile(r"-?(\d{1,3}(,\d{3}){1,3}|\d{1,12})\.\d{2}")
+# Amounts with two decimals and optional thousands groups: Nordbank writes
+# -1.234,56 and Kestrel -1,234.56.
+NORDBANK_AMOUNT = re.compile(r"-?(\d{1,3}(\.\d{3})+|\d+),\d{2}")
+KESTREL_AMOUNT = re.compile(r"-?(\d{1,3}(,\d{3})+|\d+)\.\d{2}")
+# A line ends at CRLF, CR or LF, as the csv module reads them.
+LINE_END = re.compile(r"\r\n|\r|\n")
 
 
 def cents(text, pattern):
@@ -59,7 +61,10 @@ def cents(text, pattern):
     which allows exactly two decimals."""
     if not pattern.fullmatch(text):
         return None
-    return int(text.replace(",", "").replace(".", ""))
+    try:
+        return int(text.replace(",", "").replace(".", ""))
+    except ValueError:  # more digits than Python converts
+        return None
 
 
 def iso_date(text, form):
@@ -77,40 +82,47 @@ def read_text(path):
     try:
         return data.decode("utf-8")
     except UnicodeDecodeError as e:
-        raise StatementError(path, data.count(b"\n", 0, e.start) + 1, "not UTF-8") from None
+        line = len(LINE_END.findall(data[:e.start].decode("utf-8"))) + 1
+        raise StatementError(path, line, "not UTF-8") from None
 
 
 def read_nordbank(path):
     """The transactions in a Nordbank CSV export."""
     found = []
     reader = csv.reader(io.StringIO(read_text(path), newline=""), delimiter=";", strict=True)
+    last = 0  # the last line of the record read before
     try:
         if next(reader, None) != ["Date", "Payee", "Amount"]:
             raise StatementError(path, 1, "expected the header Date;Payee;Amount")
+        last = reader.line_num
         for row in reader:
-            line = reader.line_num
+            line, last = last + 1, reader.line_num
             if not row:
                 continue
             if len(row) != 3:
                 raise StatementError(path, line, f"expected 3 fields, found {len(row)}")
+            # A quoted field may hold line breaks: the line each field starts on.
+            starts = [line]
+            for field in row[:-1]:
+                starts.append(starts[-1] + len(LINE_END.findall(field)))
             date = iso_date(row[0], "%d.%m.%Y")
             if date is None:
-                raise StatementError(path, line, f"bad date {row[0]!r}")
+                raise StatementError(path, starts[0], f"bad date {row[0]!r}")
             amount = cents(row[2], NORDBANK_AMOUNT)
             if amount is None:
-                raise StatementError(path, line, f"bad amount {row[2]!r}")
+                raise StatementError(path, starts[2], f"bad amount {row[2]!r}")
             if not row[1].strip():
-                raise StatementError(path, line, "no payee")
+                raise StatementError(path, starts[1], "no payee")
             found.append(Transaction(date, amount, row[1]))
     except csv.Error as e:
-        raise StatementError(path, reader.line_num, f"bad quoting: {e}") from None
+        raise StatementError(path, last + 1, f"bad quoting: {e}") from None
     return found
 
 
 def read_kestrel(path):
     """The transactions in a Kestrel Bank QIF export."""
     found, record, opened = [], {}, None
-    lines = [text.removesuffix("\r") for text in read_text(path).split("\n")]
+    lines = LINE_END.split(read_text(path))
     if lines[0] != "!Type:Bank":
         raise StatementError(path, 1, "expected the first line !Type:Bank")
     for line, text in enumerate(lines[1:], start=2):

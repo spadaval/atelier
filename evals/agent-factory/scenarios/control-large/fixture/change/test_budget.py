@@ -131,8 +131,16 @@ class BadLineTest(LedgerCase):
                 ("j.csv", "", "1: expected the header Date;Payee;Amount"),
                 ("k.qif", "!Type:Bank\nD10/04/2026\nT-1.00\nPX\n^\nMa memo\n",
                  "6: the last record is not ended by ^"),
-                ("l.csv", "Date;Payee;Amount\n01.10.2026;X;-1234567890123,00\n",
-                 "2: bad amount '-1234567890123,00'")]:
+                ("l.csv", "Date;Payee;Amount\n01.10.2026;X;-" + "9" * 5000 + ",00\n",
+                 "2: bad amount"),
+                ("m.csv", 'Date;Payee;Amount\n31.02.2026;"Cafe\nNord";-1,00\n',
+                 "2: bad date '31.02.2026'"),
+                ("p.csv", 'Date;Payee;Amount\n01.10.2026;"Cafe\r\nNord";bad\n',
+                 "3: bad amount 'bad'"),
+                ("n.csv", 'Date;Payee;Amount\n01.10.2026;X;-1,00\n02.10.2026;"Cafe;-1,00\n',
+                 "3: bad quoting"),
+                ("o.qif", "!Type:Bank\rD10/04/2026\rT-1.00\rPX\r^\rDsoon\r",
+                 "6: the last record is not ended by ^")]:
             with self.subTest(name=name):
                 path = self.file(name, text)
                 code, out, err = self.run_cli("import", path)
@@ -146,9 +154,31 @@ class BadLineTest(LedgerCase):
         self.assertEqual(budget.load_ledger(self.ledger), [Transaction("2026-10-04", -100, payee)])
 
     def test_a_byte_that_is_not_utf8_names_its_line(self):
-        path = self.root / "oct.csv"
-        path.write_bytes(NORDBANK.encode() + b"07.10.2026;Caf\xe9;-1,00\n")
-        self.assertEqual(self.run_cli("import", str(path)), (1, "", f"{path}:6: not UTF-8\n"))
+        for ending in ("\n", "\r", "\r\n"):
+            with self.subTest(ending=repr(ending)):
+                path = self.root / "oct.csv"
+                path.write_bytes(NORDBANK.replace("\n", ending).encode()
+                                 + b"07.10.2026;Caf\xe9;-1,00" + ending.encode())
+                self.assertEqual(self.run_cli("import", str(path)),
+                                 (1, "", f"{path}:6: not UTF-8\n"))
+
+    def test_any_line_ending_reads_alike(self):
+        for ending in ("\r", "\r\n"):
+            with self.subTest(ending=repr(ending)):
+                files = [self.file("oct.csv", NORDBANK.replace("\n", ending)),
+                         self.file("oct.qif", KESTREL.replace("\n", ending))]
+                self.assertEqual(self.run_cli("import", *files)[0], 0)
+                self.assertEqual(len(budget.load_ledger(self.ledger)), 6)
+                self.ledger.unlink()
+
+    def test_a_payee_may_hold_a_line_break(self):
+        text = 'Date;Payee;Amount\n01.10.2026;"Cafe\nNord";-1,00\n02.10.2026;X;-2,00\n'
+        self.assertEqual(self.run_cli("import", self.file("a.csv", text))[0], 0)
+        self.assertEqual([t.payee for t in budget.load_ledger(self.ledger)], ["Cafe\nNord", "X"])
+
+    def test_a_large_amount_within_the_format_is_read(self):
+        self.run_cli("import", self.file("a.csv", "Date;Payee;Amount\n01.10.2026;X;-1234567890123,00\n"))
+        self.assertEqual(budget.load_ledger(self.ledger)[0].cents, -123456789012300)
 
 
 if __name__ == "__main__":

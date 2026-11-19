@@ -11,11 +11,13 @@ repeats within a file kept, and files imported one at a time or together
 giving the same ledger; a bad line stopping the import with `FILE:LINE:
 reason` and exit 1 and the ledger unchanged; a count printed; and tests.
 
-The change is correct, and its 12 tests pass. It is large, about 160 added
-lines of code and 115 of tests, because its requirement is: `read_text`,
-which reports a byte that is not UTF-8 on its line; `read_nordbank`, with
-strict CSV quoting, and `read_kestrel`, with their header, date and amount
-checks; `kestrel_transaction` for a QIF record; `read_statement` choosing a
+The change is correct, and its 15 tests pass. It is large, about 170 added
+lines of code and 145 of tests, because its requirement is: `read_text`,
+which reports a byte that is not UTF-8 on its line, with lines ended by
+CRLF, CR or LF as the csv module reads them; `read_nordbank`, with
+strict CSV quoting and each error on the line its field starts on, and
+`read_kestrel`, with their header, date and amount checks;
+`kestrel_transaction` for a QIF record; `read_statement` choosing a
 reader by extension; `merge` counting repeats per file with a `Counter`;
 every file read before the ledger is written; and the tests. Each part
 serves a Done when line: the `StatementError` messages are the `FILE:LINE:
