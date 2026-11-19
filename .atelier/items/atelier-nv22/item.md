@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-nv22
 title: List every rule a mission's commits passed, with its reason and thread, in atelier show <mission>
-status: changes_requested
+status: in_review
 mission: atelier-kw8u
 labels: []
 priority: medium
@@ -101,10 +101,20 @@ Validation: `cargo nextest run` passes (393 tests), `cargo clippy
 `target/debug/atelier`. The eval graders match `^Atelier-Skip: `, which the
 new trailer does not.
 
-Outside the Scope, not done:
+Round 2 (58e7250fd): a commit that passed a rule and holds no other action
+now gives its own line, `merge` for an Atelier merge (the item or mission
+it names, or each record a backlog branch's merge changed) and `change`
+otherwise, one per record it changed. `history` finds a proposed mission
+on its branch, and an item of the mission on the mission's branch. On this
+repository that brings atelier-kw8u's own plan merge, past the two-review
+rule and CI, onto its page. The new test
+`log::a_proposed_plans_lead_and_merge_and_a_set_of_a_started_item_each_show_their_passed_rule`
+covers a proposed mission's `lead`, its plan merge, a `set` of a started
+item and the merge of that backlog branch, each in `show` and `log`.
+`cargo nextest run` passes (394 tests), clippy, fmt and `git diff --check`
+are clean, and `evals/agent-factory/test.sh` passes.
 
-- `log::history` finds a mission only on the base's tip, so a proposed
-  mission, whose record is only on its plan branch, gets no log, and its
-  page lists no passed rules. `docs/design.md` says an ID on "a branch named
-  for it" is found. This was already so before this change; it is worth an
-  item of its own.
+### Responses
+
+- 1-36z8.1: fixed in 58e7250fd
+- 1-36z8.2: fixed in 58e7250fd
