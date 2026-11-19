@@ -19,7 +19,7 @@ unset ATELIER_SKIP T3CODE_THREAD_ID CLAUDE_CODE_SESSION_ID CODEX_SESSION_ID CODE
 
 failed=()
 echo "== harness"
-(cd "$here/harness" && python3 -m unittest test_run) || failed+=(harness)
+(cd "$here/harness" && python3 -m unittest test_run test_confine) || failed+=(harness)
 for dir in "$here"/scenarios/*/; do
     name=$(basename "$dir")
     echo "== $name"

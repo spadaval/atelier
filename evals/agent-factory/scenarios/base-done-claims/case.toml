@@ -1,0 +1,32 @@
+# A replay case (harness/replay.py): atelier-fj1t's first change, reviewed
+# again. Only the judge reads `defect` and the commits; the fixture holds the
+# item's Goal, Done when, Context and Report, and the change.
+
+row = 68
+defect_item = "atelier-uw4x"
+item = "atelier-fj1t"
+base = "3fa4156712b6d882ed62142ad7ef921228966354"
+change = "4402d727120a6d52e3f4f510a845df38dcd932c3"
+fix = "047155d4993ffeebd8c2b10a20a7188990e9b771"
+defect = """
+`land` counts a base commit as reviewed only when an approval's pinned commit
+contains it, so a close committed after the approval, which `merge`'s
+review.current accepts as a status-only change, passes `merge` and is then
+refused on the base by the new `land_base_done_claim` check.
+"""
+
+id = "atelier-t2vb"
+title = "Refuse done claims for branchless work on the base"
+goal = """
+`atelier issue transition <id> start` and then `close` on the base branch takes a work item to done without an owner branch, so it never meets the review and merge gates. Now that record-only commits may land on the base (atelier-3mjv), that commit passes `land`, which is the astromech scenario in atelier-kaor item 6.
+"""
+done_when = [
+  "`land` on the base (or the close transition) refuses a new done claim for work that has no recorded owner branch, with guidance to use `atelier start`; superseding work and closing decision records (atelier-ox63) on the base stay allowed.",
+  "Tests cover all three.",
+]
+context = """
+Found 2026-10-15 in review finding atelier-e91j on atelier-kaor.
+"""
+report = """
+land (and start) on the base refuse an unpushed commit outside review that takes a work item to done, with land_base_done_claim and guidance to move it to a work branch and atelier start it; closing missions, deciding decision records and superseding work stay allowed. For merges only a status that differs from every parent counts. Test: base_refuses_done_claims_outside_review_but_allows_supersede_and_decisions. Documented in reviews-and-merge.md.
+"""

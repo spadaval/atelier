@@ -15,7 +15,8 @@ use crate::records::{
     ReviewFile,
 };
 use crate::repo::item_path;
-use crate::{git, Repo};
+use crate::skip::{BY_TRAILER, TRAILER};
+use crate::{git, Repo, Walked};
 use anyhow::{bail, Context, Result};
 use chrono::{DateTime, NaiveDate, Utc};
 use std::collections::{BTreeSet, HashMap};
@@ -31,12 +32,16 @@ pub struct Logged {
     pub commit: String,
     /// The item or mission the action is on.
     pub id: String,
-    /// The thread the action is shown with, where the log's table gives one.
+    /// The thread the action is shown with: the one that ran it, where its
+    /// commit names one, else the one the log's table gives, if any.
     pub thread: Option<Thread>,
     pub action: Happened,
     /// Each rule the action's commit carries an `Atelier-Skip` trailer for, as
     /// `<rule>: <reason>`.
     pub skips: Vec<String>,
+    /// The thread that passed `skips`, as the commit's `Atelier-Skip-By`
+    /// trailer names it; `None` in a commit made before that trailer.
+    pub skipped_by: Option<Thread>,
 }
 
 /// A status a record moved from and to in one commit; `from` is `None`
@@ -106,6 +111,13 @@ pub enum Happened {
     Close {
         status: Move,
     },
+    /// A record changed in a commit that passed a rule, with no action above
+    /// found on it, such as the merge of a plan or a `set` of a started
+    /// item: shown so that no passed rule goes unseen. `merge` when the
+    /// commit is an Atelier merge.
+    Passed {
+        merge: bool,
+    },
 }
 
 impl Happened {
@@ -123,6 +135,8 @@ impl Happened {
             Happened::Ready { .. } => "ready",
             Happened::Drop { .. } => "drop",
             Happened::Close { .. } => "close",
+            Happened::Passed { merge: true } => "merge",
+            Happened::Passed { merge: false } => "change",
         }
     }
 
@@ -138,6 +152,7 @@ impl Happened {
             Happened::Lead { .. } => 6,
             Happened::Ready { .. } => 7,
             Happened::Drop { .. } | Happened::Close { .. } => 8,
+            Happened::Passed { .. } => 9,
         }
     }
 
@@ -155,6 +170,7 @@ impl Happened {
                 | Happened::Drop { .. }
                 | Happened::Close { .. }
                 | Happened::Lead { .. }
+                | Happened::Passed { .. }
         )
     }
 }
@@ -202,9 +218,12 @@ pub fn history(
     of: Option<&str>,
     since: Option<DateTime<Utc>>,
 ) -> Result<Option<History>> {
-    let tips: Vec<(String, String)> = git::branches(&repo.root)?
-        .into_iter()
-        .filter_map(|(name, tip)| Some((repo.config.record_of(&name)?, tip)))
+    // Every branch the convention names, local and remote-tracking, as
+    // `show` reads them: a mission's lookup by name reads the tip `show`
+    // reads, and the walk takes every tip, a backlog branch's included.
+    let walked = repo.walked()?;
+    let tips: Vec<(String, String)> = (walked.iter())
+        .filter_map(|branch| Some((branch.record.clone()?, branch.tip.clone())))
         .collect();
     let base_tip = repo.base_tip.clone();
     let mission = match of {
@@ -212,8 +231,12 @@ pub fn history(
         Some(id) => {
             validate_id(id).map_err(|message| anyhow::anyhow!(message))?;
             let mission = format!(".atelier/missions/{id}/mission.md");
-            let is_mission = repo.reader().blob(&format!("{base_tip}:{mission}"))?;
             let tip = tips.iter().find(|(name, _)| name == id);
+            // A proposed mission is only on its branch.
+            let mut is_mission = repo.reader().blob(&format!("{base_tip}:{mission}"))?;
+            if let (None, Some((_, tip))) = (&is_mission, tip) {
+                is_mission = repo.reader().blob(&format!("{tip}:{mission}"))?;
+            }
             let mut item = repo
                 .reader()
                 .blob(&format!("{base_tip}:{}", item_path(id)))?;
@@ -229,7 +252,11 @@ pub fn history(
     };
 
     let mut revisions = vec![base_tip.clone()];
-    revisions.extend(tips.iter().map(|(_, tip)| tip.clone()));
+    for tip in walked.iter().flat_map(|branch| &branch.tips) {
+        if !revisions.contains(tip) {
+            revisions.push(tip.clone());
+        }
+    }
     let commits = walk(&repo.root, &revisions)?;
     let mut walker = Walker {
         repo,
@@ -257,7 +284,7 @@ pub fn history(
                 .collect();
             let mut members = BTreeSet::new();
             for item in ids {
-                if in_mission(repo, &base_tip, &tips, &item, mission)? {
+                if in_mission(repo, &base_tip, &walked, &item, mission)? {
                     members.insert(item);
                 }
             }
@@ -274,21 +301,26 @@ pub fn history(
     Ok(Some(history))
 }
 
-/// Whether the item `id`'s record, on the base's tip or else on its
-/// branch, names `mission`.
+/// Whether the item `id`'s record names `mission`: on the base's tip,
+/// else on its own branch, else, as `show` finds a record the base does not
+/// hold, on the first unmerged branch of `walked`, by name, that adds it,
+/// such as the mission's or a backlog branch.
 fn in_mission(
     repo: &mut Repo,
     base_tip: &str,
-    tips: &[(String, String)],
+    walked: &[Walked],
     id: &str,
     mission: &str,
 ) -> Result<bool> {
     let path = item_path(id);
     let mut text = repo.reader().blob(&format!("{base_tip}:{path}"))?;
-    if text.is_none() {
-        if let Some((_, tip)) = tips.iter().find(|(name, _)| name == id) {
-            text = repo.reader().blob(&format!("{tip}:{path}"))?;
+    let own = walked.iter().filter(|b| b.record.as_deref() == Some(id));
+    let adding = walked.iter().filter(|b| !b.merged);
+    for branch in own.chain(adding) {
+        if text.is_some() {
+            break;
         }
+        text = repo.reader().blob(&format!("{}:{path}", branch.tip))?;
     }
     let item = text.and_then(|text| parse_item(Path::new(&path), &text).ok());
     Ok(item.is_some_and(|item| item.mission.as_deref() == Some(mission)))
@@ -303,6 +335,8 @@ struct Commit {
     /// The item an `Atelier-Merge:` trailer names.
     merged: Option<String>,
     skips: Vec<String>,
+    /// The thread an `Atelier-Skip-By:` trailer names.
+    skipped_by: Option<Thread>,
     /// Each record file it changed from its parent, with the old and new
     /// blob as Git abbreviates them, `None` where it has none.
     changes: Vec<Change>,
@@ -319,6 +353,13 @@ struct Change {
 /// merge: without it Git follows only the side a merge matches on the
 /// record paths, and the other side's actions are lost.
 fn walk(root: &Path, revisions: &[String]) -> Result<Vec<Commit>> {
+    let trailer = |key: &str| format!("%(trailers:key={key},valueonly,separator=%x1f)");
+    let format = format!(
+        "--format=%x01%H%x02%h%x02%P%x02%ct%x02{}%x02{}%x02{}%x03",
+        trailer("Atelier-Merge"),
+        trailer(TRAILER),
+        trailer(BY_TRAILER),
+    );
     let mut args = vec![
         "log",
         "-z",
@@ -333,7 +374,7 @@ fn walk(root: &Path, revisions: &[String]) -> Result<Vec<Commit>> {
         "--root",
         "--no-renames",
         "--raw",
-        "--format=%x01%H%x02%h%x02%P%x02%ct%x02%(trailers:key=Atelier-Merge,valueonly,separator=%x1f)%x02%(trailers:key=Atelier-Skip,valueonly,separator=%x1f)%x03",
+        &format,
     ];
     args.extend(revisions.iter().map(String::as_str));
     args.extend(["--", ".atelier/items", ".atelier/missions"]);
@@ -348,7 +389,7 @@ fn commit(entry: &str) -> Result<Commit> {
     let unreadable = || format!("git log printed a commit this tool cannot read: {entry:?}");
     let (header, raw) = entry.split_once('\x03').with_context(unreadable)?;
     let fields: Vec<&str> = header.split('\x02').collect();
-    let [hash, short, parents, time, merged, skips] = fields.as_slice() else {
+    let [hash, short, parents, time, merged, skips, skipped_by] = fields.as_slice() else {
         bail!(unreadable());
     };
     let seconds: i64 = time.parse().with_context(unreadable)?;
@@ -388,6 +429,7 @@ fn commit(entry: &str) -> Result<Commit> {
         time: DateTime::from_timestamp(seconds, 0).with_context(unreadable)?,
         merged: values(merged).into_iter().next(),
         skips: values(skips),
+        skipped_by: values(skipped_by).into_iter().next().map(Thread),
         changes,
     })
 }
@@ -563,12 +605,38 @@ impl Walker<'_, '_> {
         if !pending.is_empty() {
             self.pending.insert(commit.hash.clone(), pending);
         }
+        // A record the commit changed with no action of its own, beside one
+        // that has, still shows the rules the commit passed: a `ready` of
+        // two items, one of which was ready already.
+        if !commit.skips.is_empty() {
+            let merge = commit.parents.len() > 1;
+            for id in self.records_of(commit)? {
+                if !found.iter().any(|(of, _, _)| *of == id) {
+                    found.push((id, None, Happened::Passed { merge }));
+                }
+            }
+        }
         found.sort_by_key(|(_, _, action)| action.row());
-        let carries = found.iter().any(|(_, _, action)| action.commits());
+        // Each record shows the commit's skips once: on its actions Atelier
+        // commits, else on all of its actions. A verdict's carries them and
+        // its review line beside it does not; a settlement carries them
+        // beside an item that the same commit created.
+        let carries: BTreeSet<String> = (found.iter())
+            .filter(|(_, _, action)| action.commits())
+            .map(|(id, _, _)| id.clone())
+            .collect();
         for (id, thread, action) in found {
-            let skips = match !carries || action.commits() {
+            let skips = match !carries.contains(&id) || action.commits() {
                 true => commit.skips.clone(),
                 false => Vec::new(),
+            };
+            let skipped_by = commit.skipped_by.clone().filter(|_| !skips.is_empty());
+            // The thread that ran the command which made the commit, where
+            // the commit names it: a lead's merge of an implementer's item
+            // is the lead's.
+            let thread = match (action.commits(), &commit.skipped_by) {
+                (true, Some(by)) => Some(by.clone()),
+                _ => thread,
             };
             self.history.actions.push(Logged {
                 time: commit.time,
@@ -577,6 +645,7 @@ impl Walker<'_, '_> {
                 thread,
                 action,
                 skips,
+                skipped_by,
             });
         }
         Ok(())
@@ -618,6 +687,47 @@ impl Walker<'_, '_> {
             new.implementers.holder().cloned(),
             action,
         )))
+    }
+
+    /// The IDs of the records `commit` changed, each once: for an Atelier
+    /// merge, the item or mission it names, else those its merge changed
+    /// against the base it merged into, as a backlog branch's merge does.
+    fn records_of(&mut self, commit: &Commit) -> Result<Vec<String>> {
+        let paths: Vec<String> = match commit.parents.as_slice() {
+            [base, _, ..] => {
+                if let Some(id) = commit.merged.as_ref().filter(|id| validate_id(id).is_ok()) {
+                    return Ok(vec![id.clone()]);
+                }
+                let listed = git::listing(
+                    &self.repo.root,
+                    &[
+                        "diff",
+                        "--name-only",
+                        "-z",
+                        "--no-renames",
+                        base,
+                        &commit.hash,
+                        "--",
+                        ".atelier/items",
+                        ".atelier/missions",
+                    ],
+                )?;
+                git::names(&listed)
+            }
+            _ => (commit.changes.iter())
+                .map(|change| change.path.clone())
+                .collect(),
+        };
+        let mut ids: Vec<String> = Vec::new();
+        for path in paths {
+            if let Some(record) = Record::of(&path) {
+                let id = record.id().to_string();
+                if !ids.contains(&id) {
+                    ids.push(id);
+                }
+            }
+        }
+        Ok(ids)
     }
 
     /// The version of the record at `path` whose blob is `blob`, read from
@@ -900,7 +1010,7 @@ mod tests {
     #[test]
     fn a_commit_reads_with_its_fields_and_changes() {
         let entry =
-            "abc123\x02abc\x02p1 p2\x0217944170\x02demo-ab12\x02rule: why\x1fother: why\x03\0\n\
+            "abc123\x02abc\x02p1 p2\x0217944170\x02demo-ab12\x02rule: why\x1fother: why\x02t1\x03\0\n\
                      :100644 100644 1111111 0000000 D\0.atelier/items/demo-ab12/item.md\0\
                      :000000 100644 0000000 2222222 A\0.atelier/missions/demo-cd34/mission.md\0";
         let commit = commit(entry).unwrap();
@@ -909,6 +1019,7 @@ mod tests {
         assert_eq!(commit.parents, ["p1", "p2"]);
         assert_eq!(commit.merged.as_deref(), Some("demo-ab12"));
         assert_eq!(commit.skips, ["rule: why", "other: why"]);
+        assert_eq!(commit.skipped_by, Some(Thread("t1".into())));
         assert_eq!(commit.changes.len(), 2);
         assert_eq!(commit.changes[0].old.as_deref(), Some("1111111"));
         assert_eq!(commit.changes[0].new, None);

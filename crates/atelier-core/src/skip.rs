@@ -2,13 +2,14 @@
 //! Hooks and the bypass). A rule is a refusal that depends on the state of
 //! the work or on who asks. Given a reason, a [`Skip`] passes every rule
 //! one invocation meets: the caller says each with the reason, and the
-//! commit the invocation makes carries each as a trailer. A refusal of
-//! anything else is not passed.
+//! commit the invocation makes carries each as a trailer, with the thread
+//! that ran it. A refusal of anything else is not passed.
 //!
 //! Every refusal of a rule goes through [`Skip::refuse`], so a rule cannot
 //! refuse without offering the skip.
 
 use crate::actions::{check, mission_refusals, refusals, Action, Facts, MissionFacts, Refusal};
+use crate::model::Thread;
 use crate::{entry, say};
 use anyhow::Result;
 use std::cell::RefCell;
@@ -16,6 +17,14 @@ use std::cell::RefCell;
 /// The variable that gives a command a skip's reason, which the Git hooks
 /// an action's commit or push runs are given from its [`Skip`].
 pub const VARIABLE: &str = "ATELIER_SKIP";
+
+/// The key of the trailer that holds one rule passed, as `<rule>: <reason>`.
+pub const TRAILER: &str = "Atelier-Skip";
+
+/// The key of the trailer that names the thread that passed a commit's
+/// rules. A binary from before it reads only [`TRAILER`], so a commit
+/// holding both reads there as it always did.
+pub const BY_TRAILER: &str = "Atelier-Skip-By";
 
 /// A refused action: the rules it breaks, one line each, which a reason would
 /// pass, or none when what refused it is no rule; what it says; and the way
@@ -50,13 +59,15 @@ impl From<String> for Refused {
     }
 }
 
-/// One invocation's skip: the reason given, if any, and each rule it has
-/// passed. Its caller makes one per invocation and gives it to whatever
-/// opens a repository, makes a commit or prints the outcome, so a passed
-/// rule reaches that invocation's commit and output and no other's.
+/// One invocation's skip: the reason given, if any, the thread that gave
+/// it, and each rule it has passed. Its caller makes one per invocation and
+/// gives it to whatever opens a repository, makes a commit or prints the
+/// outcome, so a passed rule reaches that invocation's commit and output
+/// and no other's.
 #[derive(Debug, Default)]
 pub struct Skip {
     reason: Option<String>,
+    by: Option<Thread>,
     passed: RefCell<Vec<String>>,
 }
 
@@ -67,7 +78,19 @@ impl Skip {
         let reason = reason.map(|reason| reason.split_whitespace().collect::<Vec<_>>().join(" "));
         Skip {
             reason: reason.filter(|reason| !reason.is_empty()),
+            by: None,
             passed: RefCell::default(),
+        }
+    }
+
+    /// This skip, given by `thread`, the thread running the invocation,
+    /// which the commit's trailers name beside each rule it passes. A skip
+    /// with no thread writes the rules alone, as one did before
+    /// 2026-11-18 (atelier-nv22).
+    pub fn by(self, thread: Thread) -> Skip {
+        Skip {
+            by: Some(thread),
+            ..self
         }
     }
 
@@ -114,6 +137,21 @@ impl Skip {
     /// Each rule passed so far, as `<rule>: <reason>`.
     pub fn passed(&self) -> Vec<String> {
         self.passed.borrow().clone()
+    }
+
+    /// The trailers of a commit of what this invocation wrote: one
+    /// `Atelier-Skip: <rule>: <reason>` for each rule passed so far, then
+    /// `Atelier-Skip-By: <thread>`; none when no rule was passed.
+    pub fn trailers(&self) -> Vec<String> {
+        let passed = self.passed();
+        if passed.is_empty() {
+            return Vec::new();
+        }
+        let mut trailers: Vec<String> = (passed.iter())
+            .map(|line| format!("{TRAILER}: {line}"))
+            .collect();
+        trailers.extend(self.by.iter().map(|by| format!("{BY_TRAILER}: {by}")));
+        trailers
     }
 
     /// What the caller is told when `action` is refused, or `None` when it may

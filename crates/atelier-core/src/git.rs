@@ -160,23 +160,6 @@ pub fn remote_branches(repo: &Path, remote: &str) -> Result<Vec<(String, String)
         .collect())
 }
 
-/// Every local branch, with the commit it points at.
-pub fn branches(repo: &Path) -> Result<Vec<(String, String)>> {
-    let listed = run(
-        repo,
-        &[
-            "for-each-ref",
-            "--format=%(refname:strip=2) %(objectname)",
-            "refs/heads/",
-        ],
-    )?;
-    Ok(listed
-        .lines()
-        .filter_map(|line| line.rsplit_once(' '))
-        .map(|(name, tip)| (name.to_string(), tip.to_string()))
-        .collect())
-}
-
 /// Whether this clone has the commit `commit`.
 pub fn has_commit(repo: &Path, commit: &str) -> Result<bool> {
     let object = format!("{commit}^{{commit}}");
@@ -198,17 +181,13 @@ pub fn is_ancestor(repo: &Path, commit: &str, of: &str) -> Result<bool> {
     }
 }
 
-/// `message` with a trailer `Atelier-Skip: <rule>: <reason>` for each rule
-/// `skip` passed, in its trailer paragraph.
+/// `message` with [`Skip::trailers`] in its trailer paragraph: one for
+/// each rule `skip` passed, and the thread that passed them.
 pub fn with_skips(repo: &Path, message: &str, skip: &Skip) -> Result<String> {
-    let passed = skip.passed();
-    if passed.is_empty() {
+    let trailers = skip.trailers();
+    if trailers.is_empty() {
         return Ok(message.to_string());
     }
-    let trailers: Vec<String> = passed
-        .iter()
-        .map(|line| format!("Atelier-Skip: {line}"))
-        .collect();
     let mut args = vec!["interpret-trailers"];
     for trailer in &trailers {
         args.extend(["--trailer", trailer]);
