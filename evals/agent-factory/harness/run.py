@@ -821,11 +821,20 @@ def log_atelier(work: Path) -> None:
     binary.chmod(0o755)
 
 
-def atelier_calls(work: Path) -> list:
-    """Each `atelier` call the run made, from atelier_log.py's log."""
+def atelier_calls(work: Path, first: str = None) -> list:
+    """Each `atelier` call the run made, from atelier_log.py's log, with the
+    thread of `threads` in result.json that made it ("by"): a Codex
+    subagent's `codex-<CODEX_THREAD_ID>`, else its T3CODE_THREAD_ID, else
+    the first agent's, `first`, in a run without threads."""
     log = work / ".atelier-calls.jsonl"
-    return [json.loads(line) for line in
-            (log.read_text().splitlines() if log.exists() else []) if line.strip()]
+    calls = [json.loads(line) for line in
+             (log.read_text().splitlines() if log.exists() else []) if line.strip()]
+    for call in calls:
+        env = call.get("env") or {}
+        child, session = env.get("CODEX_THREAD_ID"), env.get("CODEX_SESSION_ID")
+        call["by"] = (f"codex-{child}" if child and session and child != session
+                      else env.get("T3CODE_THREAD_ID") or first)
+    return calls
 
 
 def run_one(scenario: str, arm: str, ref: str, setup: dict, index: int,
@@ -897,7 +906,7 @@ def run_one(scenario: str, arm: str, ref: str, setup: dict, index: int,
             record.pop("tokens")
             record.pop("instructions")
             info["init"].update(record)
-    calls = atelier_calls(work)
+    calls = atelier_calls(work, first_thread["thread"])
     (run_dir / "final.md").write_text((info["result"] or {}).get("result") or "")
     grade = subprocess.run(
         [sys.executable, "-I", str(sdir / "grade.py"), str(work), str(transcript)],

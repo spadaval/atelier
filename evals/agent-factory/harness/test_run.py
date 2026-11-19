@@ -643,10 +643,51 @@ class AtelierLogTest(unittest.TestCase):
             self.assertEqual((ok.returncode, ok.stdout), (0, "real status\n"))
             self.assertEqual(bad.returncode, 1)
             calls = run.atelier_calls(tmp)
-            self.assertEqual([(c["argv"], c["thread"], c["exit"]) for c in calls],
-                             [(["status"], "t-1", 0), (["merge", "x"], "t-1", 1)])
+            self.assertEqual([(c["argv"], c["thread"], c["exit"], c["by"]) for c in calls],
+                             [(["status"], "t-1", 0, "t-1"), (["merge", "x"], "t-1", 1, "t-1")])
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_a_codex_subagent_is_told_from_its_parent(self):
+        # Review 1-jgy4: in sol a spawn_agent child inherits its parent's
+        # T3CODE_THREAD_ID and session, and has a CODEX_THREAD_ID of its own.
+        tmp = Path(tempfile.mkdtemp(prefix="af-atelier-log-"))
+        try:
+            (tmp / "bin").mkdir()
+            (tmp / "bin" / "atelier").write_text("#!/bin/sh\nexit 1\n")
+            (tmp / "bin" / "atelier").chmod(0o755)
+            run.log_atelier(tmp)
+            path = f"{tmp / 'bin'}:{os.environ['PATH']}"
+            shared = {"PATH": path, "T3CODE_THREAD_ID": "thread-parent",
+                      "CODEX_SESSION_ID": "root-session"}
+            for thread in ("root-session", "reviewer-session"):
+                subprocess.run(["atelier", "review", "x"],
+                               env={**shared, "CODEX_THREAD_ID": thread})
+            subprocess.run(["atelier", "status"], env={"PATH": path,
+                                                       "CLAUDE_CODE_SESSION_ID": "s-1"})
+            calls = run.atelier_calls(tmp, first="main")
+            self.assertEqual([(c["thread"], c["by"]) for c in calls], [
+                ("thread-parent", "thread-parent"),
+                ("thread-parent/reviewer-session", "codex-reviewer-session"),
+                ("s-1", "main")])
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_the_identity_is_atelier_s(self):
+        # The cases of crates/atelier-core/src/identity.rs's tests.
+        spec = importlib.util.spec_from_file_location("atelier_log",
+                                                      HERE / "atelier_log.py")
+        log = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(log)
+        everything = {"T3CODE_THREAD_ID": "t3", "CLAUDE_CODE_SESSION_ID": "claude",
+                      "CODEX_SESSION_ID": "codex", "GROK_SESSION_ID": "grok"}
+        self.assertEqual(log.identity(everything), "t3")
+        self.assertEqual(log.identity({}), "human")
+        self.assertEqual(log.identity({"T3CODE_THREAD_ID": "", "GROK_SESSION_ID": "g"}), "g")
+        self.assertEqual(log.identity({"CODEX_SESSION_ID": " "}), "human")
+        root = {"T3CODE_THREAD_ID": "t3", "CODEX_SESSION_ID": "s", "CODEX_THREAD_ID": "s"}
+        self.assertEqual(log.identity(root), "t3")
+        self.assertEqual(log.identity({**root, "CODEX_THREAD_ID": "kid"}), "t3/kid")
 
 
 FAKE_AGENT = r'''
@@ -730,8 +771,8 @@ class RunOneTest(unittest.TestCase):
         self.assertEqual(r["tokens"], {"in": 400, "cached_in": 290, "out": 35})
         self.assertEqual(r["peak_agents"], 2)
         [failed] = r["atelier_failed"]
-        self.assertEqual((failed["argv"], failed["thread"], failed["exit"]),
-                         (["submit"], first["thread"], 1))
+        self.assertEqual((failed["argv"], failed["thread"], failed["by"], failed["exit"]),
+                         (["submit"], first["thread"], first["thread"], 1))
         self.assertFalse((run.role_home(Path(r["work_dir"]), "reviewer") / "auth.json")
                          .is_symlink())
         self.assertIn("| house | case | none | 1 of 1 |", table.table([r]))

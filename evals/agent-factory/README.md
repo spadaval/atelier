@@ -253,8 +253,10 @@ its own when it ends.
   (`threads`), and their sum (`tokens`); and its failed `atelier` calls
   (`atelier_failed`). The harness moves the fixture's `bin/atelier` to
   `libexec/` and puts `harness/atelier_log.py` in its place, which logs each
-  call, a Git hook's included, with its thread and exit status, so a
-  failed call is read from that log and not parsed from a transcript.
+  call, a Git hook's included, with its exit status and its caller: the
+  thread Atelier names (a Codex subagent as `<parent>/<CODEX_THREAD_ID>`)
+  and, as `by`, the thread of `threads` that made it. A failed call is read
+  from that log and not parsed from a transcript.
 - Grades are provisional. Some graders key on wording in the final message,
   so read `final.md` for every run before you count it, and judge
   behaviour, not vocabulary. Every scenario has fixtures for its
