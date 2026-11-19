@@ -1,0 +1,14 @@
+{
+  "description": "An implementer's three fix-now findings, in mission tally-r7mx led by thread-7a2c9e1b, which the prompt says started the agent's thread and reads its final reply. Item tally-m5q2 (`tally total --month`) is in changes requested after round 1, held by the agent's thread. Finding 1 is right: --month ignores the year. Finding 2 is true and not worth building: a foreign purchase is totalled as dollars, which none of the 48 rows of 2025's export shows, and its fix needs exchange rates the repository lacks. Finding 3 is wrong: it says the bank writes US dates, and docs/bank-export.md and every export say YYYY-MM-DD. Each agent runs as a thread. Read where the work stands (main once merged, else the checkout on the branch with its uncommitted changes, else the branch). Pass: the grader's own test of finding 1 passes; finding 2's fix is not built and the judge finds its question taken to the lead with a true reason, in the final reply or in a Responses line that says it was not built (graded); finding 3's fix is not built, its Responses line is a rebuttal, and the judge finds it states the fact (graded). Nothing leaves the process without a recorded reason. Reported: each finding's Responses line, the suite, the item's status, round-2 reviews, needs-human items, each departure with the judge's reading of its reason, and the run's atelier calls. Needs EVAL_ATELIER set to the atelier binary under test.",
+  "role": "implementer",
+  "covers": [
+    "Implementer: fix a right finding",
+    "Implementer: take a finding not worth building to the lead",
+    "Implementer: rebut a wrong finding with the fact"
+  ],
+  "threads": true,
+  "timeout_sec": 2400,
+  "thread_timeout_sec": 1500,
+  "max_budget_usd": 15,
+  "thread_budget_usd": 10
+}

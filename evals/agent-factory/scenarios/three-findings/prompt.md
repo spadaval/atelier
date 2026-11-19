@@ -1,0 +1,1 @@
+{{skill}}You are the implementer of tally-m5q2. The lead of its mission, tally-r7mx, is thread-7a2c9e1b, which started this thread and reads your final reply. Run `atelier status` and do what it says.
