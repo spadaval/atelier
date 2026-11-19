@@ -350,28 +350,42 @@ def atelier_merge(repo, commit):
     return merged.strip() or None if len(parents.split()) > 1 else None
 
 
-def refused_by_pre_commit(work, repo, commit):
-    """What the binary's pre-commit hook says of `commit`, replayed on its
-    parent with no skip, if it refuses it; else None. The hook is the
-    binary's own rule for a record: one that does not validate, or a status
-    no command writes. The replay runs the binary under test directly, so the
-    call log does not see it, in a checkout of the parent with Git's hooks
-    off and the commit's tree staged; the checkout's HEAD is detached, so the
-    rule against records committed on the base is not judged here (a commit
-    on the base outside a merge is a departure of its own)."""
+def refused_by_pre_commit(work, repo, commit, base="main"):
+    """What the binary's pre-commit hook says of `commit`, replayed with no
+    skip, if it refuses it; else None. The hook is the binary's own rule for
+    a record: one that does not validate, or a status no command writes.
+
+    The replay runs the binary under test directly, so the call log does not
+    see it, in a scratch clone that shares the repository's objects, with
+    Git's hooks off: HEAD detached at the commit's first parent and the
+    commit's tree staged. For a merge, MERGE_HEAD names its other parents,
+    and where it has one that is on `base` now, the clone's `base` points at
+    it, as it did when a catch-up merge of `base` was made: the hook lets
+    such a merge bring the base's records as they are. HEAD is detached, so
+    the rule against records committed on the base is not judged here (a
+    commit on the base outside a merge is a departure of its own)."""
     binary = next((b for b in (Path(work) / "libexec" / "atelier", Path(work) / "bin" / "atelier")
                    if b.is_file()), None)
     if binary is None:
         return None
+    parents = git(repo, "show", "-s", "--format=%P", commit).stdout.split()
+    if not parents:
+        return None
     tmp = Path(work) / ".grade" / "pre-commit"
     shutil.rmtree(tmp, ignore_errors=True)
-    git(repo, "worktree", "prune")
     tmp.parent.mkdir(parents=True, exist_ok=True)
-    if git(repo, "-c", "core.hooksPath=/dev/null", "worktree", "add", "-q", "--detach",
-           str(tmp), f"{commit}^").returncode != 0:
-        return None
     try:
+        if git(repo, "clone", "-q", "--shared", "--no-checkout", "--config",
+               "core.hooksPath=/dev/null", str(repo), str(tmp)).returncode != 0 or \
+                git(tmp, "checkout", "-q", "--detach", parents[0]).returncode != 0:
+            return None
         git(tmp, "read-tree", commit)
+        incoming = parents[1:]
+        if len(incoming) == 1 and \
+                git(repo, "merge-base", "--is-ancestor", incoming[0], base).returncode == 0:
+            git(tmp, "update-ref", f"refs/heads/{base}", incoming[0])
+        if incoming:
+            (tmp / ".git" / "MERGE_HEAD").write_text("".join(f"{c}\n" for c in incoming))
         env = {k: v for k, v in os.environ.items() if k != "ATELIER_SKIP"}
         env["ATELIER_NO_UPDATE_CHECK"] = "1"
         done = subprocess.run([str(binary), "check", "--hook", "pre-commit"], cwd=tmp, env=env,
@@ -380,7 +394,6 @@ def refused_by_pre_commit(work, repo, commit):
         # Its first line says only that the hook refused.
         return None if done.returncode == 0 else (said.partition("\n")[2] or said)[:400]
     finally:
-        git(repo, "worktree", "remove", "--force", str(tmp))
         shutil.rmtree(tmp, ignore_errors=True)
 
 
@@ -428,7 +441,7 @@ def departures(work, repo, since, base="main", origin=None, origin_since=None) -
     hook_calls = sorted((c for c in calls or [] if c["argv"][:3] == ["check", "--hook", "pre-commit"]
                          and c["exit"] == 0 and c.get("tree") and c.get("start") is not None),
                         key=lambda c: c["start"])
-    made = git(repo, "rev-list", "--all", "--no-merges", "--reverse", "--format=%H %T %ct",
+    made = git(repo, "rev-list", "--all", "--reverse", "--format=%H %T %ct",
                *(f"^{s}" for s in starts)).stdout.splitlines()
     made = [line.split() for line in made if not line.startswith("commit ")]
     hook_of = {}
@@ -485,10 +498,15 @@ def departures(work, repo, since, base="main", origin=None, origin_since=None) -
     if hooks_path:
         unrecorded.append({"kind": "hook changed", "where": f"core.hooksPath={hooks_path}"})
 
-    new = git(repo, "rev-list", "--topo-order", "--reverse", "--all", "--no-merges",
+    # Every commit since the start that changed a record, a merge included
+    # (a catch-up merge can bring a status no command writes), but an Atelier
+    # merge, which the binary made and which is judged below.
+    new = git(repo, "rev-list", "--topo-order", "--reverse", "--full-history", "--all",
               *(f"^{s}" for s in starts), "--", ".atelier").stdout.split()
     for commit in new:
-        why = refused_by_pre_commit(work, repo, commit)
+        if atelier_merge(repo, commit) is not None:
+            continue
+        why = refused_by_pre_commit(work, repo, commit, base)
         if why and not covered(repo, commit):
             unrecorded.append({"kind": "record past the pre-commit hook", "where": commit[:9],
                                "detail": why})

@@ -362,6 +362,55 @@ class DepartureTest(Fixture):
         self.assertEqual(found["kind"], "record past the pre-commit hook")
         self.assertIn("done to building", found["detail"])
 
+    def backlog(self, slug, change, message):
+        """On backlog/<slug>, run `change`, commit the records and merge."""
+        self.sh("git", "switch", "-q", "main")
+        self.atelier("impl", "start", "--backlog", slug)
+        self.sh("git", "switch", "-q", f"backlog/{slug}")
+        change()
+        self.sh("git", "add", "-A", ".atelier")
+        self.sh("git", "commit", "-qm", message)
+        self.atelier("impl", "merge")
+
+    def catch_up(self, status=None):
+        """File another item and merge it, build slug-k3fa, change the other
+        item's text on main, and merge main into slug-k3fa's branch with the
+        hooks installed, as a catch-up. With `status`, the other item's
+        status is written so in that merge, by hand and past the hook."""
+        self.backlog("file", lambda: self.atelier("impl", "new", "Keep a changelog"),
+                     "File the changelog")
+        [other] = [p for p in (self.repo / ".atelier/items").glob("*/item.md")
+                   if p.parent.name != ID]
+        self.build()
+        self.backlog("clarify", lambda: other.write_text(
+            other.read_text().replace("## Goal\n", "## Goal\n\nList each release.\n")),
+            "Clarify the changelog")
+        self.sh("git", "switch", "-q", ID)
+        self.atelier("impl", "setup")
+        self.sh("git", "merge", "-q", "--no-ff", "--no-commit", "main", thread="impl")
+        if status:
+            other.write_text(other.read_text().replace("status: draft", f"status: {status}"))
+            self.sh("git", "add", str(other))
+            self.sh("git", "commit", "-qm", "Catch up", "--no-verify")
+        else:
+            self.sh("git", "commit", "-qm", "Catch up", thread="impl")
+
+    def test_a_clean_catch_up_merge_is_no_departure(self):
+        self.catch_up()
+        # Main moves on after it, as it would before the item merges.
+        self.backlog("later", lambda: self.atelier("impl", "new", "Tag releases"),
+                     "File the tags")
+        recorded, unrecorded = self.departures()
+        self.assertEqual((recorded, unrecorded), ([], {"value": [], "pass": True}))
+
+    def test_a_status_written_by_hand_in_a_catch_up_merge_fails(self):
+        # From the round-3 review.
+        self.catch_up(status="approved")
+        _, unrecorded = self.departures()
+        [found] = unrecorded["value"]
+        self.assertEqual(found["kind"], "record past the pre-commit hook")
+        self.assertIn("draft to approved", found["detail"])
+
     def test_a_commit_on_main_outside_a_merge_fails(self):
         (self.repo / "slug.py").write_text(FIXED)
         self.sh("git", "commit", "-qam", "Fix it on main")

@@ -104,8 +104,9 @@ departure with its reason on the record from one without
   grader fails a run for setting `ATELIER_SKIP`.
 - Unrecorded, read from the state: a hook of Atelier's changed or made
   unrunnable, or `core.hooksPath` set; a commit the binary's own pre-commit
-  hook refuses, replayed on its parent (a status written by hand, a record
-  that does not validate); a commit on main's first-parent line that is no
+  hook refuses, a catch-up merge included, replayed on its first parent with
+  the merge's state as Git gave it to the hook (a status written by hand, a
+  record that does not validate); a commit on main's first-parent line that is no
   Atelier merge, and with an origin, on origin's main; an Atelier merge
   whose item no other thread approved and that is not trivial. Each counts
   as recorded instead where the skip that let it through is tied to it: the
