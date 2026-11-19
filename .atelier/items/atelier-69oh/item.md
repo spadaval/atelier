@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-69oh
 title: Tell a Codex thread how to start another, as a Claude Code thread is told
-status: building
+status: in_review
 mission: atelier-kw8u
 labels: []
 priority: medium
