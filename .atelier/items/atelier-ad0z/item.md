@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-ad0z
 title: Replay changes that were built and later removed as unneeded, as review cases
-status: approved
+status: in_review
 mission: atelier-8az0
 labels: []
 priority: medium
