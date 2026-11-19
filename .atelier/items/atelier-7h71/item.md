@@ -118,3 +118,8 @@ branches, `eval/skill-no-size-verdict` and `eval/skill-no-reviewer`, are
 pushed and never to be merged. The README's results list does not link the
 new file, since the item's scope is `results/`; the next item that edits
 the README can add it.
+
+### Responses
+
+- 1-t0j9.1: fixed in fae6eddc1
+- 1-t0j9.2: fixed in fae6eddc1
