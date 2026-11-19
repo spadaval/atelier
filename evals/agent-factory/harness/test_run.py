@@ -299,14 +299,17 @@ class LimitTest(unittest.TestCase):
             self.assertEqual(self.disallowed(roles[role]["argv"]), list(run.AGENT_TOOLS))
         self.assertEqual(env["T3CODE_THREAD_ID"], "thread-1")
         self.assertTrue((self.tmp / "bin" / "delegate").is_file())
-        self.assertIn("delegate", note)
+        self.assertEqual(note, run.THREADS_NOTE)
+        for role in run.ROLES:
+            argv = roles[role]["argv"]
+            self.assertEqual(argv[argv.index("--append-system-prompt") + 1], run.THREADS_NOTE)
 
     def test_codex_has_no_delegate_and_spawn_agent_only_with_threads(self):
         env, note = run.threads(self.tmp, self.tmp / "run", run.agent_env(self.tmp, "codex", True),
                                 run.one_model_setup("codex", "gpt-6-luna", "low"), {},
                                 "thread-1")
         self.assertFalse((self.tmp / "bin" / "delegate").exists())
-        self.assertNotIn("delegate", note)
+        self.assertEqual(note, run.CODEX_THREADS_NOTE)
         config = (Path(env["CODEX_HOME"]) / "config.toml").read_text()
         self.assertIn("disable_native_tools = false", config)
         self.assertIn("max_threads = 1", config)
@@ -314,6 +317,22 @@ class LimitTest(unittest.TestCase):
         config = (Path(env["CODEX_HOME"]) / "config.toml").read_text()
         self.assertIn("disable_native_tools = true", config)
         self.assertIn("plugins = false", config)
+
+    def test_each_kind_of_agent_is_told_how_to_start_a_thread_and_nothing_else(self):
+        """Claude Code is told of delegate and a one-model Codex of spawn_agent,
+        in the same opening words, each with no word on when or why."""
+        delegate, spawn = run.THREADS_NOTE, run.CODEX_THREADS_NOTE
+        for note in (delegate, spawn):
+            self.assertTrue(note.startswith(run.THREADS_LEAD))
+            self.assertIn("To start another agent as a new thread", note)
+            self.assertIn("with that task as its only prompt", note)
+            for steer in ("should", "must", "only if", "unless", "when you", "if you"):
+                self.assertNotIn(steer, note.lower())
+        self.assertIn("`delegate <role>", delegate)
+        self.assertNotIn("spawn_agent", delegate)
+        self.assertIn('`spawn_agent` with fork_turns "none"', spawn)
+        self.assertIn("`wait_agent`", spawn)
+        self.assertNotIn("delegate", spawn)
 
     def test_jobs_above_two_and_threads_above_one_are_refused(self):
         self.assertIn("above 2", run.check_jobs(3, ["vacuous-test-review"]))
@@ -348,14 +367,18 @@ class CodexPromptTest(unittest.TestCase):
     home the harness builds (`codex debug prompt-input` calls no model)."""
     setUp, tearDown = LimitTest.setUp, LimitTest.tearDown
 
-    def given(self, threads):
+    def prompt_input(self, threads, config=()):
         env = run.agent_env(self.tmp, "codex", threads)
         run.stage_for("codex", "HEAD", self.tmp, "skills/agent-factory")
         subprocess.run(["git", "init", "-q", str(self.tmp / "repo")], check=True)
         out = subprocess.run(["codex", "debug", "prompt-input", "-c", 'model="gpt-6-luna"',
-                              "hi"], cwd=self.tmp / "repo", env=env, stdin=subprocess.DEVNULL,
-                             capture_output=True, text=True, timeout=120)
-        return run.codex_given(json.loads(out.stdout), Path(env["CODEX_HOME"]))
+                              *config, "hi"], cwd=self.tmp / "repo", env=env,
+                             stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                             timeout=120)
+        return json.loads(out.stdout), Path(env["CODEX_HOME"])
+
+    def given(self, threads):
+        return run.codex_given(*self.prompt_input(threads))
 
     def test_without_threads_spawn_agent_is_gone_and_the_skill_loads(self):
         facts = self.given(False)
@@ -365,6 +388,14 @@ class CodexPromptTest(unittest.TestCase):
 
     def test_with_threads_spawn_agent_is_offered(self):
         self.assertTrue(self.given(True)["spawn_agent"])
+
+    def test_the_spawn_note_reaches_the_model_as_developer_instructions(self):
+        cmd = run.codex_command("hi", "gpt-6-luna", "low", run.CODEX_THREADS_NOTE)
+        given = next(a for a in cmd if a.startswith("developer_instructions="))
+        items, _ = self.prompt_input(True, ["-c", given])
+        texts = [c.get("text", "") for i in items if i.get("role") == "developer"
+                 for c in i.get("content") or []]
+        self.assertIn(run.CODEX_THREADS_NOTE, texts)
 
 
 class DelegateTest(unittest.TestCase):
