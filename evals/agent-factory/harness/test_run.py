@@ -1204,5 +1204,41 @@ class MainTest(unittest.TestCase):
         self.assertEqual(self.canaries, [])
 
 
+class ProductMapTest(unittest.TestCase):
+    """A replay fixture's AGENTS.md keeps its map and commands, whatever
+    headings an era gave its process (replay.product_map)."""
+
+    def test_process_goes_under_any_heading_and_the_map_stays(self):
+        text = """# Guide
+
+How we work here.
+
+## Getting Going
+
+- Load the agent-factory skill first.
+- Run `atelier status`, then `atelier issue claim <id>`.
+- Keep `.atelier/` committed.
+
+## Where Things Are
+
+- Intent: `SPEC.md`
+- Notes: `docs/gone.md`
+- Hooks: `.claude/settings.json`
+
+## Handy
+
+Use `cargo nextest run`, and say why in the evidence.
+
+```bash
+# the checks
+cargo fmt -- --check
+atelier lint
+```
+"""
+        self.assertEqual(run.replay.product_map(text, lambda p: p in ("SPEC.md", ".claude")),
+                         "# Guide\n\n## Where Things Are\n\n- Intent: `SPEC.md`\n\n"
+                         "## Handy\n\n```bash\ncargo fmt -- --check\n```\n")
+
+
 if __name__ == "__main__":
     unittest.main()
