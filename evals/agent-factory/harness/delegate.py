@@ -10,8 +10,9 @@ waits for it and prints its final reply.
 
 It keeps the harness's limit of two agents per run: a thread it started
 cannot call it, and it holds a lock while its child runs, so a second call
-waits for the first child to end. It logs each child's start and end, with
-the child's process group, which the harness kills if the run ends first.
+waits for the first child to end. It logs each child's start, with its role
+and task, which a grader may read, and its end, with the child's process
+group, which the harness kills if the run ends first.
 """
 import fcntl
 import json
@@ -63,7 +64,7 @@ def main():
     with transcript.open("w") as f:
         proc = subprocess.Popen(argv, cwd=os.getcwd(), env=env, stdin=subprocess.DEVNULL,
                                 stdout=f, stderr=subprocess.STDOUT, start_new_session=True)
-        log(conf, event="start", thread=thread, pgid=proc.pid, role=role)
+        log(conf, event="start", thread=thread, pgid=proc.pid, role=role, task=task)
         try:
             code = proc.wait(timeout=conf["timeout"])
         except subprocess.TimeoutExpired:

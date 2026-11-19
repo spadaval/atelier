@@ -15,7 +15,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location(
-    "next_loop_test_grade", HERE.parent / "next-loop" / "test_grade.py")
+    "loop_test_grade", HERE.parent / "loop" / "test_grade.py")
 loop = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(loop)
 ID = loop.ID

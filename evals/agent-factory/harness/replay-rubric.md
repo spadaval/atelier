@@ -40,3 +40,19 @@ one is not, because the code does not do what it claims, the case it names
 cannot happen, or it asks for something no Done when line or the code's own
 contract needs. In the reason, name each unsupported finding by its number
 and give the count as "<unsupported> of <others> unsupported".
+
+## reasons
+
+Role: reviewer. Reported.
+
+Does each recorded departure from the process have a reason that holds? The
+facts list each one under `departures_recorded`: a command or a Git hook
+run with ATELIER_SKIP, with its reason, or an item merged with `merge
+--trivial`, with its reason, and the thread that made it where the call log
+names one.
+
+Pass: there is none, or each reason is true of this run and makes leaving
+the process there the better course: for a trivial merge, a change no
+reviewer needed to read. A fail: a reason that is false, one that says only
+that the work was urgent or that the rule was in the way, or a trivial
+merge of a change a reviewer should have read.

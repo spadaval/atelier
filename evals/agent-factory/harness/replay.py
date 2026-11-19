@@ -227,10 +227,11 @@ def judge_context(case_dir: Path) -> str:
 
 def grade(case_dir: Path, work: Path) -> None:
     """Print a replay run's facts. The grade rests on a round-1 review by a
-    thread that never implemented the item, and no rule passed with
-    ATELIER_SKIP; whether a finding names the defect is the rubric's. The
-    rest is reported: the reviews, their fix-now findings, files changed
-    outside the reviews, whether main moved, and the `atelier` calls."""
+    thread that never implemented the item, and no departure from the
+    process without a recorded reason (facts.departures); whether a finding
+    names the defect is the rubric's. The rest is reported: the reviews,
+    their fix-now findings, files changed outside the reviews, whether main
+    moved, each departure with its reason, and the `atelier` calls."""
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import facts
     case, work = load(case_dir), Path(work)
@@ -241,14 +242,13 @@ def grade(case_dir: Path, work: Path) -> None:
     fix_now = [f for r in rounds for f in r["findings"]
                if (f["recommendation"] or "").lower() == "fix now"]
     other, main_moved = facts.outside_review(work, repo, case["id"], branch_head)
-    skips = facts.skips(work, repo, (work / ".setup_head").read_text().strip())
     facts.print_facts({
         "round_1_reviews": facts.fact(rounds),
         "a_round_1_review_by_another_thread": facts.fact(reviewed, reviewed),
         "fix_now_findings": facts.fact(len(fix_now)),
         "other_files_changed": facts.fact(other),
         "main_moved": facts.fact(main_moved),
-        "skips": facts.fact(skips, not skips),
+        **facts.departure_facts(work, repo, (work / ".setup_head").read_text().strip()),
         **facts.call_facts(work),
     })
 
