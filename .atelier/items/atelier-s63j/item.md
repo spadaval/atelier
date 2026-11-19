@@ -31,8 +31,61 @@ Taken from deferred finding atelier-z8rg/1-yrne.1, in .atelier/items/atelier-z8r
 
 ## Done when
 
-- [ ] A replay fixture holds none of the old tracker's process text, whatever headings its base's AGENTS.md uses, and no root-level guidance file of that tracker, such as `AGENTFACTORY.md`.
-- [ ] `replay_tests.py` asserts this for every replay case, and `hierarchy-rules` and `priority-contract` pass it.
-- [ ] The evals README no longer needs its note that those two cases show the old process.
+- [x] A replay fixture holds none of the old tracker's process text, whatever headings its base's AGENTS.md uses, and no root-level guidance file of that tracker, such as `AGENTFACTORY.md`.
+- [x] `replay_tests.py` asserts this for every replay case, and `hierarchy-rules` and `priority-contract` pass it.
+- [x] The evals README no longer needs its note that those two cases show the old process.
 
 ## Scope
+
+## Report
+
+Replay fixtures no longer carry the old tracker's process, in any era. The
+old strip removed three named AGENTS.md sections, which missed June 2026's
+`Start Here` and `Common Commands` and the `## Missions` section four
+October and November cases kept (`after-merge-checks`, `brief-transitions`,
+`merge-sync`, `quiet-tokens`, naming `atelier work missions`). It also kept
+`CONTRIBUTING.md` and `.github/PULL_REQUEST_TEMPLATE.md` in every fixture,
+both pure old process ("Find or create the relevant Atelier issue", "Evidence
+records"), and `priority-contract`'s `AGENTFACTORY.md`.
+
+- `harness/replay.py`: `product_map` replaces `strip_process`. It ignores
+  headings and keeps an AGENTS.md list item, paragraph or code line only if
+  it names a file the fixture holds or a `cargo`/`git` command, and names no
+  `atelier` command, tracker file (`.atelier`, `.agents`, `.claude`,
+  `.codex`), Agent Factory skill or evidence. A heading stays only over what
+  is left. `DROPPED` adds `AGENTFACTORY.md`, `CONTRIBUTING.md` and the pull
+  request template, and `dropped()` matches a path in it.
+- `harness/replay_tests.py`: a new test for every replay case asserts none of
+  those files exists and no line of AGENTS.md or CLAUDE.md names the old
+  tracker's commands, skill, files or evidence, and that AGENTS.md still
+  holds `cargo nextest run` when the base's did. It fails on the old code for
+  `hierarchy-rules` (the whole `Start Here`) and `after-merge-checks`
+  (`Missions`, and `CONTRIBUTING.md` when that alone is put back).
+- `harness/test_run.py`: `ProductMapTest` checks `product_map` on made-up
+  headings, including a `#` comment inside a code block.
+- `README.md`: the fixture description says what is left out, the note on
+  the two June cases is gone, and the results paragraph says which recorded
+  replays ran on fixtures that still held old process.
+
+Evidence: `evals/agent-factory/test.sh` with the installed atelier 0.7.0
+(the tree's version) passes, all harness tests and every scenario. I read
+the rewritten AGENTS.md for each of the five base eras (June, July, two
+October, November).
+
+What the rule costs and leaves:
+
+- AGENTS.md prose naming no file or command goes even when it is product
+  guidance, such as June's "Do not add compatibility aliases" bullet. The
+  docs it points at stay in the tree.
+- Two October cases keep a `## Current Mission` heading over its two product
+  pointers, the rebuild strategy and ADR 0019. Its tracker record line goes.
+- The tree's own README.md and docs/ still describe that era's commands.
+  They are the product under review, not guidance to the reviewer, so the
+  fixture keeps them.
+- The rule is a marker list. Process text in a future era that names none of
+  the markers but does name a file or a cargo command would survive, and the
+  per-case test checks the same kind of markers, so add any new marker to
+  both.
+- The results in `results/` were recorded on the old fixtures. They are not
+  rerun here.
+
