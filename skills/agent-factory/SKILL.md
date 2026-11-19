@@ -36,16 +36,6 @@ in a session once the run is approved. Every other role
 runs unattended: it never waits on them, and takes a question to the thread
 that started it or to an item labelled `needs-human`, as its role file says.
 
-## Independent Review
-
-Every non-trivial change is reviewed before it merges by a thread that did
-not write it. A change is trivial only when its correctness is evident from
-the diff alone, such as a typo; rewording a document is not trivial. No
-thread approves its own work or settles a finding on it, and an implementer
-passes no rule on its own work: a fix-now finding is fixed, rebutted or
-taken to the mission's lead. The lead settles it, and may depart from any of
-this, a review included, with its reason on the command.
-
 ## Starting Another Thread
 
 Atelier never starts an agent. When a command prints a task for another
