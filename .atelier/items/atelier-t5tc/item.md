@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-t5tc
 title: Show whether the later round's brief hides an important defect in code the fix changed
-status: in_review
+status: approved
 mission: atelier-8az0
 labels: []
 priority: medium
