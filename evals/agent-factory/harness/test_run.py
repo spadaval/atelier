@@ -1229,6 +1229,8 @@ How we work here.
 
 Use `cargo nextest run`, and say why in the evidence.
 
+- Tests: `cargo test`, which CI runs on the pull request before the merge.
+
 ```bash
 # the checks
 cargo fmt -- --check

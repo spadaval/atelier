@@ -83,7 +83,8 @@ when, Context and Report as they stood. They share one setup,
   request template and June 2026's `AGENTFACTORY.md`. AGENTS.md keeps only
   the lines that name a file the fixture holds or a `cargo` or `git`
   command, and none that names the `atelier` command, the tracker's files,
-  the Agent Factory skill or its evidence, whatever the era's headings.
+  the Agent Factory skill, its evidence, merges or pull requests, whatever
+  the era's headings.
   Today's binary tracks it with one new item, the change is committed on
   that item's branch, and the item is submitted for review. It has no
   remote and no history after the change.

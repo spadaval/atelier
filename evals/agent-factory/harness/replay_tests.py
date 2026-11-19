@@ -167,13 +167,13 @@ class ReplayCase(unittest.TestCase):
     def test_the_fixture_holds_none_of_the_old_trackers_process_text(self):
         """Whatever its era's headings: no guidance file of the old tracker,
         and no line of AGENTS.md or CLAUDE.md that names its commands, its
-        skill, its files or its evidence, while AGENTS.md keeps the base's
-        test command."""
+        skill, its files, its evidence or its merges, while AGENTS.md keeps
+        the base's test command."""
         for name in ("AGENTFACTORY.md", "CONTRIBUTING.md", ".agents",
                      ".github/PULL_REQUEST_TEMPLATE.md"):
             self.assertFalse((self.repo / name).exists(), name)
         old = re.compile(r"\batelier [a-z]|[Aa]gent.?[Ff]actory|AGENTFACTORY|\.agents\b"
-                         r"|\.atelier/|[Ee]vidence")
+                         r"|\.atelier/|[Ee]vidence|[Mm]erge|[Pp]ull request")
         for name in ("AGENTS.md", "CLAUDE.md"):
             path = self.repo / name
             text = path.read_text() if path.is_file() else ""

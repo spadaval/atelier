@@ -49,10 +49,10 @@ REPO = Path(__file__).resolve().parents[3]
 DROPPED = (".atelier", ".agents", ".claude", ".codex", "AGENTFACTORY.md", "CONTRIBUTING.md",
            ".github/PULL_REQUEST_TEMPLATE.md")
 # What names the old tracker's process in AGENTS.md: the `atelier` command,
-# the tracker's or the agents' files, the Agent Factory skill, or the
-# evidence records the tracker kept until October 2026.
-PROCESS = re.compile(r"`(~/)?\.?(atelier|agents|claude|codex)\b|agent.?factory|\bevidence\b",
-                     re.I)
+# the tracker's or the agents' files, the Agent Factory skill, the evidence
+# records the tracker kept until October 2026, or how a change merged.
+PROCESS = re.compile(r"`(~/)?\.?(atelier|agents|claude|codex)\b|agent.?factory|\bevidence\b"
+                     r"|\bmerge|pull request", re.I)
 IMPLEMENTER = "thread-5e1f0a7c"
 IDENTITY = {"GIT_AUTHOR_NAME": "Dana Dev", "GIT_AUTHOR_EMAIL": "dana@example.com",
             "GIT_COMMITTER_NAME": "Dana Dev", "GIT_COMMITTER_EMAIL": "dana@example.com"}
