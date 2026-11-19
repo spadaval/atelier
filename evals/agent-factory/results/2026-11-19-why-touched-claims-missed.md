@@ -18,17 +18,20 @@ This run checks that gap and looks for the text that causes it.
   skill, 15 of 19 checked only whether the walk reaches every claim it
   should (an `advances` link stored on one endpoint, reopened child work),
   and none of those 15 found it.
-- **`roles/reviewer.md` does not cause the miss in `sol`.** With its Size
-  and Verdict cut, the skill found the defect 0 of 10 times. With no
-  `roles/reviewer.md` at all, it also found it 0 of 10 times. As a control
-  outside the Done when, id3v's `threads-only` skill (the prompt line and a
-  `SKILL.md` holding only Starting Another Thread) found it 3 of 10 times,
-  the same as no skill. So the cause in `sol` is in the part of `SKILL.md`
-  above Starting Another Thread: Run `atelier status` first, Your Role, Who
-  Works With the Human, and Independent Review. In `sol`, every arm that kept
-  that text found the defect 0 of 33 times. The arms without it found it 8 of
-  23 times (p < 0.001). These runs cannot tell which of those four passages
-  does it.
+- **Cutting `roles/reviewer.md` does not bring the defect back in `sol`.**
+  With its Size and Verdict cut, the skill found the defect 0 of 10 times.
+  With no `roles/reviewer.md` at all, it also found it 0 of 10 times. As a
+  control outside the Done when, id3v's `threads-only` skill (the prompt
+  line and a `SKILL.md` holding only Starting Another Thread) found it 3 of
+  10 times, the same as no skill. That points to the part of `SKILL.md`
+  above Starting Another Thread as the next suspect: Run `atelier status`
+  first, Your Role, Who Works With the Human, and Independent Review. In
+  `sol`, every arm that kept that text found the defect 0 of 33 times, and
+  the arms without it 8 of 23 times (p < 0.001). Cuts that stay at zero
+  cannot show that the reviewer file adds nothing to the miss, since a
+  count cannot fall below zero and the two files may act together. They
+  also cannot tell which of the four sections matters, or whether a new
+  reviewer passage could counter it: no arm added text.
 - **Size and Verdict is what wins `costly-hardening`, and only that.**
   Without it the skill passed 0 of 5, and with no reviewer file 1 of 5,
   against 10 of 10 with the whole skill. On the overbuilt cases, the
@@ -124,7 +127,12 @@ past the suite checked one-sided links and nested work.
 **What they wrote under Size and Verdict.** Every one of the 22 failing
 skill reviews gives the change's own aim as its Value, in words like
 "reopening advancing work must invalidate a completed mission's claim".
-None gives the Goal's aim, a `land` that checks only what changed. Under
+Two of them also state the Goal's boundary and then do not test it. One,
+from today's `house` runs (`house-3-8a5b`), says "while unrelated
+historical claims remain trusted", and one of id3v's (`house-2-434a`) says
+"while unrelated historical claims remain eligible to be skipped". Both
+tested only one-sided links and child work, and both approved. The other
+20 do not mention the Goal's aim, a `land` that checks only what changed. Under
 Risk, 10 rate the change high for the opposite failure: "an omitted
 dependency can silently skip a required completion check." Another 11 name
 the defect's own class and rate it low or medium, most of them because it
@@ -135,23 +143,28 @@ the Risk scale's low end ("a failure shows and is cheap to undo") and its
 high end ("silent wrong results"). The Verdicts all read "the value
 warrants the change", with no `Shrink:` or `Reject:`. One passing `house`
 skill review gave the Goal's aim as its Value ("without making ordinary
-landing recheck all historical claims") and then found the defect.
+landing recheck all historical claims"), tested it, and found the defect.
+So stating the boundary is not enough. The reviews that found the defect
+are the ones that built a case to test it.
 
 The cut arms show what those Size lines are. Without Size and Verdict, `sol`
 reviewers wrote no scales and still checked only the direction of missing
-claims, so the Size lines record where a reviewer was already looking. They
-do not make it look there.
+claims. The Size lines record where a reviewer was already looking, and
+they are not needed for it to look there.
 
 ## What it points to
 
-- **For atelier-oiwy.** `roles/reviewer.md` is not the cause of this miss
-  in `sol`, so new reviewer passages will not repair it there, and cutting
-  Size and Verdict would lose `costly-hardening` (0 of 5 without it) and
-  gain nothing on `touched-claims`. The cause is in `SKILL.md`'s first four
-  sections, and one cut arm each (Run `atelier status` first and Your Role,
-  Who Works With the Human, Independent Review) would find which. In
-  `house`, where the skill still found the defect 4 of 10 times, no cut arm
-  was run.
+- **For atelier-oiwy.** Cutting `roles/reviewer.md`, or its Size and
+  Verdict, did not restore the defect in `sol`. Cutting Size and Verdict
+  also loses `costly-hardening` (0 of 5 without it). So removing text from
+  the reviewer file is not the fix these runs support. Whether a new
+  reviewer passage could counter the miss is untested, and it is the arm
+  atelier-oiwy can run: for example, one that asks a reviewer to test the
+  change against the Goal as well as against its own claim. The first four
+  sections of `SKILL.md` are the next suspect for the cause, and one cut
+  arm each (Run `atelier status` first and Your Role, Who Works With the
+  Human, Independent Review) would narrow it. In `house`, where the skill
+  still found the defect 4 of 10 times, no cut arm was run.
 - **For the human.** The skill trades one kind of review for another.
   With it, reviewers block more on size: `costly-hardening` goes from 0 to
   10 of 10, and overbuilt findings block in 15 of 15 runs. On this replay

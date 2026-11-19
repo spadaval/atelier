@@ -58,7 +58,7 @@ harness.
 
 ## Report
 
-The gap holds, but `roles/reviewer.md` does not cause it. Over ten runs a
+The gap holds, and cutting `roles/reviewer.md` does not close it. Over ten runs a
 cell, `touched-claims` was found by 10 of 20 reviews with no skill and 4 of
 20 with it (`sol` 3 to 0, `house` 7 to 4). With id3v's twelve reviews the
 totals are 15 of 26 against 4 of 26. In `sol`, the skill without Size and
@@ -74,29 +74,35 @@ times. Results:
   With the skill, 15 of 19 tested only whether the walk misses a claim
   (one-sided links, reopened child work), and none of them found it. Under
   Size and Verdict, all 22 failing skill reviews gave the change's own aim
-  as its Value, not the Goal's. Eleven named the defect's class under Risk
+  as its Value. Two of them also stated the Goal's boundary ("unrelated
+  historical claims remain trusted") and never tested it; the reviews that
+  found the defect are the ones that built a case for it. Eleven named the
+  defect's class under Risk
   ("an overly broad traversal produces a visible refusal and is cheap to
-  undo") and rated it low or medium. The cut arms show these lines record
-  where a reviewer already looks: without Size and Verdict, the reviews
-  wrote no scales and still checked only for missing claims.
+  undo") and rated it low or medium. These lines record where a reviewer
+  already looks: without Size and Verdict, the reviews wrote no scales and
+  still checked only for missing claims.
 - **Where the cause is.** As a control outside the Done when, I ran
   id3v's `eval/skill-threads-only` arm (the prompt line, and a `SKILL.md`
   holding only Starting Another Thread). It found the defect 3 of 10 times,
-  the same as no skill. So in `sol` the cause is in `SKILL.md`'s first four
-  sections: Run `atelier status` first, Your Role, Who Works With the Human,
-  and Independent Review. Every `sol` arm that kept them found the defect 0
-  of 33 times, and every arm without them 8 of 23 (p < 0.001). The runs
-  cannot tell which section it is. `house` had no cut arms.
+  the same as no skill. That points to `SKILL.md`'s first four sections as
+  the next suspect: Run `atelier status` first, Your Role, Who Works With
+  the Human, and Independent Review. Every `sol` arm that kept them found
+  the defect 0 of 33 times, and every arm without them 8 of 23 (p < 0.001).
+  Cuts that stay at zero cannot show that the reviewer file adds nothing,
+  and the runs cannot tell which section matters. `house` had no cut arms.
 - **What each cut costs.** Without Size and Verdict, `costly-hardening`
   falls to 0 of 5, and with no reviewer file to 1 of 5, against 10 of 10
   with the whole skill. On the overbuilt cases both cut arms still blocked
   in 15 of 15 runs. I ran no skill again today (10 of 15 blocked), and that
   shows the blocking s6xk credited to Size and Verdict comes from elsewhere
   in the skill. No control run asked for less in any arm.
-- **What it points to.** For atelier-oiwy: new reviewer passages will not
-  fix this miss in `sol`. Cutting Size and Verdict would lose
-  `costly-hardening` and gain nothing here. One cut arm for each of
-  `SKILL.md`'s first four sections would find the cause. For the human:
+- **What it points to.** For atelier-oiwy: removing reviewer text did not
+  fix this miss in `sol`, and cutting Size and Verdict loses
+  `costly-hardening`. Whether a new reviewer passage could counter it, such
+  as one asking a reviewer to test the change against the Goal, is
+  untested and is atelier-oiwy's to try. One cut arm for each of
+  `SKILL.md`'s first four sections would narrow the cause. For the human:
   with the skill, reviewers block more on size, and on this replay they
   test the change against its own claim instead of the Goal. That misses a
   check that does too much. The Risk scale then calls such a failure low
