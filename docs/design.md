@@ -153,8 +153,12 @@ with no conversion. `Store::write_item` leaves a file that already reads as
 the item it is given, so a command that changes nothing never respells one;
 a command that changes the item writes `open` and keeps `ready`, whose `by`
 `show` prints. Only `log` reads the old spelling, to print history as it
-was written. A binary from before refuses `open` on an item by name, so a
-host installs this one before any of its repositories holds such a record.
+was written. A binary from before refuses `open` on an item by name, and
+one such record on the base or on any named branch stops its `status` and
+`list` for the whole repository; an installed `atelier-desk` from before
+stops the same way, and an installed extension from before cannot draw an
+open item. So a host installs the command, the Desk and the extension from
+this tree before any of its repositories holds such a record.
 
 The item lives in a directory named for its `id`. Sections are `##`
 headings: Goal, Done when, Scope, Report; Goal and Done when are
