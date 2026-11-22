@@ -3,12 +3,13 @@ schema: atelier.item
 schema_version: 3
 id: atelier-js4a
 title: Add mission-plan actions to atelier_core::log and implement Desk mission history (M5)
-status: ready
+status: building
 mission: atelier-ww7w
 labels: []
 priority: medium
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3Aa7ab9ade-d27f-4fdc-9a10-37446bba3ca2%3Adelegate-task%3A25d2a75f-4f1b-49bd-9c19-fc6374735508
 ready:
   by: Sumeet, in conversation on 2026-11-22
   at: 2026-11-22T05:33:31.467134267Z
