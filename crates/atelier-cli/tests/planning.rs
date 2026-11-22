@@ -692,7 +692,7 @@ fn status_on_the_base_lists_only_what_can_start_and_counts_the_rest_by_cause() {
         atelier(&root, "t1", &["status"]).stdout,
         format!(
             "{NO_HOOKS}You are thread t1, on a detached HEAD.\nReady to start:\n  \
-             demo-a1aa (high): Say hello\n{others}Then: atelier start demo-a1aa\n"
+             demo-a1aa (high): Say hello\n{others}{MAY_START}"
         )
     );
     for id in ["demo-b2bb", "demo-d4dd"] {
@@ -700,8 +700,8 @@ fn status_on_the_base_lists_only_what_can_start_and_counts_the_rest_by_cause() {
     }
 
     // Once t1 holds the one that could, nothing can start: a thread
-    // holding nothing is told so and offered no start, and t1 is still
-    // sent back to its item.
+    // holding nothing is told so and offered no start, and t1 is sent to
+    // the checkout its item is in.
     assert_eq!(atelier(&root, "t1", &["start", "demo-a1aa"]).code, 0);
     let base = scratch.worktree("base");
     git(&base, &["switch", "-q", "main"]);
@@ -718,7 +718,9 @@ fn status_on_the_base_lists_only_what_can_start_and_counts_the_rest_by_cause() {
         atelier(&base, "t1", &["status"]).stdout,
         format!(
             "{NO_HOOKS}You are thread t1, on the base branch main.\nYou hold:\n  demo-a1aa \
-             (building): Say hello\n{count}Then: atelier start demo-a1aa (switches to its branch)\n"
+             (building): Say hello\n{count}demo-a1aa's branch is checked out in {0}; work there.\n\
+             Then: cd {0}\n",
+            git(&root, &["rev-parse", "--show-toplevel"])
         )
     );
 }

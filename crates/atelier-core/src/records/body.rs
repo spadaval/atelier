@@ -257,15 +257,13 @@ fn add_after(body: &str, content: &str, lines: &str) -> String {
     format!("{head}\n{lines}{end}{tail}")
 }
 
-/// The lines of an item's `### Responses`, under `## Report`.
-pub(crate) fn responses(file: &Path, body: &str) -> Result<Vec<Response>, Problem> {
-    let Some(lines) = section(body, 2, "Report").and_then(|report| section(report, 3, "Responses"))
-    else {
-        return Ok(Vec::new());
-    };
-    fields(lines)
+/// The lines of an item's `### Responses`, under `## Report`, each as the
+/// response it is or why it is none, so one bad line hides no other.
+pub(crate) fn responses(body: &str) -> Vec<Result<Response, String>> {
+    let lines = section(body, 2, "Report").and_then(|report| section(report, 3, "Responses"));
+    fields(lines.unwrap_or_default())
         .into_iter()
-        .map(|line| response(line).map_err(|message| Problem::new(file, "Responses", message)))
+        .map(response)
         .collect()
 }
 
@@ -278,7 +276,9 @@ fn response(line: &str) -> Result<Response, String> {
         .unwrap_or(line)
         .split_once(": ")
         .ok_or_else(form)?;
-    let finding: FindingName = finding.parse()?;
+    let finding: FindingName = finding
+        .parse()
+        .map_err(|why| format!("{}: {why}", form()))?;
     if let Some(commit) = reply.strip_prefix("fixed in ") {
         Ok(Response::Fixed {
             finding,

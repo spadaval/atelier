@@ -563,7 +563,7 @@ fn a_push_of_the_base_with_a_commit_that_is_no_atelier_merge_is_refused() {
         .stderr
         .contains(&format!("  {commit} Say hello: not an Atelier merge\n")));
     assert!(run.stderr.contains(
-        &format!("Move them to a branch: atelier start --new \"<title>\" starts an item that holds code, atelier start --backlog <slug> a branch for record changes. Then git branch -f main {} takes them off main, and atelier merge brings the branch in.\n", &pushed[..7])
+        &format!("Move them to a new item's branch and put main back with:\n  atelier start --new \"<title>\" && git reset --keep {}\n", &pushed[..40])
     ), "{}", run.stderr);
     assert_eq!(remote_tip(&root, "main"), pushed);
 
@@ -576,6 +576,11 @@ fn a_push_of_the_base_with_a_commit_that_is_no_atelier_merge_is_refused() {
     let run = git_as(&root, &["push", "-q", "origin", "feature:main"]);
     assert_ne!(run.code, 0);
     assert!(run.stderr.contains("Say hello: not an Atelier merge"));
+    // The base does not hold what was pushed, so no reset of it is printed.
+    assert!(!run.stderr.contains("reset --keep"), "{}", run.stderr);
+    assert!(run
+        .stderr
+        .contains("Once that branch holds them, move main back"));
 
     // A merge that is not Atelier's is refused, and so is a commit that is
     // no merge but carries the trailer.
@@ -830,8 +835,10 @@ fn with_a_forge_any_push_that_moves_the_base_is_refused_and_names_merge() {
         format!(
             "Atelier's pre-push hook refused this push; nothing was pushed.\n\
              Rule: main is moved only by the forge's merge of a pull request. With a forge configured, atelier merge has the forge merge each branch's pull request and never pushes main, so no push may move it.\n\
-             Put the commits on a branch and run atelier merge there; `git branch -f main {}` puts main back.\n{SKIP}",
-            &pushed[..7]
+             Move them to a new item's branch and put main back with:\n  atelier start --new \"<title>\" && git reset --keep {0}\n\
+             If uncommitted changes make the reset refuse, nothing is lost and the new branch already has the commits: save the changes with `git stash push -u`, finish with `git reset --keep {0}`, then run `git stash apply` in the new branch's checkout.\n\
+             For record changes alone, use `atelier start --backlog <slug>` in place of `start --new`. atelier merge then brings the branch in.\n{SKIP}",
+            &pushed[..40]
         )
         + "error: failed to push some refs to '"
         + &format!("{}'\n", scratch.dir.path().join("remote.git").display())
@@ -870,7 +877,7 @@ fn a_first_push_of_a_base_judges_its_whole_line() {
     // With no commit of the remote's to name, the way out names none.
     assert!(
         run.stderr
-            .contains("Then moving main back to the remote's commit takes them off main,"),
+            .contains("Once that branch holds them, move main back to the remote's commit,"),
         "{}",
         run.stderr
     );
@@ -1073,4 +1080,172 @@ fn the_base_a_commit_is_judged_against_is_heads_not_the_checkouts() {
         run.stderr
     );
     assert_eq!(git(&root, &["rev-parse", "HEAD"]), before);
+}
+
+/// A base pushed, then strictly ahead of it by a code commit: the
+/// repository, the commit the remote has and the one to move.
+fn ahead(forge: bool) -> (Scratch, String, String) {
+    let scratch = Scratch::new(&[(ID, "ready")]);
+    let root = scratch.root();
+    fs::write(root.join("hello.txt"), "v1\n").unwrap();
+    fs::write(root.join("notes.txt"), "v1\n").unwrap();
+    if forge {
+        let config = "\n[forge]\nprovider = \"github\"\nremote = \"origin\"\n";
+        append(&root, ".atelier/config.toml", config);
+    }
+    on_base(&root, "Files");
+    let remote = scratch.dir.path().join("remote.git");
+    git(
+        scratch.dir.path(),
+        &["init", "-q", "--bare", remote.to_str().unwrap()],
+    );
+    git(
+        &root,
+        &["remote", "add", "origin", remote.to_str().unwrap()],
+    );
+    git(&root, &["push", "-q", "origin", "main"]);
+    git(&root, &["fetch", "-q", "origin"]);
+    install_hooks(&root);
+    git(&root, &["switch", "-q", "main"]);
+    let old = git(&root, &["rev-parse", "main"]);
+    fs::write(root.join("hello.txt"), "v2\n").unwrap();
+    assert_eq!(commit_all(&root, "Say hello").code, 0);
+    let moved = git(&root, &["rev-parse", "main"]);
+    (scratch, old, moved)
+}
+
+/// Pushes main from `at`, and gives the refusal with the one line of steps
+/// it prints.
+fn refused_steps(at: &Path) -> (String, String) {
+    let push = git_as(at, &["push", "origin", "main"]);
+    assert_ne!(push.code, 0);
+    let steps: Vec<String> = (push.stderr.lines())
+        .filter(|line| line.starts_with("  ") && line.contains("atelier start --new"))
+        .map(|line| line.trim().to_string())
+        .collect();
+    assert_eq!(steps.len(), 1, "{}", push.stderr);
+    (push.stderr.clone(), steps[0].clone())
+}
+
+/// The branch `start --new` made, which holds `moved` as its parent: the
+/// commit itself, with no cherry-pick.
+fn moved_to(root: &Path, moved: &str) -> String {
+    let listed = git(root, &["branch", "--format=%(refname:short)"]);
+    let found: Vec<&str> = (listed.lines())
+        .filter(|name| name.starts_with("demo-"))
+        .collect();
+    assert_eq!(found.len(), 1, "{listed}");
+    assert_eq!(git(root, &["rev-parse", &format!("{}^", found[0])]), moved);
+    found[0].to_string()
+}
+
+#[test]
+fn the_printed_steps_move_a_commit_off_a_checked_out_base_and_keep_uncommitted_work() {
+    for forge in [false, true] {
+        let (scratch, old, moved) = ahead(forge);
+        let root = scratch.root();
+        fs::write(root.join("notes.txt"), "mine\n").unwrap();
+        fs::write(root.join("new.txt"), "untracked\n").unwrap();
+        let (_, steps) = refused_steps(&root);
+        let run = sh(&root, "t1", &steps);
+        assert_eq!(run.code, 0, "{forge}: {}", run.stderr);
+
+        let branch = moved_to(&root, &moved);
+        assert_eq!(git(&root, &["symbolic-ref", "--short", "HEAD"]), "main");
+        assert_eq!(git(&root, &["rev-parse", "main"]), old);
+        assert_eq!(read(&root, "hello.txt"), "v1\n");
+        assert_eq!(read(&root, "notes.txt"), "mine\n");
+        assert_eq!(read(&root, "new.txt"), "untracked\n");
+        assert_eq!(git(&root, &["show", &format!("{branch}:hello.txt")]), "v2");
+        let push = git_as(&root, &["push", "-q", "origin", "main"]);
+        assert_eq!(push.code, 0, "{}", push.stderr);
+    }
+}
+
+#[test]
+fn the_printed_steps_refuse_over_overlapping_work_and_say_how_to_finish() {
+    let (scratch, old, moved) = ahead(false);
+    let root = scratch.root();
+    fs::write(root.join("hello.txt"), "v2\nmine\n").unwrap();
+    let (said, steps) = refused_steps(&root);
+    let run = sh(&root, "t1", &steps);
+    assert_ne!(run.code, 0, "{}", run.stdout);
+
+    // Nothing is lost, and the branch has the commit already.
+    let branch = moved_to(&root, &moved);
+    assert_eq!(git(&root, &["rev-parse", "main"]), moved);
+    assert_eq!(read(&root, "hello.txt"), "v2\nmine\n");
+
+    // What it says to do then, as written.
+    let line = said.lines().find(|line| line.starts_with("If uncommitted"));
+    let commands: Vec<&str> = line.unwrap().split('`').skip(1).step_by(2).collect();
+    let [save, finish, restore] = commands[..] else {
+        panic!("{commands:?}");
+    };
+    for command in [save, finish] {
+        let run = sh(&root, "t1", command);
+        assert_eq!(run.code, 0, "{command}: {}", run.stderr);
+    }
+    assert_eq!(git(&root, &["rev-parse", "main"]), old);
+    assert_eq!(git(&root, &["status", "--porcelain"]), "");
+    let work = scratch.dir.path().join("work");
+    git(
+        &root,
+        &["worktree", "add", "-q", work.to_str().unwrap(), &branch],
+    );
+    let run = sh(&work, "t1", restore);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(read(&work, "hello.txt"), "v2\nmine\n");
+}
+
+#[test]
+fn the_printed_steps_work_from_a_checkout_that_does_not_have_the_base_out() {
+    // Another checkout has the base out: the steps act there.
+    let (scratch, old, moved) = ahead(false);
+    let root = scratch.root();
+    let other = scratch.worktree("other");
+    let (_, steps) = refused_steps(&other);
+    let run = sh(&other, "t1", &steps);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    moved_to(&root, &moved);
+    assert_eq!(git(&root, &["rev-parse", "main"]), old);
+    assert_eq!(read(&root, "hello.txt"), "v1\n");
+    assert_eq!(git(&other, &["rev-parse", "HEAD"]), moved);
+
+    // None has: `start` switches, and the base is moved as a ref.
+    let (scratch, old, moved) = ahead(false);
+    let root = scratch.root();
+    git(&root, &["checkout", "-q", "--detach"]);
+    let (_, steps) = refused_steps(&root);
+    let run = sh(&root, "t1", &steps);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let branch = moved_to(&root, &moved);
+    assert_eq!(git(&root, &["symbolic-ref", "--short", "HEAD"]), branch);
+    assert_eq!(git(&root, &["rev-parse", "main"]), old);
+}
+
+#[test]
+fn a_start_that_fails_in_the_printed_steps_leaves_the_base_holding_the_commit() {
+    let (scratch, _, moved) = ahead(true);
+    let root = scratch.root();
+    let (_, steps) = refused_steps(&root);
+    // The claim cannot be pushed, so `start` makes no branch.
+    git(&root, &["remote", "set-url", "origin", "/nonexistent"]);
+    assert_ne!(sh(&root, "t1", &steps).code, 0);
+    assert_eq!(git(&root, &["rev-parse", "main"]), moved);
+}
+
+#[test]
+fn no_reset_is_printed_where_a_new_branch_would_not_hold_the_commits() {
+    // The forge's base moved on, so `start` would branch from it.
+    let (scratch, old, moved) = ahead(true);
+    let root = scratch.root();
+    let tree = format!("{old}^{{tree}}");
+    let theirs = git(&root, &["commit-tree", &tree, "-p", &old, "-m", "Theirs"]);
+    git(&root, &["update-ref", "refs/remotes/origin/main", &theirs]);
+    let push = git_as(&root, &["push", "origin", "main"]);
+    assert_ne!(push.code, 0);
+    assert!(!push.stderr.contains("reset --keep"), "{}", push.stderr);
+    assert!(!push.stderr.contains("branch -f"), "{}", push.stderr);
+    assert_eq!(git(&root, &["rev-parse", "main"]), moved);
 }

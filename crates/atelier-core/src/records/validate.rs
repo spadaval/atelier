@@ -78,10 +78,8 @@ fn validate_item(
         problems.push(p);
         Vec::new()
     });
-    let responses = dir.responses().unwrap_or_else(|p| {
-        problems.push(p);
-        Vec::new()
-    });
+    problems.extend(dir.malformed_responses());
+    let responses = dir.responses();
     let named = reviews(&dir.reviews, &decisions, &responses, problems);
     let mut problem =
         |field: &str, message: String| problems.push(Problem::new(&dir.path, field, message));

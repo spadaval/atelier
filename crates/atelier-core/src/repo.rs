@@ -876,6 +876,10 @@ pub fn facts<'a>(
         mission: links.mission.clone(),
         caller: &repo.caller,
         checkout,
+        worktree: match repo.named() {
+            Some(Named::Record(id)) if id == located.id => Some(&repo.root),
+            _ => None,
+        },
     }
 }
 

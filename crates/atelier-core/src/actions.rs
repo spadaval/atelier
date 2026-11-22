@@ -9,6 +9,7 @@ use crate::model::{
 };
 use crate::records::{validate, ItemDir, MissionDir, Problem, ReviewFile};
 use crate::review::{answer, chain, waits_on_lead};
+use std::path::Path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
@@ -355,6 +356,9 @@ pub struct Facts<'a> {
     /// gathers it where `merge` runs and `status` lists its conditions: on
     /// that branch. Without it, the conditions it bears on are not listed.
     pub checkout: Option<&'a Checkout>,
+    /// The caller's checkout, when it is on the item's branch: where a
+    /// reviewer's task says to run.
+    pub worktree: Option<&'a Path>,
 }
 
 /// What `merge` reads from Git besides the item's record.
@@ -607,13 +611,18 @@ pub enum Condition {
     },
     /// A verdict needs its review file valid; this is what is not.
     Invalid(Problem),
+    /// A line under Responses is no response, so what it was meant to say,
+    /// a `not built` among them, is not known.
+    MalformedResponse(Problem),
 }
 
 impl Condition {
     /// Whether `action` refused for this condition breaks a rule, which
     /// `ATELIER_SKIP` passes, rather than having nothing to act on: a branch
     /// `start` would create, or one a take-over would switch to; a question
-    /// to decide; a finding to settle, or one settled already.
+    /// to decide; a finding to settle, or one settled already; or a malformed
+    /// response at `merge`, whose merged tree must validate whatever is
+    /// skipped, and which may hold a question to the lead.
     pub fn is_rule(&self, action: Action) -> bool {
         !matches!(
             (action, self),
@@ -621,6 +630,10 @@ impl Condition {
                 | (
                     _,
                     Condition::NoBranch | Condition::NoFinding(_) | Condition::Settled { .. }
+                )
+                | (
+                    Action::Merge | Action::MergeTrivial,
+                    Condition::MalformedResponse(_)
                 )
         )
     }
@@ -804,6 +817,19 @@ fn invalid(problems: Vec<Problem>, file: &ReviewFile) -> Vec<Condition> {
     own.map(Condition::Invalid).collect()
 }
 
+/// A condition for each line of `item`'s Responses that is no response. It
+/// names the record by its path from the root, whichever copy was read: a
+/// skip writes it into a commit, as the pre-commit hook's rule of it does.
+pub(crate) fn malformed(item: &ItemDir) -> Vec<Condition> {
+    let file = std::path::PathBuf::from(crate::repo::item_path(&item.item.id));
+    let problems = item.malformed_responses().into_iter();
+    let from_root = problems.map(|problem| Problem {
+        file: file.clone(),
+        ..problem
+    });
+    from_root.map(Condition::MalformedResponse).collect()
+}
+
 /// What a verdict in `file` needs, given every finding, decision and
 /// response of its item or mission: `changes` an open fix-now finding of
 /// the file's own, and `approve` none open among the file's and those of
@@ -928,7 +954,8 @@ pub fn unmet(action: Action, facts: &Facts) -> Result<Vec<Condition>, Problem> {
             if !item.report_written() {
                 unmet.push(Condition::NoReport);
             }
-            let responses = item.responses()?;
+            unmet.extend(malformed(item));
+            let responses = item.responses();
             let findings = item.findings()?;
             let rebutted = |name: &FindingName| {
                 let rebuttal = |r: &Response| matches!(r, Response::Rebutted { finding, .. } if finding == name);
@@ -955,8 +982,9 @@ pub fn unmet(action: Action, facts: &Facts) -> Result<Vec<Condition>, Problem> {
                 return Ok(unmet);
             };
             let (findings, decisions) = (item.findings()?, item.decisions()?);
-            let responses = item.responses()?;
+            let responses = item.responses();
             unmet = invalid(validate(std::slice::from_ref(item), &[]), file);
+            unmet.extend(malformed(item));
             unmet.extend(verdict(action, file, &findings, &decisions, &responses));
         }
         Action::Close => {
@@ -978,11 +1006,12 @@ pub fn unmet(action: Action, facts: &Facts) -> Result<Vec<Condition>, Problem> {
                     unmet.push(Condition::Reviewed);
                 }
             }
+            unmet.extend(malformed(item));
             // A stop of its mission stops its merge too.
             unmet.extend(mission_dropped(facts));
             let checkout = facts.checkout;
             if action == Action::Merge {
-                let (findings, responses) = (item.findings()?, item.responses()?);
+                let (findings, responses) = (item.findings()?, item.responses());
                 for finding in item.open_findings()? {
                     if let Some(reason) = waits_on_lead(&finding.name, &findings, &responses) {
                         unmet.push(Condition::WaitsOnLead {
@@ -1105,7 +1134,7 @@ pub fn next(facts: &Facts) -> Result<Option<Action>, Problem> {
     if let Some(file) = facts.reviewing() {
         let findings = facts.item.findings()?;
         let decisions = facts.item.decisions()?;
-        let responses = facts.item.responses()?;
+        let responses = facts.item.responses();
         let open = findings.iter().any(|f| {
             f.name.review == file.name && blocks_verdict(f, &findings, &decisions, &responses)
         });

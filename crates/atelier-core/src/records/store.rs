@@ -212,8 +212,20 @@ impl ItemDir {
         body::decisions(&self.path, &self.item.body)
     }
 
-    pub fn responses(&self) -> Result<Vec<Response>, Problem> {
-        body::responses(&self.path, &self.item.body)
+    /// The lines of `### Responses` that read; [`ItemDir::malformed_responses`]
+    /// has the others.
+    pub fn responses(&self) -> Vec<Response> {
+        let lines = body::responses(&self.item.body);
+        lines.into_iter().filter_map(Result::ok).collect()
+    }
+
+    /// A problem for each line of `### Responses` that is no response.
+    pub fn malformed_responses(&self) -> Vec<Problem> {
+        body::responses(&self.item.body)
+            .into_iter()
+            .filter_map(Result::err)
+            .map(|message| Problem::new(&self.path, "Responses", message))
+            .collect()
     }
 
     /// The fix-now findings no later round or decision has closed.

@@ -272,7 +272,7 @@ in the checkout that has the base out, it writes nothing and names the
 
 | Command | Behaviour |
 | --- | --- |
-| `status` | Who this thread is, what it holds, what each thing needs, and the next command. On the base with nothing held: the ready items `start` would accept now, one line counting the other ready items by what stops them, missions in progress and what waits on the human, which is not listed as ready. For a mission's lead, its mission, what each item needs, and what is disputed in it. |
+| `status` | Who this thread is, what it holds, what each thing needs, and the next command. Away from an item's branch with nothing held: the ready items `start` would accept now, with none named as the next command, since the thread's task says which to start; one line counting the other ready items by what stops them, missions in progress and what waits on the human, which is not listed as ready. For a thread holding a started item: in the base's checkout, the checkout that has the item's branch or the `git worktree add` that makes one; elsewhere, `start <id>`. For a mission's lead, its mission, what each item needs, and what is disputed in it. |
 | `show <id>` | An item in full, with a summary of each review: its round, reviewer, model, the commit it reviewed and its verdict, and each finding's name, recommendation, state and title. A finding's text is in its review file. For a mission, the whole mission on one page: whether it is proposed, agreed, done or dropped, its outcome and criteria, its items grouped by status with who holds each and what blocks each, what is disputed in it as `list --disputed` gives it, and its reviews by round. Either says which ref the record was read from, and, for a fetched ref, how long ago the remote was fetched. |
 | `list` | With no flags, all open work on the base, grouped by mission and then by label, and apart from it what is proposed: missions on unmerged branches and record changes waiting to merge, each with its branch. Narrowed by `--ready`, `--blocked`, `--needs-human`, `--proposed`, `--mission <id>`, `--label <l>`, `--mine` and `--deferred`; `--done` shows finished missions and items instead. `--disputed` lists instead, across open and done items, each open fix-now finding answered `not built`, which waits on the lead, each finding whose Response is `rebutted` with what the next round made of it (kept, withdrawn, fixed, kept at defer or no action, or not yet reviewed), and each plan-review round whose reviewers gave different verdicts; `--mission <id>` narrows it. The listing refuses nothing; `submit` refuses another plan round after two split rounds in a row (see Review). |
 | `log` | The history of actions, read from Git, one line each and oldest first: when, the commit, which item or mission, the action, the thread where the record holds one, what changed, and any rule its commit skipped. For everything, one item, or one mission with its plan reviews and its items, and only actions `--since` a time. It adds nothing up. |
@@ -338,7 +338,9 @@ Then: atelier submit
 It lists only what is not met: a finding already answered is not shown. A
 Done when line that wraps over several lines of the record is shown whole; a
 wrapped line that begins `#123` is text, not a heading. It
-gives the round of an item in review or with changes requested. A finding
+gives the round of an item in review or with changes requested. A line
+under `### Responses` in none of the three forms is listed with the forms,
+whatever the item waits for, and is never read as an answer. A finding
 whose rebuttal a reviewer kept says the rebuttal has had its one try. A
 finding answered `not built` stops the merge until the lead rules, and
 `status` says how the lead rules. When round 3 or later asked for changes
@@ -370,9 +372,11 @@ with the harness's own tool, using a line the tool prints:
   start one yourself now, without waiting to be asked. Under Codex a subagent
   you start is one; under Claude Code a subagent runs as your thread and is
   refused, so use your harness's tool for a new agent thread. Give it fresh
-  context, not a fork of yours, and give it this task: Run atelier review
-  atelier-06jc and follow what it prints. Then wait for its verdict, and run
-  `atelier status`." A Claude Code subagent carries its parent's identity, so
+  context, not a fork of yours, and give it this task: In <path>, run
+  atelier review atelier-06jc and follow what it prints. Then wait for its
+  verdict, and run `atelier status`." `<path>` is the checkout on the item's
+  branch, where `review` runs: a new thread often starts in the main
+  checkout. A Claude Code subagent carries its parent's identity, so
   it cannot review its parent's item; a Codex subagent has one of its own
   ([design record, Threads and
   roles](design.md#threads-and-roles)). It says starting the
@@ -638,6 +642,14 @@ check` and says what it found in the output of the Git command it guards.
 | pre-push | `git push` of the base | The base receives only merges. With a forge, every push that moves the base is refused, since the forge makes its merges. Without one, each new commit on the base's own line must be an Atelier merge; the commits a merge brought in are not looked at. |
 | post-checkout | `git switch` | Nothing; it prints `status` for the branch just switched to |
 
+When pre-push refuses commits made on the base, it prints one command line
+that makes a branch holding them and puts the base back to the remote's
+commit, keeping uncommitted changes. Where those changes touch the same
+files, Git refuses the move and loses nothing, and the hook says how to
+save them and finish. Where a new branch would not hold the commits, as
+when the base has diverged from the remote's, it prints no such command and
+says what to do instead.
+
 Every rule a hook or a command applies can be skipped on purpose:
 
 ```text
@@ -652,6 +664,10 @@ ATELIER_SKIP="the reviewer is down and the human said to merge" atelier merge
 - Every refusal names the proper way out first and the skip second.
 - A record Atelier cannot parse cannot be skipped past. That is not a rule;
   the tool has nothing to read.
+- A malformed line under `### Responses` leaves the record readable.
+  `check`, `submit` and `verdict` refuse it as a rule, which can be skipped.
+  `merge` cannot skip it: what merges must be valid, and the line may have
+  meant `not built`.
 
 Git's own `--no-verify` still exists. It skips every hook, a project's own
 included, and leaves no trace, so agents are told to use `ATELIER_SKIP`.

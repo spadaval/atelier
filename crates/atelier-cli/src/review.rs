@@ -36,8 +36,9 @@ pub fn review(repo: &mut Repo, id: &str) -> Result<Outcome> {
         Ok(_) => None,
         // Its one condition: the caller never implemented the item.
         Err(Refusal::Unmet(_)) => {
-            let text =
-                output::author(id, &repo.caller) + &brief(repo, &facts, None, forge.as_ref())?;
+            let checkout = git::checkout_of(&repo.root, &repo.branch_of(id))?;
+            let text = output::author(id, &repo.caller, checkout.as_deref())
+                + &brief(repo, &facts, None, forge.as_ref())?;
             Some(text.into())
         }
         Err(refusal) => Some(refused(Action::Review, &refusal, &facts)?),
