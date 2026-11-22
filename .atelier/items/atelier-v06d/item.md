@@ -3,13 +3,15 @@ schema: atelier.item
 schema_version: 3
 id: atelier-v06d
 title: 'Make an unstarted item open: remove draft, ready and the ready command from the binary, the records and the documents'
-status: draft
+status: ready
 mission: atelier-dh7a
 labels: []
 priority: medium
 blocked_by: []
 implementers: []
-ready: null
+ready:
+  by: Sumeet, agreed plan of atelier-dh7a
+  at: 2026-11-22T17:38:00.693469211Z
 trivial: null
 caused_by: null
 created_at: 2026-11-19T15:25:03.017123820Z

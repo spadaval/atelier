@@ -5,7 +5,7 @@ id: atelier-dh7a
 title: 'Make a filed item simply open: no draft or ready, filed on the branch you are on, and agents told to file what they find'
 status: open
 labels: []
-lead: null
+lead: mcp:launch:d9ce201b02acc943fe31a743127b2bc6eadad19a1d9e5ad882baa055012ff415
 planners:
 - 62596020-99cc-45fd-b632-3d3d6dc63385
 created_at: 2026-11-19T15:23:31.634513877Z
