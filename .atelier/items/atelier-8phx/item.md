@@ -3,13 +3,14 @@ schema: atelier.item
 schema_version: 3
 id: atelier-8phx
 title: Tell every role to file what it finds outside its work, and show with an eval case that the line changes what agents do
-status: draft
+status: building
 mission: atelier-dh7a
 labels: []
 priority: medium
 blocked_by:
 - atelier-u6oy
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A134a3ba0-c5f0-4828-a968-a4cfb219e451%3Adelegate-task%3Ac05f2162-4393-45a6-9e3f-c9bfc89ea590
 ready: null
 trivial: null
 caused_by: null
