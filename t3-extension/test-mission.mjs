@@ -80,7 +80,7 @@ try {
     assert.equal(await read(`p.dataset.missionPage`), 'running');
     assert.equal(await read(`text(p.querySelector('h1'))`), 'Make the mission page say what needs you');
     assert.equal(await read(`text(p.querySelector('[data-state]'))`), 'Running');
-    assert.match(await read(`text(p)`), /1 of 8 merged/);
+    assert.match(await read(`text(p)`), /1 of 10 merged/);
     assert.equal(await read(`text(p.querySelector('[data-summary]'))`), 'Two items are being built, one is in review and one is merging. One item waits on you and one thread has been quiet for 47m.');
     assert.deepEqual(await rows('needs-you'), ['item:atelier-r001', 'thread:thread:quiet']);
     assert.match(await read(`text(p.querySelector('[data-row="item:atelier-r001"]'))`), /atelier-r001 is labelled needs-human\. One item waits behind it\.Open item$/);
@@ -127,7 +127,7 @@ try {
   await check('running: the page reads the mission, its history and each listed thread in full, through the gate\'s forms', async () => {
     const reads = [...new Set(await page.evaluate('missionReads'))].sort();
     assert.deepEqual(reads, [
-      '/api/history?repo=atelier&ids=atelier-rm01,atelier-r001,atelier-r002,atelier-r003,atelier-r004,atelier-r005,atelier-r006,atelier-r007,atelier-r008',
+      '/api/history?repo=atelier&ids=atelier-rm01,atelier-r001,atelier-r002,atelier-r003,atelier-r004,atelier-r005,atelier-r006,atelier-r007,atelier-r008,atelier-r009,atelier-r010',
       '/api/repos/atelier/missions/atelier-rm01',
       '/api/thread?id=thread%3Abusy&full=1', '/api/thread?id=thread%3Alead&full=1', '/api/thread?id=thread%3Amerging&full=1', '/api/thread?id=thread%3Aquiet&full=1',
     ]);

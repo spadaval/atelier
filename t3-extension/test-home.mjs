@@ -176,7 +176,7 @@ try {
   });
   // A read that answered and then fails keeps what it gave, said to be as of then, never silently.
   for (const [failing, label, where, kept] of [
-    ['/api/roadmap?repo=atelier', 'the items in no mission', `p`, `p.querySelectorAll('[data-loose] [data-item-row]').length === 3`],
+    ['/api/roadmap?repo=atelier', 'the items in no mission', `p`, `p.querySelectorAll('[data-loose] [data-item-row]').length === 5`],
     ['/api/history?repo=atelier&days=7', 'the week', `p`, `p.querySelectorAll('[data-entry]').length === 3`],
     ['/api/repos/atelier/missions/atelier-nm01', 'an open mission\'s items', `p.querySelector('[data-mission-row="atelier-nm01"]')`, `p.querySelectorAll('[data-items="atelier-nm01"] [data-item-row]').length === 5`],
   ]) {
