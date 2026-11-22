@@ -102,11 +102,12 @@ workspaces stood, CI proved that nothing in the new one built from the old
 the direct way: the job that built and tested `next/` deleted the root
 `crates/` directory first.
 
-`scripts/ci-jobs.sh` says which of CI's two jobs a change needs. The Rust
-job checks formatting, builds and tests the workspace, and runs the tree's
-`atelier check` on the records; it is skipped when the change touches only
-Markdown outside `crates/` and the Desk's app outside `desk/src/api/`. The
-Desk's job tests its app, when the change touches `desk/`.
+`scripts/ci-jobs.sh` says which of CI's four jobs a change needs, and holds
+each one's paths. The Rust job checks formatting and lints, builds and tests
+the workspace, and runs the tree's `atelier check` on the records; a change
+to records alone skips it. The Desk's job tests its app. The extension's job
+tests the T3 Code extension and its release script. The evals' job tests
+Agent Factory's eval fixtures and harness.
 `scripts/count_non_test_rust.py` counts the non-test Rust of a commit.
 
 The binary is `target/debug/atelier` in a build of the tree, and `cargo

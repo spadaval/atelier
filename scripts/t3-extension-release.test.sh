@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Tests scripts/t3-extension-release.sh against a scratch repository whose
 # master is a line of merges, with GitHub's answers about CI runs served by a
-# stand-in `gh` from fixtures. CI's `changes` job runs it. Its bundle and
+# stand-in `gh` from fixtures. CI's `extension` job runs it. Its bundle and
 # verify cases build this checkout's t3-extension/, so they need Node and pnpm.
 set -euo pipefail
 
