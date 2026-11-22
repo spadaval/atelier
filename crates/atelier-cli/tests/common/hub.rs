@@ -72,11 +72,7 @@ impl Hub {
     }
 
     pub fn command(&self, at: &Path, thread: &str, args: &[&str]) -> Command {
-        let path = format!(
-            "{}:{}",
-            self.gh.join("bin").display(),
-            std::env::var("PATH").unwrap()
-        );
+        let path = format!("{}:{}", self.gh.join("bin").display(), path());
         let mut command = atelier_command(at, thread, args);
         command.env("PATH", path).env("FAKE_GH", &self.gh);
         command

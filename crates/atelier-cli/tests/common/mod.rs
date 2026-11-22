@@ -177,8 +177,19 @@ pub fn git_output(at: &Path, args: &[&str]) -> Output {
         .unwrap()
 }
 
+/// `PATH` with the binary under test first: it is the `atelier` that Git's
+/// hooks and a pasted line find, whatever the host has installed or none.
+pub fn path() -> String {
+    let bin = Path::new(env!("CARGO_BIN_EXE_atelier")).parent().unwrap();
+    let rest = std::env::var("PATH").unwrap_or_default();
+    format!("{}:{rest}", bin.display())
+}
+
+/// What every process a test starts in a repository is given: who commits,
+/// and [`path`], since any Git command can run a hook that runs `atelier`.
 pub fn identity(command: &mut Command) -> &mut Command {
     command
+        .env("PATH", path())
         .env("GIT_AUTHOR_NAME", "b")
         .env("GIT_AUTHOR_EMAIL", "b@b")
         .env("GIT_COMMITTER_NAME", "b")
@@ -227,11 +238,9 @@ pub fn atelier(at: &Path, thread: &str, args: &[&str]) -> Run {
 /// Runs `line` in a shell in `at`, as an agent that copied it would: as
 /// `thread`, with the binary under test first on `PATH` as `atelier`.
 pub fn sh(at: &Path, thread: &str, line: &str) -> Run {
-    let bin = Path::new(env!("CARGO_BIN_EXE_atelier")).parent().unwrap();
-    let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
     let mut command = Command::new("sh");
     command.current_dir(at).args(["-c", line]);
-    as_thread(&mut command, thread).env("PATH", path);
+    as_thread(&mut command, thread);
     let output = command.output().unwrap();
     Run {
         code: output.status.code().unwrap_or(-1),

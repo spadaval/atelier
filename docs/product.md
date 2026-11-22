@@ -113,9 +113,9 @@ Every change a thread makes, to code or to records, lives on a branch that
 
 | Branch | Holds | Made by |
 | --- | --- | --- |
-| `<item-id>` | One item's change: its code and its records | `start <id>` on an open item, or `start --new` |
-| `<mission-id>` | A new mission's plan, its reviews, and its items until the plan merges | `start --mission "<title>"` |
-| `backlog/<slug>` | Record changes tied to no started item and no proposed plan: filing a bug, changing an item, dropping one, started or not, leading, closing or stopping an open mission, a lead's notes, and an amendment of an agreed mission's plan with its plan reviews | `start --backlog <slug>` |
+| `<item-id>` | One item's change: its code and its records, and the new items its implementer, its reviewers or any other thread file on it | `start <id>` on an open item, or `start --new` |
+| `<mission-id>` | A new mission's plan, its reviews, its items until the plan merges, and other new items filed on it | `start --mission "<title>"` |
+| `backlog/<slug>` | Record changes tied to no started item and no proposed plan: filing by a thread that has no branch, changing an item, dropping one, started or not, leading, closing or stopping an open mission, a lead's notes, and an amendment of an agreed mission's plan with its plan reviews | `start --backlog <slug>` |
 
 `config.toml` may set one branch prefix, such as `x/`, for a host whose
 forge has a naming rule. It applies to all three kinds: `x/<item-id>`,
@@ -261,7 +261,8 @@ not, and an agreed mission are dropped on a backlog branch, and the drop
 counts once that merges: the item's `submit`, `merge` and take-over are then
 refused, its implementer's `status` says it was dropped and why, and that
 `merge` closes the item's pull request. `drop` names the other items that
-only the dropped item's branch filed, so none is lost unseen. A started item
+only the dropped item's branch filed, committed or still in its checkout,
+with the commands that carry each over, so none is lost unseen. A started item
 may also be dropped on its own branch, which stops it once that commit is
 pushed; the base's copy then follows by a record-only change. A proposed
 plan is dropped on its branch, which is then pushed and its pull request
@@ -291,6 +292,7 @@ branch for the change.
 | `list` | With no flags, all open work on the base, grouped by mission and then by label, and apart from it what is proposed: missions on unmerged branches and record changes waiting to merge, each with its branch. Narrowed by `--startable` (open and can start now), `--blocked`, `--needs-human`, `--proposed`, `--mission <id>`, `--label <l>`, `--mine` and `--deferred`; `--done` shows finished missions and items instead. `--disputed` lists instead, across open and done items, each open fix-now finding answered `not built`, which waits on the lead, each finding whose Response is `rebutted` with what the next round made of it (kept, withdrawn, fixed, kept at defer or no action, or not yet reviewed), and each plan-review round whose reviewers gave different verdicts; `--mission <id>` narrows it. The listing refuses nothing; `submit` refuses another plan round after two split rounds in a row (see Review). |
 | `log` | The history of actions, read from Git, one line each and oldest first: when, the commit, which item or mission, the action, the thread where the record holds one, what changed, and any rule its commit skipped. For everything, one item, or one mission with its plan reviews and its items, and only actions `--since` a time. It adds nothing up. |
 | `check` | Validates every record. The Git hooks and CI run it. |
+| `new "<title>"` | Writes an open item and prints its path, on any branch `start` made: a started item's, whether the thread implements it, reviews it or neither, a mission's or a backlog branch. The item reaches the base with that branch's merge, is shown as proposed until then, and makes no approval stale. It joins no mission unless `--in <mission>` names one, and nobody holds it. On the branch of an item that is done or dropped, which will not merge, it is refused. A thread with no branch makes one with `start --backlog`. `--from <finding>` makes the item from an unsettled deferred finding of a done item, and marks the finding taken; that changes the finding's item, so it runs on a backlog branch or by an item's implementer on its branch. |
 
 A lead or a planner reads where things stand with `show`, `list` and
 `status`. Which of these replaced each of the old tool's nine `work` views is
@@ -299,13 +301,12 @@ in the design record's [Tried and removed](design.md#tried-and-removed).
 ### Planner
 
 A planner works on a mission's branch or a backlog branch, never on the
-base.
+base, and creates items there with `new`.
 
 | Command | Behaviour |
 | --- | --- |
 | `start --mission "<title>"` | Makes branch `<mission-id>` from the base, writes the new mission's record there with status `open` and the caller as its planner, commits it and pushes the branch where a remote is configured. |
 | `start --backlog <slug>` | Makes branch `backlog/<slug>` from the base and pushes it where a remote is configured. It commits nothing, since nothing is claimed. |
-| `new "<title>"` | Writes an open item and prints its path. `--in <mission>` sets membership. `--from <finding>` makes the item from an unsettled deferred finding of a done item, and marks the finding taken. |
 | `set <id> ...` | Changes front-matter fields: title, priority, labels, mission, blocked-by, and, on a bug, `--caused-by <item>` for the item that introduced it. |
 | `drop <id> --reason` | Ends work that will not be done: on a backlog branch, for a started item too, or on a started item's own branch. Given an unsettled deferred finding of a done item, it marks the finding dropped. |
 | `close <id>` | Ends an agreed mission whose items are all done or dropped and whose Result is written. With a result text, ends an open item that has no files to change. |
@@ -466,10 +467,15 @@ record is committed on the base.
 - A new mission, its documents and the items it starts with are written on
   the mission's branch, with its plan reviews, and reach the base when the
   plan merges.
+- A new item is filed on the branch its thread is on, of any of the three
+  kinds, and reaches the base with that branch's merge. Only a thread with
+  no branch needs a backlog branch for it, as does a plan reviewer, who
+  files once its verdict is published. Dropping a started item names each
+  item filed on its branch, so that those still wanted are carried over.
 - Every other record change that belongs to no started item is written on a
-  backlog branch, as is a drop of any item: filing an item, `set`,
-  `drop`, `lead`, `close`, a lead's notes, an item added to an agreed
-  mission, and dropping an agreed mission. Each merges as a record-only
+  backlog branch, as is a drop of any item: `set`,
+  `drop`, `lead`, `close`, a lead's notes, and dropping an agreed
+  mission. Each merges as a record-only
   change. An amendment of an agreed mission's plan is written on a backlog
   branch too, and merges after two approving plan reviews of it.
 - Once an item is started, its directory changes only on its branch, and those
@@ -495,7 +501,10 @@ record is committed on the base.
   definition, the diff, the Report with its validation, earlier rounds' open
   findings with the author's responses, and the branch's
   pull request where a forge is configured, where CI's result can be read.
-  It carries no author reasoning beyond the Report. From round 2 on it puts
+  It carries no author reasoning beyond the Report. It says the one thing
+  the reviewer may write there beside its review: a new item, for a problem
+  outside the item under review. A plan's brief says to publish the verdict
+  first and then file such a problem on a backlog branch. From round 2 on it puts
   first what changed since the last round. Where the base was merged in
   between, that diff names only the paths the branch changes. Where the last
   round's commit is no longer in the branch's history, there is no such
@@ -591,12 +600,16 @@ item's branch, `merge` runs only on an approved item, or with `--trivial`.
 It checks:
 
 1. The latest round has an approve verdict that still covers the head: since
-   the commit it reviewed, nothing changed outside the item's own directory,
-   and the item's Goal, Done when and Scope did not change.
+   the commit it reviewed, nothing changed outside the item's own directory
+   but to file new items, and the item's Goal, Done when and Scope did not
+   change. Filing adds the record of an open item that neither that commit
+   nor the base holds; any other change to another item's record is stale.
+   An item filed and not committed holds the merge until it is committed.
 2. The configured merge checks pass on the merged tree. Where the forge names
    a CI workflow, CI passed on the head, or on an earlier commit of the
    branch from which the head differs only inside the item's directory, such
-   as the commit `submit` pushed before `verdict approve` committed. The
+   as the commit `submit` pushed before `verdict approve` committed. An
+   item filed after that push is outside it, so CI runs again for it. The
    latest finished run among those decides, except that when it failed and
    a newer one is still running, the newer one is waited for.
 

@@ -1330,10 +1330,22 @@ pub fn brief(brief: &Brief) -> String {
     text + &review_file(
         path,
         brief.carried.len() + 1,
+        ITEM_REVIEWER_WRITES,
         "the change merges",
         "writes it and the item's new status and prints the Git command that commits the two",
     ) + "Run that command; your review is then done.\n"
 }
+
+/// What an item's reviewer may write beside its review file, in the
+/// implementer's checkout.
+const ITEM_REVIEWER_WRITES: &str = "Change no other file, except to file a problem outside this item, which you may do here before or after your verdict: run `atelier new \"<title>\"`, write the Goal and Done when in the file it names, then run the Git command it prints. The new item reaches the base in this item's merge and makes no approval stale.";
+
+/// What a plan's reviewer may write beside its review file.
+const PLAN_REVIEWER_WRITES: &str = "Change no other file until your review is pushed.";
+
+/// How a plan's reviewer files a problem its plan is not about, after its
+/// verdict is published.
+const PLAN_REVIEWER_FILES: &str = "Only once that push is made, you may file a problem unrelated to the plan, on a branch of its own so that the plan and your verdict stay as they are: run `atelier start --backlog <slug>`, then on that branch `atelier new \"<title>\"`, write it, run the Git command it prints, then `atelier submit` and `atelier merge`.\n";
 
 /// How every round's reviewer is to look.
 const LOOK: &str = "Read the code, run what proves it, and write down each problem you find. The author's reasoning is left out on purpose; judge what is there.";
@@ -1398,12 +1410,14 @@ fn carried_findings(carried: &[Carried], reviewer: bool, item: bool) -> String {
 }
 
 /// How a reviewer writes its file at `path`, whose findings number on from
-/// `next`, and records its verdict, which `commits` it. `before` is what a
-/// fix-now finding must be fixed before.
-fn review_file(path: &str, next: usize, before: &str, commits: &str) -> String {
+/// `next`, and records its verdict, which `commits` it. `writes` is what
+/// else it may write, and `before` what a fix-now finding must be fixed
+/// before.
+fn review_file(path: &str, next: usize, writes: &str, before: &str, commits: &str) -> String {
     format!(
         "\nYour review file: {path}\n\
-         Write your review there, and change no other file. Leave its front matter, between the `---` lines, as it is.\n\
+         Write your review there. Leave its front matter, between the `---` lines, as it is.\n\
+         {writes}\n\
          Under `## Summary`, say what you checked and how, and what you could not check. Then add a section for each problem, numbered on from {next}:\n\n\
          ## Finding {next}: <a one-line title>\n\
          Recommendation: fix now\n\
@@ -1522,9 +1536,10 @@ pub fn plan_brief(brief: &PlanBrief) -> String {
     text + &review_file(
         brief.path,
         brief.carried.len() + 1,
+        PLAN_REVIEWER_WRITES,
         "the mission starts",
         "writes it, changing no status, and prints the Git command that commits it alone",
-    ) + "No command commits or pushes your review: you do, with Git. Run the command `verdict` prints, which commits the file alone, then push the commit to the branch of the plan:\n" + &brief.landing.commands() + "Tell whoever started you the commit. Your review is then done.\n"
+    ) + "No command commits or pushes your review: you do, with Git. Run the command `verdict` prints, which commits the file alone, then push the commit to the branch of the plan:\n" + &brief.landing.commands() + PLAN_REVIEWER_FILES + "Tell whoever started you the commit. Your review is then done.\n"
 }
 
 /// What a plan's reviewer after the first round is told, with the diff
@@ -1571,7 +1586,7 @@ pub fn plan_verdict_recorded(
     landing: &Landing,
 ) -> String {
     format!(
-        "Recorded your verdict on the plan of mission {id}, round {round}: {}. Wrote, and did not commit:\n  {path}\nCommit it alone, and push it to the branch of the plan you reviewed; your review is done once it is there. Tell whoever started you the commit, and stop.\nThen: {commit_line}\n{}",
+        "Recorded your verdict on the plan of mission {id}, round {round}: {}. Wrote, and did not commit:\n  {path}\nCommit it alone, and push it to the branch of the plan you reviewed; your review is done once it is there. Tell whoever started you the commit, and stop.\nThen: {commit_line}\n{}{PLAN_REVIEWER_FILES}",
         verdict_name(verdict),
         landing.commands(),
     )
@@ -1677,23 +1692,34 @@ pub fn dropped_on_backlog(id: &str, branch: &str, reason: &str, remote: Option<&
     )
 }
 
-/// The items `added`, each its ID, title and the ref that holds it, which
-/// the branch of dropped `id` filed and the base does not hold.
-pub fn dropped_adds(
-    id: &str,
-    branch: &str,
-    base: &str,
-    added: &[(String, String, String)],
-) -> String {
+/// An item that a dropped item's branch filed and the base does not hold.
+pub struct LeftBehind {
+    pub id: String,
+    pub title: String,
+    /// The ref that holds it.
+    pub on: String,
+    /// The command that commits it there, where no commit has it as it is.
+    pub commit_first: Option<String>,
+}
+
+/// The items `added`, which the branch of dropped `id` filed and the base
+/// does not hold, each with what brings it over.
+pub fn dropped_adds(id: &str, branch: &str, base: &str, added: &[LeftBehind]) -> String {
     if added.is_empty() {
         return String::new();
     }
     let mut text = format!(
         "Branch {branch} also adds items that are not on {base}, and dropping {id} leaves them behind. For each still wanted, run its command on a backlog branch and commit it:\n"
     );
-    for (other, title, on) in added {
-        let dir = atelier_core::repo::item_dir(other);
-        text += &format!("  {other}: {title}\n    git checkout {on} -- {dir}\n");
+    for item in added {
+        let dir = atelier_core::repo::item_dir(&item.id);
+        text += &format!("  {}: {}\n", item.id, item.title);
+        if let Some(commit) = &item.commit_first {
+            text += &format!(
+                "    It is not committed as it stands. Before its checkout leaves {branch}, commit it there:\n    {commit}\n    Then, on the backlog branch:\n"
+            );
+        }
+        text += &format!("    git checkout {} -- {dir}\n", item.on);
     }
     text
 }

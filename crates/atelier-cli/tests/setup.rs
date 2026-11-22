@@ -10,14 +10,6 @@ use std::os::unix::fs::{symlink, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-/// `PATH` with the new binary's directory first, as the hook scripts run
-/// `atelier` from `PATH`.
-fn path() -> String {
-    let binary = Path::new(env!("CARGO_BIN_EXE_atelier"));
-    let rest = std::env::var("PATH").unwrap_or_default();
-    format!("{}:{rest}", binary.parent().unwrap().display())
-}
-
 fn ran(command: &mut Command) -> Run {
     let output = command.stdin(Stdio::null()).output().unwrap();
     Run {
@@ -30,14 +22,12 @@ fn ran(command: &mut Command) -> Run {
 /// Git run as thread t1, with the hooks finding the new binary.
 fn git_hooked(at: &Path, args: &[&str]) -> Run {
     let mut command = Command::new("git");
-    command.current_dir(at).args(args).env("PATH", path());
+    command.current_dir(at).args(args);
     command.env("T3CODE_THREAD_ID", "t1");
     ran(identity(&mut command))
 }
 
-/// [`git_hooked`] that must succeed. Once `setup` has run, every Git
-/// command that runs a hook goes through it, or the hook would run the
-/// `atelier` installed on the host.
+/// [`git_hooked`] that must succeed.
 fn passes(at: &Path, args: &[&str]) {
     let run = git_hooked(at, args);
     assert_eq!(run.code, 0, "git {args:?}: {}", run.stderr);
@@ -46,10 +36,7 @@ fn passes(at: &Path, args: &[&str]) {
 /// A line printed for an agent to paste, run as written by a shell.
 fn shell(at: &Path, line: &str) -> Run {
     let mut command = Command::new("sh");
-    command
-        .current_dir(at)
-        .args(["-c", line])
-        .env("PATH", path());
+    command.current_dir(at).args(["-c", line]);
     command.env("T3CODE_THREAD_ID", "t1");
     ran(identity(&mut command))
 }

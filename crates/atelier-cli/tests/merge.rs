@@ -20,7 +20,12 @@ const WAIT: &str = "touch \"$MERGE_MARK\"; \
 /// A scratch repository whose base config has `config` added, and whose
 /// item t1 started, changed with `change` and submitted.
 fn submitted_with(config: &str, change: impl Fn(&Path)) -> Scratch {
-    let scratch = Scratch::new(&[(ID, "open")]);
+    submitted_among(&[(ID, "open")], config, change)
+}
+
+/// [`submitted_with`], of a base that holds `items`.
+fn submitted_among(items: &[(&str, &str)], config: &str, change: impl Fn(&Path)) -> Scratch {
+    let scratch = Scratch::new(items);
     let root = scratch.root();
     if !config.is_empty() {
         append(&root, ".atelier/config.toml", config);
@@ -37,7 +42,11 @@ fn submitted_with(config: &str, change: impl Fn(&Path)) -> Scratch {
 
 /// As [`submitted_with`], then approved by t2.
 fn approved_with(config: &str, change: impl Fn(&Path)) -> Scratch {
-    let scratch = submitted_with(config, change);
+    approve(submitted_with(config, change))
+}
+
+/// `scratch`, whose submitted item t2 then approved.
+fn approve(scratch: Scratch) -> Scratch {
     let root = scratch.root();
     assert_eq!(atelier(&root, "t2", &["review", ID]).code, 0);
     let run = verdict(&root, "t2", &["verdict", "approve"]);
@@ -255,7 +264,11 @@ fn merge_says_how_many_merge_checks_passed_or_that_none_is_configured() {
 /// `merge` changes nothing, says `said` changed since round 1 and to run
 /// `submit`, and that `status` says the same.
 fn stale_after(change: impl Fn(&Path), said: &str) {
-    let scratch = approved();
+    stale_in(approved(), change, said);
+}
+
+/// [`stale_after`], in `scratch`.
+fn stale_in(scratch: Scratch, change: impl Fn(&Path), said: &str) {
     let root = scratch.root();
     let reviewed = git(&root, &["show", &format!("{ID}:{}", review_of(&root, 1).1)]);
     let reviewed = front(&reviewed, "commit");
@@ -267,7 +280,7 @@ fn stale_after(change: impl Fn(&Path), said: &str) {
     let run = merge(&root, "t1", &[]);
     assert_eq!(run.code, 1, "{}", run.stdout);
     let needs = format!(
-        "To merge it:\n  [ ] The approval still covers the head: since {}, which round 1 reviewed, nothing changed outside this item's directory, nor its Goal, Done when or Scope (changed: {said})\n\
+        "To merge it:\n  [ ] The approval still covers the head: since {}, which round 1 reviewed, nothing but new items changed outside this item's directory, nor its Goal, Done when or Scope (changed: {said})\n\
          What changed needs a fresh review, so send it back to review.\nThen: atelier submit\n",
         &reviewed[..7]
     );
@@ -310,9 +323,56 @@ fn a_config_change_after_approval_makes_it_stale() {
 
 #[test]
 fn a_change_to_another_item_after_approval_makes_it_stale() {
+    let path = ".atelier/items/demo-cd34/item.md";
+    let more = |root: &Path| append(root, path, "More.\n");
+    let gone = |root: &Path| fs::remove_file(root.join(path)).unwrap();
+    // An item the base holds: edited, deleted, or put back other than it
+    // was after the review saw it deleted.
+    let held = || {
+        approve(submitted_among(
+            &[(ID, "open"), ("demo-cd34", "open")],
+            "",
+            |_| {},
+        ))
+    };
+    stale_in(held(), more, path);
+    stale_in(held(), gone, path);
+    let deleted = approve(submitted_among(
+        &[(ID, "open"), ("demo-cd34", "open")],
+        "",
+        gone,
+    ));
+    let back = |root: &Path| write_item(root, "demo-cd34", "open", &[], &["t9"], "");
+    stale_in(deleted, back, path);
+    // An item the branch filed and the review saw: edited, or deleted.
+    let file = |root: &Path| write_item(root, "demo-cd34", "open", &[], &[], "");
+    stale_in(approved_with("", file), more, path);
+    stale_in(approved_with("", file), gone, path);
+    // An added record that is not a new item's: one that is not open.
+    for status in ["done", "dropped", "building"] {
+        stale_after(
+            |root| write_item(root, "demo-cd34", status, &[], &[], ""),
+            path,
+        );
+    }
+}
+
+#[test]
+fn what_else_a_filing_commit_holds_still_makes_the_approval_stale() {
+    let notes = ".atelier/items/demo-cd34/notes.md";
     stale_after(
-        |root| write_item(root, "demo-cd34", "open", &[], &[], ""),
-        ".atelier/items/demo-cd34/item.md",
+        |root| {
+            write_item(root, "demo-cd34", "open", &[], &[], "");
+            fs::write(root.join(notes), "Seen on Linux.\n").unwrap();
+        },
+        notes,
+    );
+    stale_after(
+        |root| {
+            write_item(root, "demo-cd34", "open", &[], &[], "");
+            fs::write(root.join("hello.txt"), "hello!\n").unwrap();
+        },
+        "hello.txt",
     );
 }
 
@@ -885,11 +945,7 @@ impl Forge {
     /// `atelier` with the fake gh first on `PATH`, and a wait for CI of 20
     /// seconds, polling every 50 milliseconds.
     fn command(&self, at: &Path, thread: &str, args: &[&str]) -> Command {
-        let path = format!(
-            "{}:{}",
-            self.gh.join("bin").display(),
-            std::env::var("PATH").unwrap()
-        );
+        let path = format!("{}:{}", self.gh.join("bin").display(), path());
         let mut command = atelier_command(at, thread, args);
         command
             .env("PATH", path)

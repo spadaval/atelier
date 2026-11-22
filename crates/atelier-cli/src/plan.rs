@@ -15,16 +15,21 @@ use atelier_core::model::{
     SchemaVersion, Settlement, Status, Thread, Threads,
 };
 use atelier_core::plan::{
-    agreed, drop_mission, is_mission, misplaced, planned_facts, save, save_with, Belongs,
+    agreed, drop_mission, is_mission, misplaced, planned_facts, save, save_new, save_with, Belongs,
 };
 use atelier_core::records::{put_first, validate_id, ReviewFile};
-use atelier_core::repo::{item_dir, mission_path, on_base};
+use atelier_core::repo::{item_dir, item_of_record, item_path, mission_path, on_base};
 use atelier_core::{refused as refused_action, Located, Refused, Repo};
 use std::collections::BTreeMap;
 
 const ITEM_BODY: &str = "\n## Goal\n\n## Done when\n\n## Scope\n";
 const MISSION_BODY: &str =
     "\n## Why\n\n## Outcome\n\n## Success criteria\n\n## Scope\n\n## Authority\n\n## Result\n";
+
+/// The commit message of the new item `id`, as `new` and `drop` print it.
+fn filing(id: &str) -> String {
+    format!("Plan {id}")
+}
 
 /// A new open item with empty Goal, Done when and Scope sections.
 pub fn open_item(id: &str, title: &str, mission: Option<String>) -> Item {
@@ -59,7 +64,7 @@ pub fn new(
     }
     let belongs = match from {
         Some(_) => Belongs::Settle,
-        None => Belongs::Backlog,
+        None => Belongs::New,
     };
     let command = match from {
         Some(_) => "new --from",
@@ -80,8 +85,7 @@ pub fn new(
     }
     let item = open_item(&id, title, into);
     let said = output::created_item(&id);
-    let message = format!("Plan {id}");
-    Ok(save(repo, "new", vec![item], Vec::new(), &said, &message)?.into())
+    Ok(save_new(repo, "new", item, &said, &filing(&id))?.into())
 }
 
 /// A new mission `id` titled `title`, open, planned by `planner`, with its
@@ -372,7 +376,8 @@ fn dropped_copy(located: &Located, why: &str) -> Item {
 
 /// Names each other item that the branch of `id`, here or on the remote as
 /// fetched, added and the base does not hold, since dropping `id` leaves
-/// them on that branch. One on both is named from the copy the reader
+/// them on that branch, with one the branch's checkout holds and has not
+/// committed. One on both is named from the copy the reader
 /// reads: the remote's where it is strictly ahead, else the local one.
 fn added_there(repo: &mut Repo, id: &str) -> Result<String> {
     let (root, base_tip) = (repo.root.clone(), repo.base_tip.clone());
@@ -394,11 +399,7 @@ fn added_there(repo: &mut Repo, id: &str) -> Result<String> {
     let mut added = BTreeMap::new();
     for (name, tip) in &tips {
         for path in atelier_core::git::changed_records(&root, &base_tip, tip)? {
-            let Some(other) = path
-                .strip_prefix(".atelier/items/")
-                .and_then(|rest| rest.strip_suffix("/item.md"))
-                .filter(|other| *other != id)
-            else {
+            let Some(other) = item_of_record(&path).filter(|other| *other != id) else {
                 continue;
             };
             if !matches!(repo.item_at(&base_tip, other), Ok(None)) {
@@ -410,8 +411,42 @@ fn added_there(repo: &mut Repo, id: &str) -> Result<String> {
                 Ok(Some(dir)) => dir.item.title,
                 Err(_) => "its record does not read".to_string(),
             };
-            let found = (other.to_string(), title, name.clone());
-            added.entry(other.to_string()).or_insert(found);
+            added
+                .entry(other.to_string())
+                .or_insert(output::LeftBehind {
+                    id: other.to_string(),
+                    title,
+                    on: name.clone(),
+                    commit_first: None,
+                });
+        }
+    }
+    // `new` commits nothing, so the branch's checkout can hold one more,
+    // or a newer copy of one it committed.
+    if let Some(at) = crate::git::checkout_of(&root, &branch)?.filter(|at| at.exists()) {
+        for path in atelier_core::repo::planning(&at)? {
+            let Some(other) = item_of_record(&path).filter(|other| *other != id) else {
+                continue;
+            };
+            if !at.join(item_path(other)).exists()
+                || !matches!(repo.item_at(&base_tip, other), Ok(None))
+            {
+                continue;
+            }
+            let store = atelier_core::records::Store::new(at.join(".atelier"));
+            let title = match store.item(other) {
+                Ok(dir) => dir.item.title,
+                Err(_) => "its record does not read".to_string(),
+            };
+            let commit =
+                output::commit_line(Some(&at), std::slice::from_ref(&path), &filing(other), &[]);
+            let found = output::LeftBehind {
+                id: other.to_string(),
+                title,
+                on: branch.clone(),
+                commit_first: Some(commit),
+            };
+            added.insert(other.to_string(), found);
         }
     }
     let added: Vec<_> = added.into_values().collect();
@@ -576,7 +611,7 @@ fn settle(repo: &mut Repo, command: &str, name: &str, how: Settle) -> Result<Out
         vec![review],
         &said,
         &message,
-        false,
+        None,
     )?;
     Ok(saved.into())
 }

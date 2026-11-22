@@ -219,9 +219,10 @@ fn the_planning_commands_write_nothing_in_the_bases_checkout_nor_on_an_items_bra
         );
         assert_eq!(git(&base, &["status", "--porcelain", "-uall"]), "");
     }
-    // On an item's branch, a change that is not the item's is refused.
+    // On an item's branch, a change that is not the item's is refused,
+    // but for filing a new item.
     assert_eq!(atelier(&root, "t1", &["start", "demo-b2b2"]).code, 0);
-    for args in commands {
+    for args in commands.iter().filter(|args| args[0] != "new") {
         let run = atelier(&root, "p1", args);
         assert_eq!(run.code, 1, "{args:?}");
         assert!(
@@ -1853,7 +1854,8 @@ fn review_of_a_mission_opens_a_plan_review_and_its_verdict_commits_only_that_fil
              Push it to {MISSION}: git push . HEAD:refs/heads/{MISSION}\nIf that is refused because \
              the other reviewer got there first, put your commit after theirs and push again; your \
              files differ, so this cannot conflict: git rebase {MISSION} && git push . \
-             HEAD:refs/heads/{MISSION}\n"
+             HEAD:refs/heads/{MISSION}\n\
+             Only once that push is made, you may file a problem unrelated to the plan, on a branch of its own so that the plan and your verdict stay as they are: run `atelier start --backlog <slug>`, then on that branch `atelier new \"<title>\"`, write it, run the Git command it prints, then `atelier submit` and `atelier merge`.\n"
         )
     );
     // Nothing is committed until the reviewer runs that line.

@@ -23,9 +23,13 @@ item in `items/<id>/item.md` with its reviews beside it, and the rules in
   start` makes, and reaches `master` only by `atelier merge`. There are
   three kinds: `<item-id>` for an item's code and records, `<mission-id>`
   for a new mission's plan, its items and its plan reviews, and
-  `backlog/<slug>` for record changes tied to neither, such as filing,
-  changing or dropping an item, leading or closing a mission, or a lead's
-  notes.
+  `backlog/<slug>` for record changes tied to neither, such as changing
+  or dropping an item, leading or closing a mission, or a lead's notes.
+- File a new item on the branch you are on: `atelier new "<title>"`, write
+  it, and commit it with the command `new` prints. It reaches `master` with
+  that branch's merge, and on an item's branch, as implementer or reviewer,
+  it makes no approval stale. A thread with no branch, or a plan reviewer
+  once its verdict is pushed, files on a backlog branch.
 - Only `start`, `submit` and `merge` act on Git. `new`, `set`, `drop`,
   `close`, `lead`, `review` and `verdict` write files and commit nothing;
   commit and push them with Git.

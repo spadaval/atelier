@@ -374,6 +374,9 @@ pub struct Checkout {
 pub struct SinceApproval {
     /// Every path that differs.
     pub changed: Vec<String>,
+    /// Those of `changed` that only file a new item: the record of an open
+    /// item that neither the reviewed commit nor the base holds.
+    pub filed: Vec<String>,
     /// The item's record at the reviewed commit, if it had one.
     pub reviewed: Option<ItemDir>,
     /// The item's record at the head, which is what merges, whatever the
@@ -582,8 +585,8 @@ pub enum Condition {
     /// No review of the latest round approves the item.
     NoApproval,
     /// The approval no longer covers the head: since the commit it
-    /// reviewed, these paths outside the item's directory, or these of its
-    /// requirement sections, changed.
+    /// reviewed, these paths outside the item's directory that file no new
+    /// item, or these of its requirement sections, changed.
     Stale {
         round: u32,
         commit: String,
@@ -1103,15 +1106,16 @@ pub fn unsettled(item: &ItemDir) -> Result<Vec<Finding>, Problem> {
 }
 
 /// Whether the approval still covers the head: since the commit it
-/// reviewed, nothing changed outside the item's own directory, and the
-/// item's requirements at the head are as it read them. A Report, a
-/// response or a review file never makes it stale.
+/// reviewed, nothing changed outside the item's own directory but to file
+/// new items, and the item's requirements at the head are as it read them.
+/// A Report, a response, a review file or a new item's record never makes
+/// it stale.
 fn stale(item: &ItemDir, review: &ReviewFile, since: &SinceApproval) -> Option<Condition> {
     let own = format!(".atelier/items/{}/", item.item.id);
     let mut changed: Vec<String> = since
         .changed
         .iter()
-        .filter(|path| !path.starts_with(&own))
+        .filter(|path| !path.starts_with(&own) && !since.filed.contains(path))
         .cloned()
         .collect();
     for heading in REQUIREMENTS {
