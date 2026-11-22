@@ -3,13 +3,14 @@ schema: atelier.item
 schema_version: 3
 id: atelier-rme3
 title: Show open items in the Desk and the T3 extension with no draft or ready, and one backlog list for loose items
-status: draft
+status: building
 mission: atelier-dh7a
 labels: []
 priority: medium
 blocked_by:
 - atelier-v06d
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A134a3ba0-c5f0-4828-a968-a4cfb219e451%3Adelegate-task%3Af9b8e4e8-be66-415b-9cab-18cee314ff97
 ready: null
 trivial: null
 caused_by: null
