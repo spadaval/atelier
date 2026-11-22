@@ -34,7 +34,7 @@ fn merging_record(status: &str, blockers: &[&str]) -> Scratch {
     fs::write(root.join("conflict"), "topic\n").unwrap();
     git(&root, &["add", "."]);
     git(&root, &["commit", "-qm", "Topic"]);
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     write_item(
         &root,
         ID,
@@ -165,7 +165,7 @@ fn configured_remote_base_is_trusted_but_an_unconfigured_remote_is_not() {
         fs::write(root.join("topic"), "topic").unwrap();
         git(&root, &["add", "."]);
         git(&root, &["commit", "-qm", "Topic"]);
-        git(&root, &["checkout", "-q", "--detach", "main"]);
+        off_base(&root);
         write_item(&root, ID, "approved", &["t1"], &[], "Already reviewed");
         git(&root, &["add", "."]);
         git(&root, &["commit", "-qm", "Remote base"]);

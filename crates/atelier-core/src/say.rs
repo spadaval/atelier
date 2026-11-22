@@ -599,6 +599,19 @@ pub fn rule_on_base(base: &str) -> String {
     format!("Nothing is written in the checkout of the base branch {base}")
 }
 
+pub fn on_detached_head(command: &str, base: &str) -> Refused {
+    Refused::then(
+        format!(
+            "`atelier {command}` refused; nothing written.\nThis checkout is on a detached HEAD, and a commit made there is on no branch, so it would never reach {base}.\n"
+        ),
+        "Make the branch the change belongs on, and run this there: `atelier start --backlog <slug>` for a record change tied to no item or mission, or `atelier start <id>` for an item's own work.".to_string(),
+    )
+}
+
+pub fn rule_on_detached_head(command: &str) -> String {
+    format!("`atelier {command}` writes on a branch, not on a detached HEAD")
+}
+
 /// A record change that belongs on a backlog branch, run on the branch of
 /// item `id`.
 pub fn belongs_on_backlog(command: &str, id: &str, branch: &str) -> Refused {
@@ -614,8 +627,8 @@ pub fn rule_belongs_on_backlog(command: &str, branch: &str) -> String {
     format!("`atelier {command}` writes on a backlog or mission branch, not on the item branch {branch}")
 }
 
-/// A drop of started item `id`, run anywhere but a checkout of its branch
-/// `branch`, which `checkout`, if any, has out.
+/// A drop of started item `id`, run on neither a backlog branch nor its
+/// branch `branch`, which `checkout`, if any, has out.
 pub fn drop_off_branch(
     id: &str,
     branch: &str,
@@ -623,25 +636,20 @@ pub fn drop_off_branch(
     checkout: Option<&Path>,
 ) -> Refused {
     let there = match checkout {
-        Some(path) => format!(
-            "Run it in {}, which has {branch} checked out.",
-            path.display()
-        ),
-        None => format!(
-            "Run it in a checkout of {branch}, as after `git worktree add ../{id} {branch}`."
-        ),
+        Some(path) => format!("in {}, which has {branch} checked out", path.display()),
+        None => format!("in a checkout of {branch}"),
     };
     Refused::then(
         format!(
-            "`atelier drop {id}` refused; nothing written.\n{id} is started, and a started item's record changes only on its branch {branch}; this checkout is on {}.\n",
+            "`atelier drop {id}` refused; nothing written.\n{id} is started, so it is dropped on a backlog branch or on its own branch {branch}; this checkout is on {}.\n",
             place(here)
         ),
-        there,
+        format!("Run it on a backlog branch, made with `atelier start --backlog drop-{id}`, or {there}."),
     )
 }
 
 pub fn rule_drop_off_branch(id: &str, branch: &str) -> String {
-    format!("A started item {id} is dropped in a checkout of its branch {branch}")
+    format!("A started item {id} is dropped on a backlog branch or its own branch {branch}")
 }
 
 /// How a finding was settled, after "it was".

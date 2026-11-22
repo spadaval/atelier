@@ -222,8 +222,8 @@ review=$(ls .atelier/items/tally-p4rs/reviews/1-*.md)
 sed -i 's/<!-- What you checked and how, and what you could not check. -->/Ran the suite; read the diff./' "$review"
 judge thread-5e1f0c2a approve --model gpt-6.1-sol
 as thread-1a2b3c4d merge
+# The merge deleted tally-p4rs and left this checkout on a detached HEAD.
 git switch -q main
-git branch -q -D tally-p4rs
 
 # Grader inputs, outside the repository.
 git rev-parse HEAD > "$work/.setup_head"

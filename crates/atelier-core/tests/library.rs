@@ -154,7 +154,7 @@ fn a_caller_the_records_cannot_name_and_read_back_is_refused_before_anything_is_
 fn a_skip_reaches_its_own_actions_commit_and_result_and_no_other_actions() {
     // One action with a reason: `ready` on an item that is no draft passes.
     let (_first_dir, first) = scratch("ready");
-    git(&first, &["switch", "-q", "--detach"]);
+    git(&first, &["switch", "-qc", "plan"]);
     let skip = Skip::new(Some("  Ada\n said to "));
     let mut repo = Repo::open(&first, Thread("p1".into()), &skip).unwrap();
     let done = ready(&mut repo, &[ID.into()], "ada").unwrap().unwrap();
@@ -171,7 +171,7 @@ fn a_skip_reaches_its_own_actions_commit_and_result_and_no_other_actions() {
     // Then another, in the same process, with no reason, on another
     // repository: nothing of the first reaches its result.
     let (_second_dir, second) = scratch("draft");
-    git(&second, &["switch", "-q", "--detach"]);
+    git(&second, &["switch", "-qc", "plan"]);
     let skip = Skip::new(None);
     let mut repo = Repo::open(&second, Thread("p1".into()), &skip).unwrap();
     let done = ready(&mut repo, &[ID.into()], "ada").unwrap().unwrap();
@@ -185,7 +185,7 @@ fn a_skip_reaches_its_own_actions_commit_and_result_and_no_other_actions() {
 #[test]
 fn ready_given_no_id_refuses_and_commits_nothing() {
     let (_dir, root) = scratch("draft");
-    git(&root, &["switch", "-q", "--detach"]);
+    git(&root, &["switch", "-qc", "plan"]);
     fs::write(root.join("unrelated.txt"), "staged\n").unwrap();
     git(&root, &["add", "unrelated.txt"]);
     let before = (

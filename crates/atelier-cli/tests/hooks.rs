@@ -713,7 +713,7 @@ fn a_push_of_several_refs_judges_only_the_base() {
     git(&root, &["switch", "-q", "-c", "spike"]);
     fs::write(root.join("hello.txt"), "hello\n").unwrap();
     assert_eq!(commit_all(&root, "Try hello").code, 0);
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     edit(&root, &item_path(ID), "title: Say hello", "title: Say hi");
     assert_eq!(commit_all(&root, "Retitle").code, 0);
     let run = git_as(&root, &["push", "-q", "origin", "main", "spike"]);
@@ -758,7 +758,7 @@ fn an_atelier_merge_of_a_branch_with_code_commits_reaches_the_base_and_its_branc
     assert_eq!(run.code, 0, "{}", run.stderr);
 
     // Planning on either side of the merge, pushed with it.
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     let run = atelier(&root, "t1", &["new", "Say goodbye"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert_eq!(commit_all(&root, "Plan goodbye").code, 0);

@@ -41,15 +41,12 @@ fn join_mission(checkout: &Path, id: &str, mission: &str) {
     .unwrap();
 }
 
-/// Commits everything in `root`; in a detached checkout, as the fixture's
-/// is, the base moves to it too, as a backlog branch's merge would move it.
+/// Commits everything in `root`; on the fixture's branch the base moves to
+/// it too, as a backlog branch's merge would move it.
 fn commit_all(root: &Path, message: &str) {
     git(root, &["add", "-A"]);
     git(root, &["commit", "-qm", message]);
-    if !git_output(root, &["symbolic-ref", "-q", "HEAD"])
-        .status
-        .success()
-    {
+    if stands_in(root) {
         git(root, &["branch", "-f", "main", "HEAD"]);
     }
 }
@@ -423,7 +420,7 @@ fn set_is_refused_with_nothing_written_for_a_field_or_record_it_cannot_change() 
     // A started item's record changes only on its branch, which is named.
     assert_eq!(planned(&root, "p1", &["ready", ID, "--by", "s"]).code, 0);
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     let run = atelier(&root, "p1", &["set", ID, "--title", "T"]);
     assert_eq!(run.code, 1);
     assert_eq!(
@@ -662,7 +659,7 @@ fn start_needs_the_items_mission_agreed_and_ready_refuses_a_mission() {
         )
     );
     assert_eq!(git(&root, &["status", "--porcelain"]), "");
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
 
     // Open on the base, as once its plan merged, its items start; the old
     // `ready` reads as open.
@@ -671,7 +668,7 @@ fn start_needs_the_items_mission_agreed_and_ready_refuses_a_mission() {
         commit_all(&root, "Agree");
         let run = atelier(&root, "t1", &["start", ID]);
         assert_eq!(run.code, 0, "{status}: {}", run.stderr);
-        git(&root, &["checkout", "-q", "--detach", "main"]);
+        off_base(&root);
         git(&root, &["branch", "-qD", ID]);
     }
 }
@@ -691,7 +688,7 @@ fn status_on_the_base_lists_only_what_can_start_and_counts_the_rest_by_cause() {
     assert_eq!(
         atelier(&root, "t1", &["status"]).stdout,
         format!(
-            "{NO_HOOKS}You are thread t1, on a detached HEAD.\nReady to start:\n  \
+            "{NO_HOOKS}You are thread t1, on branch {SCRATCH}, which is no item's.\nReady to start:\n  \
              demo-a1aa (high): Say hello\n{others}{MAY_START}"
         )
     );
@@ -830,13 +827,13 @@ fn a_start_new_stopped_before_its_branch_leaves_no_branch_and_no_item() {
         &root,
         &["for-each-ref", "--format=%(refname:short)", "refs/heads/"],
     );
-    assert_eq!(branches, "main");
-    assert_eq!(git(&root, &["rev-parse", "--abbrev-ref", "HEAD"]), "HEAD");
+    assert_eq!(branches, format!("main\n{SCRATCH}"));
+    assert_eq!(git(&root, &["rev-parse", "--abbrev-ref", "HEAD"]), SCRATCH);
     assert_eq!(git(&root, &["status", "--porcelain", "-uall"]), "");
     let status = atelier(&root, "t1", &["status"]).stdout;
     assert_eq!(
         status,
-        format!("{NO_HOOKS}You are thread t1, on a detached HEAD.\nNothing is ready to start.\n")
+        format!("{NO_HOOKS}You are thread t1, on branch {SCRATCH}, which is no item's.\nNothing is ready to start.\n")
     );
 }
 
@@ -914,16 +911,13 @@ fn created(run: &Run) -> String {
 }
 
 /// Runs a planning command as `p1`, and commits what it wrote with the
-/// line it printed; in a detached checkout the base moves to that commit,
+/// line it printed; on the fixture's branch the base moves to that commit,
 /// as a backlog branch's merge would move it.
 fn plan(root: &Path, args: &[&str]) -> Run {
     let run = atelier(root, "p1", args);
     assert_eq!(run.code, 0, "{args:?}: {}", run.stderr);
     shell(root, &then(&run.stdout));
-    if !git_output(root, &["symbolic-ref", "-q", "HEAD"])
-        .status
-        .success()
-    {
+    if stands_in(root) {
         git(root, &["branch", "-f", "main", "HEAD"]);
     }
     run
@@ -1070,7 +1064,7 @@ fn a_dropped_mission_changes_no_item_and_start_on_one_says_it_was_dropped() {
         );
     }
     assert_eq!(tip(&root, STARTED), branch);
-    assert_eq!(git(&root, &["branch", "--show-current"]), "");
+    assert_eq!(git(&root, &["branch", "--show-current"]), SCRATCH);
     let run = planned(&root, "p1", &["drop", MISSION, "--reason", "again"]);
     assert_eq!(run.code, 1);
     assert_eq!(
@@ -1096,13 +1090,13 @@ fn a_started_item_is_dropped_on_its_branch_and_then_refused_everywhere_with_its_
     assert_eq!(atelier(&work, "t2", &["review", ID]).code, 0);
     assert_eq!(verdict(&work, "t2", &["verdict", "approve"]).code, 0);
 
-    // Anywhere but a checkout of its branch, the drop is refused.
+    // On neither a backlog branch nor its own, the drop is refused.
     let reason = "The site greets instead";
     let run = atelier(&root, "p1", &["drop", ID, "--reason", reason]);
     assert_eq!(run.code, 1);
     assert!(
         run.stderr.starts_with(&format!(
-            "`atelier drop {ID}` refused; nothing written.\n{ID} is started, and a started item's record changes only on its branch {ID}; this checkout is on a detached HEAD.\nRun it in {}, which has {ID} checked out.\n",
+            "`atelier drop {ID}` refused; nothing written.\n{ID} is started, so it is dropped on a backlog branch or on its own branch {ID}; this checkout is on branch {SCRATCH}.\nRun it on a backlog branch, made with `atelier start --backlog drop-{ID}`, or in {}, which has {ID} checked out.\n",
             work.display()
         )),
         "{}",
@@ -1590,7 +1584,7 @@ fn a_mission_goes_from_its_branch_through_two_plan_reviews_and_its_items_to_clos
 
     let merged = atelier(&root, "p1", &["merge"]);
     assert_eq!(merged.code, 0, "{}{}", merged.stdout, merged.stderr);
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     let text = git(
         &root,
         &["show", &format!("main:{}", mission_path(&mission))],
@@ -1619,7 +1613,7 @@ fn a_mission_goes_from_its_branch_through_two_plan_reviews_and_its_items_to_clos
     let merged = atelier(&work, "t1", &["merge"]);
     assert_eq!(merged.code, 0, "{}", merged.stderr);
     // Planning goes on from the base the merge left.
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
 
     // The other item is a draft and the Result empty: close lists both.
     let run = planned(&root, "p1", &["close", &mission]);
@@ -2280,7 +2274,7 @@ fn an_agreed_missions_record_changes_merge_on_check_and_its_plan_needs_two_revie
         }),
     ];
     for (slug, change) in changes {
-        git(&root, &["checkout", "-q", "--detach", "main"]);
+        off_base(&root);
         assert_eq!(atelier(&root, "p1", &["start", "--backlog", slug]).code, 0);
         change(&root);
         git(&root, &["add", "-A"]);
@@ -2293,7 +2287,7 @@ fn an_agreed_missions_record_changes_merge_on_check_and_its_plan_needs_two_revie
 
     // A change to its Why is a change of its plan, and waits for two
     // reviews of it.
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     assert_eq!(atelier(&root, "p1", &["start", "--backlog", "why"]).code, 0);
     let path = root.join(mission_path(MISSION));
     let text = fs::read_to_string(&path).unwrap();

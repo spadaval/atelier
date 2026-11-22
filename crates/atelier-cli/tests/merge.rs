@@ -177,8 +177,9 @@ fn an_approved_item_merges_in_one_commit_and_then_reads_as_done() {
         run.stdout,
         format!(
             "Ran 1 merge check from main's config.toml on the merged tree; it passed.\n\
-             Merged {ID} into main with merge commit {}; it is done.\n",
-            &merged[..7]
+             Merged {ID} into main with merge commit {}; it is done.\n{}",
+            &merged[..7],
+            deleted(ID, &branch)
         )
     );
     // One merge commit, of the base and the branch, whose message ends
@@ -196,7 +197,7 @@ fn an_approved_item_merges_in_one_commit_and_then_reads_as_done() {
         message.ends_with(&format!("\n\nAtelier-Merge: {ID}")),
         "{message}"
     );
-    assert_eq!(git(&root, &["diff", "--name-only", ID, "main"]), "");
+    assert_eq!(git(&root, &["diff", "--name-only", &branch, "main"]), "");
     assert_eq!(field(&root, "main", "status"), "approved");
     assert_eq!(field(&root, "main", "trivial"), "null");
     // The base's checkout moved with it, and nothing is left over.
@@ -205,20 +206,19 @@ fn an_approved_item_merges_in_one_commit_and_then_reads_as_done() {
     assert_eq!(git(&root, &["status", "--porcelain"]), "");
     assert_eq!(git(&root, &["worktree", "list"]).lines().count(), 2);
 
-    let after = atelier(&root, "t1", &["status"]);
-    assert!(
-        after
-            .stdout
-            .ends_with("Status: done\nNothing is left to do on it.\n"),
-        "{}",
-        after.stdout
-    );
-    // Run again, it has nothing to do and says so.
+    // The branch is gone, and its checkout is detached where it merged.
+    assert!(!branch_exists(&root, ID));
+    assert_eq!(git(&root, &["branch", "--show-current"]), "");
+    assert_eq!(head(&root, "HEAD"), branch);
+    let shown = atelier(&root, "t1", &["show", ID]).stdout;
+    assert!(shown.contains("Status: done"), "{shown}");
+    // Run again, there is no branch to merge, and nothing changes.
     let again = merge(&root, "t1", &[]);
-    assert_eq!(again.code, 0);
-    assert_eq!(
-        again.stdout,
-        format!("{ID} is already merged into main; nothing is left to do on it.\n")
+    assert_eq!(again.code, 1);
+    assert!(
+        again.stderr.starts_with(&not_on_item("merge")),
+        "{}",
+        again.stderr
     );
     assert_eq!(head(&root, "main"), merged);
 }
@@ -243,8 +243,9 @@ fn merge_says_how_many_merge_checks_passed_or_that_none_is_configured() {
         assert_eq!(
             run.stdout,
             format!(
-                "{said}Merged {ID} into main with merge commit {}; it is done.\n",
-                &head(&root, "main")[..7]
+                "{said}Merged {ID} into main with merge commit {}; it is done.\n{}",
+                &head(&root, "main")[..7],
+                deleted(ID, &head(&root, "main^2"))
             )
         );
     }
@@ -626,8 +627,8 @@ fn of_two_merges_at_once_the_second_waits_for_the_first() {
     );
     // One line of merges on the base: the first, then the second on it.
     assert_eq!(head(&root, "main^1^1"), base);
-    assert_eq!(head(&root, "main^1^2"), head(&root, ID));
-    assert_eq!(head(&root, "main^2"), head(&root, OTHER));
+    assert_eq!(head(&root, "main^1^2"), head(&root, "HEAD"));
+    assert_eq!(head(&root, "main^2"), head(&other, "HEAD"));
 }
 
 #[test]
@@ -717,22 +718,22 @@ fn a_trivial_merge_needs_no_review_and_stores_its_reason() {
     assert_eq!(run.code, 0, "{}", run.stderr);
     // The reason is committed on the branch, alone, and the merge brings it.
     assert_eq!(
-        git(&root, &["log", "-1", "--format=%s", ID]),
+        git(&root, &["log", "-1", "--format=%s", "HEAD"]),
         format!("Merge {ID} as trivial: a typo")
     );
     assert_eq!(
-        git(&root, &["diff", "--name-only", &format!("{ID}^"), ID]),
+        git(&root, &["diff", "--name-only", "HEAD^", "HEAD"]),
         item_path(ID)
     );
     assert_eq!(field(&root, "main", "status"), "building");
     assert_eq!(field(&root, "main", "trivial"), "a typo");
-    assert_eq!(head(&root, "main^2"), head(&root, ID));
+    assert_eq!(head(&root, "main^2"), head(&root, "HEAD"));
     let shown = atelier(&root, "t1", &["show", ID]).stdout;
     assert!(shown.contains("Status: done"), "{shown}");
-    // Run again, it has nothing to do and commits nothing.
+    // Run again, there is no branch to merge, and it commits nothing.
     let again = merge(&root, "t1", &["--trivial", "a typo"]);
-    assert_eq!(again.code, 0, "{}", again.stderr);
-    assert_eq!(head(&root, "main^2"), head(&root, ID));
+    assert_eq!(again.code, 1, "{}", again.stdout);
+    assert_eq!(head(&root, "main^2"), head(&root, "HEAD"));
 }
 
 #[test]
@@ -1009,6 +1010,12 @@ fn waiting_for(wait: &str) -> String {
     )
 }
 
+/// What `merge` says once it deleted the branch merged at `head`, on the
+/// forge's remote and here.
+fn cleaned(head: &str) -> String {
+    format!("Deleted branch {ID} on origin.\n{}", deleted(ID, head))
+}
+
 /// What `merge` says once the forge merged the pull request.
 fn forge_merged() -> String {
     format!(
@@ -1164,16 +1171,17 @@ fn a_run_that_passed_on_the_submit_commit_counts_after_the_approval() {
     assert_eq!(
         run.stdout,
         format!(
-            "{}{}{}",
+            "{}{}{}{}",
             pushed_pull(),
             waiting_for("20 seconds"),
-            forge_merged()
+            forge_merged(),
+            cleaned(&approved)
         )
     );
     assert_eq!(forge.polls(ID), 2, "one before the lock, one under it");
     // The verdict commit was pushed, and the forge merged it; the local
-    // base was brought up to its merge.
-    assert_eq!(forge.remote(ID), Some(approved.clone()));
+    // base was brought up to its merge, and the branch deleted.
+    assert_eq!(forge.remote(ID), None);
     assert_eq!(forge.remote("main"), Some(head(&root, "main")));
     assert_eq!(head(&root, "main^2"), approved);
 }
@@ -1261,13 +1269,14 @@ fn merge_waits_while_a_newer_run_is_going_and_merges_as_soon_as_it_passes() {
     assert_eq!(
         run.stdout,
         format!(
-            "{}{}{}",
+            "{}{}{}{}",
             pushed_pull(),
             waiting_for("20 seconds"),
-            forge_merged()
+            forge_merged(),
+            cleaned(&approved)
         )
     );
-    assert_eq!(forge.remote(ID), Some(approved));
+    assert_eq!(forge.remote(ID), None);
 }
 
 #[test]
@@ -1565,7 +1574,7 @@ fn another_items_merge_completes_while_one_waits() {
     let waiting = forge.waiting(&root, ID);
     let second = forge.atelier(&other, "t1", &["merge"]);
     assert_eq!(second.code, 0, "{}", second.stderr);
-    assert_eq!(head(&root, "main^2"), head(&root, OTHER));
+    assert_eq!(head(&root, "main^2"), head(&other, "HEAD"));
     let first = head(&root, "main");
 
     // Once its CI passes, the first merges onto the base the second left.
@@ -1573,7 +1582,7 @@ fn another_items_merge_completes_while_one_waits() {
     let run = run(waiting.wait_with_output().unwrap());
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert_eq!(head(&root, "main^1"), first);
-    assert_eq!(head(&root, "main^2"), head(&root, ID));
+    assert_eq!(head(&root, "main^2"), head(&root, "HEAD"));
 }
 
 /// Starts `merge` waiting for a run in progress on the head, changes the
@@ -1670,11 +1679,16 @@ fn with_no_ci_workflow_submit_pushes_and_opens_and_merge_waits_for_nothing() {
     let submitted = forge.submitted();
     assert_eq!(forge.remote(ID), Some(submitted.clone()));
     assert_eq!(forge.opened(), 1);
+    let approved = head(&root, ID);
     let run = forge.merge();
     assert_eq!(run.code, 0, "{}", run.stderr);
-    assert_eq!(run.stdout, format!("{}{}", pushed_pull(), forge_merged()));
+    assert_eq!(
+        run.stdout,
+        format!("{}{}{}", pushed_pull(), forge_merged(), cleaned(&approved))
+    );
     assert_eq!(forge.polls(ID), 0);
-    assert_eq!(forge.remote(ID), Some(head(&root, ID)));
+    assert_eq!(forge.remote(ID), None);
+    assert_eq!(head(&root, "main^2"), approved);
     assert_eq!(forge.remote("main"), Some(head(&root, "main")));
     assert_eq!(field(&root, "main", "status"), "approved");
 }
@@ -1734,9 +1748,10 @@ fn on_a_protected_base_the_item_loop_merges_through_the_forge_and_a_fresh_clone_
     assert_eq!(
         run.stdout,
         format!(
-            "{}{}Ran 1 merge check from main's config.toml on the merged tree; it passed.\nThe forge merged pull request #7 into main; {ID} is done.\n",
+            "{}{}Ran 1 merge check from main's config.toml on the merged tree; it passed.\nThe forge merged pull request #7 into main; {ID} is done.\n{}",
             pushed_pull(),
             waiting_for("20 seconds"),
+            cleaned(&approved),
         )
     );
     // The forge was asked to merge the head checked, as a merge commit,
@@ -1784,8 +1799,8 @@ fn on_a_protected_base_the_item_loop_merges_through_the_forge_and_a_fresh_clone_
     );
     // This clone fetched the merge and brought its base up to it.
     assert_eq!(head(&root, "main"), merged);
-    let status = forge.atelier(&root, "t1", &["status"]).stdout;
-    assert!(status.contains("Status: done\n"), "{status}");
+    let shown = forge.atelier(&root, "t1", &["show", ID]).stdout;
+    assert!(shown.contains("Status: done\n"), "{shown}");
 
     // A fresh clone reads the item done.
     let fresh = forge.scratch.dir.path().join("fresh");
@@ -1801,13 +1816,9 @@ fn on_a_protected_base_the_item_loop_merges_through_the_forge_and_a_fresh_clone_
     let shown = forge.atelier(&fresh, "t9", &["show", ID]);
     assert_eq!(shown.code, 0, "{}", shown.stderr);
     assert!(shown.stdout.contains("Status: done\n"), "{}", shown.stdout);
-    // Run again, there is nothing left to do.
-    let again = forge.merge();
-    assert_eq!(again.code, 0, "{}", again.stderr);
-    assert_eq!(
-        again.stdout,
-        format!("{ID} is already merged into main; nothing is left to do on it.\n")
-    );
+    // The hooks let the merged branch's deletion through.
+    assert_eq!(forge.remote(ID), None);
+    assert!(!branch_exists(&root, ID));
     // And no push moves the protected base: the pre-push hook refuses it.
     git(&root, &["switch", "-q", "main"]);
     fs::write(root.join("other.txt"), "other\n").unwrap();
@@ -1910,7 +1921,10 @@ fn where_the_forge_waits_on_a_required_review_or_check_merge_exits_not_yet_and_m
     fs::remove_file(forge.gh.join("view")).unwrap();
     let run = forge.merge();
     assert_eq!(run.code, 0, "{}", run.stderr);
-    assert_eq!(run.stdout, format!("{PULL}{}", forge_merged()));
+    assert_eq!(
+        run.stdout,
+        format!("{PULL}{}{}", forge_merged(), cleaned(&approved))
+    );
     assert_eq!(forge.remote("main"), Some(head(&root, "main")));
 }
 
@@ -1924,13 +1938,14 @@ fn a_forge_merge_the_local_base_cannot_follow_still_reads_as_done() {
     let base = forge.scratch.worktree("base");
     git(&base, &["switch", "-q", "main"]);
     append(&base, ".atelier/config.toml", "# a note\n");
-    let tip = head(&root, "main");
+    let (tip, approved) = (head(&root, "main"), head(&root, ID));
     let run = forge.merge();
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert!(
         run.stdout.ends_with(&format!(
-            "The forge merged pull request #7 into main; {ID} is done.\nmain is checked out at {}, where tracked files have uncommitted changes, so it was left as it was. Bring it up to date there with `git merge --ff-only origin/main`.\n",
-            base.display()
+            "The forge merged pull request #7 into main; {ID} is done.\nmain is checked out at {}, where tracked files have uncommitted changes, so it was left as it was. Bring it up to date there with `git merge --ff-only origin/main`.\n{}",
+            base.display(),
+            cleaned(&approved)
         )),
         "{}",
         run.stdout
@@ -1939,13 +1954,10 @@ fn a_forge_merge_the_local_base_cannot_follow_still_reads_as_done() {
     assert!(read(&base, ".atelier/config.toml").ends_with("# a note\n"));
     let shown = forge.atelier(&root, "t1", &["show", ID]).stdout;
     assert!(shown.contains("Status: done\n"), "{shown}");
-    // Run again, it is merged, and nothing more is asked of the forge.
-    let again = forge.merge();
-    assert_eq!(again.code, 0, "{}", again.stderr);
-    assert_eq!(
-        again.stdout,
-        format!("{ID} is already merged into main; nothing is left to do on it.\n")
-    );
+    // The forge's base as fetched holds it, so the branch is deleted, and
+    // run again nothing more is asked of the forge.
+    assert_eq!(forge.remote(ID), None);
+    assert_eq!(forge.merge().code, 1);
     let merges = fs::read_to_string(forge.gh.join("merged")).unwrap();
     assert_eq!(merges.lines().count(), 1);
 }
@@ -1963,12 +1975,14 @@ fn a_forge_merge_onto_a_base_the_local_one_diverged_from_still_reads_as_done() {
     git(&base, &["add", "local.txt"]);
     git(&base, &["commit", "-qm", "Local only"]);
     let local = head(&root, "main");
+    let approved = head(&root, ID);
     let run = forge.merge();
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert!(
-        run.stdout.ends_with(
-            "The local main has commits origin/main does not, so it was left as it was; no merge made them. Move it to origin/main once they are on a branch.\n"
-        ),
+        run.stdout.ends_with(&format!(
+            "The local main has commits origin/main does not, so it was left as it was; no merge made them. Move it to origin/main once they are on a branch.\n{}",
+            cleaned(&approved)
+        )),
         "{}",
         run.stdout
     );
@@ -1976,12 +1990,7 @@ fn a_forge_merge_onto_a_base_the_local_one_diverged_from_still_reads_as_done() {
     assert_eq!(head(&base, "HEAD"), local);
     let shown = forge.atelier(&root, "t1", &["show", ID]).stdout;
     assert!(shown.contains("Status: done\n"), "{shown}");
-    let again = forge.merge();
-    assert_eq!(again.code, 0, "{}", again.stderr);
-    assert_eq!(
-        again.stdout,
-        format!("{ID} is already merged into main; nothing is left to do on it.\n")
-    );
+    assert_eq!(forge.merge().code, 1);
     let merges = fs::read_to_string(forge.gh.join("merged")).unwrap();
     assert_eq!(merges.lines().count(), 1);
     assert_eq!(head(&root, "main"), local);
@@ -2105,13 +2114,17 @@ fn with_a_skip_a_failing_merge_check_or_uncommitted_change_does_not_stop_the_mer
     assert_eq!(
         run.stdout,
         format!(
-            "{}{}Merged {ID} into main with merge commit {}; it is done.\n",
+            "{}{}Merged {ID} into main with merge commit {}; it is done.\n\
+             Left branch {ID} checked out, since this checkout holds changes the merge does not. \
+             Take them to a branch made with `atelier start --backlog <slug>` or `atelier start <id>`.\n",
             skipped(&rules[0]),
             skipped(&rules[1]),
             &head(&root, "main")[..7]
         )
     );
     assert_eq!(field(&root, "main", "status"), "approved");
+    // The branch stays under what is not committed.
+    assert_eq!(git(&root, &["branch", "--show-current"]), ID);
     // The merge commit was made again once the check was skipped, so its
     // message names both.
     let message = git(&root, &["log", "-1", "--format=%B", "main"]);
@@ -2266,11 +2279,12 @@ fn with_a_skip_ci_that_failed_or_has_not_finished_passes_and_a_failing_forge_doe
     assert_eq!(
         run.stdout,
         format!(
-            "{}{}{}{}",
+            "{}{}{}{}{}",
             pushed_pull(),
             waiting_for("20 seconds"),
             skipped(rule),
-            forge_merged()
+            forge_merged(),
+            cleaned(&approved)
         )
     );
     let message = git(&root, &["log", "-1", "--format=%B", "main"]);

@@ -234,7 +234,7 @@ fn status_on_the_base_shows_what_can_start_the_missions_in_progress_and_what_wai
     assert_eq!(
         stdout(&root, "p1", &["status"]),
         NO_HOOKS.to_string()
-            + "You are thread p1, on a detached HEAD.\n\
+            + "You are thread p1, on branch scratch, which is no item's.\n\
          Ready to start:\n  demo-a1aa (high): Say hello\n  demo-g7gg (medium): Add a version flag\n\
          1 other ready item cannot start yet: 1 waits on a blocker that is not done. \
          See it with: atelier list\n\

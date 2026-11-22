@@ -18,6 +18,7 @@
 //! carried over. The wait for CI before the lock, and which runs count for
 //! the head, are new.
 
+use crate::cleanup;
 use crate::commands::{self, hold, Outcome};
 use crate::git;
 use crate::output;
@@ -97,7 +98,14 @@ pub fn merge(root: &Path, caller: Thread, trivial: Option<String>, skip: &Skip) 
         Err(outcome) => return Ok(outcome),
     };
     if merged {
-        return Ok(Outcome::Done(publish(repo, &id)));
+        // Run again, as after a catch-up that failed, it finishes the
+        // cleanup, but leaves a branch someone is still writing on.
+        let mut said = output::already_merged(&id, &repo.base);
+        said += &match cleanup::unsaved(repo)? {
+            true => output::branch_attached(&branch),
+            false => cleanup::delete_merged(repo, config.forge.as_ref(), &branch, &head),
+        };
+        return Ok(Outcome::Done(said));
     }
 
     // What the checks run on, confirmed unchanged before anything is
@@ -276,7 +284,7 @@ fn checked_merge(
 /// Merges `commit`, the merge of the branch whose `head` the checks ran
 /// on with the base at `base_tip`, once nothing they read has moved: with
 /// a forge, by its merge of the pull request `pull`; without one, by
-/// moving the local base.
+/// moving the local base. Then it cleans up after the merge.
 #[allow(clippy::too_many_arguments)]
 fn finish(
     repo: &mut Repo,
@@ -291,6 +299,12 @@ fn finish(
 ) -> Result<Outcome> {
     let commit = commit.as_str();
     let (root, base) = (repo.root.clone(), repo.base.clone());
+    let branch = repo.branch.clone().context("merge runs on a branch")?;
+    // What the branch drops is told against the base it merges into.
+    let dropped = match &config.forge {
+        Some(_) => cleanup::dropped_here(repo, base_tip, head)?,
+        None => Vec::new(),
+    };
     let read = (head, base_tip, uncommitted);
     let base_read = match &config.forge {
         None => Some(base_checkout.zip(base_dirt)),
@@ -323,6 +337,7 @@ fn finish(
             true => output::records_merged(id, &base, commit),
             false => output::merged(id, &base, commit),
         };
+        said += &cleanup::delete_merged(repo, None, &branch, head);
         return Ok(Outcome::Done(said));
     };
     // With a forge the base moves only by its merge of the pull request,
@@ -357,6 +372,8 @@ fn finish(
     }
     said += &output::forge_merged(id, &base, pull);
     said += &catch_up(&root, &forge.remote, &base)?;
+    said += &cleanup::close_pull_requests(repo, forge, &dropped, &branch);
+    said += &cleanup::delete_merged(repo, Some(forge), &branch, head);
     Ok(Outcome::Done(said))
 }
 
@@ -398,9 +415,7 @@ fn forge_refused(
 /// Says what it could not do; the merge is made either way.
 fn catch_up(root: &Path, remote: &str, base: &str) -> Result<String> {
     let tracking = format!("refs/remotes/{remote}/{base}");
-    let refspec = format!("+refs/heads/{base}:{tracking}");
-    let fetched = git::run(root, &["fetch", "--quiet", remote, &refspec]);
-    if let Err(error) = fetched {
+    if let Err(error) = git::fetch_branch(root, remote, base) {
         return Ok(output::not_fetched(remote, base, &error));
     }
     let merged = git::run(root, &["rev-parse", &tracking])?;
@@ -1048,11 +1063,6 @@ fn counts(
                 .all(|path| path.starts_with(&own)));
     known.insert(commit.to_string(), counts);
     Ok(counts)
-}
-
-/// `merge` run again on a branch the base holds already.
-fn publish(repo: &Repo, id: &str) -> String {
-    output::already_merged(id, &repo.base)
 }
 
 /// What moved while the checks ran.

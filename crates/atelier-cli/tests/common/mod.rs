@@ -3,6 +3,8 @@
 
 #![allow(dead_code)]
 
+pub mod hub;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -29,15 +31,49 @@ pub const MAY_START: &str = "Start one only if that is your task: atelier start 
 /// one task it gives.
 pub const START_ONE: &str = "must be a thread other than yours, and starting it is your job: it is part of the task you were given, even as another thread's child or subagent, and nobody else will start it. So start one yourself now, without waiting to be asked. Under Codex a subagent you start is one; under Claude Code a subagent runs as your thread and is refused, so use your harness's tool for a new agent thread. Give it fresh context, not a fork of yours, and give it this task:\n";
 
+/// The fixture's branch, which the convention does not name, so it takes
+/// any record change.
+pub const SCRATCH: &str = "scratch";
+
+/// Puts the fixture's checkout back on [`SCRATCH`], at `main`.
+pub fn off_base(root: &Path) {
+    git(root, &["checkout", "-q", "-B", SCRATCH, "main"]);
+}
+
+/// Whether `at` is where a commit stands in for a backlog branch's merge:
+/// on [`SCRATCH`], or detached.
+pub fn stands_in(at: &Path) -> bool {
+    matches!(
+        git(at, &["branch", "--show-current"]).as_str(),
+        "" | SCRATCH
+    )
+}
+
+/// What `merge` says once it deleted `branch` here, merged at `head`.
+pub fn deleted(branch: &str, head: &str) -> String {
+    format!(
+        "Deleted branch {branch} here; this checkout is on a detached HEAD at {}. For further changes, run `atelier start --backlog <slug>` or `atelier start <id>`.\n",
+        &head[..7]
+    )
+}
+
+/// What a command that runs on an item's branch says on a detached HEAD,
+/// as `merge` run again once its branch is deleted.
+pub fn not_on_item(command: &str) -> String {
+    format!(
+        "`atelier {command}` runs on an item's branch, and this checkout is on a detached HEAD. Nothing changed.\n"
+    )
+}
+
 pub struct Scratch {
     pub dir: TempDir,
 }
 
 impl Scratch {
     /// A repository whose one commit, on `main`, holds `items`, each an
-    /// ID with its status. Its checkout is detached at that commit, since
-    /// nothing is written in the base's own checkout; [`on_base`] commits
-    /// there.
+    /// ID with its status. Its checkout is on [`SCRATCH`] at that commit,
+    /// since nothing is written in the base's own checkout or on a detached
+    /// HEAD; [`on_base`] commits there.
     pub fn new(items: &[(&str, &str)]) -> Scratch {
         let scratch = Scratch {
             dir: TempDir::new().unwrap(),
@@ -55,7 +91,7 @@ impl Scratch {
         }
         git(&root, &["add", "-A"]);
         git(&root, &["commit", "-qm", "Plan"]);
-        git(&root, &["checkout", "-q", "--detach"]);
+        git(&root, &["checkout", "-q", "-b", SCRATCH]);
         scratch
     }
 
@@ -81,7 +117,7 @@ impl Scratch {
     }
 }
 
-/// Commits everything in the detached checkout `at` as `message`, and moves
+/// Commits everything in the checkout `at` as `message`, and moves
 /// `main` to that commit, as a merge of a backlog branch would.
 pub fn on_base(at: &Path, message: &str) {
     git(at, &["add", "-A"]);
@@ -231,7 +267,7 @@ pub fn verdict(at: &Path, thread: &str, args: &[&str]) -> Run {
 
 /// A planning command as `thread`, and, when it wrote its records, the
 /// commit it printed, with the base moved to it, as the merge of a
-/// backlog branch would move it. `at` is a detached checkout.
+/// backlog branch would move it. `at` is on [`SCRATCH`].
 pub fn planned(at: &Path, thread: &str, args: &[&str]) -> Run {
     let run = atelier(at, thread, args);
     if run.code == 0 && run.stdout.contains("\nThen: git ") {
@@ -351,8 +387,12 @@ pub fn submitted() -> Scratch {
 /// `pr merge` merges as the forge does, in the bare repository whose path
 /// is in `remote`, past its hooks: a merge commit of `main` and the head
 /// `--match-head-commit` names, which must be a branch's tip there, with
-/// the subject and body given. Then no pull request is open, and a line is
-/// added to `merged`. While `merge-refused` exists it refuses as GitHub
+/// the subject and body given. Then no pull request is open, a line is
+/// added to `merged`, and the shell file `after-merge` is run, where there
+/// is one, for what happens before `merge` hears back. `pr close` adds its
+/// arguments to `closed`, or fails while `close-refused` exists; a lookup
+/// of the pull requests from a branch answers with `open/<branch>`, where
+/// there is one, rather than `pulls`. While `merge-refused` exists it refuses as GitHub
 /// does when the base's protection is not met. `pr view` answers with
 /// `view`, or an open pull request with nothing missing.
 pub const FAKE_GH: &str = r#"#!/bin/sh
@@ -395,6 +435,12 @@ if [ "$1" = pr ] && [ "$2" = merge ]; then
   git --git-dir="$remote" update-ref refs/heads/main "$commit" || exit 1
   echo '[]' > "$FAKE_GH/pulls"
   echo "$head" >> "$FAKE_GH/merged"
+  if [ -f "$FAKE_GH/after-merge" ]; then . "$FAKE_GH/after-merge" >&2; fi
+  exit 0
+fi
+if [ "$1" = pr ] && [ "$2" = close ]; then
+  if [ -f "$FAKE_GH/close-refused" ]; then echo "HTTP 502: Bad Gateway" >&2; exit 1; fi
+  echo "$*" >> "$FAKE_GH/closed"
   exit 0
 fi
 method=GET
@@ -417,6 +463,15 @@ case "$answer" in
     ;;
 esac
 if [ "$answer" = pulls ] && [ "$method" = GET ]; then
+  for arg in "$@"; do
+    case "$arg" in
+      head=*:*)
+        if [ -f "$FAKE_GH/open/${arg#head=*:}" ]; then
+          cat "$FAKE_GH/open/${arg#head=*:}"
+          exit 0
+        fi ;;
+    esac
+  done
   if [ -f "$FAKE_GH/pulls-stall" ]; then echo $$ > "$FAKE_GH/stalled"; exec sleep 600; fi
   if [ -f "$FAKE_GH/pulls-down" ]; then echo "HTTP 502: Bad Gateway" >&2; exit 1; fi
 fi

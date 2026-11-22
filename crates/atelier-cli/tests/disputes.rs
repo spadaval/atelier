@@ -173,7 +173,7 @@ fn a_rebuttal_the_next_reviewer_keeps_has_had_its_one_try_until_a_reviewer_lower
     );
     let merged = atelier(&root, "t1", &["merge"]);
     assert_eq!(merged.code, 0, "{}", merged.stderr);
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     assert!(atelier(&root, "t9", &["list", "--deferred"])
         .stdout
         .contains(&format!("  {ID}/{stem}.1: No period\n")),);
@@ -231,7 +231,7 @@ fn decided_before_removal(root: &Path, finding: &str) -> String {
     git(root, &["switch", "-q", "main"]);
     git(root, &["merge", "-q", "--no-ff", ID, "-m", "Merge"]);
     // Nothing is written in the base's own checkout.
-    git(root, &["checkout", "-q", "--detach"]);
+    off_base(root);
     "2-dcdd.1".into()
 }
 

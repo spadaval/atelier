@@ -254,6 +254,22 @@ impl Github {
         self.gh(&args, "gh pr merge").map(drop)
     }
 
+    /// Closes pull request `number` with `comment`, and leaves its branch.
+    pub fn close_pull_request(&self, number: u64, comment: &str) -> Result<(), ForgeError> {
+        let number = number.to_string();
+        let repo = self.repo();
+        let args = [
+            "pr",
+            "close",
+            &number,
+            "--repo",
+            &repo,
+            "--comment",
+            comment,
+        ];
+        self.gh(&args, "gh pr close").map(drop)
+    }
+
     /// Where pull request `number` stands for a merge, as the forge says.
     pub fn merge_state(&self, number: u64) -> Result<MergeState, ForgeError> {
         let number = number.to_string();

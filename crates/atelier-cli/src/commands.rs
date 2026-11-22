@@ -7,7 +7,9 @@ use atelier_core::forge::Github;
 use atelier_core::model::{validate_slug, Forge, MissionStatus, Named, Status};
 use atelier_core::plan::{approvals, Approvals};
 use atelier_core::records::{render_item, render_mission, validate_id, Problem, ReadError};
-use atelier_core::repo::{facts, item_dir, item_path, mission_path, planning, write_and_commit};
+use atelier_core::repo::{
+    facts, item_dir, item_path, mission_path, on_base, planning, write_and_commit,
+};
 use atelier_core::{
     annotate, annotate_all, entry, overview, refused, Done, Entry, Located, Refused, Repo,
 };
@@ -112,6 +114,8 @@ fn orientation(repo: &mut Repo) -> Result<String> {
     };
     let reviewing = plan_reviews(repo)?;
     let mut unsaved = unsaved(repo)?;
+    unsaved += &output::unattached(&git::unattached(&repo.root)?);
+    unsaved += &piled_up(repo)?;
     // A stop of a mission this checkout holds dropped, until published.
     for id in repo.store().ids("missions")? {
         let dropped =
@@ -143,6 +147,22 @@ fn orientation(repo: &mut Repo) -> Result<String> {
         &unsaved,
         there.as_deref(),
     ))
+}
+
+/// From this many merged local branches, or detached worktrees, `status`
+/// says they have piled up.
+const MANY_MERGED: usize = 20;
+const MANY_DETACHED: usize = 10;
+
+/// `status`'s line on merged branches and detached worktrees piling up. It
+/// only counts: a detached worktree may be a reviewer at work.
+fn piled_up(repo: &Repo) -> Result<String> {
+    let merged = git::merged_branches(&repo.root, &repo.base, &repo.base_tip)?;
+    let detached = git::detached_worktrees(&repo.root)?;
+    Ok(match merged >= MANY_MERGED || detached >= MANY_DETACHED {
+        true => output::piled_up(&repo.base, merged, detached),
+        false => String::new(),
+    })
 }
 
 /// How the base's checkout, which `start` never switches, sends the holder
@@ -234,6 +254,13 @@ fn unsaved(repo: &Repo) -> Result<String> {
 
 pub fn start(repo: &mut Repo, id: &str) -> Result<Outcome> {
     validate_id(id).map_err(|message| anyhow!(message))?;
+    // A merged branch is deleted, and a drop can be the base's alone, so
+    // only the base as it is now says the item can still be claimed.
+    if let Err(error) = fetch_base(repo) {
+        let remote = repo.remote().unwrap_or("the remote");
+        let text = output::base_unread(id, &repo.base, remote, &error);
+        return Ok(Outcome::Refused(text));
+    }
     let located = repo.locate(id)?;
     let Some(record) = located.record() else {
         return Ok(output::no_item(id, &repo.base).into());
@@ -265,6 +292,7 @@ pub fn start(repo: &mut Repo, id: &str) -> Result<Outcome> {
             branch,
             record: Some((item_path(id), render_item(&item), format!("Start {id}"))),
             item: Some(id),
+            existing: true,
         };
         return begin(repo, claim, output::started(id, &repo.branch_of(id)));
     }
@@ -291,6 +319,9 @@ fn take_over(repo: &mut Repo, id: &str, branch: &str, located: &Located) -> Resu
                 id, branch, &path,
             )));
         }
+    }
+    if let Some(refused) = stranding(repo)? {
+        return Ok(refused);
     }
     let local = git::branch_tip(&root, branch)?;
     // Bring the local branch to the forge's tip where the forge is ahead,
@@ -360,6 +391,18 @@ fn take_over(repo: &mut Repo, id: &str, branch: &str, located: &Located) -> Resu
                     id, branch, &remote, &error,
                 )));
             }
+            if let Err(error) = fetch_base(repo) {
+                let text = output::claim_unconfirmed(id, branch, &repo.base, &remote, &error);
+                return Ok(Outcome::Refused(text));
+            }
+            // A losing take-over deletes nothing: the branch holds the
+            // earlier implementer's work.
+            if let Some(status) = finished(repo, id)? {
+                let here = (!on_base).then_some(branch);
+                let text =
+                    output::take_over_finished(id, branch, &repo.base, &remote, status, here);
+                return Ok(Outcome::Refused(text));
+            }
         }
         output::taken_over(id, before.as_ref())
     };
@@ -385,6 +428,7 @@ pub fn start_new(repo: &mut Repo, title: &str) -> Result<Outcome> {
         branch: repo.branch_of(&id),
         record: Some((item_path(&id), render_item(&item), format!("Start {id}"))),
         item: Some(&id),
+        existing: false,
     };
     begin(repo, claim, output::started_new(&id, &repo.branch_of(&id)))
 }
@@ -403,6 +447,7 @@ pub fn start_mission(repo: &mut Repo, title: &str) -> Result<Outcome> {
             format!("Plan mission {id}"),
         )),
         item: None,
+        existing: false,
     };
     begin(repo, claim, output::started_mission(&id, &branch))
 }
@@ -438,6 +483,7 @@ pub fn start_backlog(repo: &mut Repo, slug: &str) -> Result<Outcome> {
         branch: branch.clone(),
         record: None,
         item: None,
+        existing: false,
     };
     begin(repo, claim, output::started_backlog(&branch))
 }
@@ -449,6 +495,9 @@ struct Claim<'a> {
     branch: String,
     record: Option<(String, String, String)>,
     item: Option<&'a str>,
+    /// The item had a record before the claim, which can be ended on the
+    /// base while the claim is made.
+    existing: bool,
 }
 
 /// Makes `claim`: commits its record on the base's tip, then creates its
@@ -457,6 +506,9 @@ struct Claim<'a> {
 /// except in the base's own checkout, where it prints the `git worktree
 /// add` that gives the branch a checkout of its own.
 fn begin(repo: &mut Repo, claim: Claim, said: String) -> Result<Outcome> {
+    if let Some(refused) = stranding(repo)? {
+        return Ok(refused);
+    }
     let root = repo.root.clone();
     let branch = &claim.branch;
     let commit = match &claim.record {
@@ -489,6 +541,19 @@ fn begin(repo: &mut Repo, claim: Claim, said: String) -> Result<Outcome> {
             git::delete_branch(&root, branch, &commit)?;
             return Ok(Outcome::Refused(lost_claim(repo, &claim, &remote, &error)?));
         }
+        if let Some(id) = claim.item.filter(|_| claim.existing) {
+            if let Err(error) = fetch_base(repo) {
+                let text = output::claim_unconfirmed(id, branch, &repo.base, &remote, &error);
+                return Ok(Outcome::Refused(text));
+            }
+            if let Some(status) = finished(repo, id)? {
+                // Only the local branch goes: a remote one is deleted by
+                // `merge` alone, and the base's record wins over this one.
+                git::delete_branch(&root, branch, &commit)?;
+                let text = output::start_finished(id, branch, &repo.base, &remote, status);
+                return Ok(Outcome::Refused(text));
+            }
+        }
     }
     if repo.branch.as_deref() == Some(repo.base.as_str()) {
         let path = worktree_path(repo, branch);
@@ -502,6 +567,35 @@ fn begin(repo: &mut Repo, claim: Claim, said: String) -> Result<Outcome> {
     git::switch(&root, branch).with_context(|| output::not_switched(branch))?;
     let mut repo = crate::open(&repo.dir, repo.skip)?;
     Ok(Outcome::Done(format!("{said}\n{}", status(&mut repo)?)))
+}
+
+/// Fetches the base from the remote, where one is configured, and judges
+/// by it from then on.
+fn fetch_base(repo: &mut Repo) -> Result<()> {
+    let Some(remote) = repo.remote().map(str::to_string) else {
+        return Ok(());
+    };
+    git::fetch_branch(&repo.root, &remote, &repo.base)?;
+    repo.reread_base()
+}
+
+/// The status that ends item `id` on the base, if one does.
+fn finished(repo: &mut Repo, id: &str) -> Result<Option<Status>> {
+    let tip = repo.base_tip.clone();
+    let found = repo.item_at(&tip, id)?.map(|dir| on_base(dir).item.status);
+    Ok(found.filter(|status| matches!(status, Status::Done | Status::Dropped)))
+}
+
+/// `start` refused where switching away from a detached HEAD would leave
+/// commits on no branch. A rule, checked before anything is written.
+fn stranding(repo: &Repo) -> Result<Option<Outcome>> {
+    let commits = git::unattached(&repo.root)?;
+    if commits.is_empty() {
+        return Ok(None);
+    }
+    let text = output::start_strands(&commits);
+    let rule = output::rule_start_strands();
+    Ok(repo.skip.refuse([rule], text).map(Outcome::from))
 }
 
 /// Pushes `commit` to `remote` as the new branch `branch`, which the remote
@@ -595,6 +689,14 @@ pub fn submit(repo: &mut Repo) -> Result<Outcome> {
     if records_branch(repo)?.is_some() {
         return submit_records(repo);
     }
+    let mut unfetched = String::new();
+    if let Some(Named::Record(id)) = repo.named() {
+        // Unreached, the last fetch judges, and `merge` judges again.
+        if let Err(error) = fetch_base(repo) {
+            let remote = repo.remote().unwrap_or("the remote");
+            unfetched = output::submit_base_unread(&id, &repo.base, remote, &error);
+        }
+    }
     let Some(located) = repo.current()? else {
         return Ok(Outcome::Refused(output::not_on_item(
             "submit",
@@ -637,7 +739,10 @@ pub fn submit(repo: &mut Repo) -> Result<Outcome> {
         None => String::new(),
     };
     Ok(Outcome::Done(output::submitted(
-        &item.id, &repo.root, &left, &shared,
+        &item.id,
+        &repo.root,
+        &left,
+        &(unfetched + &shared),
     )))
 }
 

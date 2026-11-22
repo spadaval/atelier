@@ -3,9 +3,9 @@
 
 use crate::api::{
     ActionRequest, ApiError, DisputedRepo, DisputedResponse, EmbedResponse, FetchMark, Hold,
-    InboxRepo, InboxResponse, MissionRow, MissionState, MotionRepo, MotionResponse, PrMark,
-    ProposedRepo, ProposedResponse, RepoSummary, ReposResponse, SessionRequest, StopAction,
-    ThreadsResponse, TiesResponse,
+    InboxRepo, InboxResponse, MissionPage, MissionRow, MissionState, MotionRepo, MotionResponse,
+    PrMark, ProposedRepo, ProposedResponse, RepoSummary, ReposResponse, SessionRequest, Status,
+    StopAction, ThreadsResponse, TiesResponse,
 };
 use crate::config::Config;
 use crate::fetch::{self, Fetches};
@@ -25,7 +25,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
-use std::any::Any;
+use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -55,8 +55,9 @@ pub struct Desk {
     pub fetches: Fetches,
     /// Plans proposed and merged, as the Desk saw them.
     pub news: News,
-    /// By repository and route.
-    cache: Mutex<HashMap<(String, String), Slot>>,
+    /// By repository, route and the type kept, so that two readers of one
+    /// route that keep different types never read each other's as missing.
+    cache: Mutex<HashMap<(String, String, TypeId), Slot>>,
     /// Each repository's remote, as its configuration names it at
     /// `HEAD`, and whether its forge is GitHub's, by name.
     remotes: Mutex<HashMap<String, (Option<String>, bool)>>,
@@ -222,7 +223,7 @@ impl Desk {
         let mut repo = read::open(dir, &self.config.caller, &skip)?;
         self.remember(name, &repo);
         let commits = read::commits(&repo)?;
-        let slot = (name.to_string(), route.to_string());
+        let slot = (name.to_string(), route.to_string(), TypeId::of::<T>());
         if let Some((at, kept)) = self.cache.lock().unwrap().get(&slot) {
             if *at == commits {
                 return Ok(kept.downcast_ref::<T>().cloned());
@@ -283,6 +284,16 @@ impl Desk {
             Ok(None) => Err(Failure::NotFound(missing())),
             Err(error) => Err(Failure::Failed(format!("{error:#}"))),
         }
+    }
+
+    /// Mission `id`'s page as read from `repo`, and the branch the
+    /// convention names for it: what its page and a planning session of it
+    /// both read, and so keep once.
+    fn mission_read(&self, repo: &str, id: &str) -> Result<(MissionPage, String), Failure> {
+        let missing = || format!("No mission {id} is on the base or on a branch.");
+        self.repo_route(repo, &format!("mission {id}"), missing, |r| {
+            Ok(read::mission(r, id)?.map(|page| (page, r.branch_of(id))))
+        })
     }
 
     /// One response per repository served, each from `build` or with the
@@ -568,16 +579,16 @@ async fn mission(
 ) -> Response {
     blocking(move || {
         checked(&id)?;
-        let missing = || format!("No mission {id} is on the base or on a branch.");
-        let mut page = desk.repo_route(&repo, &format!("mission {id}"), missing, |r| {
-            read::mission(r, &id)
-        })?;
+        let (mut page, own) = desk.mission_read(&repo, &id)?;
         let dir = desk.served(&repo)?;
         let snapshot = desk.threads.snapshot();
         snapshot.join(&mut page.threads);
         page.t3 = snapshot.state;
-        page.pull_request =
-            (page.mission.branch.clone()).and_then(|b| desk.pull_request(&repo, &dir, &b));
+        // A merged branch is deleted, and its pull request is still the
+        // forge's, under the name the convention gives the branch.
+        let agreed = page.mission.state != MissionState::Proposed;
+        let branch = (page.mission.branch.clone()).or_else(|| agreed.then_some(own));
+        page.pull_request = branch.and_then(|b| desk.pull_request(&repo, &dir, &b));
         desk.settle(&repo, &dir, &mut page.mission);
         page.can_stop &= desk.config.state.is_some();
         page.fetched = desk.fetched(&repo, &dir);
@@ -620,16 +631,18 @@ async fn item(
     blocking(move || {
         checked(&id)?;
         let missing = || format!("No item {id} is on the base or on a branch.");
-        let mut page = desk.repo_route(&repo, &format!("item {id}"), missing, |r| {
-            read::item(r, &id)
+        let (mut page, own) = desk.repo_route(&repo, &format!("item {id}"), missing, |r| {
+            Ok(read::item(r, &id)?.map(|page| (page, r.branch_of(&id))))
         })?;
         let snapshot = desk.threads.snapshot();
         snapshot.join(&mut page.threads);
         page.t3 = snapshot.state;
         let dir = desk.served(&repo)?;
         page.fetched = desk.fetched(&repo, &dir);
-        page.pull_request =
-            (page.row.branch.as_ref()).and_then(|b| desk.pull_request(&repo, &dir, &b.name));
+        let ended = matches!(page.row.status, Status::Done | Status::Dropped);
+        let branch =
+            (page.row.branch.as_ref().map(|b| b.name.clone())).or_else(|| ended.then_some(own));
+        page.pull_request = branch.and_then(|b| desk.pull_request(&repo, &dir, &b));
         Ok(page)
     })
     .await
@@ -881,10 +894,7 @@ async fn session(
 ) -> Response {
     blocking(move || {
         checked(&mission)?;
-        let missing = || format!("No mission {mission} is on the base or on a branch.");
-        let page = desk.repo_route(&repo, &format!("mission {mission}"), missing, |r| {
-            read::mission(r, &mission)
-        })?;
+        let (page, _) = desk.mission_read(&repo, &mission)?;
         let dir = desk.served(&repo)?;
         let t3 = desk.config.t3.as_ref();
         let title = &page.mission.title;
@@ -903,6 +913,32 @@ async fn session(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_route_kept_as_one_type_is_not_missing_to_a_reader_of_another() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let root = dir.path();
+        std::fs::create_dir(root.join(".atelier")).unwrap();
+        std::fs::write(
+            root.join(".atelier/config.toml"),
+            "schema_version = 3\nslug = \"demo\"\nbase_branch = \"main\"\n",
+        )
+        .unwrap();
+        let git = |args: &[&str]| atelier_core::git::run(root, args).unwrap();
+        git(&["init", "-q", "-b", "main"]);
+        git(&["add", "-A"]);
+        let who = ["-c", "user.name=b", "-c", "user.email=b@b"];
+        git(&[&who[..], &["commit", "-qm", "Configure"]].concat());
+
+        let desk = Desk::new(toml::from_str("caller = \"ada\"\nroots = []\n").unwrap());
+        for _ in 0..2 {
+            let number = desk.read("demo", root, "route", |_| Ok(Some(7_u32)));
+            assert_eq!(number.unwrap(), Some(7));
+            let text = desk.read("demo", root, "route", |_| Ok(Some("seven".to_string())));
+            assert_eq!(text.unwrap().as_deref(), Some("seven"));
+        }
+        assert_eq!(desk.built.load(Ordering::Relaxed), 2, "each is kept");
+    }
 
     #[test]
     fn a_host_name_loses_its_port() {

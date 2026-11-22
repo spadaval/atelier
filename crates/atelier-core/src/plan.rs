@@ -235,18 +235,28 @@ pub enum Belongs<'a> {
     Settle,
     /// The branch of this started item.
     Item(&'a str),
+    /// A review's checkout: as `Backlog`, or detached at the commit it
+    /// reviews.
+    Review,
 }
 
 /// Refuses `command`, whose change belongs on a branch of kind `belongs`,
-/// where it runs: always in the base's own checkout, and on a branch of
-/// another kind. Each is a rule. A detached checkout, or a branch the
-/// convention does not name, takes any change, as a reviewer's checkout
-/// at a commit does.
+/// where it runs: always in the base's own checkout, on a detached HEAD,
+/// where only a review is written, since a commit there is on no branch,
+/// and on a branch of another kind. Each is a rule. A branch the
+/// convention does not name takes any change.
 pub fn misplaced(repo: &mut Repo, command: &str, belongs: Belongs) -> Result<Option<Refused>> {
     let base = repo.base.clone();
     if repo.branch.as_deref() == Some(base.as_str()) {
         let text = say::on_base_checkout(command, &base);
         return Ok(repo.skip.refuse([say::rule_on_base(&base)], text));
+    }
+    if repo.branch.is_none() && belongs != Belongs::Review {
+        let text = say::on_detached_head(command, &base);
+        let rule = say::rule_on_detached_head(command);
+        if let Some(refused) = repo.skip.refuse([rule], text) {
+            return Ok(Some(refused));
+        }
     }
     if let Belongs::Item(id) = belongs {
         let branch = repo.branch_of(id);

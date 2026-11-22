@@ -451,6 +451,6 @@ fn a_merged_items_deferred_findings_are_listed_on_its_own_branch() {
     let finding = format!("{ID}/{stem}.1");
     let on_branch = listed(&root);
     assert_eq!(on_branch, [finding]);
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     assert_eq!(listed(&root), on_branch);
 }

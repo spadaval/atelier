@@ -1,6 +1,7 @@
 //! The `atelier` command (docs/product.md, Commands).
 
 mod check;
+mod cleanup;
 mod commands;
 mod git;
 mod history;
@@ -160,7 +161,7 @@ enum Command {
         #[arg(long, required = true, value_parser = NonEmptyStringValueParser::new())]
         by: String,
     },
-    /// End an item or mission that will not be done, in this checkout, and commit nothing. A started item is dropped in a checkout of its own branch, by any thread, and its base copy then on a backlog branch; an item not started, or a mission, on a backlog branch. An item already merged is refused. Given a deferred finding of a done item, named as `atelier list --deferred` prints it, mark it dropped, on a backlog branch or the branch of an item you implement.
+    /// End an item or mission that will not be done, in this checkout, and commit nothing. An item, started or not, or an agreed mission is dropped on a backlog branch, and the drop counts once that merges; a started item may instead be dropped in a checkout of its own branch, and its base copy then on a backlog branch. An item already merged is refused. Given a deferred finding of a done item, named as `atelier list --deferred` prints it, mark it dropped, on a backlog branch or the branch of an item you implement.
     Drop {
         /// An item, a mission, or a finding.
         id: String,
@@ -174,7 +175,7 @@ enum Command {
         /// The item's result, written into its Report. A mission's is written in its file.
         result: Option<String>,
     },
-    /// Make a branch and claim it: start a ready item on a branch named for it, or take over a started one; or make a new mission's branch, or a backlog branch. The only command that makes a branch. Where a remote is configured the push of the branch is the claim. In the base's own checkout it does not switch, and prints the `git worktree add` to run.
+    /// Make a branch and claim it: start a ready item on a branch named for it, or take over a started one; or make a new mission's branch, or a backlog branch. The only command that makes a branch. Where a remote is configured the push of the branch is the claim, and `start <id>` fetches the base first and refuses an item done or dropped there. In the base's own checkout it does not switch, and prints the `git worktree add` to run.
     #[command(group(ArgGroup::new("what").required(true).args(["id", "new", "mission", "backlog"])))]
     Start {
         id: Option<String>,
@@ -188,7 +189,7 @@ enum Command {
         #[arg(long, value_name = "SLUG")]
         backlog: Option<String>,
     },
-    /// Send this branch's item to review, once its Done when lines are ticked and its Report is written, committing its directory and pushing the branch where a forge is configured. On a backlog or mission branch, refused while a record change is uncommitted, or once 2 rounds of plan review in a row split on its plan change; else it pushes the branch and opens its pull request.
+    /// Send this branch's item to review, once its Done when lines are ticked and its Report is written, and it is not done or dropped on the base as fetched then, committing its directory and pushing the branch where a forge is configured. On a backlog or mission branch, refused while a record change is uncommitted, or once 2 rounds of plan review in a row split on its plan change; else it pushes the branch and opens its pull request.
     Submit,
     /// Open this round's review file of an item in review, or of a mission's plan, or take it over, and print the brief. It commits nothing.
     Review { id: String },
@@ -201,7 +202,7 @@ enum Command {
     },
     /// Lead a ready mission, written in this checkout, on a backlog branch, committing nothing, and see what each of its items needs.
     Lead { mission: String },
-    /// Merge this branch's approved item into the base once its checks pass: through the forge's merge of its pull request where a forge is configured, else by moving the local base to a merge commit. The item is done once merged. A backlog branch, which changes records alone, merges once its records are valid on the merged tree, with no review.
+    /// Merge this branch's approved item into the base once its checks pass: through the forge's merge of its pull request where a forge is configured, else by moving the local base to a merge commit. The item is done once merged. A backlog branch, which changes records alone, merges once its records are valid on the merged tree, with no review. Once merged, it deletes the branch here and on the forge's remote, leaving this checkout on a detached HEAD, and closes the pull request of each item a backlog branch dropped.
     Merge {
         /// Merge an item nobody reviewed, whose correctness is evident from its diff, giving why.
         #[arg(long, value_name = "WHY")]

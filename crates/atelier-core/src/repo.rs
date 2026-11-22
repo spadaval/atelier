@@ -223,6 +223,14 @@ impl<'s> Repo<'s> {
         })
     }
 
+    /// Reads the base's tip again, as after a fetch of it: what is read
+    /// from then on is judged by that tip.
+    pub fn reread_base(&mut self) -> Result<()> {
+        self.base_tip = base_tip(&self.root, &self.config)?;
+        self.changed.get_mut().clear();
+        Ok(())
+    }
+
     /// The root when the directory it was opened from is not the root, so
     /// that a printed Git command naming paths from the root needs `git -C
     /// <root>`.
