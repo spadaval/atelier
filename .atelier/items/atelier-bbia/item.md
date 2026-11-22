@@ -39,3 +39,13 @@ Out: trends across runs, the daily feed and the host's database, which are the D
 ## Context
 
 `skills/agent-factory/procedures/garden.md` gives the Report's sections. `docs/architecture/desk.md`, "Spike pages left for a later mission", names the spike's digest view (`Digest.tsx`) as the earlier attempt. It waits on atelier-v958, which reads items from their branches and rewrites the inbox. atelier-e7iy asks whether `status` should say an approved run waits for its session; the inbox line here is the Desk's side of the same gap.
+
+Stale since 2026-11-22: `atelier-7637` ended the session this item is
+written around. An approved run now merges at once, and its proposals wait in
+one `"Garden proposals"` item labelled `needs-human,garden`, on
+`backlog/garden-proposals`. Rewrite the Done when lines about "waiting for
+its session" and the Session section before readying this. The same change
+left `docs/product/desk.md` wrong in two places: "Sessions, not queues"
+still lists gardening as a session that leaves no list to answer later, and
+the roadmap's "Sessions for gardening". Whether the Desk shows `"Garden
+proposals"` as a list is Sumeet's to decide; fix those lines with this item.
