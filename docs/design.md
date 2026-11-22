@@ -1190,16 +1190,18 @@ refused as `show` refuses it.
 
 | Line | Found where | Thread shown |
 | --- | --- | --- |
+| plan | A mission's record first appears `open`, with no lead or Result, and its `created_at` at most 24 hours before the commit | Its first planner |
 | start, take-over | An item's `implementers` gains an entry | That entry |
 | submit | An item's status becomes `in_review` | The item's holder |
 | review, take-over | A review file appears, or its `reviewers` gains an entry | That entry |
 | verdict | A review's verdict is set, on an item or a mission | The review's holder |
 | merge | On the base's first-parent line, an item's copy first holds a started status, or becomes `done` in an Atelier merge made before the branch model | The item's holder |
+| plan-merge | A merge on the base's first-parent line brings a mission to the base `open`, or changes the plan of an agreed one as `merge` judges it: a plan section of `mission.md`, or another file in its directory but `notes.md` and `reviews/` | The mission's latest planner |
 | settle | A finding gains `Taken` or `Dropped` | The thread in that line |
 | lead | A mission's `lead` is set or changes | That entry |
 | ready | An item's status becomes `ready`; on a mission in the old form, its status | None; the name given with `--by` |
 | drop, close | A status becomes `dropped`, or `done` outside a merge | None |
-| merge, change | A record changed in a commit that passed a rule, with none of the above found on that record, such as a plan's merge, a `set` of a started item, or a `ready` of an item ready already beside one that was not: `merge` for an Atelier merge, else `change`. An Atelier merge's record is the item or mission its `Atelier-Merge:` names, or, for a backlog branch, each record the merge changed | The thread that passed the rule |
+| merge, change | A record changed in a commit that passed a rule, with none of the above found on that record, such as a `set` of a started item, the merge of one, or a `ready` of an item ready already beside one that was not: `merge` for an Atelier merge, else `change`. An Atelier merge's record is the item or mission its `Atelier-Merge:` names, or, for a backlog branch, each record the merge changed | The thread that passed the rule |
 
 Where a commit passed a rule and names the thread that ran the command
 (`Atelier-Skip-By:`, see Hooks and the bypass), the line of the action
@@ -1209,7 +1211,8 @@ item's holder.
 
 A skip is shown on the line of the action whose commit carries its trailer,
 which is every action where Atelier makes the commit or prints the commit
-line. Those are `start`, `submit` and `merge`, whose trailers are in the
+line. Those are `start`, with `plan`, the commit of `start --mission`;
+`submit`; and `merge`, with `plan-merge`, whose trailers are in the
 merge commit's message whether the forge makes it or `merge` does, a
 take-over of an implementer, which `start` commits, and `verdict`, `ready`,
 `drop`, `close` and `lead`, whose printed commit line carries them. Each
@@ -1241,6 +1244,7 @@ holds:
 
 | Action | What changed |
 | --- | --- |
+| plan | The status move, as `new -> open` |
 | start | The status move, when the commit made the item `building` |
 | take-over, of an implementer | `from <former implementer>`, then the status move as for start |
 | submit | The status move, as `building -> in_review` |
@@ -1248,6 +1252,7 @@ holds:
 | take-over, of a reviewer | The review's name, then `from <former reviewer>` |
 | verdict | The review's name and `approve` or `changes`, then the item's status move when the commit made it `approved` or `changes_requested` |
 | merge | The status move, as `approved -> done`, then `trivial: <why>` for a trivial merge, and the merge commit's branch |
+| plan-merge | `amendment`, when the plan was agreed already |
 | settle | `<finding> taken into <item>`, or `<finding> dropped: <reason>` |
 | lead | `from <former lead>`, when the lead changed |
 | ready | The status move, then `by <name>` |
@@ -1269,7 +1274,11 @@ it changed. The repository's one `git cat-file --batch` process reads those
 versions. An action is found by comparing a record's two versions across one
 commit, so no record's history is read on its own, and `log` starts the
 same few Git processes however many records and commits there are. Git
-lists each commit once, so each action is printed once.
+lists each commit once, so each action is printed once. A second `git log`
+lists the base's first-parent merges that changed a file under
+`.atelier/missions`, for `plan-merge`: the walk lists no files for a merge,
+and the parents it gives are the nearest listed commits, which drop a base
+that had no record yet.
 
 - **Both sides of every merge.** Given paths, `git log` simplifies history:
   it follows only the side a merge matches on those paths, and the other
@@ -1289,14 +1298,19 @@ lists each commit once, so each action is printed once.
   item on the merge's second parent against the item in the merge: what its
   branch brought is found on the second-parent side. The forge's merge and
   `merge`'s own are read alike, and a merge someone made by hand on the
-  forge is read the same way. A merge of a mission's or a backlog branch
-  gives no line of its own: the actions its branch carried, such as a `ready`
-  or a `drop`, are found on the second-parent side. Any other merge commit
-  gives no line.
+  forge is read the same way. A merge that agrees or amends a mission's plan
+  gives that mission's `plan-merge`, which is never `merge`, so a count of
+  `merge` lines counts no plan as an item. A merge of a mission's or a
+  backlog branch gives no other line of its own: the actions its branch
+  carried, such as a `ready` or a `drop`, are found on the second-parent
+  side. Any other merge commit gives no line.
 - **The cutover's conversion commit is read like any other.** Each record
   it added shows its actions at that commit's time, as `new -> <status>` and
   every thread its record names. Nothing special-cases it; a reader who
-  wants the time after it uses `--since`.
+  wants the time after it uses `--since`. Records have no version 3 history
+  from before their conversion, so when those missions were planned or
+  agreed is not in the log: `plan`'s 24 hours keep a mission converted days
+  after it was created from reading as planned at the conversion.
 - **A version that does not read.** History can hold a record that was
   invalid at one commit, or not UTF-8. `log` passes that version over,
   compares the versions on each side of it, and says on standard error
@@ -1308,6 +1322,10 @@ lists each commit once, so each action is printed once.
 - **Time and order.** A line's time is its commit's committer time. Lines
   are ordered by it, lines of one commit keep the order of the table above,
   and commits of one time keep Git's order, parents first.
+
+A caller may give the walk a deadline (`history_until`), as the Desk does:
+its Git listings are killed then, it reads no further commit, and it is an
+error rather than part of a history. The command gives none.
 
 In astromech on 2026-11-11, `atelier log` from a debug build printed 88
 lines in 0.06 to 0.08 seconds, starting six Git processes.
@@ -1668,7 +1686,9 @@ What is still to come:
   branch is merged and deleted; a take-over shows both implementers, and a
   review taken over both reviewers; a deferred
   finding settled on a gardener's branch and merged; a mission's plan
-  reviews, its merge, `lead` and `close`, with its item dropped; an item
+  reviews, `lead` and `close`, with its item dropped; a plan's `plan`, its
+  `plan-merge` and each amendment's, never a `merge`, and no `plan` for a
+  converted, led or finished record; an item
   merged by the forge, whose base copy stays `approved`, shown as merged; a skip on its
   action's line; `--since`; two actions on one record in one commit as their net
   change; a version that does not parse passed over; a branch's actions after

@@ -25,16 +25,16 @@ change. Two facts shape the order of work:
   read items the way `status`, `list` and `show` do without copying CLI code.
 - **Seven views were missing**, listed with sizes in
   [Missing views](#missing-views). Six were small moves or exposures of code
-  that existed, and atelier-l5ai has added them. One, the history of actions (`atelier log`), is specified and
-  not built, and only the debrief's timeline and its plan-against-actual
-  need it; the mission page ships without them first.
+  that existed, and atelier-l5ai has added them. One, the history of actions (`atelier log`), was added
+  later, by atelier-js4a; only the debrief's timeline and its
+  plan-against-actual need it, so the mission page shipped without them.
 
 In the tables below, **master** means the function exists on master today
 (3715b5f9), **psjw** that it exists on the atelier-psjw branch (55d88b72)
 and not on master, and **M1** to **M7** name a view that was missing.
 atelier-psjw has since merged, so its marks now mean on master too, and
 atelier-l5ai added M1, M2, M3, M4, M6 and M7: where a table names one of
-those, the function that now gives it follows. Only M5 is still missing.
+those, the function that now gives it follows. atelier-js4a added M5.
 
 ## How the server reads
 
@@ -639,7 +639,7 @@ identity never appears in a path: it can hold `/`, `:` and `%`, as
 | `GET /api/embed` | Embedded mode | `origins`: the configuration's `embed_origins`, the origins the Desk talks to (The host contract) |
 | `GET /api/repos/{repo}/missions` | Mission rail, the project home | The repository's missions and loose work |
 | `GET /api/repos/{repo}/missions/{id}` | Mission, the extension's mission page and project home | One mission, wherever it is read from: sections, documents, items, plan reviews, threads, its pull request and its stop |
-| `GET /api/repos/{repo}/missions/{id}/history` | Mission, Activity tab | The actions on the mission and its items (M5; 404 until it exists) |
+| `GET /api/repos/{repo}/missions/{id}/history` | Mission, Activity tab | The actions on the mission and its items, from the records (M5) |
 | `GET /api/repos/{repo}/doc?path=<path>&at=<commit>` | Mission, Documents tab | One Markdown file at the base's tip, or at `at` |
 | `GET /api/repos/{repo}/items/{id}` | Item | One item in full |
 | `GET /api/inbox` | Inbox | What waits on the human, in every repository |
@@ -670,7 +670,9 @@ up among the repositories served, a pull request is a number, and a thread
 identity is sent to T3 Code as JSON. The pages leave out what such a read
 cannot give and still draw.
 
-The route for `/history` is not served yet (M5): it answers `404`.
+The two history routes are two readers. A mission's reads the records'
+changes, so it is exact; `/api/history` reads commit subjects, and its
+section below says why it still does.
 
 ## Responses, field by field
 
@@ -965,7 +967,37 @@ on the human there, and what is in motion. An unknown repository is `404`.
 The history is read as `/api/history` reads it, and the page still gets an
 answer when it cannot be: the ages then come from the branches.
 
+### `GET /api/repos/{repo}/missions/{id}/history`
+
+What `atelier log <id>` gives for a mission, its plan reviews and its items,
+oldest first, from `atelier_core::log::history_until` on a repository opened
+with `Repo::open_committed` (M5). It is kept until the repository's commits
+change, under the cache key above, and given 15 seconds: the walk stops
+then, and the request stops waiting whatever hung. A read past that is
+`500`. An unknown repository, or an ID that is no mission's, an item's
+included, is `404`; an ID that does not validate `400`.
+
+| Field | Given by |
+| --- | --- |
+| `actions[].timestamp`, `commit` | The commit's committer time, in UTC, and the commit as Git abbreviates it |
+| `actions[].id` | The mission, or the item of it |
+| `actions[].action` | `Happened::name`, as `atelier log` prints it: `plan`, `plan-merge` and the others in [the log's table](../design.md#the-log) |
+| `actions[].thread` | The thread the log shows, or `null` |
+| `actions[].detail[]` | What changed, in the log's parts (`Happened::changed`), such as `approved -> done`, or `amendment` on a `plan-merge` |
+| `actions[].skips[]`, `skipped_by` | Each rule the action's commit passed, as `<rule>: <reason>`, and the thread that passed them |
+| `passed_over[] {timestamp, commit, id, path, problem}` | Each version of those records the log passed over, as it does not read |
+| `commit`, `fetched` | As on every response for one repository |
+
+Records have no history from before their conversion at the cutover, so a
+mission converted then has no `plan`, and no `plan-merge` of its first plan.
+
 ### `GET /api/history?repo=<repo>&days=<n>&ids=<id,...>`
+
+This route, and `/api/launch` with it, stays on commit subjects until
+`t3-extension/fixture-desk.mjs` is updated: that fixture builds its closed
+mission's history from empty commits, which change no record, and
+`t3-extension/` is frozen in mission atelier-ww7w. Subjects also reach back
+before the cutover, where the records' history does not.
 
 The records' steps, newest first, read from the subjects of the newest
 20,000 commits on the local branches and the fetched remote's. Only the
@@ -1396,10 +1428,10 @@ an `ItemView`; `show` prints each.
 | M4 | An approved item's approval time on `Entry` | `atelier_core::annotate` and `annotate_all`, with `atelier_core::git::approved_at`; the CLI calls them | Low | Medium | Low |
 | M7 | An item's page as `show <item>` prints it, with whether its record came from the base or the branch | `atelier_core::item_view`, returning `ItemView`, and `Located::read_from` (`ReadFrom::Base` or `ReadFrom::Branch`); `show` calls it | Low | Medium | Low |
 | M6 | What in a mission's plan changed between a reviewed commit and the base's tip | `atelier_core::plan::plan_changed_at`, comparing two commits; `plan_changed`, which `ready` and `review` use, still compares the checkout | Low | Medium: tells the human at go whether the review is stale | Low |
-| M5 | The history of actions with the commit, time and thread of each, as `atelier log` is specified (`redesign-architecture.md`, The log), for a mission and its items | Missing. The old debrief's reader follows first parents only | High: a Git walk of both merge parents and branch tips, with record diffs per commit | Medium: the timeline, planned against added, and when an item merged | Medium: the walk is unsettled in the specification |
+| M5 | The history of actions with the commit, time and thread of each, as `atelier log` is specified ([the design record](../design.md#the-log)), for a mission and its items | `atelier_core::log::history_until`, returning `History`; `log` calls it through `history` | High: a Git walk of both merge parents and branch tips, with record diffs per commit | Medium: the timeline, planned against added, and when an item merged | Medium |
 
-M1 to M4 come before the mission page can match `show`. M5 can follow the
-first mission page: its parts show "not available yet" until then.
+M1 to M4 come before the mission page can match `show`. M5 followed it
+(atelier-js4a) as a route: the app does not draw it yet.
 
 ## Spike pages left for a later mission
 
@@ -1407,7 +1439,7 @@ The spike's Health page, its Insights page and the gardener and backlog
 digest view (`Digest.tsx`) are out of this mission (strategy, Scope: the
 next mission's health, feed and database). They are not designed here.
 The spike's activity feed (`Feed.tsx`, `/r/:repo/activity`), built from
-`git log` subjects, waits for M5.
+`git log` subjects, waited for M5, and is left for that mission too.
 
 ## Choices made here
 

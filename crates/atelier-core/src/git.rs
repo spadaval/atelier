@@ -10,9 +10,11 @@
 use crate::skip::{Skip, VARIABLE};
 use anyhow::{bail, Context, Result};
 use std::collections::HashSet;
-use std::io::Write;
+use std::fs::File;
+use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output, Stdio};
+use std::process::{Child, Command, ExitStatus, Output, Stdio};
+use std::time::{Duration, Instant};
 
 /// A Git command run in `repo`.
 pub fn git(repo: &Path) -> Command {
@@ -69,7 +71,39 @@ pub fn listing(repo: &Path, args: &[&str]) -> Result<String> {
 }
 
 fn listing_with(repo: &Path, args: &[&str], input: Option<&str>) -> Result<String> {
-    let output = output(repo, args, input)?;
+    listed(args, output(repo, args, input)?)
+}
+
+/// [`listing`], with Git killed at `deadline`, which is then an error.
+pub(crate) fn listing_until(
+    repo: &Path,
+    args: &[&str],
+    deadline: Option<Instant>,
+) -> Result<String> {
+    if deadline.is_none() {
+        return listing(repo, args);
+    }
+    // Files, as a pipe that fills would stop Git before it could exit.
+    let (mut stdout, mut stderr) = (tempfile::tempfile()?, tempfile::tempfile()?);
+    let mut child = git(repo)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(stdout.try_clone()?)
+        .stderr(stderr.try_clone()?)
+        .spawn()
+        .with_context(|| format!("cannot start git {}", args.join(" ")))?;
+    let status = wait(&mut child, deadline)?
+        .with_context(|| format!("git {} did not finish by its deadline", args.join(" ")))?;
+    let output = Output {
+        status,
+        stdout: read_all(&mut stdout)?,
+        stderr: read_all(&mut stderr)?,
+    };
+    listed(args, output)
+}
+
+/// What `git` printed, run with `args`, where it succeeded.
+fn listed(args: &[&str], output: Output) -> Result<String> {
     if !output.status.success() {
         bail!(
             "git {} failed: {}",
@@ -78,6 +112,37 @@ fn listing_with(repo: &Path, args: &[&str], input: Option<&str>) -> Result<Strin
         );
     }
     Ok(String::from_utf8(output.stdout)?)
+}
+
+/// Everything written to `file`, from its start.
+pub(crate) fn read_all(file: &mut File) -> std::io::Result<Vec<u8>> {
+    file.rewind()?;
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)?;
+    Ok(bytes)
+}
+
+/// Waits for `child` to exit, or until `deadline`, when it is killed and
+/// `None` is returned.
+pub(crate) fn wait(
+    child: &mut Child,
+    deadline: Option<Instant>,
+) -> std::io::Result<Option<ExitStatus>> {
+    let Some(deadline) = deadline else {
+        return child.wait().map(Some);
+    };
+    loop {
+        if let Some(status) = child.try_wait()? {
+            return Ok(Some(status));
+        }
+        let now = Instant::now();
+        if now >= deadline {
+            child.kill()?;
+            child.wait()?;
+            return Ok(None);
+        }
+        std::thread::sleep((deadline - now).min(Duration::from_millis(20)));
+    }
 }
 
 /// The top of the checkout `dir` is in.
@@ -454,4 +519,20 @@ pub fn fetched_at(repo: &Path) -> Result<Option<std::time::SystemTime>> {
         .iter()
         .filter_map(|head| head.metadata().ok()?.modified().ok());
     Ok(times.max())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn git_still_running_at_its_deadline_is_killed() {
+        let dir = tempfile::tempdir().unwrap();
+        let started = Instant::now();
+        let deadline = Some(started + Duration::from_millis(200));
+        let args = ["-c", "alias.nap=!sleep 10", "nap"];
+        let error = listing_until(dir.path(), &args, deadline).unwrap_err();
+        assert!(error.to_string().contains("did not finish by its deadline"));
+        assert!(started.elapsed() < Duration::from_secs(5));
+    }
 }
