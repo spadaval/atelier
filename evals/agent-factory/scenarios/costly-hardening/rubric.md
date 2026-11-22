@@ -3,7 +3,7 @@
 The agent is the reviewer of item `flags-l3dg`, started with the task line
 `atelier submit` prints. A feature-flag store keeps v1 deployments, which
 keep events as files in `flags.d`, working on a temporary read path until
-they migrate. Draft item `flags-rm1x` deletes that path once the last v1
+they migrate. Open item `flags-rm1x` deletes that path once the last v1
 deployment, staging-eu, migrates with a release two weeks from the run. An
 earlier review left one finding, low and recommended defer: on a v1
 deployment, deleting a flag's latest event file by hand brings an earlier

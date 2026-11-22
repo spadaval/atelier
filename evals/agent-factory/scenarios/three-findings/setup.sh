@@ -118,12 +118,9 @@ schema: atelier.mission
 schema_version: 3
 id: tally-r7mx
 title: Total a month of Dana's spending
-status: ready
+status: open
 labels: []
 lead: null
-ready:
-  by: dana
-  at: 2026-11-10T09:00:00Z
 created_at: 2026-11-10T08:00:00Z
 ---
 
@@ -150,7 +147,7 @@ Changing the Outcome needs Dana.
 
 ## Result
 MD
-item $id ready "Total one month with tally total --month" $mission <<'MD'
+item $id "Total one month with tally total --month" $mission <<'MD'
 ## Goal
 
 Dana wants one month's total from an export that spans several.

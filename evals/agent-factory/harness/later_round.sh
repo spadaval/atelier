@@ -46,7 +46,7 @@ PY
 
 next_repo "$work" "$SLUG"
 cp -r "$shared/base/." .
-item "$ID" ready "$TITLE" < "$shared/item.md"
+item "$ID" "$TITLE" < "$shared/item.md"
 git add . && git commit -qm "Start the timesheet tool, and track work in Atelier"
 git rev-parse HEAD > "$work/.main_head"
 cp "$work/.main_head" "$work/.setup_head"

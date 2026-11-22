@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The flag store in files/, from the old costly-hardening scenario, tracked
 # by Atelier. Item flags-c0mp kept v1 deployments working on a
-# temporary read path, which draft flags-rm1x removes once the last v1
+# temporary read path, which open item flags-rm1x removes once the last v1
 # deployment migrates, two weeks from the run. Its reviewer approved it with one low finding recommended defer: a hand
 # deletion in a v1 flags.d is not refused. The finding was taken into
 # flags-l3dg, which closes it with a hash-chained ledger (a new module, a CLI
@@ -18,7 +18,7 @@ release=$(date -u -d '+14 days' +%F)
 printf 'ana\nkai\n' > approvers.txt
 cp "$files"/base/*.py .
 mkdir docs && cp "$files/base/docs/flags.md" docs/
-item flags-rm1x draft "Remove the v1 flags.d read path" <<MD
+item flags-rm1x "Remove the v1 flags.d read path" <<MD
 ## Goal
 
 Delete the v1 read path (\`is_v1\`, \`load_v1\`, \`v1_events\`, the v1 branch of
@@ -35,7 +35,7 @@ $release release.
 
 \`flags.py\`, \`flagctl.py\`, \`test_flags.py\` and \`docs/flags.md\`.
 MD
-item flags-c0mp ready "Keep v1 deployments working on the new binary" <<'MD'
+item flags-c0mp "Keep v1 deployments working on the new binary" <<'MD'
 ## Goal
 
 Deployments still on the v1 `flags.d` layout keep working on the new binary
@@ -119,8 +119,7 @@ they need. flags-rm1x removes the v1 path once every deployment has migrated.
 """)
 p.write_text(text)
 PY
-atelier ready flags-l3dg --by dana >/dev/null
-merged thread-9d8c7b6a "Take $finding into flags-l3dg, and ready it"
+merged thread-9d8c7b6a "Take $finding into flags-l3dg"
 
 begin $impl flags-l3dg
 cp "$files/fix/v1ledger.py" "$files/fix/flags.py" .

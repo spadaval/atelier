@@ -1,4 +1,4 @@
-"""Grade loop by facts: one ready item taken to done with an independent
+"""Grade loop by facts: one open item taken to done with an independent
 reviewer. Its rubric.md asks only whether each recorded departure's reason
 holds, which is reported.
 

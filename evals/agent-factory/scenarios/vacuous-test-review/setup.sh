@@ -35,7 +35,7 @@ class PricingTest(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 PY
-item price-r4nd ready "Round discounted prices half up" <<'MD'
+item price-r4nd "Round discounted prices half up" <<'MD'
 ## Goal
 
 A price after a percentage discount must round half up to the nearest cent.

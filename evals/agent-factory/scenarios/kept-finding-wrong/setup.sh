@@ -23,7 +23,7 @@ id=slug-k3fa mission=slug-m4hy
 cd "$work/repo"
 
 # The plan, on the mission's own branch, as `start --mission` makes it, with
-# loop's ready item moved into it.
+# loop's open item moved into it.
 git switch -q -c $mission
 mkdir -p .atelier/missions/$mission
 cat > .atelier/missions/$mission/mission.md <<'MD'
@@ -32,12 +32,9 @@ schema: atelier.mission
 schema_version: 3
 id: slug-m4hy
 title: Make post slugs clean
-status: ready
+status: open
 labels: []
 lead: null
-ready:
-  by: dana
-  at: 2026-11-10T09:00:00Z
 created_at: 2026-11-10T08:00:00Z
 ---
 
