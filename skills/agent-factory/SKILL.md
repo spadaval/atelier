@@ -40,6 +40,15 @@ gardener, like every other role, runs unattended: it never waits on them, and
 takes a question to the thread that started it or to an item labelled
 `needs-human`, as its role file says.
 
+## Problems Outside Your Work
+
+When you find a problem outside the work in hand, file it and carry on with
+your work: run `atelier new "<title>"` on the branch you are on, write what
+you saw and where in the file it names, and commit it with the command it
+prints. With no branch, file on one from `atelier start --backlog <slug>`,
+and as a plan's reviewer only once your verdict is pushed. What a reviewer
+finds in the change under review stays a finding.
+
 ## Independent Review
 
 Every non-trivial change is reviewed before it merges by a thread that did
