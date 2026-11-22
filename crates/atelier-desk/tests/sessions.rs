@@ -185,6 +185,16 @@ impl World {
         fs::read_to_string(self.dir.path().join("calls")).unwrap_or_default()
     }
 
+    async fn page(&self, mission: &str) -> (StatusCode, Value) {
+        let request = Request::get(format!("/api/repos/demo/missions/{mission}"))
+            .header("host", "localhost")
+            .body(Body::empty());
+        let response = self.app.clone().oneshot(request.unwrap()).await.unwrap();
+        let status = response.status();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await;
+        (status, serde_json::from_slice(&body.unwrap()).unwrap())
+    }
+
     async fn start(&self, mission: &str) -> (StatusCode, Value) {
         let request = Request::post("/api/sessions")
             .header("host", "localhost")
@@ -254,6 +264,23 @@ async fn a_session_starts_a_thread_in_the_repositorys_project() {
         calls.lines().last().unwrap() == format!("auth session revoke session-{issued}"),
         "{calls}"
     );
+}
+
+#[tokio::test]
+async fn a_missions_page_and_its_session_are_each_found_whichever_is_read_first() {
+    // Both read the mission, kept while the commits are unchanged.
+    for page_first in [true, false] {
+        let world = world(None, true).await;
+        if !page_first {
+            let (status, answer) = world.start(MISSION).await;
+            assert_eq!(status, StatusCode::OK, "{answer}");
+        }
+        let (status, page) = world.page(MISSION).await;
+        assert_eq!(status, StatusCode::OK, "{page}");
+        assert_eq!(page["mission"]["id"], MISSION);
+        let (status, answer) = world.start(MISSION).await;
+        assert_eq!(status, StatusCode::OK, "{answer}");
+    }
 }
 
 #[tokio::test]
