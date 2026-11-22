@@ -137,15 +137,18 @@ page's Bugs to file, with the item or commit that caused it, and leave.
 **What earlier runs left.** Run `git fetch --prune origin` where there is a
 remote. The last merged run is the done, not dropped, earlier run whose
 window ends last. Read its Report, and these items, open or closed since its
-window began (`atelier list --label <label>`, and with `--done`):
+window began:
 
-- those labelled `needs-human,garden` and titled exactly `Garden proposals`:
-  the open proposals, `### Decided`, and a closed one's Report;
-- those labelled `bug`.
+- from `atelier list --label garden`, and again with `--done`, those titled
+  exactly `Garden proposals` and also labelled `needs-human`: the open
+  proposals, `### Decided`, and a closed one's Report;
+- from `atelier list --label bug`, and again with `--done`, every one.
 
-Where `backlog/garden-proposals` has not merged, read them as it holds them
-too. What these hold is covered, so it is not brought again as new: an
-unanswered proposal stays open in its item until the human answers. Each
+`list` and `show` give the base's copy of an item a branch has changed. One
+that `list` says is changed on `backlog/garden-proposals` is read with `git
+show <branch>:.atelier/items/<id>/item.md`, from that branch or its
+`origin/` copy. What these hold is covered, so it is not brought again as
+new: an unanswered proposal stays open in its item until the human answers. Each
 proposal or bug that the last merged run's Report lists and none of them
 covers was left by a run that stopped after its merge: carry it onto this
 page, marked with the run and date it came from and outside the limit of
@@ -220,11 +223,14 @@ The run ends there if it has nothing to file or label and
 `backlog/garden-proposals` holds nothing unmerged. Otherwise, straight after
 the merge, get onto that branch as below, and on it:
 
-- **Proposals.** Find the open item labelled `needs-human,garden` and titled
-  exactly `Garden proposals`; the old digest atelier-j86z is not it. With
-  none, run `atelier new "Garden proposals"` and `atelier set <id> --labels
-  needs-human,garden`. Under `### Open` in its Goal, keep every unanswered
-  proposal, and add the page's new and carried ones, each as `- <run> P<n>,
+- **Proposals.** In `atelier list --label garden`, find the item titled
+  exactly `Garden proposals` and also labelled `needs-human`; the old digest
+  atelier-j86z is not it. `--label` takes one label, and adding
+  `--needs-human` hides an item not yet merged. The item is open unless its
+  `item.md` in this checkout says done or dropped, whatever `list` says.
+  With no open one, run `atelier new "Garden proposals"` and `atelier set
+  <id> --labels needs-human,garden`. Under `### Open` in its Goal, keep
+  every unanswered proposal, and add the page's new and carried ones, each as `- <run> P<n>,
   <date>: <the change>. <its cause>. See that run's Report.` Only the human's
   answer takes one off that list.
 - **Bugs.** For each bug to file that no item covers, run `atelier new
