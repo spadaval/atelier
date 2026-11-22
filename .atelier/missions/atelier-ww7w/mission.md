@@ -3,7 +3,7 @@ schema: atelier.mission
 schema_version: 3
 id: atelier-ww7w
 title: Cut review, CI, and branch overhead, and close the garden and Desk history loops
-status: open
+status: done
 labels: []
 lead: mcp:launch:b3b5ffd62a4c227e4ec8ce23f1e32b83538dd28e5e6c91e0a2d3d91ead863ef6
 planners:
@@ -68,3 +68,62 @@ Recent rewrites cut CLI+core size sharply and put the lead in charge, but concre
 - **Reserved for the human:** changing the round-cap thresholds (3 code rounds / 2 split plan rounds), touching `t3-extension/`, altering `atelier-dh7a` or `atelier-kw8u` plans, editing `roles/reviewer.md`, or breaking record format compatibility across repositories.
 
 ## Result
+
+Done on 2026-11-22. All six items merged, and every check in
+`all-checks-pass` passes on `master` at `435025919`.
+
+**What `master` has now**
+
+- **CI** (`atelier-1n49`): the `changes` job runs no Node or `pnpm` setup and
+  takes 10 to 13 seconds, down from 26. Records and their artifacts under
+  `.atelier/items/` and `.atelier/missions/` skip the Rust job, and that
+  job runs clippy with warnings denied.
+- **Reviews** (`atelier-h6ij`): a later plan round opens with the diff of
+  the plan's own paths, two split plan rounds in a row send the planner to
+  the human, and an item asked for changes in round 3 or later goes to its
+  lead.
+- **Branches** (`atelier-gqtw`): a started item is dropped on one backlog
+  branch, `start` and `submit` judge by the freshly fetched base, and
+  `atelier merge` deletes the branch it merged, on the remote under a lease
+  and locally, leaving the checkout on a detached HEAD. `status` counts
+  merged branches and detached worktrees once they pile up.
+- **Paper cuts** (`atelier-zc9b`): `submit` names the checkout's path,
+  `status` no longer sends a thread to an unrelated item or to a `start`
+  that does not switch, the pre-push recovery steps work on a checked-out
+  base, and a malformed `### Responses` line is reported, not fatal.
+- **Garden** (`atelier-7637`): an approved run merges at once, and its
+  proposals and bugs wait for the human in one `"Garden proposals"` item on
+  `backlog/garden-proposals`.
+- **Desk** (`atelier-js4a`): `atelier log` prints `plan` and `plan-merge`,
+  and `GET /api/repos/{repo}/missions/{id}/history` serves a mission's
+  history from the records, bounded at 15 seconds.
+
+**Verified on `435025919`, in the lead's checkout:** `cargo fmt -- --check`,
+`cargo clippy --all-targets --locked -- -D warnings`, `cargo nextest run
+--locked` (459 tests), `atelier check`, `scripts/ci-jobs.test.sh`,
+`evals/agent-factory/test.sh`, the Desk's `pnpm typecheck`, `test`, `build`
+and `e2e`, and `node t3-extension/run-tests.mjs`, unmodified. CI passed on
+the same commit. Nothing under `t3-extension/` and nothing in
+`skills/agent-factory/roles/reviewer.md` changed.
+
+**Not proven by use yet**
+
+- No reviewer agent has worked from a plan's delta brief, and no plan has
+  met the two-split exit outside a test and a scratch clone.
+- Closing a dropped item's pull request on GitHub has run only in tests.
+- `atelier merge` has deleted one real branch, `atelier-gqtw`'s own.
+- The 308 merged local branches and 72 detached worktrees this clone
+  already held are only counted. Removing them is the human's.
+
+**Left as it was, by the plan:** `/api/history` and `/api/launch` still read
+commit subjects, until `t3-extension/` reopens (`atelier-jz8q`).
+
+**Changes others will meet:** planning commands refuse a detached HEAD,
+`atelier start <id>` needs the remote to answer, and a checkout is detached
+after its branch merges.
+
+**Filed from what the work found:** `atelier-jz8q`, `atelier-tuln`,
+`atelier-itqc`, `atelier-vfnn`, `atelier-kjc4`, `atelier-10d6`,
+`atelier-p8bu`, `atelier-in1t`, `atelier-5asm`, `atelier-5erp`,
+`atelier-a9jo` and `atelier-vv54`, all drafts. `notes.md` has the lead's
+rulings and the one change outside the plan, `atelier-fxwl`.

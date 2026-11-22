@@ -34,3 +34,44 @@ Filed `atelier-10d6` (`start --backlog` advises another slug, which the garden
 procedure now forbids) and marked the draft `atelier-bbia` stale: it and two
 lines of `docs/product/desk.md` still describe a garden session. The live
 skill checkout, `~/projects/atelier-skill`, was moved to `4d7fab468`.
+
+## 2026-11-22: rulings and departures
+
+- **Order.** `atelier-gqtw` and `atelier-zc9b` ran side by side, not one
+  after the other as the design suggested. `atelier-zc9b` merged first and
+  `atelier-gqtw` then took one base merge and a fresh review round. That
+  was cheaper than leaving `atelier-zc9b` idle for the whole of
+  `atelier-gqtw`.
+- **An amendment's first review round** gets the delta brief from the last
+  agreed round, not the whole plan, as `atelier-h6ij` built it. Kept: the
+  amendment's change is what is under review.
+- **`atelier-gqtw`'s reviewer.** Grok 4.6 ran out of balance 15 minutes into
+  round 1 and left no verdict. Gemini 4 Neon reviewed in its place, asked
+  for two changes in round 1 and approved round 2. Because the change
+  deletes remote branches, the lead also read `cleanup.rs` and the claim and
+  drop paths, and found nothing to block. Codex was out of allowance all
+  day, so no item of this mission had a GPT reviewer.
+- **`atelier-fxwl`** is outside the plan: one attribute that silences a
+  warning every release build printed, found while installing `master`.
+- **No rule was passed.** No `ATELIER_SKIP` was used on any item's merge.
+- **A `forge.remote` given as a URL** has no remote-tracking base, so
+  `start` would refuse and `merge` would keep its branches. Not filed: no
+  repository here is configured that way.
+
+## 2026-11-22: rolled out
+
+The shared `atelier` on this host was installed from `435025919` and
+`~/projects/atelier-skill` moved to it. The first real deletion was
+`atelier-gqtw`'s own branch: `atelier merge` run again on it deleted the
+branch on `origin` and locally and left that checkout on a detached HEAD.
+
+## 2026-11-22: follow-ups filed at the close
+
+`atelier-p8bu` (a skip on a plan `submit` with nothing to commit is not
+recorded), `atelier-in1t` (the brief's whole-change diff reads the local
+base), `atelier-5asm` (three printed commands that are refused),
+`atelier-5erp` (the evals' tests leave temp directories), `atelier-a9jo`
+(the cutover template still bans every remote branch deletion) and
+`atelier-vv54` (the Desk hides malformed Responses lines, from deferred
+finding `atelier-zc9b/1-4861.1`). The mission's other deferred findings
+were settled against the items already filed for them.

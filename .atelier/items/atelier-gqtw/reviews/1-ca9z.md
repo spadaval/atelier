@@ -55,6 +55,7 @@ In `Desk::read` (`crates/atelier-desk/src/server.rs:225-230`), a cache hit retur
 
 ## Finding 2: `added_there` prefers a stale local branch over a newer fetched remote-tracking branch
 Recommendation: defer
+Dropped by mcp:launch:b3b5ffd62a4c227e4ec8ce23f1e32b83538dd28e5e6c91e0a2d3d91ead863ef6: fixed on the item's branch in ce50941a9, with a regression test, before it merged
 
 In `crates/atelier-cli/src/plan.rs:383-414`, `added_there` builds `tips` with the local branch first and the remote-tracking branch second, then deduplicates by item ID with `added.entry(other.to_string()).or_insert(found)`:
 
