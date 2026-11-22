@@ -528,9 +528,8 @@ Its model is `t3-extension/src/mission/model.ts`.
   its review rounds and time from start to merge at its end; and the
   merged items, most review rounds first, each opening its pull request on
   the forge where the item's page gives one (`pull_request`). One whose
-  branch is deleted, or whose pull request has left the forge's recent
-  list, has none: it says its pull request is not known and opens its Desk
-  page, framed.
+  pull request has left the forge's recent list has none: it says its pull
+  request is not known and opens its Desk page, framed.
 - The lanes and the merge times come from commit subjects, as the progress
   log below does, and say so. The page has no log of steps.
 - `L` opens the lead's thread, `Enter` presses the focused row's button and
@@ -742,7 +741,7 @@ gives (added by atelier-uwxy).
 | `sections[] {heading, markdown}` | `MissionDir::section` for Why, Outcome, Success criteria, Scope, Authority and Result, those present, of the copy that counts | master |
 | `dropped` | `MissionDir::dropped` | master |
 | `read_at` | The commit its record and documents were read at: the tip of the branch it was read from, else the base's | Desk |
-| `pull_request {number, url, state}` | The pull request whose head is the branch it was read from, from the forge's list (see Fetching) | Desk, `gh` |
+| `pull_request {number, url, state}` | The pull request whose head is the branch it was read from, or, for one not proposed that is read from the base, the branch the convention names for it, which `merge` deleted; from the forge's list (see Fetching) | Desk, `gh` |
 | `round {round, reviews[] {name, reviewer, model, verdict}}` | The last round of `MissionDir::reviews` | Desk |
 | `stop_on` | For `stop_pending` on an agreed mission, the unmerged branch that drops it | Desk |
 | `can_stop` | Whether the page offers the stop: `proposed`, with a forge remote and a state directory configured | Desk |
@@ -803,7 +802,7 @@ app resolves them against `path`, as the spike's `DocReader` does.
 | `unsettled[]` | The names of `actions::unsettled`, for a done item | master |
 | `threads[]` | One agent per identity and role the record names: its implementers, the reviewers of its reviews and the deciders of its answers, each with `item: null` | Desk, T3 Code |
 | `t3` | As on `/api/threads` | Desk |
-| `pull_request {number, url, state}` | The pull request of its branch, where the forge's last list has one (Fetching); `null` for an item with no branch or none found | Desk, the forge |
+| `pull_request {number, url, state}` | The pull request of its branch, or for a done or dropped item with none, of the branch the convention names for it, where the forge's last list has one (Fetching); `null` for another item with no branch, or none found | Desk, the forge |
 
 An **agent**, in `threads[]` of a mission or an item: `identity`, whole as
 the record holds it; `role`, one of `planner`, `implementer`, `reviewer`, `lead` or
@@ -1189,7 +1188,8 @@ replaced. Its default (`atelier_desk::config::SESSION_MESSAGE`) is:
 
 ## Fetching
 
-No command of the tracker fetches (docs/design.md, No command fetches); the
+The tracker's commands fetch no more than the base and a lost claim's
+branch (docs/design.md, No command fetches); the
 Desk does, for the human. On a thread of its own, every `fetch_seconds`, it
 runs `git fetch --quiet --prune <remote>` in each served repository, with no
 terminal prompt and SSH in batch mode (`atelier_core::git::unattended`).

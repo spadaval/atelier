@@ -41,12 +41,12 @@ it does its implementer submit the next round; write that ruling in
 
 Where the work turns out much harder than the plan took it to be, you may
 drop an item, or the mission, with the reason `atelier drop <id> --reason
-"<why>"` records. A started item is dropped in a checkout of its branch,
-committed and pushed; then its copy on the base, on a backlog branch:
-`atelier start --backlog drop-<id>`, the same `atelier drop`, commit,
-`atelier submit` and `atelier merge`. Anything else is dropped on a backlog
-branch alone. The mission's Result names at its close what was not done and
-why.
+"<why>"` records. One backlog branch is enough, for a started item too:
+`atelier start --backlog drop-<id>`, the drop, commit, `atelier submit` and
+`atelier merge`, which also closes a dropped item's pull request. Where `drop`
+names items only the dropped branch filed, bring over those still wanted
+with the commands it prints. The mission's Result names at its close what
+was not done and why.
 
 You may not do more or other than the plan asks. What the Authority
 withholds, and the product's direction, stay the human's: take them to an

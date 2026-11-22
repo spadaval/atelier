@@ -68,7 +68,9 @@ item in `items/<id>/item.md` with its reviews beside it, and the rules in
   HTTPS credentials for GitHub needs one command in a fresh checkout:
   `git config remote.origin.pushurl git@github.com:spadaval/atelier.git`,
   or `gh auth setup-git`. `gh` must be signed in either way.
-- Never force-push `master` or delete remote branches without the human.
+- Never force-push `master`. Never delete a remote branch by hand without
+  the human: `atelier merge` alone deletes one, the branch it just merged,
+  and only while that is still at the merged commit.
 
 ## Sources
 

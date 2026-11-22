@@ -115,7 +115,7 @@ Every change a thread makes, to code or to records, lives on a branch that
 | --- | --- | --- |
 | `<item-id>` | One item's change: its code and its records | `start <id>` on a ready item, or `start --new` |
 | `<mission-id>` | A new mission's plan, its reviews, and its items until the plan merges | `start --mission "<title>"` |
-| `backlog/<slug>` | Record changes tied to no started item and no proposed plan: filing a bug, readying or dropping an item, leading, closing or stopping an open mission, a lead's notes, and an amendment of an agreed mission's plan with its plan reviews | `start --backlog <slug>` |
+| `backlog/<slug>` | Record changes tied to no started item and no proposed plan: filing a bug, readying an item, dropping one, started or not, leading, closing or stopping an open mission, a lead's notes, and an amendment of an agreed mission's plan with its plan reviews | `start --backlog <slug>` |
 
 `config.toml` may set one branch prefix, such as `x/`, for a host whose
 forge has a naming rule. It applies to all three kinds: `x/<item-id>`,
@@ -153,9 +153,18 @@ holds it.
 `atelier list`, `atelier show` and the Desk read the base and every branch
 the convention names, local and fetched, so work in motion is seen from any
 clone that has fetched. They say which ref each record was read from and how
-long ago the remote was fetched. No command fetches, except to read back
-what it just did: `start` the branch whose claim it lost, and `merge` the
-base the forge merged into.
+long ago the remote was fetched. Commands fetch two things and no more: the
+base, by `start <id>` and `submit` to judge an item by it as it is now and
+by `merge` to read back the forge's merge; and, by `start`, the branch
+whose claim it lost.
+
+A branch ends when it merges. `merge` then deletes it on the forge's remote,
+only while it is still at the merged commit, and here, and leaves the
+checkout on a detached HEAD at that commit. The next change starts with
+`start`: the planning commands write nothing on a detached HEAD, while
+`review` and `verdict` work in a reviewer's detached checkout. A commit made
+on a detached HEAD that no branch, remote-tracking branch or tag holds is
+shown by `status`, and `start` refuses to switch away from it.
 
 ## Lifecycle
 
@@ -245,14 +254,16 @@ A thread that has ever been an item's implementer can never review that
 item, and a planner of a mission can never review its plan. Taking a role over does not erase who held it
 before.
 
-Dropping is final, and counts once it is published. A started item is
-dropped on its own branch: once that commit is pushed, the item's `submit`
-and `merge` are refused, and its implementer's `status` says it was dropped
-and why. The base's copy follows by a record-only change. A proposed plan is
-dropped on its branch, which is then pushed and its pull request closed. An
-item that is not started, and an agreed mission, are dropped on a backlog
-branch, and the drop counts once that merges. Until a drop is published,
-`status` and `show` say so.
+Dropping is final, and counts once it is published. An item, started or
+not, and an agreed mission are dropped on a backlog branch, and the drop
+counts once that merges: the item's `submit`, `merge` and take-over are then
+refused, its implementer's `status` says it was dropped and why, and that
+`merge` closes the item's pull request. `drop` names the other items that
+only the dropped item's branch filed, so none is lost unseen. A started item
+may also be dropped on its own branch, which stops it once that commit is
+pushed; the base's copy then follows by a record-only change. A proposed
+plan is dropped on its branch, which is then pushed and its pull request
+closed. Until a drop is published, `status` and `show` say so.
 
 ## Commands
 
@@ -265,14 +276,15 @@ command that changes a record (`new`, `set`, `ready`, `drop`, `close`,
 `lead`, `review` and `verdict`) only writes the file,
 in the checkout it runs in, prints the paths it wrote and the Git command
 that commits them, and stops. It makes no commit, no branch and no push. Run
-in the checkout that has the base out, it writes nothing and names the
-`start` that makes a branch for the change.
+in the checkout that has the base out, or, but for `review` and `verdict`,
+on a detached HEAD, it writes nothing and names the `start` that makes a
+branch for the change.
 
 ### Anyone
 
 | Command | Behaviour |
 | --- | --- |
-| `status` | Who this thread is, what it holds, what each thing needs, and the next command. On the base with nothing held: the ready items `start` would accept now, one line counting the other ready items by what stops them, missions in progress and what waits on the human, which is not listed as ready. For a mission's lead, its mission, what each item needs, and what is disputed in it. |
+| `status` | Who this thread is, what it holds, what each thing needs, and the next command. On the base with nothing held: the ready items `start` would accept now, one line counting the other ready items by what stops them, missions in progress and what waits on the human, which is not listed as ready. Away from an item's branch, it also shows a detached HEAD's commits that no branch holds and, from 20 merged local branches or 10 detached worktrees, one line that counts both and names the Git commands that list them; it deletes nothing. For a mission's lead, its mission, what each item needs, and what is disputed in it. |
 | `show <id>` | An item in full, with a summary of each review: its round, reviewer, model, the commit it reviewed and its verdict, and each finding's name, recommendation, state and title. A finding's text is in its review file. For a mission, the whole mission on one page: whether it is proposed, agreed, done or dropped, its outcome and criteria, its items grouped by status with who holds each and what blocks each, what is disputed in it as `list --disputed` gives it, and its reviews by round. Either says which ref the record was read from, and, for a fetched ref, how long ago the remote was fetched. |
 | `list` | With no flags, all open work on the base, grouped by mission and then by label, and apart from it what is proposed: missions on unmerged branches and record changes waiting to merge, each with its branch. Narrowed by `--ready`, `--blocked`, `--needs-human`, `--proposed`, `--mission <id>`, `--label <l>`, `--mine` and `--deferred`; `--done` shows finished missions and items instead. `--disputed` lists instead, across open and done items, each open fix-now finding answered `not built`, which waits on the lead, each finding whose Response is `rebutted` with what the next round made of it (kept, withdrawn, fixed, kept at defer or no action, or not yet reviewed), and each plan-review round whose reviewers gave different verdicts; `--mission <id>` narrows it. The listing refuses nothing; `submit` refuses another plan round after two split rounds in a row (see Review). |
 | `log` | The history of actions, read from Git, one line each and oldest first: when, the commit, which item or mission, the action, the thread where the record holds one, what changed, and any rule its commit skipped. For everything, one item, or one mission with its plan reviews and its items, and only actions `--since` a time. It adds nothing up. |
@@ -294,9 +306,9 @@ base.
 | `new "<title>"` | Writes a draft item and prints its path. `--in <mission>` sets membership. `--from <finding>` makes the item from an unsettled deferred finding of a done item, and marks the finding taken. |
 | `set <id> ...` | Changes front-matter fields: title, priority, labels, mission, blocked-by, and, on a bug, `--caused-by <item>` for the item that introduced it. |
 | `ready <id>... --by <name>` | Marks each named item ready and records who said so. A mission is refused: it needs no go-ahead. |
-| `drop <id> --reason` | Ends work that will not be done. Given an unsettled deferred finding of a done item, it marks the finding dropped. |
+| `drop <id> --reason` | Ends work that will not be done: on a backlog branch, for a started item too, or on a started item's own branch. Given an unsettled deferred finding of a done item, it marks the finding dropped. |
 | `close <id>` | Ends an agreed mission whose items are all done or dropped and whose Result is written. With a result text, ends a draft or ready item that has no files to change. |
-| `submit` and `merge` on a mission's or a backlog branch | As for an item: `submit` pushes the branch and opens its pull request, and `merge` merges it once it has what it needs. |
+| `submit` and `merge` on a mission's or a backlog branch | As for an item: `submit` pushes the branch and opens its pull request, and `merge` merges it once it has what it needs, then deletes it. A backlog merge that drops a started item also closes that item's pull request. |
 
 Agents edit the Markdown body of a record directly. They never hand-edit front
 matter; `set` and the status commands write it.
@@ -305,9 +317,9 @@ matter; `set` and the status commands write it.
 
 | Command | Behaviour |
 | --- | --- |
-| `start <id>` | On a ready item: creates branch `<id>` from the base, sets `building`, binds this thread as implementer, and pushes the branch where a remote is configured, which is the claim. On a started item: switches to its branch and takes it over. `start --new "<title>"` creates an item on a new branch already `building`, for work the human asked for directly. In the checkout that has the base out, `start` makes the branch without switching and prints the Git command that adds a worktree for it. |
-| `submit` | Checks every Done when line is ticked, the Report is written, and each open fix-now finding has a response; sets `in_review` and commits the item's directory; opens a new round; prints the reviewer's handoff line. On a branch that proposes or changes a plan, it opens a round of plan review, and refuses to once the change's last two rounds split. Where a forge is configured it then pushes the branch and opens its pull request, so CI runs while the review does; a push or pull request that fails is a warning, and `merge` does it later. |
-| `merge` | Runs the checks below and merges the branch. With a forge, the forge merges the pull request, as a merge commit; without one, `merge` makes the merge commit and moves the base locally. If CI has not finished it waits for it, up to 9 minutes, then says "not yet" and is run again later. Its only flag is `--trivial "<why>"`, which skips review for a change whose correctness is evident from the diff and records the claim. |
+| `start <id>` | On a ready item: creates branch `<id>` from the base, sets `building`, binds this thread as implementer, and pushes the branch where a remote is configured, which is the claim. On a started item: switches to its branch and takes it over. For either, where a remote is configured, it first fetches the base and refuses an item done or dropped there, and after its push looks again. `start --new "<title>"` creates an item on a new branch already `building`, for work the human asked for directly. In the checkout that has the base out, `start` makes the branch without switching and prints the Git command that adds a worktree for it. |
+| `submit` | Where a remote is configured, fetches the base and refuses an item done or dropped there. Checks every Done when line is ticked, the Report is written, and each open fix-now finding has a response; sets `in_review` and commits the item's directory; opens a new round; prints the reviewer's handoff line. On a branch that proposes or changes a plan, it opens a round of plan review, and refuses to once the change's last two rounds split. Where a forge is configured it then pushes the branch and opens its pull request, so CI runs while the review does; a push or pull request that fails is a warning, and `merge` does it later. |
+| `merge` | Runs the checks below and merges the branch. With a forge, the forge merges the pull request, as a merge commit; without one, `merge` makes the merge commit and moves the base locally. If CI has not finished it waits for it, up to 9 minutes, then says "not yet" and is run again later. Once merged, it deletes the branch, on the forge's remote and here. Its only flag is `--trivial "<why>"`, which skips review for a change whose correctness is evident from the diff and records the claim. |
 
 ### Reviewer
 
@@ -450,14 +462,15 @@ record is committed on the base.
   the mission's branch, with its plan reviews, and reach the base when the
   plan merges.
 - Every other record change that belongs to no started item is written on a
-  backlog branch: filing an item, `set`, `ready`, dropping an item that is
-  not started, `lead`, `close`, a lead's notes, an item added to an agreed
+  backlog branch, as is a drop of any item: filing an item, `set`, `ready`,
+  `drop`, `lead`, `close`, a lead's notes, an item added to an agreed
   mission, and dropping an agreed mission. Each merges as a record-only
   change. An amendment of an agreed mission's plan is written on a backlog
   branch too, and merges after two approving plan reviews of it.
 - Once an item is started, its directory changes only on its branch, and those
-  changes reach the base in the merge. A drop of a started item is written
-  there too, and the base's copy follows by a record-only change.
+  changes reach the base in the merge. The exception is a drop, which a
+  backlog branch may write to the base's copy: a `dropped` record on the
+  base wins over the item's branch.
 - Once an item is done, its directory changes only when one of its deferred
   findings is settled. That is written where the command is run: on a
   backlog branch, or on a gardener's branch, where it is reviewed with the
@@ -618,6 +631,14 @@ failing check passed with `ATELIER_SKIP` gets its skip line instead, and
 nothing says the checks passed. A run that finds the branch already merged
 says so, and says nothing of checks.
 
+Once the base this clone has fetched holds the merged commit, `merge`
+deletes the branch. On the forge's remote it does so only while the branch
+is still at that commit, so a later push is kept, and a refusal is a
+warning. Here it leaves the checkout detached at that commit; where a skip
+left changes uncommitted, the branch stays checked out, and `merge` says so.
+When the fetch after the merge fails it deletes neither, and `merge` run
+again after a fetch does.
+
 An item that is approved and not merged shows that way, with since when, in
 `status` and `show`, so a wait that was lost is visible. The
 time is that of the commit that recorded the approving verdict. It comes
@@ -717,7 +738,8 @@ skill.
 - Coordinating clones beyond the claim. Two clones of one remote cannot
   both start one item, since `start` pushes the branch it makes, and each
   sees the other's work once it has fetched. Nothing else is coordinated
-  across clones, and no command fetches.
+  across clones, and no command fetches more than the base and a lost
+  claim's branch.
 - An integration branch for a mission, a database or a lock service for
   records.
 - Anything for a second user: onboarding docs, installers beyond what exists,
