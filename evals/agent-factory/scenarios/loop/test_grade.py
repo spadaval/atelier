@@ -412,6 +412,23 @@ class DepartureTest(Fixture):
         self.assertEqual(found["kind"], "record past the pre-commit hook")
         self.assertIn("draft to approved", found["detail"])
 
+    def test_a_hook_skip_covers_a_commit_stamped_the_second_before_the_hook(self):
+        # Git stamps the commit's time, then runs pre-commit, so the second
+        # can tick over in between; two seconds is another commit's time.
+        self.atelier("impl", "setup")
+        self.hand_status()
+        self.sh("git", "commit", "-qam", "Approve it", thread="impl",
+                skip="Dana approved it in person")
+        at = int(self.sh_out("git", "show", "-s", "--format=%ct", "HEAD"))
+        log = self.work / ".atelier-calls.jsonl"
+        for later, covers in ((1, True), (2, False)):
+            calls = [json.loads(line) for line in log.read_text().splitlines()]
+            for call in calls:
+                if call["argv"][:3] == ["check", "--hook", "pre-commit"]:
+                    call["start"] = at + later + 0.01
+            log.write_text("".join(json.dumps(call) + "\n" for call in calls))
+            self.assertIs(self.departures()[1]["pass"], covers, later)
+
     def test_a_commit_on_main_outside_a_merge_fails(self):
         (self.repo / "slug.py").write_text(FIXED)
         self.sh("git", "commit", "-qam", "Fix it on main")
