@@ -49,10 +49,13 @@ check() {
 
 expect false false false false markdown-at-root README.md
 expect false false false false markdown-in-docs docs/adr/0001-x.md docs/strategies/y.md
-expect false false false false records-only .atelier/issues/a.md .atelier/reviews/a.toml .atelier/evidence/a.md
-expect false false false false markdown-and-records CONTEXT.md .atelier/issues/a.md
-expect false false false false new-layout-records .atelier/items/a/item.md .atelier/missions/m/mission.md
-expect true false false false new-layout-config .atelier/config.toml
+expect false false false false item-markdown .atelier/items/a/item.md .atelier/items/a/reviews/01.md
+expect false false false false item-artifacts .atelier/items/a/artifacts/shot.png .atelier/items/a/artifacts/.gitattributes
+expect false false false false mission-markdown .atelier/missions/m/mission.md .atelier/missions/m/reviews/01.md
+expect false false false false mission-artifacts .atelier/missions/m/artifacts/shot.png .atelier/missions/m/data.toml
+expect false false false false markdown-and-records CONTEXT.md .atelier/items/a/item.md
+expect true false false false config .atelier/config.toml
+expect true false false false config-and-records .atelier/config.toml .atelier/items/a/item.md
 expect true false false false markdown-under-crates crates/a/tests/fixtures/new.md
 expect true false false false rust-source crates/a/src/lib.rs
 expect true false true true lockfile Cargo.lock
@@ -76,6 +79,8 @@ expect true false true true workspace-cargo-toml Cargo.toml
 expect true false true true ci-jobs-script scripts/ci-jobs.sh
 expect true false false false ci-jobs-test scripts/ci-jobs.test.sh
 expect true false false false other-workflow .github/workflows/v-release.yml
+expect true false true false t3-extension-release-script scripts/t3-extension-release.sh
+expect true false true false t3-extension-release-test scripts/t3-extension-release.test.sh
 expect false false true false t3-extension-test t3-extension/test-extension.mjs
 expect true false false true cli crates/atelier-cli/src/main.rs
 expect false false false true eval-scenario evals/agent-factory/scenarios/x/setup.sh evals/agent-factory/README.md
