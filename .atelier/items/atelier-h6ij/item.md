@@ -3,12 +3,13 @@ schema: atelier.item
 schema_version: 3
 id: atelier-h6ij
 title: Add incremental round 2+ plan reviews, 2-split-round plan exit, and 3-round code review cap
-status: ready
+status: building
 mission: atelier-ww7w
 labels: []
 priority: medium
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3Aa7ab9ade-d27f-4fdc-9a10-37446bba3ca2%3Adelegate-task%3A38d5eadd-13a9-4e91-92a9-64f42222a00f
 ready:
   by: Sumeet, in conversation on 2026-11-22
   at: 2026-11-22T05:33:31.467134267Z
