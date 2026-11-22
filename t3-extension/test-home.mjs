@@ -79,15 +79,15 @@ try {
     assert.equal(await read(`text(p.querySelector('h1'))`), 'atelier');
     assert.deepEqual(await lanes(), [
       ['now', ['atelier-nm01'], ['atelier-l001']],
-      ['next', ['atelier-xm01'], ['atelier-l002', 'atelier-l003']],
+      ['next', ['atelier-xm01'], ['atelier-l004', 'atelier-l002', 'atelier-l005', 'atelier-l003']],
       ['later', ['atelier-lm01'], []],
     ]);
     assert.match(await read(`text(p.querySelector('[data-lane="now"]'))`), /^Now2missions in progress, and started work in no mission/);
     assert.match(await read(`text(p.querySelector('[data-mission-row="atelier-nm01"]'))`), /^Draw the project home nativelyatelier-nm011 need you1\/5/);
     // The open items in no mission count in their lane.
-    assert.match(await read(`text(p.querySelector('[data-lane="next"]'))`), /^Next3agreed, nothing started, and open work/);
+    assert.match(await read(`text(p.querySelector('[data-lane="next"]'))`), /^Next5agreed, nothing started, and open work/);
     // Each item in no mission shows its priority, as the Desk's page does; a mission's items do not.
-    assert.deepEqual(await read(`[...p.querySelectorAll('[data-loose] [data-item-row]')].map(r => [r.dataset.itemRow, r.querySelector('[data-priority]')?.dataset.priority, r.querySelectorAll('[data-priority] i.bg-border').length])`), [['atelier-l001', 'critical', 0], ['atelier-l002', 'high', 0], ['atelier-l003', 'low', 2]]);
+    assert.deepEqual(await read(`[...p.querySelectorAll('[data-loose] [data-item-row]')].map(r => [r.dataset.itemRow, r.querySelector('[data-priority]')?.dataset.priority, r.querySelectorAll('[data-priority] i.bg-border').length])`), [['atelier-l001', 'critical', 0], ['atelier-l004', 'critical', 0], ['atelier-l002', 'high', 0], ['atelier-l005', 'high', 0], ['atelier-l003', 'low', 2]]);
     assert.equal(await read(`p.querySelector('[data-items] [data-priority]')`), null);
     assert.deepEqual(await page.evaluate('homeErrors'), []);
   });
@@ -176,7 +176,7 @@ try {
   });
   // A read that answered and then fails keeps what it gave, said to be as of then, never silently.
   for (const [failing, label, where, kept] of [
-    ['/api/roadmap?repo=atelier', 'the items in no mission', `p`, `p.querySelectorAll('[data-loose] [data-item-row]').length === 3`],
+    ['/api/roadmap?repo=atelier', 'the items in no mission', `p`, `p.querySelectorAll('[data-loose] [data-item-row]').length === 5`],
     ['/api/history?repo=atelier&days=7', 'the week', `p`, `p.querySelectorAll('[data-entry]').length === 3`],
     ['/api/repos/atelier/missions/atelier-nm01', 'an open mission\'s items', `p.querySelector('[data-mission-row="atelier-nm01"]')`, `p.querySelectorAll('[data-items="atelier-nm01"] [data-item-row]').length === 5`],
   ]) {

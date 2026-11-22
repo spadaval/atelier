@@ -34,7 +34,7 @@ export function ProjectStrip({ repo, narrow, composerMissing, threads, openInbox
   const { data, error } = useDeskRead<LaunchResponse>(repo.desk, path, 60000);
   if (!data) return <Note error={Boolean(error)}>{error ? `GET ${repo.desk}${path}: ${error.message}` : `Reading ${repo.repo} from the Desk…`}</Note>;
 
-  const ready = data.ready ?? [];
+  const startable = data.ready ?? [];
   const waitingItems = data.waiting_items ?? [];
   const inMotion = data.in_motion ?? [];
   const waiting = data.waiting ?? waitingItems.length;
@@ -63,7 +63,7 @@ export function ProjectStrip({ repo, narrow, composerMissing, threads, openInbox
       </Row>
     );
   });
-  const nextRows = ready.slice(0, 3).map((item) => {
+  const nextRows = startable.slice(0, 3).map((item) => {
     // The prompt is built only from an ID of Atelier's form; any other ID is shown but cannot be used.
     const valid = itemIdPattern.test(item.id);
     const usable = valid && composerMissing === null;
@@ -92,7 +92,7 @@ export function ProjectStrip({ repo, narrow, composerMissing, threads, openInbox
       <div className={`grid min-h-0 flex-1 gap-2 ${narrow ? "grid-cols-2" : "grid-cols-3"}`}>
         <Card name="waiting" title="Waiting on you" count={waiting} empty="Nothing waiting on you" onHeader={openInbox} rows={waitingRows} />
         <Card name="motion" title="In motion" count={inMotion.length} empty="Nothing in motion" hidden={narrow} rows={motionRows} />
-        <Card name="next" title="Next up" count={ready.length} empty="Nothing ready" rows={nextRows} />
+        <Card name="next" title="Next up" count={startable.length} empty="Nothing can start" rows={nextRows} />
       </div>
     </div>
   );

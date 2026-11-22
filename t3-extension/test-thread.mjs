@@ -2,7 +2,7 @@
 // implements an item, one that leads a mission, one with children and mentions only, one that
 // planned a mission still proposed, and one with nothing, which shows its project; what each lists,
 // what its rows and titles open, and that a failed read, or a repository the Desk answers it could
-// not read, is named and never read as "holds nothing", "nothing is started" or "nothing is ready".
+// not read, is named and never read as "holds nothing", "nothing is started" or "nothing can start".
 // It builds check/thread.tsx with the extension's own Vite config and draws it in a page that
 // carries T3 Code's stylesheet, as last copied, for T3's colours, in light and dark. Screenshots go
 // to artifacts/thread-*.png.
@@ -192,15 +192,15 @@ try {
   await check('a thread with nothing: it says so, and shows its project at a glance', async () => {
     assert.equal(await read('p.dataset.thisThread'), 'empty');
     assert.equal(await read(`text(p.querySelector('[data-empty]'))`), 'This thread holds nothing, started nothing and names no record. Here is atelier.');
-    assert.deepEqual(await sections(), ['waiting', 'missions', 'motion', 'ready']);
+    assert.deepEqual(await sections(), ['waiting', 'missions', 'motion', 'next']);
     assert.deepEqual(await rows('waiting'), ['item:atelier-tn01']);
     // Only the agreed mission: the proposed plan is not one.
     assert.deepEqual(await rows('missions'), ['mission:atelier-tlm1']);
     assert.match(await read(`text(p.querySelector('[data-section="motion"]'))`), /atelier-tl02.*building, Implement atelier-tl02/);
-    assert.deepEqual(await rows('ready'), ['item:atelier-tn02']);
+    assert.deepEqual(await rows('next'), ['item:atelier-tn02']);
     await calls();
     await click('[data-section="missions"] [data-row="mission:atelier-tlm1"]');
-    await click('[data-section="ready"] [data-row="item:atelier-tn02"]');
+    await click('[data-section="next"] [data-row="item:atelier-tn02"]');
     assert.deepEqual(await calls(), [['mission', 'atelier', 'atelier-tlm1', false], ['item', 'atelier', 'atelier-tn02']]);
     await noFrame();
   });
@@ -217,11 +217,11 @@ try {
     assert.deepEqual(await sections(), []);
     assert.deepEqual(await notes(), ['Could not read the repository atelier, for what waits on you (GET /api/inbox): fixture repository unreadable']);
   });
-  await check('the glance names a repository the Desk could not read for what is in motion, and does not say nothing is started or ready', async () => {
+  await check('the glance names a repository the Desk could not read for what is in motion, and does not say nothing is started or can start', async () => {
     await open('nothing', 520, 'light', null, '/api/motion');
     assert.equal(await read('p.dataset.thisThread'), 'empty');
     assert.deepEqual(await sections(), ['waiting', 'missions']);
-    assert.doesNotMatch(await read('text(p)'), /Nothing is started|Nothing is ready/);
+    assert.doesNotMatch(await read('text(p)'), /Nothing is started|Nothing can start/);
     assert.deepEqual(await notes(), ['The Desk could not read what is in motion in atelier (GET /api/motion): fixture repository unreadable']);
   });
 

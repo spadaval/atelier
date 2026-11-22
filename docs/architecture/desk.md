@@ -520,7 +520,10 @@ Its model is `t3-extension/src/mission/model.ts`.
   work*: each other live thread, with its item, latest line and how long
   its latest run has gone. *Not started*, *Merged* and *Outcome and
   success criteria* are each one folded line that opens in place; an item
-  in them opens its Desk page, framed.
+  in them opens its Desk page, framed. *Not started* counts the open items
+  that can start and those that wait, and says of each that it can start or
+  what it waits on: its blockers, the branch that adds it while the base
+  does not hold it, or else the condition of `start` that does not hold.
 - Done (or dropped): the state and when it closed, and how long after the
   plan merged; the Result as written; a lane per item, dropped ones
   included and ended where they were dropped, from the plan's merge
@@ -551,8 +554,10 @@ of bordered panes after Factory's Mission Control: a top bar (the
 repository and mission, when the plan merged, how many items are live and
 how many quiet) and a state line (`RUNNING`, `AGREED`, `PROPOSED` or
 `DONE`) with a bar of the items done; *Active Item*, the item selected, with
-its stage and how long it has been in it, its holder and reviewer, its
-blockers, Done when, goal, pull request and CI (`GET /api/checks`);
+its stage (for an open one, whether it can start) and how long it has been
+in it, its holder and reviewer, what it cannot start until or, once
+started, its blockers, Done when, goal, pull request and CI
+(`GET /api/checks`);
 *Items*, every item with its stage, marked when it has sat in a moving stage
 for 30 minutes; *Progress Log*, the mission's steps newest first, paged to
 the rows its pane holds; *Active Threads*, the live threads on the mission,
@@ -599,9 +604,10 @@ both follow the rules here. The project's name in T3's thread breadcrumb, the
 project's name in its project strip and the "N more missions" row in its
 sidebar open it. It is the project as a roadmap without dates. *Now*
 holds each agreed mission with any item started or done, and started items
-in no mission; *Next*, agreed missions with nothing started, and open
-items in no mission; *Later*, proposed plans
-(`GET /api/roadmap` gives the items in no mission). A mission folds open to
+in no mission; *Next*, agreed missions with nothing started, and every open
+item in no mission as one list, by priority and then ID; *Later*, proposed
+plans (`GET /api/roadmap` gives the items in no mission, in no such order,
+so each page sorts them). A mission folds open to
 its items with their holders, read from its page
 (`GET /api/repos/{repo}/missions/{id}`) as it opens; those under *Now* start
 open, and those under *Next* too when *Now* has no mission and *Next* two at
@@ -1033,7 +1039,7 @@ such as for a pull request it cannot find, `500`.
 ### `GET /api/roadmap?repo=<repo>`
 
 `repo`, and `loose[]`: every item in no mission that is not done or
-dropped, as item rows, for the project home's Now, Next and Later. An
+dropped, as item rows, for the project home's Now and Next. An
 unknown repository is `404`.
 
 ### `GET /api/proposed`

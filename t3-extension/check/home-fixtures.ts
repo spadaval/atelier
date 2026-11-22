@@ -82,8 +82,11 @@ const nextMission = row("atelier-xm01", "Agreed, not started", "open", nextItems
 const laterMission = row("atelier-lm01", "A proposed plan", "proposed", []);
 const loose = [
   item("atelier-l001", "A loose item being built", "building", { holder: "thread:loose", priority: "critical" }),
-  item("atelier-l002", "A loose open item", "open", { priority: "high" }),
+  // Not in the order the home lists them: the Desk gives no order by priority.
   item("atelier-l003", "Another loose open item", "open", { priority: "low" }),
+  item("atelier-l005", "A loose item as urgent as another", "open", { priority: "high" }),
+  item("atelier-l002", "A loose open item", "open", { priority: "high" }),
+  item("atelier-l004", "The most urgent loose item", "open", { priority: "critical" }),
 ];
 const threads: Agent[] = [
   { identity: "thread:impl", role: "implementer", item: "atelier-n002", thread: { title: "Implement the fold", status: "running", provider: "claudeAgent", model: "claude-opus-5-5", link: null } },
