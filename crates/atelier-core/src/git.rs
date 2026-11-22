@@ -387,6 +387,21 @@ pub fn changed(repo: &Path, from: &str, to: &str) -> Result<Vec<String>> {
     Ok(names(&listed))
 }
 
+/// Those of [`changed`] that `to` has and `from` has not.
+pub fn added(repo: &Path, from: &str, to: &str) -> Result<Vec<String>> {
+    let args = [
+        "diff",
+        "--name-only",
+        "-z",
+        "--no-renames",
+        "--diff-filter=A",
+        from,
+        to,
+        "--",
+    ];
+    Ok(names(&listing(repo, &args)?))
+}
+
 /// The paths the commit `head` changes against the commit `base`: since
 /// the two parted, as a pull request shows them.
 pub fn changed_from_base(repo: &Path, base: &str, head: &str) -> Result<Vec<String>> {

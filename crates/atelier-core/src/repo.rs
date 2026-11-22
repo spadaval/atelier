@@ -808,17 +808,44 @@ impl<'s> Repo<'s> {
         let commit = &review.review.commit;
         Ok(Some(SinceApproval {
             changed: git::changed(&self.root, commit, head)?,
+            filed: self.filed(commit, head)?,
             reviewed: self.reader.item(commit, &record.item.id)?,
             head: self.reader.item(head, &record.item.id)?,
         }))
     }
 
+    /// The records that only file a new item between the commits `from`
+    /// and `to`: each is added since, is on no tip of the base, and is open
+    /// as `to` holds it. One that does not read files nothing.
+    fn filed(&mut self, from: &str, to: &str) -> Result<Vec<String>> {
+        let mut filed = Vec::new();
+        for path in git::added(&self.root, from, to)? {
+            let Some(id) = item_of_record(&path) else {
+                continue;
+            };
+            if !matches!(self.reader.item(&self.base_tip, id), Ok(None)) {
+                continue;
+            }
+            let added = self.reader.item(to, id).ok().flatten();
+            if added.is_some_and(|dir| dir.item.status == Status::Open) {
+                filed.push(path);
+            }
+        }
+        Ok(filed)
+    }
+
     /// What the checkout holds that no commit does and `merge` would leave
-    /// behind: changes to tracked files, and new files in the item's
-    /// directory, such as a review file.
+    /// behind: changes to tracked files, new files in the item's directory,
+    /// such as a review file, and the records of items filed on the branch,
+    /// which `new` does not commit.
     pub fn uncommitted(&self, id: &str) -> Result<Vec<String>> {
         let mut paths = git::uncommitted(&self.root)?;
-        paths.extend(git::untracked(&self.root, &item_dir(id))?);
+        let own = format!("{}/", item_dir(id));
+        let new = git::untracked(&self.root, ItemDir::DIR)?;
+        paths.extend(
+            new.into_iter()
+                .filter(|path| path.starts_with(&own) || item_of_record(path).is_some()),
+        );
         Ok(paths)
     }
 
@@ -973,6 +1000,13 @@ pub fn item_dir(id: &str) -> String {
 
 pub fn item_path(id: &str) -> String {
     format!(".atelier/items/{id}/item.md")
+}
+
+/// The item whose record `path`, from the root, is, if it is one's.
+pub fn item_of_record(path: &str) -> Option<&str> {
+    path.strip_prefix(ItemDir::DIR)?
+        .strip_suffix("/item.md")
+        .filter(|id| !id.contains('/'))
 }
 
 pub fn mission_dir(id: &str) -> String {

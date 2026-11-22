@@ -442,8 +442,8 @@ will check.
 | `review` of a plan | Reviewer | proposed, or `open` with its plan changed on the backlog branch the checkout is on | unchanged | the caller is not in the mission's `planners` |
 | `verdict changes` on a plan review | Reviewer | as `review` of a plan | unchanged | the file validates; it has an open fix-now finding; no finding has a `Decided:` line |
 | `verdict approve` on a plan review | Reviewer | as `review` of a plan | unchanged | the file validates; no fix-now finding is open among the file's own and those of earlier rounds; no finding has a `Decided:` line |
-| `merge` | Implementer | `approved` | `done`, read from the merge | a review of the latest round approves it and still covers the head; no line in Responses is malformed; nothing uncommitted in tracked files or the item's directory; the item and its mission are not dropped |
-| `merge --trivial` | Implementer | `building` | `done`, read from the merge | Done when ticked; Report written; no review file; no line in Responses is malformed; nothing uncommitted in tracked files or the item's directory; the item and its mission are not dropped |
+| `merge` | Implementer | `approved` | `done`, read from the merge | a review of the latest round approves it and still covers the head; no line in Responses is malformed; nothing uncommitted in tracked files, the item's directory or a newly filed item's record; the item and its mission are not dropped |
+| `merge --trivial` | Implementer | `building` | `done`, read from the merge | Done when ticked; Report written; no review file; no line in Responses is malformed; nothing uncommitted in tracked files, the item's directory or a newly filed item's record; the item and its mission are not dropped |
 | `merge` (mission) | Planner | proposed | agreed, by being on the base | Until atelier-2vdq, refused as a backlog branch that adds a mission is, a rule a skip passes. From atelier-2vdq: two reviews of the current round, from threads not in `planners`, approve, and the plan has not changed since the commit each reviewed; the mission is not dropped on its branch; no code changed; nothing uncommitted |
 | `merge` (backlog) | Any | none | none | in a checkout on the backlog branch; no code changed (no path outside `.atelier/`, and not `config.toml`), which is no rule; it adds no mission and changes no mission's plan, which until atelier-2vdq gives a plan its gate is a rule refused; it brings no item record in a started status; `atelier check` passes on the merged tree; nothing uncommitted. No review file is asked for. Not an implementer's action on an item |
 | `close` (item) | Any | `open` | `done` | a result text; no branch `<id>` exists |
@@ -467,7 +467,8 @@ command that commits them.
 | `start`, `start --new`, a take-over | The item's branch, which `start` makes or switches to | The command: one commit holding the item's record, which is the claim, then a push where a remote is configured |
 | `start --mission` | The mission's branch, which it makes | The command, then a push where a remote is configured |
 | `start --backlog` | The backlog branch, which it makes | Nothing to commit; the command pushes the branch where a remote is configured |
-| `new`, `set` (item) | A backlog branch; or the mission's branch while its plan is proposed and the item is one of the plan's | The agent |
+| `new` | Any branch `start` made that will merge: a started item's, whoever runs it, a mission's, or a backlog branch. A thread with no branch makes a backlog branch | The agent |
+| `set` (item) | A backlog branch; or the mission's branch while its plan is proposed and the item is one of the plan's | The agent |
 | `submit` | The item's branch | The command: the item's directory, with `in_review` |
 | `submit` (mission, backlog) | The branch it is on | The command commits only the addition of a planner taking the plan over; it refuses while a record change is uncommitted, and pushes |
 | `review`, `verdict` (item) | The item's branch, in the implementer's checkout | The agent: the reviewer commits the review file and `item.md` |
@@ -480,6 +481,10 @@ command that commits them.
 | `drop` of a proposed mission | The mission's branch | The agent, who pushes it and closes its pull request |
 | `new --from`, `drop` on a finding | A backlog branch, or a gardener's item branch | The agent |
 | `lead` | A backlog branch | The agent |
+
+Which branch a change belongs on is the command's to check, not the
+hook's: pre-commit takes a valid new item's record on every branch but the
+base.
 
 A status written by an action the agent commits is checked when it is
 committed: the pre-commit hook refuses a status change the table does not
@@ -562,13 +567,17 @@ How the table is built:
 Two facts are checked live and never stored:
 
 - **The approval covers the head.** Since the reviewed commit, nothing
-  changed outside the item's own directory, and the item's Goal, Done when
-  and Scope are unchanged. So a Report, a response or a review file never
-  makes an approval stale, while code, `config.toml`, a mission's documents,
-  another item or the item's own requirements do. If it is stale, `status`
+  changed outside the item's own directory but to file new items, and the
+  item's Goal, Done when and Scope are unchanged. Filing is adding the
+  `item.md` of an open item that neither the reviewed commit nor the base's
+  tip holds (`Repo::filed`). So a Report, a response, a review file or a
+  new item's record never makes an approval stale, whoever commits it,
+  while code, `config.toml`, a mission's documents, any other change to
+  another item, such as an edit of one the review saw filed, or the item's
+  own requirements do. If it is stale, `status`
   and `merge` say to run `submit`. `atelier-core`'s `Repo::checkout`
   gathers what this reads, as `actions::Checkout`: the paths that differ between the reviewed commit and
-  the head, the item's record at the reviewed commit and at the head, and
+  the head and which of them file a new item, the item's record at the reviewed commit and at the head, and
   what the checkout has not committed; `actions::unmet` applies the rule. `status` gathers
   it on the item's branch, so it lists what `merge` will check.
 - **The merge checks pass.** The configured commands on the merged tree,
@@ -821,7 +830,7 @@ reads and writes.
      local tip is read, and `status` and `show` say the two have diverged.
   3. Else the base's copy.
   4. A record the base does not hold and that has no branch of its own, such
-     as an item filed on a backlog branch or an item of a proposed plan, is
+     as an item just filed, on whatever branch, or an item of a proposed plan, is
      read from the unmerged branch that adds it, and is proposed. Where
      several do, the first by branch name is read and `show` names the
      others.
@@ -914,11 +923,17 @@ reads a commit. A commit made there is on no branch.
   passes it. `new --from` and `drop` on a finding, on the branch of a
   started item whose last implementer is the caller, say that the write
   reaches the base in that item's merge and makes an approval of it stale.
+  `new` there says the item it filed reaches the base in that merge and
+  makes none stale.
 - **`new`** picks an ID that no record has in the checkout, at the base's tip
   or on any branch the reader reads, and that no branch is named for, and
   writes an open item with its section headings and nothing under them; an
   item's priority starts as `medium`. It makes items only; `start
-  --mission` makes a mission.
+  --mission` makes a mission. The item joins no mission unless `--in`
+  names one, and has no implementer. It runs on any branch `start` made
+  (`Belongs::New`): on an item's, for any thread while the item is started,
+  and refused once it is done or dropped, since that branch will not merge.
+  The refusal is a rule.
 - **`set`'s flags.** `set <id>` takes `--title`, `--priority`,
   `--labels a,b`, `--mission <id>`, `--blocked-by a,b` and
   `--caused-by <item or commit>`, at least one. A list flag replaces the
@@ -941,9 +956,12 @@ reads a commit. A commit made there is on no branch.
   refusals in every clone that has fetched, and a push from a clone that
   has not is refused by the forge, since that branch is behind; `drop` then
   prints the commands that carry the base's copy on a backlog branch.
-  Either way `drop` names each other item record the branch added that the
-  base does not hold, local or as fetched, with the `git checkout` that
-  brings it over. An item that is only on its branch, as after `start
+  Either way `drop` carries none of the items filed on the branch to the
+  base: it names them, since which are still wanted is the dropping
+  thread's to judge. It names each other item record the branch added that
+  the base does not hold, local or as fetched, and each the branch's
+  checkout holds uncommitted, with the `git checkout` that brings it over,
+  after the commit it needs first where it has none. An item that is only on its branch, as after `start
   --new`, gets its branch's front matter and its Goal, Done when and Scope
   written there, under which its Report holds the reason; its reviews, the
   rest of its Report and any Decisions stay on the branch, so nothing on
@@ -1056,6 +1074,13 @@ reads a commit. A commit made there is on no branch.
   its view at the submitted commit before it publishes, and a reviewer who
   goes looking with `show` or a fetch can read the other's pushed verdict,
   which is accepted ([Decisions](#decisions)).
+- **A reviewer files as its brief says.** An item's reviewer works in the
+  implementer's checkout, so it files there with `new`, before or after its
+  verdict, and its brief allows that one write beside the review file. A
+  plan's reviewer publishes its verdict first and then files on a backlog
+  branch of its own, which `start --backlog` switches its checkout to, so
+  that neither the plan under review nor the verdict changes; its brief and
+  `verdict` both say so.
 - **A refused commit changes nothing.** When `git commit` fails, as when a
   hook refuses it, `start`, the take-over and `submit` put the files they
   wrote and the index under the paths they staged back as they were,
@@ -1143,7 +1168,8 @@ In order:
 
    On any branch: no tracked
    file has uncommitted changes and no file in a changed record's directory
-   is untracked, ignored or not; and no record the branch brings to the base
+   is untracked, ignored or not, nor, on an item's branch, a new item's
+   record; and no record the branch brings to the base
    sets an item to a started status except the item the branch is named
    for, since a started item on the base reads as done (below). The role is
    told from the checkout, as every command tells it; the rest is judged on
@@ -1836,6 +1862,11 @@ What is still to come:
   change; a version that does not parse passed over; a branch's actions after
   a plain merge that matches the base, which fails without
   `--full-history`.
+- An item filed on an item's branch by its implementer, its reviewer or
+  another thread, before or after approval, commits through the hook, shows
+  as proposed in another clone and is open on the base once the branch
+  merges, with no further round; any other change to another item's record
+  is stale; a drop of that branch names each, and its commands carry them.
 - `new --from` on a deferred finding of a done item writes `Taken:` with the
   thread, and `list --deferred` no longer shows it; settling it again is
   refused; settling a finding of an item that is not done is refused.
@@ -1999,6 +2030,7 @@ carried here when the ADRs were deleted on 2026-11-11; Git keeps the ADR.
 | A mission has no go-ahead (2026-11-13) | It protected direction, and direction is given when the mission starts, in a conversation with the human or a proposal they agreed; the Why says which. The plan reviews do the checking, and found nine problems in atelier-g961 that neither they nor the planner had seen. They keep a veto at any time, made real by the Desk telling them when a plan is proposed and when it merges |
 | The two plan reviews are enforced by `merge` (2026-11-13) | They are now the only gate, and until then the rule lived only in the skill |
 | An unstarted item is `open`, with no draft, no ready and no `ready` command (2026-11-22, atelier-v06d, mission atelier-dh7a, the human's decision of 2026-11-19, reversing "Items keep `draft` and `ready`" of 2026-11-13) | An item needs no approval to exist, as in any issue tracker: the judgment is made when someone picks the work up, and nothing starts an open item unasked. The two statuses were kept so a lead could hold later items back as drafts, and leads did not: all nine items of atelier-osel were readied in one commit the moment the plan merged, a gardener readied its own run, and `ready` checked nothing about the item (atelier-k55o). Not started is what the lack of a started status already says. `blocked_by` holds work back. Two things are given up, and the human chose both: the Desk's split of loose items into next and later, and the gardener's time waiting to start |
+| `new` files on whatever branch `start` gave the thread, an item's included, and that makes no approval stale (2026-11-22, atelier-u6oy, mission atelier-dh7a, reversing "`new` belongs on a backlog or mission branch"). Only adding an open item's record is exempt; `set`, `drop`, `close` and settling a finding are as before. Dropping that branch's item names what was filed there and carries none | An agent that saw a problem outside its item had to make, submit and merge a second branch to record one sentence, so it mostly did not. An added record changes nothing a review judged, while a changed one can. `drop` names rather than carries because the branch's items may have gone with the work, and naming writes nothing the dropping thread did not choose |
 | `lead` stays a field on the mission, as attribution (2026-11-13) | The Desk shows who leads. It reaches the base by the record-only path once per mission. It is not a lock, and a second lead loses at merge |
 | `escalate` and `decide` are removed (2026-11-13, atelier-xbog) | They served two jobs. Advice needs no record: the implementer asks the thread that started it, as Claude's advisor tool lets a working model ask a stronger one and carry on. A disputed finding already has a path: a rebuttal in Responses, settled by a fresh reviewer. Nothing has used either command since the cutover |
 | A disagreement is found, not enforced (2026-11-13) | The records hold it already: a `rebutted` Response with the next round's `Now: kept` or `Now: withdrawn`, and a plan-review round whose reviewers differ. `list --disputed` prints them, `show <mission>` gives a lead its mission's, and the gardener reads them first. Nothing blocks on them. Until 2026-11-18 a lead stepped in only by moving the disputed work out of the item's Scope into an item of its own; since then it settles a dispute either way, under "A lead is in charge of its mission" Since atelier-h6ij two split plan rounds in a row do stop the next round, for the human to rule |

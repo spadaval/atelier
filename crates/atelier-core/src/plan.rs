@@ -165,6 +165,9 @@ pub fn is_mission(repo: &Repo, id: &str) -> bool {
 pub enum Belongs<'a> {
     /// A backlog branch, or a mission's branch for its plan.
     Backlog,
+    /// Filing a new item: as `Backlog`, or the branch of any started item,
+    /// whoever files it, since the new item reaches the base in its merge.
+    New,
     /// Settling a finding: as `Backlog`, or the branch of a started item
     /// the caller implements.
     Settle,
@@ -214,6 +217,17 @@ pub fn misplaced(repo: &mut Repo, command: &str, belongs: Belongs) -> Result<Opt
         return Ok(None);
     }
     let branch = repo.branch.clone().unwrap_or_default();
+    if belongs == Belongs::New {
+        let status = record.item.status;
+        if STARTED.contains(&status) {
+            return Ok(None);
+        }
+        // A branch that will not merge would strand what is filed on it.
+        let text = say::files_on_unmerging(command, &current.id, &branch, status);
+        return Ok(repo
+            .skip
+            .refuse([say::rule_files_on_unmerging(command, &branch)], text));
+    }
     let text = say::belongs_on_backlog(command, &current.id, &branch);
     Ok(repo
         .skip
@@ -241,7 +255,29 @@ pub fn save(
         Vec::new(),
         said,
         message,
-        false,
+        None,
+    )
+}
+
+/// [`save`] of `item`, a new one, which on an item's branch reaches the
+/// base in that item's merge and makes no approval of it stale.
+pub fn save_new(
+    repo: &mut Repo,
+    command: &str,
+    item: Item,
+    said: &str,
+    message: &str,
+) -> Result<Result<Done, Refused>> {
+    let reaches = repo.current()?.map(|on| say::Guidance::Filed(on.id));
+    save_with(
+        repo,
+        command,
+        vec![item],
+        Vec::new(),
+        Vec::new(),
+        said,
+        message,
+        reaches,
     )
 }
 
@@ -256,14 +292,17 @@ pub fn save_own(
     message: &str,
 ) -> Result<Result<Done, Refused>> {
     let (items, reviews) = (Vec::new(), Vec::new());
-    save_with(repo, command, items, missions, reviews, said, message, true)
+    let reaches = Some(say::Guidance::Own);
+    save_with(
+        repo, command, items, missions, reviews, said, message, reaches,
+    )
 }
 
 /// [`save`] without the commit, with `reviews` written too, and the Git
-/// command that commits what it wrote; with `own`, `said` says how the
-/// change reaches the base. A new item it creates is removed again when a
-/// later write fails, so a finding is never left untaken beside the item
-/// that took it.
+/// command that commits what it wrote; `reaches`, where given, is how the
+/// change reaches the base, which the branch it is on says otherwise. A
+/// new item it creates is removed again when a later write fails, so a
+/// finding is never left untaken beside the item that took it.
 #[allow(clippy::too_many_arguments)]
 pub fn save_with(
     repo: &Repo,
@@ -273,7 +312,7 @@ pub fn save_with(
     reviews: Vec<ReviewFile>,
     said: &str,
     message: &str,
-    own: bool,
+    reaches: Option<say::Guidance>,
 ) -> Result<Result<Done, Refused>> {
     let paths = match checked(repo, command, &items, &missions, &reviews)? {
         Ok(paths) => paths,
@@ -310,8 +349,7 @@ pub fn save_with(
     // On an item's branch, a write outside its own directory, as settling
     // another item's finding, reaches the base in the item's merge; one
     // inside it, as its own drop, is the item's.
-    let item = match repo.named() {
-        _ if own => say::Guidance::Own,
+    let by_branch = || match repo.named() {
         Some(Named::Record(id)) if repo.root.join(item_path(&id)).exists() => {
             let own = format!("{}/", item_dir(&id));
             match paths.iter().all(|path| path.starts_with(&own)) {
@@ -321,8 +359,9 @@ pub fn save_with(
         }
         _ => say::Guidance::Branch,
     };
+    let guidance = reaches.unwrap_or_else(by_branch);
     Ok(Ok(Done {
-        text: say::planned(said, &item, at, &paths, message, &repo.skip.trailers()),
+        text: say::planned(said, &guidance, at, &paths, message, &repo.skip.trailers()),
         paths,
         commit: None,
     }))

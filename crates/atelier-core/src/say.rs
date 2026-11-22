@@ -111,7 +111,7 @@ pub fn condition_text(id: &str, condition: &Condition) -> String {
         ),
         Condition::NoApproval => "A review of the latest round approves it (none does)".into(),
         Condition::Stale { round, commit, changed } => format!(
-            "The approval still covers the head: since {}, which round {round} reviewed, nothing changed outside this item's directory, nor its Goal, Done when or Scope (changed: {})",
+            "The approval still covers the head: since {}, which round {round} reviewed, nothing but new items changed outside this item's directory, nor its Goal, Done when or Scope (changed: {})",
             short(commit),
             some(changed)
         ),
@@ -559,6 +559,9 @@ pub fn planned(
         Guidance::Settle(id) => format!(
             "Once committed, it reaches the base when {id} merges. It is outside {id}'s directory, so a review of {id} must see it: an approval from before it is stale, and `atelier merge` will say to run `atelier submit`.\n"
         ),
+        Guidance::Filed(id) => format!(
+            "Write it, then commit it: it reaches the base when {id} merges, and filing it makes no approval of {id} stale.\n"
+        ),
         Guidance::Own => String::new(),
     };
     text + &format!("Then: {}\n", commit_line(at, paths, message, trailers))
@@ -571,6 +574,8 @@ pub enum Guidance {
     /// In the merge of item `0`, whose branch it is on, outside its
     /// directory.
     Settle(String),
+    /// In the merge of item `0`, on whose branch a new item was filed.
+    Filed(String),
     /// It is the item's own, on its branch: what the command said already
     /// says what follows.
     Own,
@@ -631,6 +636,22 @@ pub fn belongs_on_backlog(command: &str, id: &str, branch: &str) -> Refused {
 
 pub fn rule_belongs_on_backlog(command: &str, branch: &str) -> String {
     format!("`atelier {command}` writes on a backlog or mission branch, not on the item branch {branch}")
+}
+
+/// A new item filed on `branch`, of item `id`, which at `status` will not
+/// merge.
+pub fn files_on_unmerging(command: &str, id: &str, branch: &str, status: Status) -> Refused {
+    Refused::then(
+        format!(
+            "`atelier {command}` refused; nothing written.\nThis checkout is on {branch}, the branch of item {id}, which is {}: only a started item's branch merges, so an item filed here would not reach the base.\n",
+            status_name(status)
+        ),
+        "Run it on a backlog branch, made with `atelier start --backlog <slug>`.".to_string(),
+    )
+}
+
+pub fn rule_files_on_unmerging(command: &str, branch: &str) -> String {
+    format!("`atelier {command}` writes on a branch that will merge, and {branch} will not")
 }
 
 /// A drop of started item `id`, run on neither a backlog branch nor its

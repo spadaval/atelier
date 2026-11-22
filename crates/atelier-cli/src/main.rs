@@ -117,7 +117,7 @@ enum Command {
         #[arg(long, conflicts_with_all = ["startable", "blocked", "needs_human", "label", "mine", "done", "deferred", "proposed"])]
         disputed: bool,
     },
-    /// Create an open item in this checkout, on a backlog or mission branch, and commit nothing; it prints the path and the Git command that commits it. A mission is made by `start --mission`.
+    /// Create an open item in this checkout, on any branch `start` made that will merge (a started item's, whether you implement or review it, a mission's or a backlog branch), and commit nothing; it prints the path and the Git command that commits it. The item reaches the base with that branch's merge, and on an item's branch filing it makes no approval stale. A thread with no branch makes one with `start --backlog`. A mission is made by `start --mission`.
     New {
         #[arg(value_parser = NonEmptyStringValueParser::new())]
         title: String,
@@ -160,7 +160,7 @@ enum Command {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true, hide = true)]
         args: Vec<String>,
     },
-    /// End an item or mission that will not be done, in this checkout, and commit nothing. An item, started or not, or an agreed mission is dropped on a backlog branch, and the drop counts once that merges; a started item may instead be dropped in a checkout of its own branch, and its base copy then on a backlog branch. An item already merged is refused. Given a deferred finding of a done item, named as `atelier list --deferred` prints it, mark it dropped, on a backlog branch or the branch of an item you implement.
+    /// End an item or mission that will not be done, in this checkout, and commit nothing. An item, started or not, or an agreed mission is dropped on a backlog branch, and the drop counts once that merges; a started item may instead be dropped in a checkout of its own branch, and its base copy then on a backlog branch. Either names each item filed on the dropped item's branch that is not on the base, with how to carry it over. An item already merged is refused. Given a deferred finding of a done item, named as `atelier list --deferred` prints it, mark it dropped, on a backlog branch or the branch of an item you implement.
     Drop {
         /// An item, a mission, or a finding.
         id: String,
