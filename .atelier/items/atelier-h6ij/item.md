@@ -77,10 +77,14 @@ Plan and code reviews now end in a ruling instead of looping.
 - `changed_from_base` moved from the CLI's `git.rs` to the core's, beside `changed_on_branch`, which both briefs use.
 - One line of `submit`'s help in `main.rs`, and a module comment in `disputed.rs` that said split rounds are never enforced.
 
+### After round 1's approval
+
+`atelier-js4a` landed and conflicted in `crates/atelier-core/src/{git,plan}.rs`. The merge of master keeps both sides, and a commit after it has `plan_paths` use the `is_plan_file` that item added, in place of its own copy of the rule. The checks below were run again on the result, the seven broken rules included.
+
 ### Validation
 
 - `cargo fmt -- --check`, `git diff --check` and `cargo clippy --all-targets --locked -- -D warnings`: clean.
-- `cargo nextest run --locked -j 4`: 416 passed, 1 skipped.
+- `cargo nextest run --locked -j 4`: 422 passed, 1 skipped.
 - `evals/agent-factory/test.sh`: passes.
 - The test the plan's last review asked for is `an_item_edit_an_amendment_took_back_after_a_round_shows_in_the_delta` in `crates/atelier-cli/tests/rounds.rs`: an amendment's item edit and its added item, both taken back after a round, with a base merge between, show in the delta. It fails when the `git diff <base>...<prev>` half of the union is removed.
 - Six other rules were each broken by hand and each failed a test in that file: the `<head>` half of the union, the base's rounds left out of the count, `notes.md` left out, item reviews left out, the amendment's scoping and the ancestor guard.
