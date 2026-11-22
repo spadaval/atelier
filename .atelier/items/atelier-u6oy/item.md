@@ -3,13 +3,14 @@ schema: atelier.item
 schema_version: 3
 id: atelier-u6oy
 title: Let atelier new file an item on whatever branch the agent is on, and lose none when that branch is dropped
-status: draft
+status: building
 mission: atelier-dh7a
 labels: []
 priority: medium
 blocked_by:
 - atelier-v06d
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A134a3ba0-c5f0-4828-a968-a4cfb219e451%3Adelegate-task%3A4b486e8a-dd69-4ad4-8a51-84eddea7bba4
 ready: null
 trivial: null
 caused_by: null
