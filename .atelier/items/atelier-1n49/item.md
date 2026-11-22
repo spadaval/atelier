@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-1n49
 title: Make record-only CI fast, update .atelier/ job filters, and run clippy in CI
-status: in_review
+status: approved
 mission: atelier-ww7w
 labels: []
 priority: medium
