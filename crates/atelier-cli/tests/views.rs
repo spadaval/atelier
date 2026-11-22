@@ -242,7 +242,7 @@ fn status_on_the_base_shows_what_can_start_the_missions_in_progress_and_what_wai
          Missions in progress:\n  demo-m1ss (in progress): Greet everyone\n\
          Waiting on a human (labelled needs-human):\n  \
          demo-f6ff (ready, medium, waits on a human): Choose a name\n\
-         Then: atelier start demo-a1aa\n"
+         " + MAY_START
     );
 }
 

@@ -4,15 +4,16 @@
 //! a rule about a push by the push.
 
 use crate::commands::{self, Outcome};
+use crate::output::{BaseCheckout, WayBack};
 use crate::{git, output, setup};
 use anyhow::{bail, Context, Result};
 use atelier_core::actions::changes;
-use atelier_core::model::Status;
+use atelier_core::model::{Config, Status};
 use atelier_core::records::{
     is_record, load, parse_config, parse_item, parse_mission, CommitReader, Problem, ReadError,
     Store, CONFIG,
 };
-use atelier_core::repo::planning;
+use atelier_core::repo::{base_tip, planning};
 use atelier_core::Skip;
 use clap::ValueEnum;
 use std::io::{ErrorKind, Read, Write};
@@ -358,7 +359,7 @@ fn pre_push(root: &Path, input: &str, skip: &Skip) -> Result<Outcome> {
     let base = config.base_branch.clone();
     let target = format!("refs/heads/{base}");
     let forge = config.forge.as_ref().map(|forge| forge.remote.as_str());
-    let mut old = None;
+    let mut back = None;
     let mut moves = false;
     let mut plain = Vec::new();
     for line in input.lines() {
@@ -376,7 +377,10 @@ fn pre_push(root: &Path, input: &str, skip: &Skip) -> Result<Outcome> {
             true => None,
             false => Some(remote),
         };
-        old = known;
+        back = match known {
+            Some(old) => way_back(root, &config, local, old)?,
+            None => None,
+        };
         if forge.is_some() {
             moves = true;
             continue;
@@ -388,7 +392,7 @@ fn pre_push(root: &Path, input: &str, skip: &Skip) -> Result<Outcome> {
         }
     }
     if moves {
-        let text = output::push_moves_base(&base, forge.unwrap_or_default(), old);
+        let text = output::push_moves_base(&base, back.as_ref());
         let rule = output::rule_base_moved(&base);
         return Ok(skip
             .refuse([rule], text)
@@ -398,13 +402,36 @@ fn pre_push(root: &Path, input: &str, skip: &Skip) -> Result<Outcome> {
     if plain.is_empty() {
         return Ok(Outcome::Done(String::new()));
     }
-    let text = output::push_refused(&base, old, &plain);
+    let text = output::push_refused(&base, back.as_ref(), &plain);
     let broken =
         (plain.iter()).map(|(commit, subject, _)| output::rule_merge(&base, commit, subject));
     Ok(skip
         .refuse(broken, text)
         .map(Outcome::from)
         .unwrap_or(Outcome::Done(String::new())))
+}
+
+/// How a refused push of `local` over the remote's `old` is undone, where
+/// steps can be printed that lose nothing: the base is at `local`, strictly
+/// ahead of `old`, and is the tip `start` makes a branch at, so that branch
+/// holds every commit the base gives up.
+fn way_back(root: &Path, config: &Config, local: &str, old: &str) -> Result<Option<WayBack>> {
+    let base = &config.base_branch;
+    if git::branch_tip(root, base)?.as_deref() != Some(local)
+        || !git::is_ancestor(root, old, local)?
+        || base_tip(root, config)? != local
+    {
+        return Ok(None);
+    }
+    let base_checkout = if git::current_branch(root)?.as_deref() == Some(base.as_str()) {
+        BaseCheckout::Here
+    } else {
+        git::checkout_of(root, base)?.map_or(BaseCheckout::Nowhere, BaseCheckout::At)
+    };
+    Ok(Some(WayBack {
+        old: old.to_string(),
+        base_checkout,
+    }))
 }
 
 /// On a branch switch, what `status` prints; else nothing. A failure is

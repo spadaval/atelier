@@ -142,7 +142,7 @@ pub fn condition_text(id: &str, condition: &Condition) -> String {
             "Finding {id}/{finding} is not settled yet (it was {})",
             settled(settlement)
         ),
-        Condition::Invalid(problem) => valid(problem),
+        Condition::Invalid(problem) | Condition::MalformedResponse(problem) => valid(problem),
     }
 }
 
@@ -209,7 +209,10 @@ pub fn next(entry: &Entry, dropped: Option<&str>) -> String {
                 Some(reviewer) => format!(
                     "Thread {reviewer} holds this round's review. Wait for its verdict, then run `atelier status`.\n"
                 ),
-                None => format!("No reviewer has opened this round's review yet.\n{}", start_reviewer(id)),
+                None => format!(
+                    "No reviewer has opened this round's review yet.\n{}",
+                    start_reviewer(id, entry.worktree.as_deref())
+                ),
             },
             Status::Draft => format!(
                 "It is a draft. A planner makes it ready with: atelier ready {id} --by <name>\n"
@@ -270,9 +273,15 @@ pub fn plan_split_exit(id: &str, splits: usize) -> String {
     )
 }
 
-/// How an implementer gets its item reviewed.
-pub fn start_reviewer(id: &str) -> String {
-    let task = format!("Run atelier review {id} and follow what it prints.");
+/// How an implementer gets its item reviewed. The task names `checkout`,
+/// the one on the item's branch: a new thread often starts in the main
+/// checkout, where `review` is refused.
+pub fn start_reviewer(id: &str, checkout: Option<&Path>) -> String {
+    let at = match checkout {
+        Some(path) => quoted(&path.display().to_string()),
+        None => format!("a checkout of {id}'s branch"),
+    };
+    let task = format!("In {at}, run atelier review {id} and follow what it prints.");
     handoff(
         "A reviewer",
         &[task],
@@ -324,9 +333,14 @@ fn lacking(action: Action, status: Status, id: &str, unmet: &[Condition]) -> Str
             text += &condition(id, unmet);
             text += "\n";
         }
+        if unmet
+            .iter()
+            .any(|c| matches!(c, Condition::MalformedResponse(_)))
+        {
+            text += MALFORMED;
+        }
         // A concrete line: agents copied "Finding <name>" from the list
-        // above, or wrote prose under the line, and every command then
-        // failed to read the item.
+        // above, or wrote prose under the line.
         if let Some(finding) = unmet.iter().find_map(|c| match c {
             Condition::NoResponse { finding, .. } => Some(finding),
             _ => None,
@@ -354,6 +368,24 @@ fn lacking(action: Action, status: Status, id: &str, unmet: &[Condition]) -> Str
         }
     }
     text
+}
+
+/// Whose a malformed response is to fix.
+const MALFORMED: &str = "The item's implementer fixes each malformed line under `### Responses`: it holds one line per finding, in one of those forms, and nothing else.\n";
+
+/// The malformed responses of `entry`'s item, where what it needs next does
+/// not list them already, as while it waits for its review.
+pub fn malformed(entry: &Entry) -> String {
+    let listed = |c: &Condition| matches!(c, Condition::MalformedResponse(_));
+    if entry.malformed.is_empty() || entry.unmet.iter().any(listed) {
+        return String::new();
+    }
+    let mut text = "Not valid:\n".to_string();
+    for problem in &entry.malformed {
+        text += &condition(&entry.id, problem);
+        text += "\n";
+    }
+    text + MALFORMED
 }
 
 /// [`lacking`], then the command of `action`.
@@ -825,6 +857,25 @@ pub fn dropped_plan(id: &str, branch: &str, reason: &str, remote: Option<&str>) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_reviewers_task_names_the_checkout_as_one_shell_word() {
+        let task = |at| {
+            start_reviewer("demo-ab12", at)
+                .lines()
+                .nth(1)
+                .unwrap()
+                .to_string()
+        };
+        assert_eq!(
+            task(Some(Path::new("/src/my repo"))),
+            "  In '/src/my repo', run atelier review demo-ab12 and follow what it prints."
+        );
+        assert_eq!(
+            task(None),
+            "  In a checkout of demo-ab12's branch, run atelier review demo-ab12 and follow what it prints."
+        );
+    }
 
     #[test]
     fn a_handoff_says_to_start_the_thread_unasked_and_holds_no_backtick() {

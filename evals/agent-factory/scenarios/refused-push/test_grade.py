@@ -38,10 +38,9 @@ class GradeTest(loop.Fixture):
         """Move the change to an item's branch, as the hook says; return its ID."""
         out = self.atelier("impl", "start", "--new", "Read the server's port from PORT")
         item = next(w for w in out.split() if w.startswith("demo-")).strip(",.:")
-        # `start` leaves the base's checkout on main, which Git will not
-        # move with `branch -f` while it is checked out.
+        self.sh("git", "reset", "-q", "--keep", self.base)
+        # `start` leaves the base's checkout on main.
         self.sh("git", "switch", "-q", item)
-        self.sh("git", "branch", "-f", "main", self.base)
         path = self.repo / f".atelier/items/{item}/item.md"
         path.write_text(path.read_text().replace("## Goal\n", "## Goal\n\nRead PORT.\n").replace(
             "## Done when\n", "## Done when\n\n- [x] `PORT=9000` starts it on 9000.\n")

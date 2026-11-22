@@ -49,7 +49,7 @@ $ atelier submit
 Submitted demo-m82p for review.
 A reviewer must be a thread other than yours, and starting it is your job:
 [...] Give it fresh context, not a fork of yours, and give it this task:
-  Run atelier review demo-m82p and follow what it prints.
+  In /home/alice/demo-demo-m82p, run atelier review demo-m82p and follow what it prints.
 Then wait for its verdict, and run `atelier status`.
 ```
 

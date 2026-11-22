@@ -1,13 +1,14 @@
 //! Where an item's record is read from, and what `status` shows.
 
 use crate::actions::{
-    mission_of, next, unmet, Action, Condition, Facts, PLANNED, ROUND_CAP, STARTED,
+    malformed, mission_of, next, unmet, Action, Condition, Facts, PLANNED, ROUND_CAP, STARTED,
 };
 use crate::disputed::{disputes, Disputes};
 use crate::model::{MissionStatus, Priority, ReviewName, Status, Thread, Verdict};
 use crate::records::{ItemDir, MissionDir, Problem};
 use crate::work::{in_progress, items_of};
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 /// What the reader asks of a record of either kind, an item or a mission.
 pub trait Record {
@@ -249,6 +250,11 @@ pub struct Entry {
     /// The last review the caller held, with its verdict, when it is not
     /// this round's reviewer.
     pub reviewed: Option<(ReviewName, Option<Verdict>)>,
+    /// The caller's checkout, when it is on the item's branch.
+    pub worktree: Option<PathBuf>,
+    /// While it is started, each line of its Responses that is no response,
+    /// whoever asks and whatever comes next.
+    pub malformed: Vec<Condition>,
     /// What the checkout has not committed, where the CLI gathered it.
     pub uncommitted: Vec<String>,
     /// Once approved, the time of the commit that recorded the approving
@@ -259,7 +265,8 @@ pub struct Entry {
     pub next: Option<Action>,
     pub unmet: Vec<Condition>,
     /// For a started item another thread holds: what its holder's next action
-    /// needs, the conditions the holder's `status` lists as unmet.
+    /// needs, the conditions the holder's `status` lists as unmet, or while
+    /// it has no next action, its malformed responses.
     pub needs: Vec<Condition>,
     /// The ref its record was read from, where views name it: a
     /// remote-tracking branch, or the unmerged branch a proposed item is
@@ -317,6 +324,11 @@ pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
             .then(|| facts.reviewed())
             .flatten()
             .map(|file| (file.name.clone(), file.review.verdict)),
+        worktree: facts.worktree.map(PathBuf::from),
+        malformed: match STARTED.contains(&item.status) {
+            true => malformed(facts.item),
+            false => Vec::new(),
+        },
         uncommitted: facts
             .checkout
             .map(|checkout| checkout.uncommitted.clone())
@@ -344,7 +356,7 @@ fn needs(facts: &Facts) -> Result<Vec<Condition>, Problem> {
     };
     Ok(match next(&theirs)? {
         Some(action) => unmet(action, &theirs)?,
-        None => Vec::new(),
+        None => malformed(facts.item),
     })
 }
 
@@ -399,6 +411,7 @@ pub fn entries(
             mission: mission_of(record, missions),
             caller,
             checkout: None,
+            worktree: None,
         };
         let mut entry = entry(&facts)?;
         mark(&mut entry, located);

@@ -631,3 +631,23 @@ fn a_finding_not_built_and_then_fixed_no_longer_waits_on_the_lead() {
         "{text}"
     );
 }
+
+#[test]
+fn a_lead_is_shown_a_malformed_not_built_line_of_an_item_in_review() {
+    let scratch = led();
+    let root = scratch.root();
+    let base = scratch.worktree("base");
+    finish_and_submit(&root, "t1");
+    let bad = "- 1-aaaa.1 not built: too large";
+    append(
+        &root,
+        &item_path(ID),
+        &format!("\n### Responses\n\n{bad}\n"),
+    );
+    git(&root, &["commit", "-qam", "Answer"]);
+    let status = atelier(&base, "lead1", &["status"]).stdout;
+    assert!(
+        status.contains(&format!("Responses: `{bad}` is not")),
+        "{status}"
+    );
+}

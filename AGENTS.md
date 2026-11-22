@@ -10,6 +10,8 @@ through the hooks in `.claude/settings.json` and `.codex/hooks.json`. It
 says who you are in this repository, what you hold, and the next command.
 Agent Factory (`skills/agent-factory`, loaded as `/agent-factory`) says how
 to decide; `atelier <command> --help` says what each command does.
+If a session starts in a different repository from its task, run `atelier
+status` again in the task's checkout.
 
 ## Work
 

@@ -110,6 +110,7 @@ fn facts<'a>(item: &'a ItemDir, caller: &'a Thread) -> Facts<'a> {
         mission: None,
         caller,
         checkout: None,
+        worktree: None,
     }
 }
 
@@ -277,6 +278,7 @@ fn every_action_in_the_table_from_every_status_sets_the_specified_status_or_is_r
                 mission: None,
                 caller: &caller,
                 checkout: None,
+                worktree: None,
             };
             match check(action, &facts) {
                 Ok(set) => {
@@ -719,6 +721,7 @@ fn status_lists_the_conditions_the_command_reports() {
                     mission: None,
                     caller: &caller,
                     checkout: None,
+                    worktree: None,
                 };
                 let shown = entry(&facts).unwrap();
                 assert_eq!(shown.next, next(&facts).unwrap());
@@ -767,6 +770,7 @@ fn the_next_action_follows_the_status_and_who_is_asking() {
             mission: None,
             caller: &caller,
             checkout: None,
+            worktree: None,
         };
         assert_eq!(next(&facts).unwrap(), expected, "{status:?} for {caller}");
     }
@@ -797,6 +801,7 @@ fn only_the_holder_submits() {
             mission: None,
             caller: &caller,
             checkout: None,
+            worktree: None,
         };
         match check(Action::Submit, &facts) {
             Err(Refusal::NotHolder {
@@ -817,6 +822,7 @@ fn only_the_holder_submits() {
         mission: None,
         caller: &caller,
         checkout: None,
+        worktree: None,
     };
     assert!(matches!(
         check(Action::Submit, &facts),
@@ -848,6 +854,7 @@ fn submit_needs_each_open_finding_answered_and_no_question_waits_on_it() {
             mission: None,
             caller: &caller,
             checkout: None,
+            worktree: None,
         };
         match check(Action::Submit, &facts) {
             Ok(_) => Vec::new(),

@@ -84,7 +84,7 @@ impl Disputes {
 /// Each open fix-now finding of `item` that waits on the lead, in the
 /// order of its reviews.
 pub fn not_built(item: &ItemDir) -> Result<Vec<NotBuilt>, Problem> {
-    let (findings, responses) = (item.findings()?, item.responses()?);
+    let (findings, responses) = (item.findings()?, item.responses());
     let mut found = Vec::new();
     for finding in item.open_findings()? {
         if let Some(reason) = waits_on_lead(&finding.name, &findings, &responses) {
@@ -105,7 +105,7 @@ pub fn not_built(item: &ItemDir) -> Result<Vec<NotBuilt>, Problem> {
 pub fn rebuttals(item: &ItemDir) -> Result<Vec<Rebuttal>, Problem> {
     let findings = item.findings()?;
     let mut found = Vec::new();
-    for response in item.responses()? {
+    for response in item.responses() {
         let Response::Rebutted { finding, fact } = response else {
             continue;
         };

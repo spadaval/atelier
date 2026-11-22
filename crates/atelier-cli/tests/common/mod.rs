@@ -21,6 +21,10 @@ pub const SKIP: &str = "If the rule is wrong for this case, go past it on purpos
 /// hooks, as every scratch repository is until `setup` runs in it.
 pub const NO_HOOKS: &str = "This clone has none of Atelier's Git hooks, so nothing checks its commits and pushes. Install them with: atelier setup\n";
 
+/// The line `status` ends with away from an item's branch, for a thread
+/// that holds nothing while some item can start.
+pub const MAY_START: &str = "Start one only if that is your task: atelier start <id>\n";
+
 /// What a handoff line says between who must be another thread and the
 /// one task it gives.
 pub const START_ONE: &str = "must be a thread other than yours, and starting it is your job: it is part of the task you were given, even as another thread's child or subagent, and nobody else will start it. So start one yourself now, without waiting to be asked. Under Codex a subagent you start is one; under Claude Code a subagent runs as your thread and is refused, so use your harness's tool for a new agent thread. Give it fresh context, not a fork of yours, and give it this task:\n";
@@ -148,6 +152,12 @@ pub fn identity(command: &mut Command) -> &mut Command {
 pub fn atelier_command(at: &Path, thread: &str, args: &[&str]) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_atelier"));
     command.current_dir(at).args(args);
+    as_thread(&mut command, thread);
+    command
+}
+
+/// The environment a command run by `thread` has.
+fn as_thread<'a>(command: &'a mut Command, thread: &str) -> &'a mut Command {
     for variable in [
         "CLAUDE_CODE_SESSION_ID",
         "CODEX_SESSION_ID",
@@ -159,8 +169,7 @@ pub fn atelier_command(at: &Path, thread: &str, args: &[&str]) -> Command {
     command.env("T3CODE_THREAD_ID", thread);
     command.env_remove("ATELIER_TEST_HOLD_BEFORE_BRANCH");
     command.env_remove("ATELIER_SKIP");
-    identity(&mut command);
-    command
+    identity(command)
 }
 
 #[derive(Clone)]
@@ -172,6 +181,22 @@ pub struct Run {
 
 pub fn atelier(at: &Path, thread: &str, args: &[&str]) -> Run {
     let output = atelier_command(at, thread, args).output().unwrap();
+    Run {
+        code: output.status.code().unwrap_or(-1),
+        stdout: String::from_utf8(output.stdout).unwrap(),
+        stderr: String::from_utf8(output.stderr).unwrap(),
+    }
+}
+
+/// Runs `line` in a shell in `at`, as an agent that copied it would: as
+/// `thread`, with the binary under test first on `PATH` as `atelier`.
+pub fn sh(at: &Path, thread: &str, line: &str) -> Run {
+    let bin = Path::new(env!("CARGO_BIN_EXE_atelier")).parent().unwrap();
+    let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
+    let mut command = Command::new("sh");
+    command.current_dir(at).args(["-c", line]);
+    as_thread(&mut command, thread).env("PATH", path);
+    let output = command.output().unwrap();
     Run {
         code: output.status.code().unwrap_or(-1),
         stdout: String::from_utf8(output.stdout).unwrap(),
