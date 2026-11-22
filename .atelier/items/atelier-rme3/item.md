@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-rme3
 title: Show open items in the Desk and the T3 extension with no draft or ready, and one backlog list for loose items
-status: in_review
+status: approved
 mission: atelier-dh7a
 labels: []
 priority: medium
