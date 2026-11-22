@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 import type { ItemRow } from "../api/ItemRow";
 import { to } from "../lib/api";
+import { cannotStartUntil } from "../lib/mission";
 import { statusName } from "../lib/words";
 import { Priority, StatusGlyph } from "./ui";
 
@@ -15,7 +16,7 @@ export function itemFacts(row: ItemRow): string[] {
   // An open item's unmet conditions already name its blockers.
   const waiting = row.status === "open" ? [] : row.blockers.filter((b) => row.waiting_on.includes(b.id));
   if (waiting.length > 0) facts.push(`Waits on ${waiting.map((b) => `${b.id} (${b.status ? statusName(b.status) : "not found"})`).join(", ")}`);
-  facts.push(...row.cannot_start, ...row.needs);
+  facts.push(...cannotStartUntil(row).map((until) => `Cannot start until ${until}`), ...row.needs);
   if (row.status === "open" && row.startable) facts.push("Can start now");
   return facts;
 }

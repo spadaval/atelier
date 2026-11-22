@@ -354,8 +354,9 @@ Running, it says in one sentence how the mission stands, lists under *Needs
 you* each item labelled needs-human and each thread waiting on a person
 (T3 says `waiting`, or the thread has a request such as an approval pending)
 or quiet for 30 minutes, with a button that opens it, lists the other live
-threads under *At work* with their latest line, and folds *Not started*,
-*Merged* and *Outcome and success criteria* to a line each. Done, it shows
+threads under *At work* with their latest line, and folds *Not started*
+(each item saying it can start or what it waits on), *Merged* and *Outcome
+and success criteria* to a line each. Done, it shows
 the Result as written, a lane per item over time and the merged items, most
 review rounds first, each opening its pull request, or its Desk page where
 the Desk knows none. `L` opens the lead's thread, `Enter` the focused row,

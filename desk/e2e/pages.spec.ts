@@ -67,9 +67,16 @@ test("the Work tab groups items by status in lifecycle order, and a done item sh
   await expect(building).toContainText("Held by thread:delegated-");
   await expect(building).toContainText("atelier-uwxy needs its Report written");
   const open = page.getByRole("region", { name: "Open" });
-  for (const id of ["atelier-94pv", "atelier-e05n", "atelier-psjw"]) await expect(open).toContainText(id);
-  await expect(open).toContainText("atelier-psjw is blocked by atelier-uwxy");
-  await expect(open).toContainText("atelier-uwxy is done (it is building)");
+  // Each open item says that it can start, or what it waits for.
+  await expect(open.locator(".facts-line")).toHaveText([
+    "Cannot start until atelier-uwxy is done (it is building)",
+    "Can start now",
+    "Can start now",
+    "Can start now",
+    "Cannot start until origin/backlog/desk-cutover merges",
+    "Cannot start until atelier-uwxy is done (it is building)",
+    "Can start now",
+  ]);
   await page.getByRole("button", { name: "Report and fixes" }).click();
   const report = page.locator(".report");
   await expect(report).toContainText("All Done when lines hold.");

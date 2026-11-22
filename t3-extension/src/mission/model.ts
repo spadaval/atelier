@@ -205,12 +205,24 @@ export function running(w: Worker, now: number): string | null {
   return Number.isNaN(started) ? null : span(now - started);
 }
 
-/** *Not started*: its open items, those that can start and those waiting on others. */
+/**
+ * An unstarted item's note: that it can start, or what it waits on, which is its blockers and, for
+ * one the base does not hold yet, the branch that adds it (an unmerged branch not named for it).
+ * Held by neither, it names the condition of `start` that does not hold.
+ */
+export function startNote(row: ItemRow): string {
+  if (row.startable) return "can start";
+  const added = row.branch && !row.branch.merged && !row.branch.name.endsWith(row.id) ? [`${row.branch.name} to merge`] : [];
+  const on = [...row.waiting_on, ...added];
+  return on.length ? `waits on ${on.join(", ")}` : `cannot start until ${row.cannot_start.join("; ")}`;
+}
+
+/** *Not started*: its open items, those that can start and those that wait. */
 export function notStarted(page: MissionPage): { rows: ItemRow[]; label: string } {
   const rows = page.items.filter((i) => i.status === "open");
   const canStart = rows.filter((i) => i.startable).length;
-  const blocked = rows.length - canStart;
-  const parts = [...(canStart ? [`${canStart} can start`] : []), ...(blocked ? [`${blocked} wait on others`] : [])];
+  const waiting = rows.length - canStart;
+  const parts = [...(canStart ? [`${canStart} can start`] : []), ...(waiting ? [`${waiting} ${waiting === 1 ? "waits" : "wait"}`] : [])];
   return { rows, label: parts.join(", ") || "none" };
 }
 

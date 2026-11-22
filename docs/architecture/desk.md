@@ -520,7 +520,10 @@ Its model is `t3-extension/src/mission/model.ts`.
   work*: each other live thread, with its item, latest line and how long
   its latest run has gone. *Not started*, *Merged* and *Outcome and
   success criteria* are each one folded line that opens in place; an item
-  in them opens its Desk page, framed.
+  in them opens its Desk page, framed. *Not started* counts the open items
+  that can start and those that wait, and says of each that it can start or
+  what it waits on: its blockers, the branch that adds it while the base
+  does not hold it, or else the condition of `start` that does not hold.
 - Done (or dropped): the state and when it closed, and how long after the
   plan merged; the Result as written; a lane per item, dropped ones
   included and ended where they were dropped, from the plan's merge
@@ -551,8 +554,10 @@ of bordered panes after Factory's Mission Control: a top bar (the
 repository and mission, when the plan merged, how many items are live and
 how many quiet) and a state line (`RUNNING`, `AGREED`, `PROPOSED` or
 `DONE`) with a bar of the items done; *Active Item*, the item selected, with
-its stage and how long it has been in it, its holder and reviewer, its
-blockers, Done when, goal, pull request and CI (`GET /api/checks`);
+its stage (for an open one, whether it can start) and how long it has been
+in it, its holder and reviewer, what it cannot start until or, once
+started, its blockers, Done when, goal, pull request and CI
+(`GET /api/checks`);
 *Items*, every item with its stage, marked when it has sat in a moving stage
 for 30 minutes; *Progress Log*, the mission's steps newest first, paged to
 the rows its pane holds; *Active Threads*, the live threads on the mission,

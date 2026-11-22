@@ -1,6 +1,6 @@
 /**
  * Where a mission stands, for mission control and the project home: an
- * item's stage and how long it has been in it, and the progress log, read
+ * item's stage, what it waits on and how long it has been in it, and the progress log, read
  * from the records' history (`GET /api/history`, from commit subjects, so
  * approximate); and whether a mission is under way.
  */
@@ -9,10 +9,24 @@ import type { ItemPage } from "../api/ItemPage";
 import type { ItemRow } from "../api/ItemRow";
 import type { MissionRow } from "../api/MissionRow";
 
-/** An item's stage in a word or two, with its review round. */
+/**
+ * What an open item waits for before it can start, each as what has to hold:
+ * `start`'s unmet conditions, and, for one the base does not hold yet, the
+ * merge of the branch that adds it (an unmerged branch not named for it).
+ */
+export function cannotStartUntil(row: ItemRow): string[] {
+  if (row.status !== "open" || row.startable) return [];
+  const on = row.branch;
+  const added = on && !on.merged && !on.name.endsWith(row.id) ? [`${on.name} merges`] : [];
+  return [...row.cannot_start, ...added];
+}
+
+/** An item's stage in a word or two, with its review round; an open one's is whether it can start. */
 export function stage(row: ItemRow, events: HistoryEvent[]): string {
   const submits = events.filter((e) => e.id === row.id && e.kind === "submitted").length;
   switch (row.status) {
+    case "open":
+      return row.startable ? "can start" : "waits";
     case "in_review":
       return `in review ${Math.max(1, submits)}`;
     case "changes_requested":

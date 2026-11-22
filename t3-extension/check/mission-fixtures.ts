@@ -115,7 +115,14 @@ const runningItems = [
   item("atelier-r005", "Show the Result as written", "done"),
   item("atelier-r006", "Stack the page below 560 pixels", "open", { startable: true }),
   item("atelier-r007", "Name each key on its button", "open"),
-  item("atelier-r008", "Wait for the decision", "open", { startable: false, waiting_on: ["atelier-r001"] }),
+  item("atelier-r008", "Wait for the decision", "open", { startable: false, waiting_on: ["atelier-r001"], cannot_start: ["atelier-r001 is done (it is building)"] }),
+  // An amendment's: not on the base until its branch merges.
+  item("atelier-r009", "Add what the amendment asks", "open", { startable: false, branch: { name: "origin/atelier-rm01", merged: false } }),
+  item("atelier-r010", "Start over on a clean branch", "open", {
+    startable: false,
+    branch: { name: "atelier-r010", merged: false },
+    cannot_start: ["No branch atelier-r010 exists yet (one does; if nothing on it is needed, delete it with `git branch -D atelier-r010`)"],
+  }),
 ];
 
 export const scenarios: Record<string, Scenario> = {

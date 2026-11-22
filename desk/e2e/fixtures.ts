@@ -167,12 +167,14 @@ export const z4crItems: ItemRow[] = [
     waiting_on: ["atelier-uwxy"],
     cannot_start: ["atelier-uwxy is done (it is building)"],
   }),
-  row("atelier-e05n", "Show the agents working on a mission and its items", "open", { priority: "medium" }),
-  row("atelier-h3hl", "Let the human start a planning session from a page", "open", { priority: "medium" }),
-  row("atelier-va99", "Install the Desk as a service on this host, on converted clones", "open", { priority: "medium" }),
-  row("atelier-qxmr", "Point the Desk at the live repositories after this host's cutover", "open", { priority: "low" }),
+  row("atelier-e05n", "Show the agents working on a mission and its items", "open", { priority: "medium", startable: true }),
+  row("atelier-h3hl", "Let the human start a planning session from a page", "open", { priority: "medium", startable: true }),
+  row("atelier-va99", "Install the Desk as a service on this host, on converted clones", "open", { priority: "medium", startable: true }),
+  row("atelier-qxmr", "Point the Desk at the live repositories after this host's cutover", "open", { priority: "low", branch: { merged: false, name: "origin/backlog/desk-cutover" } }),
   row("atelier-psjw", "Move the actions and repository access into atelier-core", "open", {
-    cannot_start: ["atelier-psjw is blocked by atelier-uwxy"],
+    blockers: [{ id: "atelier-uwxy", status: "building" }],
+    waiting_on: ["atelier-uwxy"],
+    cannot_start: ["atelier-uwxy is done (it is building)"],
   }),
   row("atelier-aab1", "Find how atelier serve can read T3 thread status", "open", { labels: ["needs-human"], needs_human: true, startable: true }),
   row("atelier-uwxy", "Serve the Desk's reading routes from commits: the atelier-desk crate", "building", {
@@ -856,7 +858,7 @@ export const loose: ItemRow[] = [
     blockers: [{ id: "atelier-52g7", status: "open" }],
     waiting_on: ["atelier-52g7"],
   }),
-  row("atelier-52g7", "Make the cutover find the docs that name removed commands", "open", { priority: "medium" }),
+  row("atelier-52g7", "Make the cutover find the docs that name removed commands", "open", { priority: "medium", startable: true }),
   row("atelier-0019", "Garden atelier, 2026-11-11", "approved", { holder: "thread:gone" }),
 ];
 
