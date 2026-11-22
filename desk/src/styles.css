@@ -579,11 +579,7 @@ h2 {
   background: var(--idle);
 }
 
-.seg i.draft {
-  background: var(--line-strong);
-}
-
-.seg i.ready {
+.seg i.open {
   background: var(--ink-2);
 }
 
@@ -3321,7 +3317,6 @@ a.q:hover {
 .mcx .st.done {
   color: var(--ok);
 }
-.mcx .st.draft,
 .mcx .st.dropped {
   color: var(--ink-3);
 }

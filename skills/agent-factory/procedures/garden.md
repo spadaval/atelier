@@ -9,7 +9,7 @@ signs, on its own branch, which merges once review approves it. Its
 proposals and bugs then go to the human as `needs-human` items, and the run
 waits on no answer. A run is not a linter: a checklist line not met is a
 line of the page, not a proposal. It is not a firefighter: something broken
-today is filed as a bug and left. It is not the backlog pass: it says when
+today is filed as an open bug item and left. It is not the backlog pass: it says when
 one looks due.
 
 ## Areas
@@ -50,10 +50,9 @@ Scope steps 1 to 7 up to the merge, and these Done when lines:
 - [ ] The page follows garden.md's template in at most 60 lines.
 ```
 
-Run `atelier ready <id> --by "<who asked for the run>"`, commit, and
-`atelier submit` and `atelier merge` that branch. Then run `atelier start
-<id>` in a new worktree of the base, never in the base's checkout. Commit the page's `Focus:` line
-before taking any number. Every run takes the numbers and the checklist.
+Commit, then `atelier submit` and `atelier merge` that branch. Then run
+`atelier start <id>` in a new worktree of the base, never in the base's
+checkout. Commit the page's `Focus:` line before taking any number. Every run takes the numbers and the checklist.
 
 ## 2. Take the Numbers and the Checklist
 
@@ -68,9 +67,9 @@ $1 > s && $1 <= e {print $3}'`. Copy all of each one's `atelier log <id>`,
 its lines before the window too, into `artifacts/numbers.md`.
 
 - **Time in each status.** A line holding `<from> -> <to>` puts the item in
-  `<to>` until the next such line. Sum the seconds in `ready` (waiting to
-  start), `building`, `in_review`, `changes_requested` and `approved`; a
-  status never reached is 0.
+  `<to>` until the next such line. Sum the seconds in `building`,
+  `in_review`, `changes_requested` and `approved`; a status never reached
+  is 0.
 - **Rounds** are its `submit` lines, **take-overs** its `take-over` lines,
   and **skips** its `skip <rule>: <reason>` parts, the rule being the text up
   to the first ` (` or `: `. **Disputes** are its lines in `atelier list
@@ -186,7 +185,7 @@ Window: <start> to <end> UTC, <n> items merged. Workings: `artifacts/numbers.md`
 
 | Measure | This run | Last run | Baseline |
 | --- | --- | --- | --- |
-| Waiting to start, building, in review, changes requested, approved: median minutes (worst) | | | |
+| Building, in review, changes requested, approved: median minutes (worst) | | | |
 | Rounds: median (worst); take-overs; disputes by outcome; skips by rule | | | |
 | Open items by status; blocked; unsettled deferred findings | | | |
 | <each carried measure> | <value>, measured <date> | | |
@@ -234,8 +233,9 @@ the merge, get onto that branch as below, and on it:
   as `- <run> P<n>, <date>: <the change>. <its cause>. See that run's
   Report.` Only the human's answer takes one off that list.
 - **Bugs.** For each bug to file that no item covers, run `atelier new
-  "<what is broken>"` and `atelier set <id> --labels bug,needs-human
-  --caused-by <item or commit>`, and put the evidence in its Goal.
+  "<what is broken>"`, which files it as an open item, and `atelier set
+  <id> --labels bug,needs-human --caused-by <item or commit>`, and put the
+  evidence in its Goal.
 - **Settled findings.** Give each item waiting for the merge its labels and
   cause.
 
@@ -274,5 +274,5 @@ there, then:
   the same item, each with its filed item or why it was declined, and leaves
   the rest open.
 
-A bug the human answers it readies, with `needs-human` taken off, or drops.
+A bug the human answers it keeps, with `needs-human` taken off, or drops.
 It commits, then runs `atelier submit` and `atelier merge`.

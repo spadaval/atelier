@@ -32,9 +32,9 @@ fn write_mission(at: &Path) {
     .unwrap();
 }
 
-/// Writes draft item `id` in the mission.
+/// Writes open item `id` in the mission.
 fn write_mission_item(at: &Path, id: &str) {
-    write_item(at, id, "draft", &[], &[], "");
+    write_item(at, id, "open", &[], &[], "");
     edit(
         at,
         &item_path(id),
@@ -156,7 +156,7 @@ fn a_later_plan_round_puts_the_diff_of_the_plans_own_paths_first() {
     for id in ["demo-edit", "demo-left"] {
         write_mission_item(&root, id);
     }
-    write_item(&root, "demo-othr", "draft", &[], &[], "");
+    write_item(&root, "demo-othr", "open", &[], &[], "");
     write(&root, &mission_file("the shape.md"), "Round\n");
     write(&root, &mission_file("notes.md"), "One\n");
     commit(&root, "Items");
@@ -461,7 +461,7 @@ fn a_code_round_whose_earlier_commit_is_gone_reviews_the_whole_change() {
 
 #[test]
 fn a_code_delta_across_a_merge_of_the_base_names_only_the_branchs_paths() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
     write(&root, "hello.txt", "hello\n");
@@ -732,8 +732,7 @@ fn round_3_asking_for_changes_takes_the_item_to_the_missions_lead() {
     let scratch = agreed(&[]);
     let root = scratch.root();
     write_mission_item(&root, ID);
-    edit(&root, &item_path(ID), "status: draft", "status: ready");
-    on_base(&root, "Ready it");
+    on_base(&root, "Plan it");
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
     write(&root, "hello.txt", "hello\n");
     commit(&root, "Say hello");

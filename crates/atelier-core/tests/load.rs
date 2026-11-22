@@ -4,7 +4,7 @@ use std::path::Path;
 fn item(id: &str, blocked_by: &str) -> Vec<u8> {
     format!(
         "---\nschema: atelier.item\nschema_version: 3\nid: {id}\ntitle: Say hello\n\
-         status: ready\nmission: null\nlabels: []\npriority: high\nblocked_by: {blocked_by}\n\
+         status: open\nmission: null\nlabels: []\npriority: high\nblocked_by: {blocked_by}\n\
          implementers: []\nready: null\ntrivial: null\ncaused_by: null\n\
          created_at: 2026-11-10T09:00:00Z\n---\n\n## Goal\n\nHello.\n\n## Done when\n\n- [ ] It says hello.\n"
     )

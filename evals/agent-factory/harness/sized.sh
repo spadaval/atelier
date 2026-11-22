@@ -21,7 +21,7 @@ source "$fixture/case.sh"
 source "$case_dir/../loop/lib.sh"
 next_repo "$work" "$SLUG"
 cp -r "$fixture/base/." .
-item "$ID" ready "$TITLE" < "$fixture/item.md"
+item "$ID" "$TITLE" < "$fixture/item.md"
 git add . && git commit -qm "Start the tool, and track work in Atelier"
 git rev-parse HEAD > "$work/.main_head"
 cp "$work/.main_head" "$work/.setup_head"

@@ -81,7 +81,7 @@ The tool is the Cargo workspace at the repository root, built to
 
 | Crate | Owns |
 | --- | --- |
-| `atelier-core` | The core, which both programs call. `model`: the domain values, Mission, Item, Review, Finding, Status, Thread and Config, with no I/O. `records`: reading and writing the three record kinds and `config.toml`, from a checkout or from a commit; IDs; validation. The rest: the use cases, which are the status view, each lifecycle action (`actions`), the merge checks, cross-branch reads, the views the Desk reads; a repository opened by path (`Repo`); `git`, the one place a `git` program is started, for the core, the command and the Desk; `forge`, the one place `gh` is started: the GitHub calls of `submit`, `review` and `merge`, and the Desk's list and close of pull requests; the history of actions `log` prints; the disagreements `list --disputed` prints; `ready` and a mission's `drop`, as functions that return what they did or a refusal as data; the refusal and skip policy, and the wording of the refusals and results of the actions here |
+| `atelier-core` | The core, which both programs call. `model`: the domain values, Mission, Item, Review, Finding, Status, Thread and Config, with no I/O. `records`: reading and writing the three record kinds and `config.toml`, from a checkout or from a commit; IDs; validation. The rest: the use cases, which are the status view, each lifecycle action (`actions`), the merge checks, cross-branch reads, the views the Desk reads; a repository opened by path (`Repo`); `git`, the one place a `git` program is started, for the core, the command and the Desk; `forge`, the one place `gh` is started: the GitHub calls of `submit`, `review` and `merge`, and the Desk's list and close of pull requests; the history of actions `log` prints; the disagreements `list --disputed` prints; a mission's `drop`, as a function that returns what it did or a refusal as data; the refusal and skip policy, and the wording of the refusals and results of the actions here |
 | `atelier-cli` | Arguments, dispatch, the cleanup after a merge (`cleanup`), the other commands' Git calls, made through `atelier-core`'s `git`, and their shell calls; `submit`, `review` and `merge`, which call the forge through `atelier-core`'s `forge`; output |
 | `atelier-desk` | The Desk's server and its T3 Code client. Its fetch, clone and push go through `atelier-core`'s `git`, which it asks to prompt for nothing, and its pull requests through `atelier-core`'s `forge` |
 
@@ -134,17 +134,31 @@ schema: atelier.item
 schema_version: 3
 id: atelier-06jc
 title: Put open findings in full in the review brief
-status: building        # draft ready building in_review changes_requested approved done dropped
+status: building        # open building in_review changes_requested approved done dropped
 mission: atelier-icv4   # optional; names a mission in the checkout
 labels: [review]
 priority: high          # critical high medium low
 blocked_by: []          # each names an item in the checkout
 implementers: [<thread>]  # start appends unless the thread already holds it; the last entry holds the item
-ready: {by: ada, at: <time>}
+ready: null             # who said go, in a record from before items were open; nothing sets it
 trivial: null           # or the reason given to merge --trivial
 caused_by: null         # on a bug: an item ID, or a commit hash of 7 to 64 hex digits
 created_at: <time>
 ```
+
+An unstarted item is `open`. A record from before 2026-11-22 says `draft`
+or `ready`, and both read as `open` wherever an item is read (serde
+aliases on `Status::Open`), in every repository the host's binary serves,
+with no conversion. `Store::write_item` leaves a file that already reads as
+the item it is given, so a command that changes nothing never respells one;
+a command that changes the item writes `open` and keeps `ready`, whose `by`
+`show` prints. Only `log` reads the old spelling, to print history as it
+was written. A binary from before refuses `open` on an item by name, and
+one such record on the base or on any named branch stops its `status` and
+`list` for the whole repository; an installed `atelier-desk` from before
+stops the same way, and an installed extension from before cannot draw an
+open item. So a host installs the command, the Desk and the extension from
+this tree before any of its repositories holds such a record.
 
 The item lives in a directory named for its `id`. Sections are `##`
 headings: Goal, Done when, Scope, Report; Goal and Done when are
@@ -359,7 +373,7 @@ the run's merge. Two branches that settle one finding differently conflict
 when the second merges, and Git reports it. These are the only writes to a
 review after its verdict, and the only writes to a done item.
 
-`new "<title>" --from <finding>` writes a draft item whose Goal names the
+`new "<title>" --from <finding>` writes an open item whose Goal names the
 finding and its review file and quotes the finding, heading and text, and
 the `Taken:` line, in one run: it validates both first, writes the item and
 then the review, and removes the item again if the review cannot be
@@ -414,11 +428,10 @@ will check.
 
 | Action | Role | From | To | Conditions |
 | --- | --- | --- | --- | --- |
-| `ready` (item) | Planner | `draft` | `ready` | none |
-| `start` | Implementer | `ready` | `building` | the item's record is on the base, so an item of a proposed plan waits for the plan to merge; blockers done; its mission, if any, is not dropped; no branch `<id>` exists, local or on the remote; where a remote is configured, the base fetched then, and again after the push, has the item neither done nor dropped; a detached HEAD holds no commit that switching away would orphan |
+| `start` | Implementer | `open` | `building` | the item's record is on the base, so an item of a proposed plan waits for the plan to merge; blockers done; its mission, if any, is not dropped; no branch `<id>` exists, local or on the remote; where a remote is configured, the base fetched then, and again after the push, has the item neither done nor dropped; a detached HEAD holds no commit that switching away would orphan |
 | `start`, taking over | Implementer | `building`, `in_review`, `changes_requested`, `approved` | unchanged | branch `<id>` exists, local or on the remote; its mission, if any, is not dropped; the base and detached HEAD conditions of `start` |
 | `start --new` | Implementer | none | `building` | none; the item is created on its new branch |
-| `start --mission` | Planner | none | `draft`, which atelier-2vdq makes `open` | none; the mission is created on its new branch, which `start` pushes where a remote is configured; atelier-2vdq adds the caller to `planners` |
+| `start --mission` | Planner | none | `open` | none; the mission is created on its new branch, which `start` pushes where a remote is configured; atelier-2vdq adds the caller to `planners` |
 | `start --backlog` | Any | none | none | no branch `backlog/<slug>` exists, local or on the remote; the remote can be reached |
 | `submit` | Implementer | `building`, `changes_requested`, `approved` | `in_review` | where a remote is configured, the base fetched then has the item neither done nor dropped; Done when ticked; Report written; each open fix-now finding has a line in Responses, and no line there is malformed. After its commit, where a forge is configured, it pushes the branch and opens its pull request; a failure of either is a warning, and `merge` does it |
 | `submit` (mission) | Planner | proposed | unchanged | in a checkout on the mission's branch; no record the branch changes is uncommitted, and the plan has not split in its last two rounds of review; then it pushes the branch and opens its pull request where a forge is configured. From atelier-2vdq: the mission is not dropped, and a caller not in `planners` is added to it, in a commit of `mission.md` alone, and takes the plan over |
@@ -433,14 +446,15 @@ will check.
 | `merge --trivial` | Implementer | `building` | `done`, read from the merge | Done when ticked; Report written; no review file; no line in Responses is malformed; nothing uncommitted in tracked files or the item's directory; the item and its mission are not dropped |
 | `merge` (mission) | Planner | proposed | agreed, by being on the base | Until atelier-2vdq, refused as a backlog branch that adds a mission is, a rule a skip passes. From atelier-2vdq: two reviews of the current round, from threads not in `planners`, approve, and the plan has not changed since the commit each reviewed; the mission is not dropped on its branch; no code changed; nothing uncommitted |
 | `merge` (backlog) | Any | none | none | in a checkout on the backlog branch; no code changed (no path outside `.atelier/`, and not `config.toml`), which is no rule; it adds no mission and changes no mission's plan, which until atelier-2vdq gives a plan its gate is a rule refused; it brings no item record in a started status; `atelier check` passes on the merged tree; nothing uncommitted. No review file is asked for. Not an implementer's action on an item |
-| `close` (item) | Any | `draft`, `ready` | `done` | a result text; no branch `<id>` exists |
+| `close` (item) | Any | `open` | `done` | a result text; no branch `<id>` exists |
 | `close` (mission) | Lead or planner | `open`, on the base | `done` | every item done or dropped; Result written |
-| `drop` | Planner | `draft`, `ready`, and an item's started statuses; a mission's `open` | `dropped` | a reason, on one line; for a started item, a checkout on a backlog branch or on the item's branch; not an item already merged |
+| `drop` | Planner | an item's `open` and started statuses; a mission's `open`, or the old `draft` | `dropped` | a reason, on one line; for a started item, a checkout on a backlog branch or on the item's branch; not an item already merged |
 | `new --from`, `drop` on a finding | Planner on a backlog branch, or an implementer on its branch | `done`, the finding's item | unchanged | a review of the item has the finding; it is deferred; it is not settled |
 | `lead` | Lead | an `open` mission, on the base | unchanged | none |
 
-`ready` on a mission is no action: it is refused, saying a mission needs no
-go-ahead.
+`ready` is no action, on an item or a mission. The command is hidden from
+help, and it is refused, whatever it is given, saying items need no
+go-ahead and nor does a mission.
 
 Each action's record change belongs on one kind of branch, and either the
 command commits it or the agent does with Git. The three commands that act
@@ -453,7 +467,7 @@ command that commits them.
 | `start`, `start --new`, a take-over | The item's branch, which `start` makes or switches to | The command: one commit holding the item's record, which is the claim, then a push where a remote is configured |
 | `start --mission` | The mission's branch, which it makes | The command, then a push where a remote is configured |
 | `start --backlog` | The backlog branch, which it makes | Nothing to commit; the command pushes the branch where a remote is configured |
-| `new`, `set`, `ready` (item) | A backlog branch; or the mission's branch while its plan is proposed and the item is one of the plan's | The agent |
+| `new`, `set` (item) | A backlog branch; or the mission's branch while its plan is proposed and the item is one of the plan's | The agent |
 | `submit` | The item's branch | The command: the item's directory, with `in_review` |
 | `submit` (mission, backlog) | The branch it is on | The command commits only the addition of a planner taking the plan over; it refuses while a record change is uncommitted, and pushes |
 | `review`, `verdict` (item) | The item's branch, in the implementer's checkout | The agent: the reviewer commits the review file and `item.md` |
@@ -474,7 +488,7 @@ list, and refuses any record change committed on the base.
 How the table is built:
 
 - A row joins the table with its command. The table holds the rows of
-  `ready` on an item, `start`, `start --new`, `start --mission`, `start
+  `start`, `start --new`, `start --mission`, `start
   --backlog`, `start` taking over, `submit` on each kind of branch,
   `review`, both verdicts, `merge` on each kind of
   branch and with `--trivial`, `lead`, `drop` (one row, for an item and a
@@ -483,7 +497,10 @@ How the table is built:
   conditions `actions::check_settle` checks after the row's. A mission's row is checked with `actions::check_mission`, from
   the mission's status and, for `close`, the status of each item that names
   it, each found as `Located::record` finds it, and its Result; for a
-  verdict, from the caller's plan review. A mission's From is its stored
+  verdict, from the caller's plan review. A mission's statuses are not an item's: `actions::ON_MISSION` gives
+  each of its actions its From and To as a `MissionStatus`, so its old
+  `draft` never reads as an item's `open`, and the pre-commit hook judges
+  each record by its own kind (`changes`, `changes_mission`). A mission's From is its stored
   status, or proposed, which is `open` read from a branch that has not
   merged; `open` in a row means `open` on the base. `start --new` and
   `start --mission` run from no status, since each creates its record, and
@@ -514,11 +531,11 @@ How the table is built:
   `submit` and `merge` need the caller to be the item's last
   implementer, and a verdict needs it to be the round's reviewer. No
   thread holds the planner's role on an item, so a planner's action on one
-  (`ready`) needs nothing held and is never refused for a role the caller
+  (`close`, `drop`) needs nothing held and is never refused for a role the caller
   holds. On a mission, `submit` and `merge` need the caller to be in
   `planners`, which `submit` adds it to, and `review` of the plan needs it
   not to be.
-- `actions::next` names the action the caller would run next: `start` on a ready
+- `actions::next` names the action the caller would run next: `start` on an open
   item; as its holder, `submit` from building or changes requested, `merge`
   from approved, and nothing while it is in review; as the round's
   reviewer, `verdict changes` while its file holds an open fix-now finding,
@@ -529,7 +546,7 @@ How the table is built:
   unmet conditions from `actions::unmet`, the function `check` calls, and ends
   with its command.
 - `start` takes the take-over row when the item's status is a started one,
-  and the plain row otherwise, so a draft, done or dropped item is refused by
+  and the plain row otherwise, so a done or dropped item is refused by
   that row's From.
 - `start`'s condition that the base's record is not dropped needs no check of
   its own: the base's dropped record is the item's status (below), and
@@ -677,8 +694,7 @@ That rule is the command's. A program that links `atelier-core`, such as the
 Desk, names the caller itself when it opens a repository (`Repo::open`),
 and that name is the identity the records get: an action it makes for
 `ada` records `ada`, where the command run by a person with
-no harness variable set is `human`. `ready`'s `by`, the person who said go,
-is a parameter of the function, which `ready --by` fills. A name the records
+no harness variable set is `human`. A name the records
 cannot write and read back as it is, one with a line break or a `: `, is
 refused when the repository is opened, before anything is written.
 
@@ -704,11 +720,13 @@ a possible reviewer of the plan. A visitor is offered the take-over, and a
 reviewer whose review is done is told to stop; the lead of the item's
 mission is told so and offered no take-over. Anywhere else it lists the
 started items the caller holds, with `start <id>` to return to one, the
-ready items `start` would accept now (`Entry::startable`, as `list --ready`
-reads it), one line counting the other ready items by what stops them (a
+open items `start` would accept now (`Entry::startable`, as `list
+--startable` reads it), the 10 most urgent by priority and then ID and a
+line with how many more (`output::STARTABLE_SHOWN`, since the session-start
+hook prints it), one line counting the other open items by what stops them (a
 blocker not done, a mission dropped, a branch of their name) that names
 `list`, and the started items others hold. Holding nothing, it ends with
-`start` on an item that can start, or says no ready item can start now and
+`start` on an item that can start, or says no open item can start now and
 names no `start`. Wherever it runs it also
 lists the record changes the checkout has not committed and the commits of
 its branch not yet pushed, with the Git command for each, and each drop
@@ -716,7 +734,7 @@ written but not yet published. Away from an
 item's branch it also lists a detached HEAD's unattached commits ([A
 detached HEAD](#a-detached-head)), the line on branches and worktrees that
 piled up ([After the merge](#after-the-merge)), the missions in progress and, apart from the
-ready items, the items labelled `needs-human` that nobody has started, as
+items that can start, the items labelled `needs-human` that nobody has started, as
 waiting on a human, and the items dropped on their branch whose drop has
 not reached the base, each with its reason. A thread that is the `lead` of an agreed
 mission is told so, with each of the mission's items by
@@ -809,7 +827,7 @@ reads and writes.
      others.
 
   A copy on any other unmerged branch, such as a backlog branch that drops
-  a ready item, is a proposed change, not the record. It takes effect when
+  an open item, is a proposed change, not the record. It takes effect when
   that branch merges. `show` names each unmerged branch that changes the
   record, and `list` shows the change under what is proposed.
 - **What a reader is told.** The reader gives each record the ref it was read
@@ -863,7 +881,7 @@ reads; nothing is written there.
   the one listed is gone. Naming `start` there made agents that follow
   `Then:` lines loop. Elsewhere it still names `start <id>`. To a thread
   holding nothing `status` names no item as the next command, in any
-  checkout: a delegated thread took the top ready item for its task, or
+  checkout: a delegated thread took the top item it listed for its task, or
   would have, in another repository.
 
 ### A detached HEAD
@@ -871,7 +889,7 @@ reads; nothing is written there.
 A detached HEAD is where `merge` leaves a checkout and where a reviewer
 reads a commit. A commit made there is on no branch.
 
-- `new`, `set`, `ready`, `drop`, `close`, `lead` and settling a finding
+- `new`, `set`, `drop`, `close`, `lead` and settling a finding
   refuse there and write nothing, naming `start --backlog <slug>` and
   `start <id>`. That is a rule. `review` and `verdict` run there, since it
   is a reviewer's checkout; they refuse only the base's checkout and, as
@@ -898,7 +916,7 @@ reads a commit. A commit made there is on no branch.
   reaches the base in that item's merge and makes an approval of it stale.
 - **`new`** picks an ID that no record has in the checkout, at the base's tip
   or on any branch the reader reads, and that no branch is named for, and
-  writes a draft with its section headings and nothing under them; an
+  writes an open item with its section headings and nothing under them; an
   item's priority starts as `medium`. It makes items only; `start
   --mission` makes a mission.
 - **`set`'s flags.** `set <id>` takes `--title`, `--priority`,
@@ -906,10 +924,8 @@ reads a commit. A commit made there is on no branch.
   `--caused-by <item or commit>`, at least one. A list flag replaces the
   list, and an empty value clears a list or an optional field. A mission
   takes only `--title` and `--labels`; an item's other flags on a mission are
-  refused. It changes a draft or ready item and is refused for a started
-  item, naming its branch, and for a done or dropped one. `ready <id>...
-  --by <name>` checks every named ID first and writes nothing when any is
-  unknown, a mission, or not a draft, naming each.
+  refused. It changes an open item and is refused for a started
+  item, naming its branch, and for a done or dropped one.
 - **`drop`.** It writes `dropped` and `Dropped: <reason>` into the record in
   the checkout. An item, started or not, and an agreed mission are dropped
   on a backlog branch, and the drop counts once that merges. For a started
@@ -954,14 +970,14 @@ reads a commit. A commit made there is on no branch.
 - **`list`'s flags.** With none, every item and mission the reader finds that
   is not done or dropped: those on the base under their mission and then
   under their sorted labels, every such mission even with no item, and,
-  apart, what is proposed. `--ready` keeps items whose `start` has no unmet
+  apart, what is proposed. `--startable` keeps open items whose `start` has no unmet
   condition; `--blocked` items with a blocker that is not done;
   `--needs-human` items with that label; `--proposed` only what is proposed;
   `--mission <id>` that mission's items; `--label <l>` items, and missions,
   with the label; `--mine` items the caller holds as implementer or as the
   round's reviewer, and missions it leads or plans with their items;
   `--done` turns all of this to done and dropped items and missions. Flags
-  narrow together; with `--ready`, `--blocked` or `--needs-human` a mission
+  narrow together; with `--startable`, `--blocked` or `--needs-human` a mission
   is shown only for an item kept under it. `--deferred`, which takes no
   other flag, lists instead each unsettled deferred finding of a done item,
   by its name and title; it reads the items of the checkout it runs in,
@@ -1303,9 +1319,9 @@ refused as `show` refuses it.
 | plan-merge | A merge on the base's first-parent line brings a mission to the base `open`, or changes the plan of an agreed one as `merge` judges it: a plan section of `mission.md`, or another file in its directory but `notes.md` and `reviews/` | The mission's latest planner |
 | settle | A finding gains `Taken` or `Dropped` | The thread in that line |
 | lead | A mission's `lead` is set or changes | That entry |
-| ready | An item's status becomes `ready`; on a mission in the old form, its status | None; the name given with `--by` |
+| ready | Only in history from before items were open: an item's record comes to spell its status `ready`; on a mission in the old form, its status | None; the name given with `--by` |
 | drop, close | A status becomes `dropped`, or `done` outside a merge | None |
-| merge, change | A record changed in a commit that passed a rule, with none of the above found on that record, such as a `set` of a started item, the merge of one, or a `ready` of an item ready already beside one that was not: `merge` for an Atelier merge, else `change`. An Atelier merge's record is the item or mission its `Atelier-Merge:` names, or, for a backlog branch, each record the merge changed | The thread that passed the rule |
+| merge, change | A record changed in a commit that passed a rule, with none of the above found on that record, such as a `set` of a started item, the merge of one, or in old history a `ready` of an item ready already beside one that was not: `merge` for an Atelier merge, else `change`. An Atelier merge's record is the item or mission its `Atelier-Merge:` names, or, for a backlog branch, each record the merge changed | The thread that passed the rule |
 
 Where a commit passed a rule and names the thread that ran the command
 (`Atelier-Skip-By:`, see Hooks and the bypass), the line of the action
@@ -1318,7 +1334,7 @@ which is every action where Atelier makes the commit or prints the commit
 line. Those are `start`, with `plan`, the commit of `start --mission`;
 `submit`; and `merge`, with `plan-merge`, whose trailers are in the
 merge commit's message whether the forge makes it or `merge` does, a
-take-over of an implementer, which `start` commits, and `verdict`, `ready`,
+take-over of an implementer, which `start` commits, and `verdict`,
 `drop`, `close` and `lead`, whose printed commit line carries them. Each
 record the commit changed shows the skips once: on its actions of those
 kinds, so the `review` line beside a verdict on the same item does not
@@ -1343,6 +1359,7 @@ space. A thread's identity is printed whole, as the record holds it, so a
 Codex subagent reads `<parent>/<child>`.
 
 A status move reads `<from> -> <to>`, each spelled as a record spells it,
+so an old item's `draft` and `ready` stay as history has them,
 and `new` stands for the status of a record the commit added. What changed
 holds:
 
@@ -1406,7 +1423,7 @@ that had no record yet.
   gives that mission's `plan-merge`, which is never `merge`, so a count of
   `merge` lines counts no plan as an item. A merge of a mission's or a
   backlog branch gives no other line of its own: the actions its branch
-  carried, such as a `ready` or a `drop`, are found on the second-parent
+  carried, such as a `drop` or a `close`, are found on the second-parent
   side. Any other merge commit gives no line.
 - **The cutover's conversion commit is read like any other.** Each record
   it added shows its actions at that commit's time, as `new -> <status>` and
@@ -1435,15 +1452,15 @@ In astromech on 2026-11-11, `atelier log` from a debug build printed 88
 lines in 0.06 to 0.08 seconds, starting six Git processes.
 
 What `log` does not show: `new`, `set` and edits to a record's text, which
-Git's own log has, so an item's time as a draft is read from its
-`created_at` and not from `log`; the executing thread of `ready`, `drop`
+Git's own log has, so when an item was filed is read from its
+`created_at` and not from `log`; the executing thread of `drop`
 and `close`, which no record holds; and a skip in a Git hook, which leaves
 nothing in Git. A skip on a command that makes no commit shows once the
 commit it prints is made, since that commit carries it.
 
 `log` sees commits, not commands. Actions on different records committed
 together appear as separate lines with one time. Two actions on one record in
-one commit appear as their net change: an item made ready and closed in the
+one commit appear as their net change: an item filed and closed in the
 same commit shows only as closed. An action undone before it was committed does
 not appear.
 
@@ -1452,7 +1469,7 @@ and the tips of unmerged branches, so an item's actions stay
 visible after its branch is merged and deleted. The old tool's history
 reader for the debrief followed first parents only and lost them.
 
-`log` adds nothing up. Time in each status from `ready` on, rounds per item,
+`log` adds nothing up. Time in each status from `building` on, rounds per item,
 roles taken over and skips are counts over its lines, and the
 gardener's procedure, not the binary, says which to take.
 
@@ -1587,7 +1604,7 @@ rule names.
   `Atelier-Skip: <rule>: <reason>` for each to its message, after `merge`'s
   `Atelier-Merge:`, and then one `Atelier-Skip-By: <thread>`, the thread
   that ran the command (2026-11-18, atelier-nv22). A command that writes files and makes no commit, such as
-  `ready`, `set`, `close` or `verdict`, puts the same trailers in the commit
+  `set`, `close` or `verdict`, puts the same trailers in the commit
   line it prints, as `--trailer` arguments (2026-11-18, atelier-mtzj, so a
   lead's departure on one is kept). The thread is its own trailer so that a
   binary from before it, which reads only `Atelier-Skip`, reads the commit as
@@ -1622,8 +1639,8 @@ rule names.
   the bound is no refusal and offers no skip); a record-writing command run
   on a kind of branch the action table does not give for its change, and
   settling a finding off a backlog branch and off an item the caller
-  implements; `set` on a record that is not a draft or ready; `ready` on a
-  record that is not a draft; `lead` on a mission that is not agreed; a
+  implements; `set` on an item that is not open or a mission that is done
+  or dropped; `lead` on a mission that is not agreed; a
   record that reads and does not validate, in what a writing command
   writes, in `check` and in the pre-commit hook; a status changed as no action
   on that kind of record (an item or a mission, `actions::changes`) changes
@@ -1854,7 +1871,7 @@ What is still to come:
   merge check, a branch gone stale.
 - A fresh-agent scenario, run by the eval harness (`loop` in
   `evals/agent-factory/`): an agent given only "run `atelier status`" takes
-  a ready item to done. It is run with Claude Opus and with a Codex model.
+  an open item to done. It is run with Claude Opus and with a Codex model.
 
 ## Tried and removed
 
@@ -1915,7 +1932,7 @@ became `show`, `list` and `status`:
 | `work mission <id>` | `show <mission>`: status, lead, Outcome, criteria and Result, items by status with holder and blockers, what is disputed, the rules its commits passed, plan reviews |
 | `work missions` | `list`, which heads each open mission's items with its status, whether it is in progress, and its lead; `status` on the base lists the missions in progress |
 | `work missions --all` | `list --done` for finished missions and items; `list` heads the open ones, and lists items in no mission |
-| `work ready` | `list --ready`, and "Ready to start" in `status` on the base |
+| `work ready` | `list --startable`, and "Can start now" in `status` on the base |
 | `work blocked` | `list --blocked`, which names each blocker that is not done |
 | `work human` | `list --needs-human`, and "Waiting on a human" in `status` |
 | `work decisions <id>` | Gone with `escalate` and `decide` (see Decisions). What two models disagreed on is in `list --disputed --mission <id>` and `show <mission>`; an old item's Decisions section is in `show <item>` |
@@ -1937,7 +1954,7 @@ carried here when the ADRs were deleted on 2026-11-11; Git keeps the ADR.
 | Status is a stored field | Every stage change is an action by a known role |
 | The implementer merges its own approved item | The reviewer is already the unbiased judge; a third agent adds a relay |
 | The harness starts agents, by whoever holds the status | T3 Code and Claude Code manage subagents well and change fast |
-| Review and readiness are separate facts | Ready says an item should start now; a review says independent agents examined a change. Since 2026-11-13 only an item is made ready, and a mission's plan reviews are its gate |
+| Review and readiness were separate facts, until 2026-11-22 | A review says independent agents examined a change, and it still says only that. Ready said an item should start now; it went with "An unstarted item is `open`" below |
 | Planning commits went on the base (2026-10-15, atelier-3mjv), until 2026-11-13 | Reversed by "Only a merge writes the base" below |
 | The workflow file goes | See Tried and removed |
 | No backward compatibility | The design should be the best one, not the nearest one |
@@ -1953,7 +1970,7 @@ carried here when the ADRs were deleted on 2026-11-11; Git keeps the ADR.
 | Every rule can be skipped on purpose, with a reason | Atelier's rules are not hard blockers, and a bypass should be intended and leave a trace |
 | `submit` pushes the branch and opens its pull request where a forge is configured (2026-11-10) | CI then runs during the review; it was nearly all of the wait between approval and merge, a median of 5.5 minutes on 25 items |
 | `merge` waits for CI, for up to 9 minutes, with no flag (2026-11-10, reversing "`merge` never waits") | The thread that runs `merge` is almost always a delegated child, which T3 neither lets watch a pull request nor wakes reliably, so "not yet, run me again" left approved items with nobody driving them |
-| The human's go-ahead on an item stays `ready --by`; a mission has none since 2026-11-13 | A machine account for agents would let GitHub carry it, and their employer's sign-on rules make one too hard to get |
+| The human's go-ahead on an item was `ready --by`, until 2026-11-22; a mission has none since 2026-11-13 | A machine account for agents would let GitHub carry it, and their employer's sign-on rules make one too hard to get. Reversed by "An unstarted item is `open`" below |
 | The tracker is for agents and the Desk is for the human: two products sharing a vocabulary and the core, which reads records, computes views and performs actions for both. `atelier` has no site. The Desk is its own binary, `atelier-desk`, and web app, `desk/`, one service per host, outside the `atelier` release (ADR 0032, 2026-11-11) | A page that mirrors the tracker's records asks the human to read records; they need to make a few decisions well, across every repository, at a desk or on a phone |
 | The Desk acts only through the core: it calls the same function the command calls, naming the person acting, and gets the result as data. It runs no `atelier` binary, reads no command output and writes no record itself. What it needs that the core lacks is added to the core (ADR 0032) | A server outside the core spent most of its code re-deriving what the core knows, by parsing output and grepping records |
 | Records in Git are the only source of truth for work. No check, merge or hook consults the Desk, its database or T3 Code; the guards decide from Git and the records, and from CI for a commit where a forge is configured. Dependence runs one way: `atelier-desk` on the core, never the reverse (ADR 0030, 2026-11-08; ADR 0032) | Records with the code are the reason the tool exists, and a guard that read anything else could disagree with them |
@@ -1968,7 +1985,7 @@ carried here when the ADRs were deleted on 2026-11-11; Git keeps the ADR.
 | One installed binary serves every repository on a host, so a later change to the record format keeps reading the old form until every repository on the host has moved. The redesign's change of layout was the one exception, made by converting every repository at once (ADR 0028) | A format change that one repository has not taken stops the binary there |
 | Only a merge writes the base (2026-11-13, atelier-to83) | A protected branch refuses anything else, and most repositories protect theirs; requiring the opposite would be backwards. Content (the plan, findings, the Report) is written, reviewed and tied to code at a commit; coordination state (who holds what, what is in flight) is derived from the base and the named branches, not committed to the base, which is what made `.atelier/` behave like a database |
 | Branch names are `<item-id>`, `<mission-id>` and `backlog/<slug>`, with one optional prefix in `config.toml` that applies to all three (2026-11-13) | The names are the index where there is no forge, the claim, and the line between published work and scratch. One prefix covers a host's own naming rule; a free pattern could not be read back into an ID |
-| Three commands act on Git; the rest write files (2026-11-13) | `start` makes and claims a branch of any of the three kinds, `submit` publishes it, and `merge` merges it. `new`, `set`, `ready`, `drop`, `close`, `lead`, `review` and `verdict` write the file and stop; the agent commits and pushes, and the hooks validate. The human said on 2026-11-10 that the tool leaned too far toward wrapping Git, and the plan had drifted the same way. `start` never switches the base's own checkout, which has cost us before, and the pre-commit hook refuses a record change committed on the base |
+| Three commands act on Git; the rest write files (2026-11-13) | `start` makes and claims a branch of any of the three kinds, `submit` publishes it, and `merge` merges it. `new`, `set`, `drop`, `close`, `lead`, `review` and `verdict` write the file and stop; the agent commits and pushes, and the hooks validate. The human said on 2026-11-10 that the tool leaned too far toward wrapping Git, and the plan had drifted the same way. `start` never switches the base's own checkout, which has cost us before, and the pre-commit hook refuses a record change committed on the base |
 | A branch merges on what it contains (2026-11-13) | Code needs an independent review; a new mission or a changed plan needs two approving plan reviews; records alone need `atelier check`. A branch counts as records alone only when every path it changes is under `.atelier/`. A plan is compared by section of `mission.md`, not by file, and until it has merged its items are part of it |
 | The trunk, not an integration branch (2026-11-13) | Each item merges to the base on its own and leaves it working, so a mission half done on the base is an accurate picture |
 | A mission's stored status is `open`, `done` or `dropped` (2026-11-13) | Proposed is never stored: it is `open` read from a branch that has not merged. A mission dropped on its branch is dropped, and `merge` refuses it. An open mission on the base is agreed and may be led and closed. An old record's `ready` reads as `open`, and an old `draft` reads as proposed until the rollout moves it to a branch or its plan merges |
@@ -1978,10 +1995,10 @@ carried here when the ADRs were deleted on 2026-11-11; Git keeps the ADR.
 | Stopping a mission is dropping it, and a drop counts once published (2026-11-13) | `drop` writes the record and stops nothing until it is merged, for an agreed mission by the record-only path, or pushed with its pull request closed, for a proposed plan. `status` and `show` say when a drop is not yet published, and the Desk's stop carries it through. From then `start`, a take-over and an item's `merge` refuse, naming the stop |
 | A started item is dropped on one backlog branch (2026-11-22, atelier-gqtw), reversing "dropped on its own branch" of 2026-11-13 | That took two branches and two merges' worth of ceremony for one line. A `dropped` record on the base already wins over any unmerged branch, so the base's copy alone stops the work. A drop on the item's own branch still works, and its base copy still follows by the record-only path. A drop of an item already merged is refused |
 | `merge` deletes the branch it merged (2026-11-22, atelier-gqtw) | Nothing did, and this repository had 285 merged local and 266 merged remote branches. The human approved deleting remote branches for `merge` alone, under a lease on the merged commit; by hand it still needs their word. The branch had also stopped a stale clone from restarting merged work, so `start` and `submit` now read the remote's base, and planning refuses the detached HEAD a merge leaves |
-| A mission has no draft status (2026-11-13) | A plan on its branch is a draft by where it is. An idea for a mission is a draft item on the base, so the base stays the one list of what might be done and branches stay short-lived |
+| A mission has no draft status (2026-11-13) | A plan on its branch is a draft by where it is. An idea for a mission is an open item on the base, so the base stays the one list of what might be done and branches stay short-lived |
 | A mission has no go-ahead (2026-11-13) | It protected direction, and direction is given when the mission starts, in a conversation with the human or a proposal they agreed; the Why says which. The plan reviews do the checking, and found nine problems in atelier-g961 that neither they nor the planner had seen. They keep a veto at any time, made real by the Desk telling them when a plan is proposed and when it merges |
 | The two plan reviews are enforced by `merge` (2026-11-13) | They are now the only gate, and until then the rule lived only in the skill |
-| Items keep `draft` and `ready` (2026-11-13) | They record intent: agreed to exist, or agreed to start now. Readying a mission never readied its items, so a lead can hold later work until earlier work has shown what it shows |
+| An unstarted item is `open`, with no draft, no ready and no `ready` command (2026-11-22, atelier-v06d, mission atelier-dh7a, the human's decision of 2026-11-19, reversing "Items keep `draft` and `ready`" of 2026-11-13) | An item needs no approval to exist, as in any issue tracker: the judgment is made when someone picks the work up, and nothing starts an open item unasked. The two statuses were kept so a lead could hold later items back as drafts, and leads did not: all nine items of atelier-osel were readied in one commit the moment the plan merged, a gardener readied its own run, and `ready` checked nothing about the item (atelier-k55o). Not started is what the lack of a started status already says. `blocked_by` holds work back. Two things are given up, and the human chose both: the Desk's split of loose items into next and later, and the gardener's time waiting to start |
 | `lead` stays a field on the mission, as attribution (2026-11-13) | The Desk shows who leads. It reaches the base by the record-only path once per mission. It is not a lock, and a second lead loses at merge |
 | `escalate` and `decide` are removed (2026-11-13, atelier-xbog) | They served two jobs. Advice needs no record: the implementer asks the thread that started it, as Claude's advisor tool lets a working model ask a stronger one and carry on. A disputed finding already has a path: a rebuttal in Responses, settled by a fresh reviewer. Nothing has used either command since the cutover |
 | A disagreement is found, not enforced (2026-11-13) | The records hold it already: a `rebutted` Response with the next round's `Now: kept` or `Now: withdrawn`, and a plan-review round whose reviewers differ. `list --disputed` prints them, `show <mission>` gives a lead its mission's, and the gardener reads them first. Nothing blocks on them. Until 2026-11-18 a lead stepped in only by moving the disputed work out of the item's Scope into an item of its own; since then it settles a dispute either way, under "A lead is in charge of its mission" Since atelier-h6ij two split plan rounds in a row do stop the next round, for the human to rule |
@@ -1991,7 +2008,7 @@ carried here when the ADRs were deleted on 2026-11-11; Git keeps the ADR.
 | A merged item is done; nothing writes `done` at the merge (2026-11-13) | A started item's record reaches the base only through its own merge, so its base copy in a started status means merged. Chosen in atelier-ogpg, under the Authority atelier-to83 gives its lead, over a last commit setting `done`; see [How `done` is recorded](#how-done-is-recorded) |
 | A record-writing command refuses in the base's own checkout, and `start` there makes the branch without switching (2026-11-13) | Files written there could be committed nowhere and would block other threads; see [The base's own checkout](#the-bases-own-checkout) |
 | `ready.at` and `created_at` are read from Git (2026-11-13) | The commit holds the time, and `atelier log` already reads times there. A mission's record drops both; an item's keeps them until an item of its own removes them, since none of atelier-to83's items changes the item's format |
-| An action's doing moves from the command's file into the core when a second caller needs it, and not before (2026-11-14, atelier-dy62) | Code with one caller is plainest beside it. `ready` and a mission's `drop` moved when the Desk needed them, and the forge code moved because the Desk calls it (atelier-x5al). `submit` and `merge` stay in `atelier-cli` until a second caller needs them; nothing else has a second caller |
+| An action's doing moves from the command's file into the core when a second caller needs it, and not before (2026-11-14, atelier-dy62) | Code with one caller is plainest beside it. A mission's `drop`, and `ready` until it was removed, moved when the Desk needed them, and the forge code moved because the Desk calls it (atelier-x5al). `submit` and `merge` stay in `atelier-cli` until a second caller needs them; nothing else has a second caller |
 | A new crate is made when a second program needs part of the core without the rest. Until then, a module (2026-11-14, atelier-dy62) | The core was three crates for about 8,000 lines that nothing used apart. The split put same-named files in different crates, which agents guessed wrong, and left helpers out of reach of the crate below |
 | The T3 Code extension lives in this repository, under `t3-extension/`, outside the `atelier` release, as the Desk is (ADR 0032). `atelier` still has no Node step in its build or release (2026-11-16, atelier-n4g7) | It talks to the Desk over the Desk's host contract, and every change to it so far also changed the Desk, so one item and one review should cover both sides |
 | The T3 Code extension is released on its own tags, `t3-extension-v<version>`, as a bundle of its files and installer with a checksum. The release builds no Rust and runs no test: it publishes only when CI passed, with the extension's job, on the last merge at or before the tag that changed what that job tests. It is never the repository's latest release, and `dist` runs `atelier`'s release only for `v*` tags (`tag-namespace`, so its workflow is `v-release.yml`) (2026-11-16, atelier-451s) | The extension changes more often than `atelier`, and a device should download five script files without a clone of a Rust project. CI already tested the commit, so the release trusts that run instead of repeating it |

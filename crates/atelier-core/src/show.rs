@@ -19,7 +19,7 @@ pub struct MissionView {
     pub dir: MissionDir,
     /// Its copies, on the base and on branches, and where `dir` was read.
     pub mission: Located<MissionDir>,
-    /// Whether it is ready with a started item ([`in_progress`]).
+    /// Whether it is open with a started item ([`in_progress`]).
     pub in_progress: bool,
     /// Its items, as [`items_of`] orders them, each [`annotate`]d.
     pub items: Vec<Entry>,

@@ -23,7 +23,7 @@ spec = importlib.util.spec_from_file_location(
 facts = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(facts)
 fact, git = facts.fact, facts.git
-WRITES = ("init", "new", "set", "ready", "drop", "close", "start", "submit",
+WRITES = ("init", "new", "set", "drop", "close", "start", "submit",
           "review", "verdict", "lead", "merge", "setup")
 HELP = ("--help", "-h", "help")
 ORDERS = [{"id": 1, "customer": "Ann", "quantity": 2, "unit_price": 3.5},

@@ -21,7 +21,7 @@ function item(id: string, title: string, status: Status, more: Partial<ItemRow> 
     priority: "medium",
     labels: [],
     needs_human: false,
-    startable: status === "ready",
+    startable: status === "open",
     blockers: [],
     waiting_on: [],
     holder: null,
@@ -68,22 +68,22 @@ const missions = (rows: MissionRow[]): MissionsResponse => ({ commit: "0".repeat
 
 type Scenario = Record<string, unknown>;
 
-// A mission in each of Now, Next and Later, a loose item for each, and a week with steps on three days.
+// A mission in each of Now, Next and Later, loose items started and open, and a week with steps on three days.
 const nowItems = [
   item("atelier-n001", "Draw the lanes", "done"),
   item("atelier-n002", "Fold a mission open", "building", { holder: "thread:impl" }),
   item("atelier-n003", "Read the week", "in_review", { holder: "thread:impl", reviewer: "thread:gone%3Areviewer01" }),
-  item("atelier-n004", "Wait for the lanes", "ready", { blockers: [{ id: "atelier-n002", status: "building" }], waiting_on: ["atelier-n002"], startable: false }),
-  item("atelier-n005", "Decide the colours", "ready", { needs_human: true }),
+  item("atelier-n004", "Wait for the lanes", "open", { blockers: [{ id: "atelier-n002", status: "building" }], waiting_on: ["atelier-n002"], startable: false }),
+  item("atelier-n005", "Decide the colours", "open", { needs_human: true }),
 ];
 const nowMission = row("atelier-nm01", "Draw the project home natively", "open", nowItems, true);
-const nextItems = [item("atelier-x001", "Write the plan's first item", "ready"), item("atelier-x002", "Then the second", "draft")];
+const nextItems = [item("atelier-x001", "Write the plan's first item", "open"), item("atelier-x002", "Then the second", "open")];
 const nextMission = row("atelier-xm01", "Agreed, not started", "open", nextItems);
 const laterMission = row("atelier-lm01", "A proposed plan", "proposed", []);
 const loose = [
   item("atelier-l001", "A loose item being built", "building", { holder: "thread:loose", priority: "critical" }),
-  item("atelier-l002", "A loose ready item", "ready", { priority: "high" }),
-  item("atelier-l003", "A loose draft", "draft", { priority: "low" }),
+  item("atelier-l002", "A loose open item", "open", { priority: "high" }),
+  item("atelier-l003", "Another loose open item", "open", { priority: "low" }),
 ];
 const threads: Agent[] = [
   { identity: "thread:impl", role: "implementer", item: "atelier-n002", thread: { title: "Implement the fold", status: "running", provider: "claudeAgent", model: "claude-opus-5-5", link: null } },

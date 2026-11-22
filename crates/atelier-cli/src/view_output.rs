@@ -3,10 +3,9 @@
 
 use crate::history::{one_line, passed_by};
 use crate::output::{
-    cap_for_lead, condition, handoff, holder, mission_status_name, priority_name, settled,
-    status_name, verdict_name,
+    cap_for_lead, condition, handoff, holder, priority_name, settled, status_name, verdict_name,
 };
-use atelier_core::actions::{Condition, PLANNED, STARTED};
+use atelier_core::actions::{Condition, STARTED};
 use atelier_core::model::{
     Finding, Mission, MissionStatus, Outcome, Ready, Recommendation, Status, Thread,
 };
@@ -138,7 +137,7 @@ fn standing(entry: &Entry) -> Vec<String> {
     if let Some(time) = &entry.approved {
         facts.push(format!("approved since {time}"));
     }
-    if entry.needs_human() && PLANNED.contains(&entry.status) {
+    if entry.needs_human() && entry.status == Status::Open {
         facts.push("waits on a human".into());
     } else if entry.startable() {
         facts.push("can start now".into());
@@ -191,10 +190,11 @@ fn mission_line(dir: &MissionDir, in_progress: bool, on: Option<String>) -> Stri
     format!("{} ({}): {}\n", mission.id, facts.join(", "), mission.title)
 }
 
+/// Who said go on an item, where a record from before items were open says.
 fn ready_line(ready: Option<&Ready>) -> String {
     match ready {
         Some(ready) => format!("Made ready by {} at {}\n", ready.by, ready.at),
-        None => "Not made ready yet\n".into(),
+        None => String::new(),
     }
 }
 
@@ -206,7 +206,7 @@ fn labels(labels: &[String]) -> String {
 }
 
 /// A mission's items under a heading for each status, each with what
-/// holds or blocks it; a ready item's other unmet conditions follow it,
+/// holds or blocks it; an open item's other unmet conditions follow it,
 /// and with `needs`, as a lead is shown them, what a started item's holder
 /// still needs.
 fn by_status(items: &[&Entry], needs: bool) -> String {
@@ -224,7 +224,7 @@ fn by_status(items: &[&Entry], needs: bool) -> String {
                 .unmet
                 .iter()
                 .filter(|c| !matches!(c, Condition::Blocked { .. }));
-            for unmet in other.filter(|_| status == Status::Ready) {
+            for unmet in other.filter(|_| status == Status::Open) {
                 text += &format!("    {}\n", condition(&entry.id, unmet));
             }
             for need in entry.needs.iter().filter(|_| needs) {
@@ -324,7 +324,7 @@ pub fn item(
     dir: &ItemDir,
     whence: &Whence,
     entry: &Entry,
-    mission: Option<&(String, Option<Status>)>,
+    mission: Option<&(String, Option<MissionStatus>)>,
     findings: &[Finding],
     open: &[Finding],
 ) -> String {
@@ -332,7 +332,7 @@ pub fn item(
     let mut status = vec![status_name(item.status).to_string()];
     status.extend(standing(entry));
     let mission = match mission {
-        Some((id, Some(status))) => format!("{id} ({})", status_name(*status)),
+        Some((id, Some(status))) => format!("{id} ({})", status.name()),
         Some((id, None)) => format!("{id} (not in the base's last commit)"),
         None => "none".into(),
     };
@@ -710,10 +710,10 @@ pub fn lead(
     )
 }
 
-pub fn lead_not_ready(id: &str, status: Status) -> String {
+pub fn lead_not_open(id: &str, status: MissionStatus) -> String {
     format!(
         "`atelier lead {id}` refused; nothing changed.\nMission {id} is {}, and `atelier lead` runs on a mission that is open. Nothing is left to lead on it.\n",
-        mission_status_name(status)
+        status.name()
     )
 }
 

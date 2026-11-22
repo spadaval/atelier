@@ -120,7 +120,7 @@ fn after_merge(hub: &Hub, script: &str) {
 
 #[test]
 fn a_started_item_is_dropped_on_one_backlog_branch_whose_merge_closes_its_pull_request() {
-    let hub = Hub::new(&[(ID, "ready")]);
+    let hub = Hub::new(&[(ID, "open")]);
     let (a, b) = (hub.clone("a"), hub.clone("b"));
     let work = working(&hub, &a);
 
@@ -175,7 +175,7 @@ fn a_started_item_is_dropped_on_one_backlog_branch_whose_merge_closes_its_pull_r
 
 #[test]
 fn a_pull_request_that_cannot_be_closed_is_a_warning_and_the_drop_merges() {
-    let hub = Hub::new(&[(ID, "ready")]);
+    let hub = Hub::new(&[(ID, "open")]);
     let a = hub.clone("a");
     working(&hub, &a);
     fs::create_dir_all(hub.gh.join("open")).unwrap();
@@ -202,12 +202,12 @@ fn a_pull_request_that_cannot_be_closed_is_a_warning_and_the_drop_merges() {
 
 #[test]
 fn a_drop_names_each_item_the_branch_added_and_the_command_that_brings_it() {
-    let hub = Hub::new(&[(ID, "ready"), ("demo-kn0w", "draft")]);
+    let hub = Hub::new(&[(ID, "open"), ("demo-kn0w", "open")]);
     let a = hub.clone("a");
     working(&hub, &a);
     // One it filed is pushed, and one is only in this clone.
     for (id, push) in [("demo-f1ed", true), ("demo-l0ca", false)] {
-        write_item(&a, id, "draft", &[], &[], "");
+        write_item(&a, id, "open", &[], &[], "");
         git(&a, &["add", "-A"]);
         git(&a, &["commit", "-qm", "File"]);
         if push {
@@ -264,10 +264,10 @@ fn a_drop_names_each_item_the_branch_added_and_the_command_that_brings_it() {
 
 #[test]
 fn a_drop_names_a_filed_item_as_the_newer_of_the_branchs_two_copies_has_it() {
-    let hub = Hub::new(&[(ID, "ready")]);
+    let hub = Hub::new(&[(ID, "open")]);
     let a = hub.clone("a");
     working(&hub, &a);
-    write_item(&a, "demo-f1ed", "draft", &[], &[], "");
+    write_item(&a, "demo-f1ed", "open", &[], &[], "");
     git(&a, &["add", "-A"]);
     git(&a, &["commit", "-qm", "File"]);
     git(&a, &["push", "-q", "origin", ID]);
@@ -342,7 +342,7 @@ fn an_item_only_on_its_branch_is_dropped_on_a_backlog_branch_with_its_definition
 
 #[test]
 fn a_stale_clones_submit_and_merge_stop_at_a_drop_made_on_a_backlog_branch() {
-    let hub = Hub::new(&[(ID, "ready")]);
+    let hub = Hub::new(&[(ID, "open")]);
     let b = hub.clone("b");
     hub.approved(&b, "t1");
     dropped(&hub);
@@ -369,7 +369,7 @@ fn a_stale_clones_submit_and_merge_stop_at_a_drop_made_on_a_backlog_branch() {
 #[test]
 fn submit_refuses_an_item_done_or_dropped_on_the_remotes_base_and_warns_when_it_cannot_read_it() {
     for status in ["done", "dropped"] {
-        let hub = Hub::new(&[(ID, "ready")]);
+        let hub = Hub::new(&[(ID, "open")]);
         let a = hub.clone("a");
         working(&hub, &a);
         finished(&a);
@@ -390,7 +390,7 @@ fn submit_refuses_an_item_done_or_dropped_on_the_remotes_base_and_warns_when_it_
         assert!(!hub.gh.join("opened").exists());
     }
 
-    let hub = Hub::new(&[(ID, "ready")]);
+    let hub = Hub::new(&[(ID, "open")]);
     let a = hub.clone("a");
     working(&hub, &a);
     finished(&a);
@@ -409,10 +409,10 @@ fn submit_refuses_an_item_done_or_dropped_on_the_remotes_base_and_warns_when_it_
 #[test]
 fn a_stale_clone_cannot_restart_or_take_over_a_merged_or_dropped_item_whose_branch_is_gone() {
     for end in ["merged", "dropped"] {
-        let hub = Hub::new(&[(ID, "ready")]);
+        let hub = Hub::new(&[(ID, "open")]);
         let (a, fresh, held) = (hub.clone("a"), hub.clone("fresh"), hub.clone("held"));
         working(&hub, &a);
-        // `held` saw it building, and `fresh` only ready.
+        // `held` saw it building, and `fresh` only open.
         git(&held, &["fetch", "-q", "origin"]);
         if end == "merged" {
             finished(&a);
@@ -451,7 +451,7 @@ fn a_stale_clone_cannot_restart_or_take_over_a_merged_or_dropped_item_whose_bran
 
 #[test]
 fn start_and_take_over_change_nothing_when_the_remotes_base_cannot_be_fetched() {
-    let hub = Hub::new(&[(ID, "ready"), (OTHER, "ready")]);
+    let hub = Hub::new(&[(ID, "open"), (OTHER, "open")]);
     let (a, b) = (hub.clone("a"), hub.clone("b"));
     let work = working(&hub, &a);
     git(&b, &["fetch", "-q", "origin"]);
@@ -477,7 +477,7 @@ fn start_and_take_over_change_nothing_when_the_remotes_base_cannot_be_fetched() 
 #[test]
 fn a_failed_fetch_is_no_failure_only_where_the_clone_already_holds_the_remotes_base() {
     // As when another fetch in the clone moved the tracking ref first.
-    let hub = Hub::new(&[(ID, "ready"), (OTHER, "ready")]);
+    let hub = Hub::new(&[(ID, "open"), (OTHER, "open")]);
     let a = hub.clone("a");
     git(&a, &["config", "remote.origin.uploadpack", "false"]);
     ok(hub.atelier(&a, "t1", &["start", ID]));
@@ -501,7 +501,7 @@ fn a_failed_fetch_is_no_failure_only_where_the_clone_already_holds_the_remotes_b
 fn a_fresh_claim_racing_a_merge_refuses_without_switching_and_keeps_the_pushed_branch() {
     // The base of a merged item holds a started status, which reads done.
     for (there, reads) in [("approved", "done"), ("dropped", "dropped")] {
-        let hub = Hub::new(&[(ID, "ready")]);
+        let hub = Hub::new(&[(ID, "open")]);
         let a = hub.clone("a");
         let before = head(&a);
         base_moves_at_push(&hub, &a, there);
@@ -524,7 +524,7 @@ fn a_fresh_claim_racing_a_merge_refuses_without_switching_and_keeps_the_pushed_b
 #[test]
 fn a_take_over_racing_a_drop_refuses_and_keeps_the_earlier_implementers_work() {
     for in_bases_checkout in [false, true] {
-        let hub = Hub::new(&[(ID, "ready")]);
+        let hub = Hub::new(&[(ID, "open")]);
         let (a, b) = (hub.clone("a"), hub.clone("b"));
         let work = working(&hub, &a);
         git(&b, &["fetch", "-q", "origin"]);
@@ -560,7 +560,7 @@ fn a_take_over_racing_a_drop_refuses_and_keeps_the_earlier_implementers_work() {
 
 #[test]
 fn a_claim_whose_check_after_the_push_fails_is_confirmed_by_running_start_again() {
-    let hub = Hub::new(&[(ID, "ready")]);
+    let hub = Hub::new(&[(ID, "open")]);
     let a = hub.clone("a");
     // The base moves with the claim's push, and the fetch of it then fails.
     let seed = hub.clone("seed-moves");
@@ -599,7 +599,7 @@ fn a_claim_whose_check_after_the_push_fails_is_confirmed_by_running_start_again(
 
 #[test]
 fn merge_deletes_the_merged_branch_on_the_remote_and_here_and_detaches_at_its_head() {
-    let hub = Hub::new(&[(ID, "ready")]);
+    let hub = Hub::new(&[(ID, "open")]);
     let a = hub.clone("a");
     hub.approved(&a, "t1");
     let merged = head(&a);
@@ -624,10 +624,10 @@ fn merge_deletes_the_merged_branch_on_the_remote_and_here_and_detaches_at_its_he
 
 #[test]
 fn a_backlog_and_a_mission_branch_are_deleted_once_merged() {
-    let hub = Hub::new(&[(ID, "draft")]);
+    let hub = Hub::new(&[(ID, "open")]);
     let (a, b) = (hub.clone("a"), hub.clone("b"));
     ok(hub.atelier(&a, "p1", &["start", "--backlog", "plan"]));
-    let run = hub.atelier(&a, "p1", &["ready", ID, "--by", "ada"]);
+    let run = hub.atelier(&a, "p1", &["set", ID, "--priority", "low"]);
     ok(run.clone());
     run_then(&a, &run.stdout);
     ok(hub.atelier(&b, "p2", &["start", "--mission", "Greet"]));
@@ -657,7 +657,7 @@ fn a_backlog_and_a_mission_branch_are_deleted_once_merged() {
 
 #[test]
 fn a_failed_catch_up_leaves_both_refs_untouched_until_merge_runs_again() {
-    let hub = Hub::new(&[(ID, "ready")]);
+    let hub = Hub::new(&[(ID, "open")]);
     let a = hub.clone("a");
     hub.approved(&a, "t1");
     let merged = head(&a);
@@ -695,7 +695,7 @@ fn a_failed_catch_up_leaves_both_refs_untouched_until_merge_runs_again() {
     );
     let status = hub.atelier(&at, "t2", &["status"]).stdout;
     assert!(
-        !status.contains("Ready to start:") && status.contains("Held by other threads:"),
+        !status.contains("Can start now:") && status.contains("Held by other threads:"),
         "{status}"
     );
 
@@ -716,10 +716,10 @@ fn a_failed_catch_up_leaves_both_refs_untouched_until_merge_runs_again() {
 
 #[test]
 fn merge_run_again_keeps_a_merged_branch_someone_is_still_writing_on() {
-    let hub = Hub::new(&[(ID, "draft")]);
+    let hub = Hub::new(&[(ID, "open")]);
     let a = hub.clone("a");
     ok(hub.atelier(&a, "p1", &["start", "--backlog", "plan"]));
-    ok(hub.atelier(&a, "p1", &["ready", ID, "--by", "ada"]));
+    ok(hub.atelier(&a, "p1", &["set", ID, "--priority", "low"]));
     // Not committed, so the branch holds nothing the base lacks.
     let run = hub.atelier(&a, "p1", &["merge"]);
     ok(run.clone());
@@ -734,7 +734,7 @@ fn merge_run_again_keeps_a_merged_branch_someone_is_still_writing_on() {
 
 #[test]
 fn a_late_push_refuses_the_remote_deletion_and_is_not_lost() {
-    let hub = Hub::new(&[(ID, "ready")]);
+    let hub = Hub::new(&[(ID, "open")]);
     let (a, late) = (hub.clone("a"), hub.clone("late"));
     hub.approved(&a, "t1");
     let merged = head(&a);
@@ -769,7 +769,7 @@ fn a_late_push_refuses_the_remote_deletion_and_is_not_lost() {
 
 #[test]
 fn a_branch_the_remote_already_deleted_is_a_warning() {
-    let hub = Hub::new(&[(ID, "ready")]);
+    let hub = Hub::new(&[(ID, "open")]);
     let a = hub.clone("a");
     hub.approved(&a, "t1");
     after_merge(
@@ -793,7 +793,7 @@ fn a_branch_the_remote_already_deleted_is_a_warning() {
 
 #[test]
 fn changes_a_skip_left_uncommitted_keep_the_local_branch_and_not_the_remotes() {
-    let hub = Hub::new(&[(ID, "ready")]);
+    let hub = Hub::new(&[(ID, "open")]);
     let a = hub.clone("a");
     hub.approved(&a, "t1");
     fs::write(a.join("hello.txt"), "hello?\n").unwrap();
@@ -813,7 +813,7 @@ fn changes_a_skip_left_uncommitted_keep_the_local_branch_and_not_the_remotes() {
 
 #[test]
 fn after_a_merge_planning_is_refused_and_a_commit_made_detached_is_not_orphaned() {
-    let hub = Hub::new(&[(ID, "ready"), (OTHER, "draft")]);
+    let hub = Hub::new(&[(ID, "open"), (OTHER, "open")]);
     let a = hub.clone("a");
     hub.approved(&a, "t1");
     ok(hub.atelier(&a, "t1", &["merge"]));
@@ -829,7 +829,6 @@ fn after_a_merge_planning_is_refused_and_a_commit_made_detached_is_not_orphaned(
         &["new", "Wave"][..],
         &["new", "Wave", "--from", &finding],
         &["set", OTHER, "--title", "Hi"],
-        &["ready", OTHER, "--by", "ada"],
         &["drop", OTHER, "--reason", "Not needed"],
         &["drop", &finding, "--reason", "Not needed"],
         &["close", OTHER, "Not needed"],
@@ -906,8 +905,8 @@ fn after_a_merge_planning_is_refused_and_a_commit_made_detached_is_not_orphaned(
 }
 
 #[test]
-fn start_of_a_ready_or_started_item_does_not_switch_away_from_a_loose_commit() {
-    let hub = Hub::new(&[(ID, "ready"), (OTHER, "ready")]);
+fn start_of_an_open_or_started_item_does_not_switch_away_from_a_loose_commit() {
+    let hub = Hub::new(&[(ID, "open"), (OTHER, "open")]);
     let (a, b) = (hub.clone("a"), hub.clone("b"));
     working(&hub, &a);
     git(&b, &["fetch", "-q", "origin"]);
@@ -936,7 +935,7 @@ fn status_counts_merged_branches_and_detached_worktrees_at_their_thresholds_and_
         )
     };
     // Every merged branch counts, whatever its name; the fixture's is one.
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     for n in 2..20 {
         git(&root, &["branch", &format!("t3/merged-{n}"), "main"]);
@@ -961,7 +960,7 @@ fn status_counts_merged_branches_and_detached_worktrees_at_their_thresholds_and_
     let status = atelier(&root, "t1", &["status"]).stdout;
     assert!(!status.contains("Piled up"), "{status}");
 
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     for n in 1..10 {
         scratch.worktree(&format!("detached-{n}"));

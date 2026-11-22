@@ -752,7 +752,7 @@ fn item_row(entry: &Entry, located: &[Located]) -> Result<ItemRow> {
         holder: entry.holder.as_ref().map(Thread::to_string),
         reviewer: entry.reviewer.as_ref().map(Thread::to_string),
         cannot_start: match entry.status {
-            atelier_core::model::Status::Ready => conditions(&entry.unmet),
+            atelier_core::model::Status::Open => conditions(&entry.unmet),
             _ => Vec::new(),
         },
         needs: conditions(&entry.needs),
@@ -1118,10 +1118,8 @@ pub fn motion(repo: &mut Repo, name: &str) -> Result<Option<MotionRepo>> {
         }
     }
     missions.sort_by(|a, b| a.mission.id.cmp(&b.mission.id));
-    // The ready items that can start now, highest priority first.
-    let mut startable: Vec<&Entry> = (records.entries.iter())
-        .filter(|e| e.status == atelier_core::model::Status::Ready && e.startable())
-        .collect();
+    // The open items that can start now, highest priority first.
+    let mut startable: Vec<&Entry> = (records.entries.iter()).filter(|e| e.startable()).collect();
     startable.sort_by(|a, b| a.priority.cmp(&b.priority).then(a.id.cmp(&b.id)));
     let mut ready = Vec::new();
     for entry in startable.into_iter().take(5) {

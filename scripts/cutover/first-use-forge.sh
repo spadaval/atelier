@@ -4,7 +4,7 @@
 #   scripts/cutover/first-use-forge.sh <work directory> <debug build of atelier> <branch>
 #
 # <branch> is a branch of spadaval/atelier with an open pull request and a
-# finished CI run, named for an item that is ready in master's records. A
+# finished CI run, named for an item that is open in master's records. A
 # clone of this host's atelier master is converted, the item started,
 # submitted, reviewed and merged by the new binary, which asks the forge what
 # `submit`, `review` and `merge` ask. The clone's fetch URL is GitHub's and

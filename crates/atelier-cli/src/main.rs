@@ -76,7 +76,7 @@ enum Command {
     ///
     /// Each line is the commit's time in UTC, the commit, the item or mission, the action, the thread that acted or `-` where no record holds one, then what changed, and last each rule its commit skipped as `skip <rule>: <reason> (by <thread>)`, or `(thread not recorded)` in a commit from before the thread was. Where a commit that passed a rule names the thread that ran the command, its action's line shows that thread. The first five hold no space; what changed and the skips are parts separated by `; `.
     ///
-    /// The actions are start, take-over, submit, review, verdict, merge, settle, lead, ready, drop and close, and change: a record in a commit that passed a rule with none of the others on it, which is `merge` when the commit is an Atelier merge. A status move reads `<from> -> <to>`, and `new` is a record the commit added. `log` sees commits, not commands: two actions on one record in one commit show as their net change. It adds nothing up; narrow its lines with grep.
+    /// The actions are start, take-over, submit, review, verdict, merge, settle, lead, drop and close, and change: a record in a commit that passed a rule with none of the others on it, which is `merge` when the commit is an Atelier merge. A status move reads `<from> -> <to>`, and `new` is a record the commit added. `log` sees commits, not commands: two actions on one record in one commit show as their net change. History from before items were open also holds `ready`, the go-ahead they then needed. It adds nothing up; narrow its lines with grep.
     Log {
         /// An item or a mission.
         id: Option<String>,
@@ -86,9 +86,9 @@ enum Command {
     },
     /// All open work on the base, grouped by mission and then by label, and then what is proposed on branches not yet merged; each flag given narrows it. It reads the branches this clone has, local and fetched, and fetches nothing.
     List {
-        /// Only items a thread could start now: ready, their blockers done, their mission ready.
+        /// Only items a thread could start now: open, their blockers done, their mission agreed.
         #[arg(long)]
-        ready: bool,
+        startable: bool,
         /// Only items with a blocker that is not done.
         #[arg(long)]
         blocked: bool,
@@ -111,13 +111,13 @@ enum Command {
         #[arg(long, conflicts_with = "done")]
         proposed: bool,
         /// Instead, the deferred findings of done items that nobody has taken into an item or dropped.
-        #[arg(long, conflicts_with_all = ["ready", "blocked", "needs_human", "mission", "label", "mine", "done", "proposed"])]
+        #[arg(long, conflicts_with_all = ["startable", "blocked", "needs_human", "mission", "label", "mine", "done", "proposed"])]
         deferred: bool,
         /// Instead, each rebutted finding of an open or done item with what the next round made of it, and each plan-review round whose reviewers' verdicts differ; with --mission, only that mission's.
-        #[arg(long, conflicts_with_all = ["ready", "blocked", "needs_human", "label", "mine", "done", "deferred", "proposed"])]
+        #[arg(long, conflicts_with_all = ["startable", "blocked", "needs_human", "label", "mine", "done", "deferred", "proposed"])]
         disputed: bool,
     },
-    /// Create a draft item in this checkout, on a backlog or mission branch, and commit nothing; it prints the path and the Git command that commits it. A mission is made by `start --mission`.
+    /// Create an open item in this checkout, on a backlog or mission branch, and commit nothing; it prints the path and the Git command that commits it. A mission is made by `start --mission`.
     New {
         #[arg(value_parser = NonEmptyStringValueParser::new())]
         title: String,
@@ -131,7 +131,7 @@ enum Command {
         #[arg(long, value_name = "FINDING", conflicts_with = "mission")]
         from: Option<String>,
     },
-    /// Change front-matter fields of a draft or ready item or mission in this checkout, on a backlog or mission branch, and commit nothing.
+    /// Change front-matter fields of an open item or mission in this checkout, on a backlog or mission branch, and commit nothing.
     #[command(group(ArgGroup::new("fields").required(true).multiple(true)))]
     Set {
         id: String,
@@ -153,13 +153,12 @@ enum Command {
         #[arg(long, group = "fields", value_name = "CAUSE")]
         caused_by: Option<String>,
     },
-    /// Mark each named draft item or mission ready, recording who said so, in this checkout, on a backlog or mission branch, and commit nothing.
+    // No longer a command, and kept hidden so that a thread which still runs
+    // it is told why rather than that the word is unknown.
+    #[command(hide = true, disable_help_flag = true)]
     Ready {
-        #[arg(required = true)]
-        ids: Vec<String>,
-        /// Who said it should start now.
-        #[arg(long, required = true, value_parser = NonEmptyStringValueParser::new())]
-        by: String,
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true, hide = true)]
+        args: Vec<String>,
     },
     /// End an item or mission that will not be done, in this checkout, and commit nothing. An item, started or not, or an agreed mission is dropped on a backlog branch, and the drop counts once that merges; a started item may instead be dropped in a checkout of its own branch, and its base copy then on a backlog branch. An item already merged is refused. Given a deferred finding of a done item, named as `atelier list --deferred` prints it, mark it dropped, on a backlog branch or the branch of an item you implement.
     Drop {
@@ -169,20 +168,20 @@ enum Command {
         #[arg(long)]
         reason: Option<String>,
     },
-    /// End a ready mission whose items are done or dropped and whose Result is written, or a draft or ready item that will not be built, with its result; in this checkout, on a backlog branch, and commit nothing.
+    /// End an agreed mission whose items are done or dropped and whose Result is written, or an open item that will not be built, with its result; in this checkout, on a backlog branch, and commit nothing.
     Close {
         id: String,
         /// The item's result, written into its Report. A mission's is written in its file.
         result: Option<String>,
     },
-    /// Make a branch and claim it: start a ready item on a branch named for it, or take over a started one; or make a new mission's branch, or a backlog branch. The only command that makes a branch. Where a remote is configured the push of the branch is the claim, and `start <id>` fetches the base first and refuses an item done or dropped there. In the base's own checkout it does not switch, and prints the `git worktree add` to run.
+    /// Make a branch and claim it: start an open item on the base on a branch named for it, or take over a started one; or make a new mission's branch, or a backlog branch. The only command that makes a branch. Where a remote is configured the push of the branch is the claim, and `start <id>` fetches the base first and refuses an item done or dropped there. In the base's own checkout it does not switch, and prints the `git worktree add` to run.
     #[command(group(ArgGroup::new("what").required(true).args(["id", "new", "mission", "backlog"])))]
     Start {
         id: Option<String>,
         /// Create an item already started, for work asked for directly, with this title.
         #[arg(long, value_name = "TITLE", value_parser = NonEmptyStringValueParser::new())]
         new: Option<String>,
-        /// Create a draft mission with this title on a new branch named for it, where its plan is written.
+        /// Create a proposed mission with this title on a new branch named for it, where its plan is written.
         #[arg(long, value_name = "TITLE", value_parser = NonEmptyStringValueParser::new())]
         mission: Option<String>,
         /// Make the branch backlog/<SLUG> at the base's tip, for record changes tied to no item or mission.
@@ -200,7 +199,7 @@ enum Command {
         #[arg(long)]
         model: Option<String>,
     },
-    /// Lead a ready mission, written in this checkout, on a backlog branch, committing nothing, and see what each of its items needs.
+    /// Lead an agreed mission, written in this checkout, on a backlog branch, committing nothing, and see what each of its items needs.
     Lead { mission: String },
     /// Merge this branch's approved item into the base once its checks pass: through the forge's merge of its pull request where a forge is configured, else by moving the local base to a merge commit. The item is done once merged. A backlog branch, which changes records alone, merges once its records are valid on the merged tree, with no review. Once merged, it deletes the branch here and on the forge's remote, leaving this checkout on a detached HEAD, and closes the pull request of each item a backlog branch dropped.
     Merge {
@@ -292,7 +291,7 @@ fn main() -> ExitCode {
                 ..
             } => views::disputed(&mut repo, mission.as_deref()),
             Command::List {
-                ready,
+                startable,
                 blocked,
                 needs_human,
                 mission,
@@ -304,7 +303,7 @@ fn main() -> ExitCode {
                 disputed: false,
             } => {
                 let filter = atelier_core::Filter {
-                    ready,
+                    startable,
                     blocked,
                     needs_human,
                     mission,
@@ -346,9 +345,7 @@ fn main() -> ExitCode {
                 };
                 plan::set(&mut repo, &id, fields)
             }
-            Command::Ready { ids, by } => {
-                atelier_core::ready(&mut repo, &ids, &by).map(Outcome::from)
-            }
+            Command::Ready { .. } => Ok(Outcome::Refused(output::no_go_ahead())),
             Command::Drop { id, reason } => plan::drop(&mut repo, &id, reason.as_deref()),
             Command::Close { id, result } => plan::close(&mut repo, &id, result.as_deref()),
             Command::Start { id: Some(id), .. } => commands::start(&mut repo, &id),

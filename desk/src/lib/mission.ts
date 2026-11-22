@@ -114,5 +114,5 @@ const named = (caller: string) => caller.charAt(0).toUpperCase() + caller.slice(
 
 /** Whether a mission is under way, for the project home's Now: an item of it is started or done. */
 export function begun(m: Pick<MissionRow, "in_progress" | "counts">): boolean {
-  return m.in_progress || m.counts.some((c) => c.status !== "draft" && c.status !== "ready" && c.status !== "dropped" && c.count > 0);
+  return m.in_progress || m.counts.some((c) => c.status !== "open" && c.status !== "dropped" && c.count > 0);
 }

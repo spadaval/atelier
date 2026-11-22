@@ -3,7 +3,7 @@
 The agent was asked to carry on running mission tally-q3sm, tally 1.2,
 which Sam approved, as its lead. The mission has three items that do not
 depend on each other: tally-c0nt (a count command) and tally-m3mo (a memo
-filter) were ready. tally-f8xr (total in another currency) was started and
+filter) were open. tally-f8xr (total in another currency) was started and
 submitted by an implementer thread that is gone, and is in changes
 requested: round 1's one fix-now finding is right, and fixing it takes real
 work (each row must convert at the rate in force on its date, from an

@@ -1,7 +1,7 @@
 //! Where an item's record is read from, and what `status` shows.
 
 use crate::actions::{
-    malformed, mission_of, next, unmet, Action, Condition, Facts, PLANNED, ROUND_CAP, STARTED,
+    malformed, mission_of, next, unmet, Action, Condition, Facts, ROUND_CAP, STARTED,
 };
 use crate::disputed::{disputes, Disputes};
 use crate::model::{MissionStatus, Priority, ReviewName, Status, Thread, Verdict};
@@ -360,21 +360,21 @@ fn needs(facts: &Facts) -> Result<Vec<Condition>, Problem> {
     })
 }
 
-/// `status` away from an item's branch: what the caller holds, what is
-/// ready, what other threads hold, and the missions.
+/// `status` away from an item's branch: what the caller holds, what can
+/// start, what other threads hold, and the missions.
 #[derive(Debug, Default)]
 pub struct Overview {
     pub held: Vec<Entry>,
-    /// Ready items `start` would accept now, except those waiting on a
+    /// Open items `start` would accept now, except those waiting on a
     /// human.
-    pub ready: Vec<Entry>,
-    /// The other ready items not waiting on a human, which `start` would
+    pub startable: Vec<Entry>,
+    /// The other open items not waiting on a human, which `start` would
     /// refuse for the conditions each lists as unmet.
     pub cannot_start: Vec<Entry>,
     pub started: Vec<Entry>,
     /// Items labelled needs-human that nobody has started.
     pub waiting: Vec<Entry>,
-    /// Ready missions with a started item.
+    /// Open missions with a started item.
     pub in_progress: Vec<MissionDir>,
     /// The missions the caller leads, each with its items, as
     /// [`items_of`] orders them, and its disagreements.
@@ -441,8 +441,8 @@ pub fn overview(
         if in_progress(mission, &entries) {
             overview.in_progress.push(mission.clone());
         }
-        let ready = mission.mission.status == MissionStatus::Open;
-        if ready && mission.mission.lead.as_ref() == Some(caller) {
+        let open = mission.mission.status == MissionStatus::Open;
+        if open && mission.mission.lead.as_ref() == Some(caller) {
             let id = &mission.mission.id;
             let of_mission = items_of(id, &entries).into_iter().cloned().collect();
             let disputed = disputes(items, std::slice::from_ref(mission), Some(id))?;
@@ -451,11 +451,11 @@ pub fn overview(
     }
     // A proposed item is not on the base yet: nobody can start it.
     for entry in entries.into_iter().filter(|entry| !entry.proposed) {
-        if entry.needs_human() && PLANNED.contains(&entry.status) {
+        if entry.needs_human() && entry.status == Status::Open {
             overview.waiting.push(entry);
         } else if entry.startable() {
-            overview.ready.push(entry);
-        } else if entry.status == Status::Ready {
+            overview.startable.push(entry);
+        } else if entry.status == Status::Open {
             overview.cannot_start.push(entry);
         } else if STARTED.contains(&entry.status) {
             if entry.holds {
@@ -466,7 +466,9 @@ pub fn overview(
         }
     }
     // The most urgent first.
-    overview.ready.sort_by_key(|e| (e.priority, e.id.clone()));
+    overview
+        .startable
+        .sort_by_key(|e| (e.priority, e.id.clone()));
     overview.held.sort_by(|a, b| a.id.cmp(&b.id));
     overview.started.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(overview)

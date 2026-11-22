@@ -281,7 +281,7 @@ fn an_item_decided_before_escalate_and_decide_were_removed_reads_as_it_did() {
 /// A ready mission led by `lead1`, holding the item, started by t1, and
 /// two plan reviews of its round 1 that disagree.
 fn led() -> Scratch {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     let dir = ".atelier/missions/demo-m1ss";
     fs::create_dir_all(root.join(format!("{dir}/reviews"))).unwrap();

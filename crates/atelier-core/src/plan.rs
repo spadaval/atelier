@@ -1,11 +1,11 @@
-//! `ready`, and what every planning command shares. A planning command
-//! reads and writes records in the checkout it runs in, validates what it
-//! writes, and commits nothing: the agent commits with Git, on the branch
-//! the change belongs on, and the change reaches the base when that branch
-//! merges. Nothing is written in the base's own checkout.
+//! What every planning command shares, and a mission's `drop`. A planning
+//! command reads and writes records in the checkout it runs in, validates
+//! what it writes, and commits nothing: the agent commits with Git, on the
+//! branch the change belongs on, and the change reaches the base when that
+//! branch merges. Nothing is written in the base's own checkout.
 
-use crate::actions::{check, row, Action, Facts, Refusal, STARTED};
-use crate::model::{Item, Mission, MissionStatus, Named, Ready, Status};
+use crate::actions::{Action, Facts, STARTED};
+use crate::model::{Item, Mission, MissionStatus, Named};
 use crate::records::{put_first, validate, validate_id, ItemDir, MissionDir, Problem, ReviewFile};
 use crate::repo::{is_planning, item_dir, item_path, mission_dir, mission_path};
 use crate::skip::Refused;
@@ -20,71 +20,6 @@ pub struct Done {
     pub text: String,
     pub paths: Vec<String>,
     pub commit: Option<String>,
-}
-
-/// `ready`: marks each of `ids`, a draft item in this checkout, ready, as
-/// `by` said, and writes it without committing; or refuses, writing
-/// nothing, when one is unknown, not a draft, or a mission, which needs no
-/// go-ahead.
-pub fn ready(repo: &mut Repo, ids: &[String], by: &str) -> Result<Result<Done, Refused>> {
-    if let Some(refused) = misplaced(repo, "ready", Belongs::Backlog)? {
-        return Ok(Err(refused));
-    }
-    if ids.is_empty() {
-        return Ok(Err(say::ready_nothing()));
-    }
-    let ready = Ready {
-        by: by.to_string(),
-        at: chrono::Utc::now().into(),
-    };
-    let (mut items, mut missions, mut unknown, mut refused) = (vec![], vec![], vec![], vec![]);
-    let mut named: Vec<&str> = Vec::new();
-    for id in ids.iter().map(String::as_str) {
-        if named.contains(&id) {
-            continue;
-        }
-        named.push(id);
-        if is_mission(repo, id) {
-            missions.push(id);
-            continue;
-        }
-        let located = match validate_id(id) {
-            Ok(()) => repo.locate_planned(id)?,
-            Err(_) => {
-                unknown.push(id);
-                continue;
-            }
-        };
-        let Some(record) = located.record() else {
-            unknown.push(id);
-            continue;
-        };
-        let facts = planned_facts(repo, &located, record);
-        match check(Action::Ready, &facts) {
-            Ok(_) => {}
-            Err(Refusal::From { status, .. }) => refused.push((id, status)),
-            Err(other) => unreachable!("an item's ready has no role or conditions: {other:?}"),
-        }
-        let mut item = record.item.clone();
-        item.status = Status::Ready;
-        item.ready = Some(ready.clone());
-        items.push(item);
-    }
-    if !unknown.is_empty() || !refused.is_empty() || !missions.is_empty() {
-        let text = say::ready_refused(&unknown, &refused, &missions);
-        let from = row(Action::Ready).from;
-        let rules = (refused.iter()).map(|(id, status)| say::rule_from(id, from, *status));
-        let refused = match unknown.is_empty() && missions.is_empty() {
-            true => repo.skip.refuse(rules, text),
-            false => Some(text),
-        };
-        if let Some(refused) = refused {
-            return Ok(Err(refused));
-        }
-    }
-    let said = say::readied(&named, by);
-    let message = format!("Ready {}", named.join(", "));
-    save(repo, "ready", items, Vec::new(), &said, &message)
 }
 
 /// The paths of mission `id`'s plan, its directory less its reviews and

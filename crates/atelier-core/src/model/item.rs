@@ -37,8 +37,10 @@ pub enum ItemSchema {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Status {
-    Draft,
-    Ready,
+    /// Nobody has started it. A record from before 2026-11-22 says `draft`
+    /// or `ready`, which read as this and are never written.
+    #[serde(alias = "draft", alias = "ready")]
+    Open,
     Building,
     InReview,
     ChangesRequested,
@@ -57,7 +59,8 @@ pub enum Priority {
     Low,
 }
 
-/// Who said an item should start now, and when.
+/// Who said an item should start, and when, which a record from before
+/// items were open holds. Nothing sets it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Ready {

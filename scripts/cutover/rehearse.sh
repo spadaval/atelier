@@ -8,7 +8,7 @@
 # bare repository, Git may use only local files, and `gh` is a double, so
 # nothing reaches the network and no real repository is changed. Each clone
 # is converted, verified, checked and given Atelier's Git hooks; one item is
-# taken from ready to done in atelier and life-on-rails, and 30 items are
+# taken from open to done in atelier and life-on-rails, and 30 items are
 # started in astromech to time `status` and `list` with that many branches.
 # It prints counts, timings, file names and pass or fail, never a record's
 # text; each repository's command output goes to <work>/<repo>.log. It stops
@@ -159,12 +159,11 @@ timed() { # status and list on the base
 full_item() {
   local id f
   id=$(T3CODE_THREAD_ID=$P atelier new "Say in the README that this clone rehearsed the cutover" \
-    | sed -n 's/^Created draft item \([^ ,]*\),.*/\1/p')
+    | sed -n 's/^Created open item \([^ ,]*\),.*/\1/p')
   f=.atelier/items/$id/item.md
   sed -i -e '/^## Goal$/a Say in the README that this clone rehearsed the cutover.' \
     -e '/^## Done when$/a - [ ] README.md ends with a line saying so.' \
     -e '/^## Scope$/a README.md.' "$f"
-  T3CODE_THREAD_ID=$P atelier ready "$id" --by ada
   git push -q origin "$base"
   T3CODE_THREAD_ID=$I atelier start "$id"
   echo "This clone rehearsed the Atelier cutover." >> README.md
@@ -191,7 +190,7 @@ full_item() {
 
 start_30() {
   local id n=0
-  for id in $(atelier list --ready | sed -n 's/^ *\([a-z0-9-]*-[a-z0-9]\{4\}\) .*/\1/p'); do
+  for id in $(atelier list --startable | sed -n 's/^ *\([a-z0-9-]*-[a-z0-9]\{4\}\) .*/\1/p'); do
     T3CODE_THREAD_ID=$I atelier start "$id"
     git switch -q "$base"
     n=$((n + 1))
@@ -215,7 +214,7 @@ for spec in atelier:master astromech:main demiurge:master life-on-rails:main cos
   step "setup and pre-commit" hooks
   step "status and list" timed
   case $repo in
-    atelier | life-on-rails) step "item ready to done" full_item ;;
+    atelier | life-on-rails) step "item open to done" full_item ;;
     astromech) step "start 30 items" start_30; step "status and list" timed ;;
   esac
 done

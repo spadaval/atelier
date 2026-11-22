@@ -3,7 +3,7 @@
 //! remote-tracking one.
 
 use crate::actions::{approval, mission_of, Checkout, Facts, SinceApproval, STARTED};
-use crate::model::{Config, Named, Status, Thread};
+use crate::model::{Config, MissionStatus, Named, Status, Thread};
 use crate::records::{allocate_id, parse_config, CommitReader, ItemDir, MissionDir, Store};
 use crate::view::Record;
 use crate::{git, say, Branch, Located, Skip};
@@ -132,7 +132,7 @@ struct Touching {
 /// What an item's start depends on, as [`Repo::links`] finds it.
 pub struct Links {
     pub blockers: Vec<(String, Option<Status>)>,
-    pub mission: Option<(String, Option<Status>)>,
+    pub mission: Option<(String, Option<MissionStatus>)>,
     /// The mission's lead, who decides the item's questions when it may.
     pub lead: Option<Thread>,
 }
@@ -733,10 +733,10 @@ impl<'s> Repo<'s> {
         // before its own base has moved.
         if let Some((id, status)) = mission
             .as_mut()
-            .filter(|(_, s)| *s != Some(Status::Dropped))
+            .filter(|(_, s)| *s != Some(MissionStatus::Dropped))
         {
             if self.dropped_on_forge(id)? {
-                *status = Some(Status::Dropped);
+                *status = Some(MissionStatus::Dropped);
             }
         }
         Ok(Links {

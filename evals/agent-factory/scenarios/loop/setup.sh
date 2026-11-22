@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # A small Python repository tracked by Atelier: a
-# config that names no forge, one ready item asking for a small real change,
+# config that names no forge, one open item asking for a small real change,
 # and no instructions or skill beyond what `atelier status` prints. work/bin
 # holds the binary under test, which the harness puts first on PATH; EVAL_ATELIER
 # names it (the round's copy of target/debug/atelier).
@@ -62,15 +62,13 @@ schema: atelier.item
 schema_version: 3
 id: slug-k3fa
 title: Make slugify collapse runs of punctuation into one hyphen
-status: ready
+status: open
 mission: null
 labels: []
 priority: high
 blocked_by: []
 implementers: []
-ready:
-  by: dana
-  at: 2026-11-10T09:00:00Z
+ready: null
 trivial: null
 caused_by: null
 created_at: 2026-11-10T09:00:00Z

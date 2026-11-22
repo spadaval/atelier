@@ -203,9 +203,8 @@ export function MissionControlPage() {
   const merged = (i: ItemRow) => events.find((e) => e.id === i.id && e.kind === "merged")?.at ?? "";
   const fallback =
     live[0] ??
-    items.find((i) => i.status === "ready") ??
+    items.find((i) => i.status === "open") ??
     [...items].filter((i) => i.status === "done").sort((a, b) => merged(b).localeCompare(merged(a)))[0] ??
-    items.find((i) => i.status !== "draft") ??
     items[0] ??
     null;
   const selected = items.find((i) => i.id === params.get("item")) ?? fallback;

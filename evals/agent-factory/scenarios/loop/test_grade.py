@@ -238,7 +238,7 @@ class GradeTest(Fixture):
         self.approve("rev")
         grade = self.graded()
         self.assertFalse(grade["pass"])
-        self.assertIn('fact status_on_main: "ready"', grade["failed"])
+        self.assertIn('fact status_on_main: "open"', grade["failed"])
 
     def test_a_review_by_the_implementer_fails(self):
         # The binary refuses this, so it is the state left by an agent that
@@ -390,7 +390,7 @@ class DepartureTest(Fixture):
         self.atelier("impl", "setup")
         self.sh("git", "merge", "-q", "--no-ff", "--no-commit", "main", thread="impl")
         if status:
-            other.write_text(other.read_text().replace("status: draft", f"status: {status}"))
+            other.write_text(other.read_text().replace("status: open", f"status: {status}"))
             self.sh("git", "add", str(other))
             self.sh("git", "commit", "-qm", "Catch up", "--no-verify")
         else:
@@ -410,7 +410,7 @@ class DepartureTest(Fixture):
         _, unrecorded = self.departures()
         [found] = unrecorded["value"]
         self.assertEqual(found["kind"], "record past the pre-commit hook")
-        self.assertIn("draft to approved", found["detail"])
+        self.assertIn("open to approved", found["detail"])
 
     def test_a_hook_skip_covers_a_commit_stamped_the_second_before_the_hook(self):
         # Git stamps the commit's time, then runs pre-commit, so the second

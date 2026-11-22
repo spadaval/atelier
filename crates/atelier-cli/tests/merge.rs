@@ -20,7 +20,7 @@ const WAIT: &str = "touch \"$MERGE_MARK\"; \
 /// A scratch repository whose base config has `config` added, and whose
 /// item t1 started, changed with `change` and submitted.
 fn submitted_with(config: &str, change: impl Fn(&Path)) -> Scratch {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     if !config.is_empty() {
         append(&root, ".atelier/config.toml", config);
@@ -311,7 +311,7 @@ fn a_config_change_after_approval_makes_it_stale() {
 #[test]
 fn a_change_to_another_item_after_approval_makes_it_stale() {
     stale_after(
-        |root| write_item(root, "demo-cd34", "draft", &[], &[], ""),
+        |root| write_item(root, "demo-cd34", "open", &[], &[], ""),
         ".atelier/items/demo-cd34/item.md",
     );
 }
@@ -489,7 +489,7 @@ fn wrote_nothing(scratch: &Scratch, run: Run, what: &str, base: &str) {
         )
     );
     assert_eq!(head(&root, "main"), base);
-    assert_eq!(field(&root, "main", "status"), "ready");
+    assert_eq!(field(&root, "main", "status"), "open");
 }
 
 #[test]
@@ -579,7 +579,7 @@ fn a_checkout_that_changes_while_the_checks_run_is_not_written() {
 #[test]
 fn of_two_merges_at_once_the_second_waits_for_the_first() {
     const OTHER: &str = "demo-cd34";
-    let scratch = Scratch::new(&[(ID, "ready"), (OTHER, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open"), (OTHER, "open")]);
     let root = scratch.root();
     append(&root, ".atelier/config.toml", &waiting_check());
     on_base(&root, "Configure");
@@ -657,7 +657,7 @@ fn a_merge_killed_during_its_checks_leaves_nothing_the_next_run_trips_on() {
 #[test]
 fn an_items_branch_that_brings_another_item_to_the_base_started_is_refused() {
     const OTHER: &str = "demo-cd34";
-    let scratch = Scratch::new(&[(ID, "ready"), (OTHER, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open"), (OTHER, "open")]);
     let root = scratch.root();
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
     write_item(&root, OTHER, "building", &["t9"], &[], "");
@@ -681,7 +681,7 @@ fn an_items_branch_that_brings_another_item_to_the_base_started_is_refused() {
 
 #[test]
 fn a_trivial_merge_needs_no_review_and_stores_its_reason() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
     fs::write(root.join("hello.txt"), "hello\n").unwrap();
@@ -738,7 +738,7 @@ fn a_trivial_merge_needs_no_review_and_stores_its_reason() {
 
 #[test]
 fn a_trivial_merge_is_refused_on_an_item_with_a_review_file() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
     let path = root.join(item_path(ID));
@@ -813,7 +813,7 @@ impl Forge {
 
     /// The repository with `ids` ready, and nothing started.
     fn set_up(ci_workflow: Option<&str>, checks: &str, ids: &[&str]) -> Forge {
-        let items: Vec<(&str, &str)> = ids.iter().map(|id| (*id, "ready")).collect();
+        let items: Vec<(&str, &str)> = ids.iter().map(|id| (*id, "open")).collect();
         let scratch = Scratch::new(&items);
         let root = scratch.root();
         let workflow = ci_workflow.map_or(String::new(), |w| format!("ci_workflow = \"{w}\"\n"));
@@ -1648,7 +1648,7 @@ fn a_merge_check_the_base_gains_during_the_wait_is_run() {
         "{}",
         run.stderr
     );
-    assert_eq!(field(&root, "main", "status"), "ready");
+    assert_eq!(field(&root, "main", "status"), "open");
 }
 
 #[test]
@@ -1669,7 +1669,7 @@ fn a_branch_that_gains_a_commit_outside_the_item_during_the_wait_is_stale() {
         "{}",
         run.stderr
     );
-    assert_eq!(field(&root, "main", "status"), "ready");
+    assert_eq!(field(&root, "main", "status"), "open");
 }
 
 #[test]
@@ -1914,7 +1914,7 @@ fn where_the_forge_waits_on_a_required_review_or_check_merge_exits_not_yet_and_m
         run.stderr
     );
     assert_eq!(forge.remote("main"), base);
-    assert_eq!(field(&root, "main", "status"), "ready");
+    assert_eq!(field(&root, "main", "status"), "open");
 
     // Given, it merges.
     forge.flag("merge-refused", false);
@@ -2022,7 +2022,7 @@ fn a_forge_merge_whose_branch_moves_during_its_checks_pushes_nothing() {
 #[test]
 fn an_untracked_file_in_the_items_directory_stops_the_merge() {
     // A review file nobody committed still means the item was reviewed.
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
     let path = root.join(item_path(ID));
@@ -2043,7 +2043,7 @@ fn an_untracked_file_in_the_items_directory_stops_the_merge() {
     let exclude = git(&root, &["rev-parse", "--git-path", "info/exclude"]);
     fs::write(root.join(exclude), format!("{REVIEWS}/\n")).unwrap();
     refused(merge(&root, "t1", &["--trivial", "a typo"]));
-    assert_eq!(field(&root, "main", "status"), "ready");
+    assert_eq!(field(&root, "main", "status"), "open");
 }
 
 #[test]

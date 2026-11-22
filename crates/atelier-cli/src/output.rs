@@ -25,6 +25,10 @@ pub(crate) fn priority_name(priority: Priority) -> &'static str {
     }
 }
 
+/// How many of the items that can start `status` names, the most urgent.
+/// The session-start hook prints it, and a backlog can hold hundreds.
+const STARTABLE_SHOWN: usize = 10;
+
 pub(crate) fn holder(entry: &Entry) -> String {
     match &entry.holder {
         Some(thread) => format!("held by {thread}"),
@@ -216,9 +220,9 @@ pub fn overview(
             }
         }
     }
-    if !overview.ready.is_empty() {
-        text += "Ready to start:\n";
-        for entry in &overview.ready {
+    if !overview.startable.is_empty() {
+        text += "Can start now:\n";
+        for entry in overview.startable.iter().take(STARTABLE_SHOWN) {
             text += &format!(
                 "  {} ({}): {}\n",
                 entry.id,
@@ -226,8 +230,12 @@ pub fn overview(
                 entry.title
             );
         }
+        let more = overview.startable.len().saturating_sub(STARTABLE_SHOWN);
+        if more > 0 {
+            text += &format!("  and {more} more: atelier list --startable\n");
+        }
     }
-    text += &cannot_start(&overview.cannot_start, !overview.ready.is_empty());
+    text += &cannot_start(&overview.cannot_start, !overview.startable.is_empty());
     if !overview.started.is_empty() {
         text += "Held by other threads:\n";
         for entry in &overview.started {
@@ -273,11 +281,11 @@ pub fn overview(
         },
         // Which to start is the task's to say: a thread given one task
         // takes a named item for its next step.
-        None if !overview.ready.is_empty() => {
+        None if !overview.startable.is_empty() => {
             text += "Start one only if that is your task: atelier start <id>\n";
         }
-        None if overview.cannot_start.is_empty() => text += "Nothing is ready to start.\n",
-        None => text += "No ready item can start now.\n",
+        None if overview.cannot_start.is_empty() => text += "Nothing is open to start.\n",
+        None => text += "No open item can start now.\n",
     }
     text
 }
@@ -339,7 +347,7 @@ pub fn unsaved(
     text
 }
 
-/// One line counting the ready items `start` would refuse, by each cause
+/// One line counting the open items `start` would refuse, by each cause
 /// among their unmet conditions, after `others` that can start, if any.
 fn cannot_start(entries: &[Entry], others: bool) -> String {
     if entries.is_empty() {
@@ -377,7 +385,7 @@ fn cannot_start(entries: &[Entry], others: bool) -> String {
     };
     let other = if others { " other" } else { "" };
     format!(
-        "{}{other} ready {item} cannot start yet: {}. See {them} with: atelier list\n",
+        "{}{other} open {item} cannot start yet: {}. See {them} with: atelier list\n",
         entries.len(),
         counts.join(", ")
     )
@@ -431,7 +439,7 @@ pub fn started_mission(id: &str, branch: &str) -> String {
 
 pub fn started_backlog(branch: &str) -> String {
     format!(
-        "Made branch {branch} at the base's tip, for record changes tied to no item or mission.\nMake them with `new`, `set`, `ready`, `drop`, `close` and `lead`, commit them with Git, then run `atelier submit` and `atelier merge` here.\n"
+        "Made branch {branch} at the base's tip, for record changes tied to no item or mission.\nMake them with `new`, `set`, `drop`, `close` and `lead`, commit them with Git, then run `atelier submit` and `atelier merge` here.\n"
     )
 }
 
@@ -579,9 +587,7 @@ pub fn piled_up(base: &str, merged: usize, detached: usize) -> String {
 }
 
 pub fn created_item(id: &str) -> String {
-    format!(
-        "Created draft item {id}, with empty Goal, Done when and Scope sections to write.\nA planner makes it ready with: atelier ready {id} --by <name>\n"
-    )
+    format!("Created open item {id}, with empty Goal, Done when and Scope sections to write.\n")
 }
 
 /// `name`, given to `new --from` or `drop`, is no finding's name.
@@ -602,7 +608,10 @@ pub fn settle_refused(command: &str, name: &str, id: &str, refusals: &[Refusal])
                 status_name(*status)
             ),
             Refusal::Unmet(unmet) => unmet.iter().map(|c| condition(id, c) + "\n").collect(),
-            Refusal::Role(_) | Refusal::NotHolder { .. } | Refusal::Record(_) => {
+            Refusal::Role(_)
+            | Refusal::FromMission { .. }
+            | Refusal::NotHolder { .. }
+            | Refusal::Record(_) => {
                 unreachable!("settling a finding needs no role, and a record problem is an error")
             }
         };
@@ -612,7 +621,7 @@ pub fn settle_refused(command: &str, name: &str, id: &str, refusals: &[Refusal])
 
 pub fn finding_taken(name: &str, id: &str) -> String {
     format!(
-        "Created draft item {id} from finding {name}: its Goal quotes the finding, and its Done when and Scope are empty to write.\nMarked finding {name} taken into {id}.\nA planner makes {id} ready with: atelier ready {id} --by <name>\n"
+        "Created open item {id} from finding {name}: its Goal quotes the finding, and its Done when and Scope are empty to write.\nMarked finding {name} taken into {id}.\n"
     )
 }
 
@@ -689,7 +698,7 @@ pub fn check_found(
 pub fn commit_refused(
     unread: &[Problem],
     invalid: &[Problem],
-    actions: &[(String, Status, Status)],
+    actions: &[(String, &str, &str)],
     base: &str,
     on_base: &[String],
 ) -> String {
@@ -709,8 +718,7 @@ pub fn commit_refused(
     for (path, before, now) in actions {
         text += &format!(
             "  {path}: status: {} to {}. Put back the status HEAD has; atelier status names the command for what comes next.\n",
-            status_name(*before),
-            status_name(*now)
+            before, now
         );
     }
     text + "Fix each file named, stage it with git add, and commit again.\n"
@@ -718,11 +726,9 @@ pub fn commit_refused(
 
 /// The rule that a status changes only as an action changes it, as the
 /// record at `path` breaks it.
-pub(crate) fn rule_status(path: &str, from: Status, to: Status) -> String {
+pub(crate) fn rule_status(path: &str, from: &str, to: &str) -> String {
     format!(
-        "A status changes only as an action of the lifecycle changes it ({path}: {} to {})",
-        status_name(from),
-        status_name(to)
+        "A status changes only as an action of the lifecycle changes it ({path}: {from} to {to})"
     )
 }
 
@@ -982,11 +988,15 @@ pub fn item_only(id: &str, flags: &[&str]) -> String {
     )
 }
 
-pub fn not_planned(id: &str, status: Status) -> String {
+pub fn not_planned(id: &str, status: &str) -> String {
     format!(
-        "`atelier set {id}` refused; nothing changed.\n{id} is {}, and its record no longer changes.\n",
-        status_name(status)
+        "`atelier set {id}` refused; nothing changed.\n{id} is {status}, and its record no longer changes.\n"
     )
+}
+
+/// `ready`, which is no command since items are open from the start.
+pub fn no_go_ahead() -> String {
+    "`atelier ready` refused; nothing changed.\nItems need no go-ahead, and nor does a mission: `atelier start <id>` takes any open item that is on the base and whose blockers are done, and a mission is agreed when its plan merges.\n".into()
 }
 
 pub fn set_started(id: &str, status: Status) -> String {

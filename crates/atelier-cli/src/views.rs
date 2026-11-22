@@ -174,7 +174,7 @@ pub fn list(repo: &mut Repo, filter: &Filter) -> Result<Outcome> {
         found.and_then(|l| l.source()).map(|b| b.name.clone())
     };
     let narrowed =
-        filter.done || filter.ready || filter.blocked || filter.needs_human || filter.mine;
+        filter.done || filter.startable || filter.blocked || filter.needs_human || filter.mine;
     let mut base = String::new();
     let mut nothing = false;
     if !filter.proposed {
@@ -335,10 +335,10 @@ pub fn lead(repo: &mut Repo, id: &str) -> Result<Outcome> {
         review: None,
     };
     if let Err(refusal) = check_mission(Action::Lead, &facts) {
-        let Refusal::From { status, .. } = refusal else {
+        let Refusal::FromMission { status, .. } = refusal else {
             unreachable!("lead has no conditions: {refusal:?}")
         };
-        let text = view_output::lead_not_ready(id, status);
+        let text = view_output::lead_not_open(id, status);
         if let Some(refused) = repo.skip.gate(Action::Lead, id, &[refusal], text) {
             return Ok(refused.into());
         }

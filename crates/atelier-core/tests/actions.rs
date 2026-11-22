@@ -1,6 +1,6 @@
 use atelier_core::actions::{
-    check, check_mission, next, row, settle_refusals, unmet, unsettled, Action, Condition, Facts,
-    MissionFacts, Refusal, Role, TABLE,
+    changes, changes_mission, check, check_mission, next, on_mission, row, settle_refusals, unmet,
+    unsettled, Action, Condition, Facts, MissionFacts, Refusal, Role, ON_MISSION, TABLE,
 };
 use atelier_core::model::{FindingName, MissionStatus, Settlement, Status, Thread};
 use atelier_core::records::{
@@ -9,9 +9,8 @@ use atelier_core::records::{
 use atelier_core::{carried, carried_plan, entry};
 use std::path::PathBuf;
 
-const ALL: [Status; 8] = [
-    Status::Draft,
-    Status::Ready,
+const ALL: [Status; 7] = [
+    Status::Open,
     Status::Building,
     Status::InReview,
     Status::ChangesRequested,
@@ -20,13 +19,19 @@ const ALL: [Status; 8] = [
     Status::Dropped,
 ];
 
+const ALL_MISSION: [MissionStatus; 4] = [
+    MissionStatus::Open,
+    MissionStatus::Done,
+    MissionStatus::Dropped,
+    MissionStatus::Draft,
+];
+
 const DONE: &str = "## Goal\ng\n\n## Done when\n\n- [x] One.\n\n## Report\n\nDone.\n";
 const UNDONE: &str = "## Goal\ng\n\n## Done when\n\n- [x] One.\n- [ ] Two.\n\n## Report\n\n";
 
 fn status_text(status: Status) -> &'static str {
     match status {
-        Status::Draft => "draft",
-        Status::Ready => "ready",
+        Status::Open => "open",
         Status::Building => "building",
         Status::InReview => "in_review",
         Status::ChangesRequested => "changes_requested",
@@ -59,7 +64,7 @@ fn record(status: Status, implementers: &[&str], body: &str) -> ItemDir {
 
 /// A mission that is `status`, its Result written or not, with `reviews`.
 fn mission(status: MissionStatus, result: &str, reviews: &[ReviewFile]) -> MissionDir {
-    let status = status_text(status.status());
+    let status = status.name();
     let text = format!(
         "---\nschema: atelier.mission\nschema_version: 3\nid: demo-m1ss\ntitle: M\nstatus: {status}\n\
          labels: []\nlead: null\nplanners:\n- p1\nready: null\ncreated_at: 2026-11-10T09:00:00Z\n---\n\
@@ -116,9 +121,8 @@ fn facts<'a>(item: &'a ItemDir, caller: &'a Thread) -> Facts<'a> {
 
 /// The architecture specification's action table, for the actions this step
 /// builds, written out here so the code's table is checked against it.
-const SPECIFIED: [(Action, &[Status], Option<Status>); 13] = [
-    (Action::Ready, &[Status::Draft], Some(Status::Ready)),
-    (Action::Start, &[Status::Ready], Some(Status::Building)),
+const SPECIFIED: [(Action, &[Status], Option<Status>); 12] = [
+    (Action::Start, &[Status::Open], Some(Status::Building)),
     // Created by the action, so it runs from no status at all.
     (Action::StartNew, &[], Some(Status::Building)),
     (
@@ -156,8 +160,7 @@ const SPECIFIED: [(Action, &[Status], Option<Status>); 13] = [
     (
         Action::Drop,
         &[
-            Status::Draft,
-            Status::Ready,
+            Status::Open,
             Status::Building,
             Status::InReview,
             Status::ChangesRequested,
@@ -165,51 +168,35 @@ const SPECIFIED: [(Action, &[Status], Option<Status>); 13] = [
         ],
         Some(Status::Dropped),
     ),
-    (
-        Action::Close,
-        &[Status::Draft, Status::Ready],
-        Some(Status::Done),
-    ),
+    (Action::Close, &[Status::Open], Some(Status::Done)),
     // `new --from` and `drop` on a finding change the finding, not its item.
     (Action::Settle, &[Status::Done], None),
 ];
 
-/// The actions on a mission, from the same table, where a mission's `open` is
-/// written `ready` and the old `draft` is `draft`.
-const MISSION_SPECIFIED: [(Action, &[Status], Option<Status>); 7] = [
-    // `lead` binds its lead to an open mission, and its status stays.
-    (Action::Lead, &[Status::Ready], None),
-    // A proposed plan's branch: `submit` writes an old draft open, and
-    // `merge` changes no status; a plan dropped there does neither.
-    (
-        Action::SubmitMission,
-        &[Status::Draft, Status::Ready],
-        Some(Status::Ready),
-    ),
-    (Action::MergeMission, &[Status::Ready], None),
-    (
-        Action::Drop,
-        &[Status::Draft, Status::Ready],
-        Some(Status::Dropped),
-    ),
-    (Action::CloseMission, &[Status::Ready], Some(Status::Done)),
-    // A plan review's verdict changes no status, from any.
-    (
-        Action::PlanVerdictChanges,
-        &[Status::Draft, Status::Ready, Status::Done, Status::Dropped],
-        None,
-    ),
-    (
-        Action::PlanVerdictApprove,
-        &[Status::Draft, Status::Ready, Status::Done, Status::Dropped],
-        None,
-    ),
-];
+/// The actions on a mission, from the same table, in a mission's own
+/// statuses: the old `draft` is proposed wherever it is read.
+const MISSION_SPECIFIED: [(Action, &[MissionStatus], Option<MissionStatus>); 7] = {
+    use MissionStatus::{Done, Draft, Dropped, Open};
+    const ANY: &[MissionStatus] = &[Open, Draft, Done, Dropped];
+    [
+        // `lead` binds its lead to an open mission, and its status stays.
+        (Action::Lead, &[Open], None),
+        // A proposed plan's branch: `submit` writes an old draft open, and
+        // `merge` changes no status; a plan dropped there does neither.
+        (Action::SubmitMission, &[Draft, Open], Some(Open)),
+        (Action::MergeMission, &[Open], None),
+        (Action::Drop, &[Draft, Open], Some(Dropped)),
+        (Action::CloseMission, &[Open], Some(Done)),
+        // A plan review's verdict changes no status, from any.
+        (Action::PlanVerdictChanges, ANY, None),
+        (Action::PlanVerdictApprove, ANY, None),
+    ]
+};
 
 /// The actions on no record a status is taken from: a mission's creation on
 /// its branch, and a backlog branch's start, submit and merge.
 const UNRECORDED_SPECIFIED: [(Action, Option<Status>); 4] = [
-    (Action::StartMission, Some(Status::Ready)),
+    (Action::StartMission, None),
     (Action::StartBacklog, None),
     (Action::SubmitBacklog, None),
     (Action::MergeBacklog, None),
@@ -264,13 +251,7 @@ fn every_action_in_the_table_from_every_status_sets_the_specified_status_or_is_r
                 action,
                 Action::Review | Action::VerdictChanges | Action::VerdictApprove
             );
-            // A planner holds nothing; the item's holder readying it is
-            // refused by its status too, never by its role.
-            let caller = thread(match action {
-                _ if reviewer => "r1",
-                Action::Ready if status == Status::Draft => "p1",
-                _ => "t1",
-            });
+            let caller = thread(if reviewer { "r1" } else { "t1" });
             let facts = Facts {
                 item: &item,
                 branch: !matches!(action, Action::Start | Action::Close),
@@ -306,7 +287,7 @@ fn every_action_in_the_table_from_every_status_sets_the_specified_status_or_is_r
         ("demo-dr0p".to_string(), Status::Dropped),
     ];
     for (action, from, to) in MISSION_SPECIFIED {
-        for status in MissionStatus::ALL {
+        for status in ALL_MISSION {
             let findings = if action == Action::PlanVerdictChanges {
                 FIX_NOW
             } else {
@@ -323,43 +304,47 @@ fn every_action_in_the_table_from_every_status_sets_the_specified_status_or_is_r
             };
             match check_mission(action, &facts) {
                 Ok(set) => {
-                    assert!(
-                        from.contains(&status.status()),
-                        "{action:?} from {status:?}"
-                    );
-                    assert_eq!(
-                        set.map(MissionStatus::status),
-                        to,
-                        "{action:?} from {status:?}"
-                    );
+                    assert!(from.contains(&status), "{action:?} from {status:?}");
+                    assert_eq!(set, to, "{action:?} from {status:?}");
                 }
-                Err(Refusal::From {
+                Err(Refusal::FromMission {
                     action: refused,
                     status: at,
                 }) => {
-                    assert!(
-                        !from.contains(&status.status()),
-                        "{action:?} from {status:?}"
-                    );
-                    assert_eq!((refused, at), (action, status.status()));
+                    assert!(!from.contains(&status), "{action:?} from {status:?}");
+                    assert_eq!((refused, at), (action, status));
                 }
                 Err(other) => panic!("{action:?} from {status:?}: {other:?}"),
             }
         }
-        // Drop's row also holds an item's started statuses.
-        assert!(from.iter().all(|status| row(action).from.contains(status)));
+        assert_eq!(on_mission(action).1, from);
+        // Drop's row alone also holds an item's statuses.
+        assert!(action == Action::Drop || row(action).from.is_empty());
     }
+    assert_eq!(ON_MISSION.len(), MISSION_SPECIFIED.len() + 1);
     // Anyone plans a mission, and is bound as its planner.
     let plan = row(Action::StartMission);
+    assert_eq!((plan.role, plan.binds), (Role::Planner, true));
     assert_eq!(
-        (plan.role, plan.binds, plan.from, plan.to),
-        (Role::Planner, true, &[][..], Some(Status::Ready))
+        *on_mission(Action::StartMission),
+        (Action::StartMission, &[][..], Some(MissionStatus::Open))
     );
     let lead = row(Action::Lead);
-    assert_eq!(
-        (lead.role, lead.binds, lead.from, lead.to),
-        (Role::Lead, true, &[Status::Ready][..], None)
-    );
+    assert_eq!((lead.role, lead.binds), (Role::Lead, true));
+}
+
+#[test]
+fn the_table_has_no_go_ahead_and_changes_an_item_and_a_mission_each_by_its_own_rows() {
+    assert!(TABLE.iter().all(|row| row.command != "ready"));
+    let into =
+        |to: Status| -> Vec<Status> { ALL.into_iter().filter(|from| changes(*from, to)).collect() };
+    // Nothing makes an item open again.
+    assert!(into(Status::Open).is_empty());
+    assert!(changes(Status::Open, Status::Building) && changes(Status::Open, Status::Done));
+    // An item's `close` from open is no change of a proposed mission's.
+    assert!(!changes_mission(MissionStatus::Draft, MissionStatus::Done));
+    assert!(changes_mission(MissionStatus::Draft, MissionStatus::Open));
+    assert!(changes_mission(MissionStatus::Open, MissionStatus::Done));
 }
 
 #[test]
@@ -367,7 +352,7 @@ fn closing_a_mission_needs_each_item_done_or_dropped_and_its_result_written() {
     let dir = mission(MissionStatus::Open, "\n### Notes\n\n", &[]);
     let items = [
         ("demo-d0ne".to_string(), Status::Done),
-        ("demo-dr4f".to_string(), Status::Draft),
+        ("demo-0pen".to_string(), Status::Open),
         ("demo-bu1d".to_string(), Status::Building),
         ("demo-dr0p".to_string(), Status::Dropped),
     ];
@@ -385,8 +370,8 @@ fn closing_a_mission_needs_each_item_done_or_dropped_and_its_result_written() {
         unmet,
         [
             Condition::ItemOpen {
-                id: "demo-dr4f".into(),
-                status: Status::Draft
+                id: "demo-0pen".into(),
+                status: Status::Open
             },
             Condition::ItemOpen {
                 id: "demo-bu1d".into(),
@@ -471,7 +456,7 @@ fn names_unsettled(item: &ItemDir) -> Vec<FindingName> {
 
 #[test]
 fn closing_an_item_needs_no_branch_named_for_it() {
-    let item = record(Status::Ready, &[], DONE);
+    let item = record(Status::Open, &[], DONE);
     let caller = thread("p1");
     let facts = facts(&item, &caller);
     match check(Action::Close, &facts) {
@@ -569,17 +554,17 @@ fn a_plan_verdict_counts_its_own_file_and_earlier_rounds_not_a_blind_one() {
 
 #[test]
 fn start_asks_of_the_items_mission_only_that_it_is_agreed_and_not_dropped() {
-    let item = record(Status::Ready, &[], DONE);
+    let item = record(Status::Open, &[], DONE);
     let caller = thread("t1");
     let mission = |status| Some(("demo-m1ss".to_string(), status));
     // No mission; an open one on the base; a done one; the old draft,
     // which is proposed; a dropped one; one not on the base.
     let cases = [
         None,
-        mission(Some(Status::Ready)),
-        mission(Some(Status::Done)),
-        mission(Some(Status::Draft)),
-        mission(Some(Status::Dropped)),
+        mission(Some(MissionStatus::Open)),
+        mission(Some(MissionStatus::Done)),
+        mission(Some(MissionStatus::Draft)),
+        mission(Some(MissionStatus::Dropped)),
         mission(None),
     ];
     for named in cases {
@@ -589,7 +574,7 @@ fn start_asks_of_the_items_mission_only_that_it_is_agreed_and_not_dropped() {
             ..facts(&item, &caller)
         };
         let expected = match &named {
-            Some((id, status @ (None | Some(Status::Draft | Status::Dropped)))) => {
+            Some((id, status @ (None | Some(MissionStatus::Draft | MissionStatus::Dropped)))) => {
                 vec![Condition::MissionNotOpen {
                     id: id.clone(),
                     status: *status,
@@ -616,19 +601,23 @@ fn taking_over_or_merging_an_item_needs_its_mission_not_dropped() {
         &[review("1-aaaa", &["r1"], "approve", "")],
     );
     for (action, item) in [(Action::TakeOver, &building), (Action::Merge, &approved)] {
-        for status in [Status::Ready, Status::Done, Status::Dropped] {
+        for status in [
+            MissionStatus::Open,
+            MissionStatus::Done,
+            MissionStatus::Dropped,
+        ] {
             let facts = Facts {
                 mission: Some(("demo-m1ss".to_string(), Some(status))),
                 ..facts(item, &caller)
             };
             let checked = check(action, &facts);
             match status {
-                Status::Dropped => assert!(
+                MissionStatus::Dropped => assert!(
                     matches!(
                         &checked,
                         Err(Refusal::Unmet(unmet)) if *unmet == [Condition::MissionNotOpen {
                             id: "demo-m1ss".into(),
-                            status: Some(Status::Dropped),
+                            status: Some(MissionStatus::Dropped),
                         }]
                     ),
                     "{action:?}: {checked:?}"
@@ -673,8 +662,8 @@ fn only_a_planner_merges_a_proposed_plan_and_none_merges_a_dropped_one() {
         assert!(
             matches!(
                 checked,
-                Err(Refusal::From {
-                    status: Status::Dropped,
+                Err(Refusal::FromMission {
+                    status: MissionStatus::Dropped,
                     ..
                 })
             ),
@@ -747,8 +736,8 @@ fn status_lists_the_conditions_the_command_reports() {
 #[test]
 fn the_next_action_follows_the_status_and_who_is_asking() {
     let cases = [
-        (Status::Draft, "t1", None),
-        (Status::Ready, "r1", Some(Action::Start)),
+        (Status::Open, "t1", Some(Action::Start)),
+        (Status::Open, "r1", Some(Action::Start)),
         (Status::Building, "t1", Some(Action::Submit)),
         (Status::Building, "t0", Some(Action::TakeOver)),
         (Status::ChangesRequested, "t1", Some(Action::Submit)),
@@ -1312,10 +1301,10 @@ fn every_open_mission_record_of_the_five_repositories_reads_in_the_old_form() {
                 review: None,
             },
         );
-        // An item of it, ready, as `start` sees it on the base.
-        let item = record(Status::Ready, &[], DONE);
+        // An item of it, open, as `start` sees it on the base.
+        let item = record(Status::Open, &[], DONE);
         let facts = Facts {
-            mission: Some((mission.id.clone(), Some(mission.status.status()))),
+            mission: Some((mission.id.clone(), Some(mission.status))),
             branch: false,
             ..facts(&item, &caller)
         };

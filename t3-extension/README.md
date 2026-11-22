@@ -383,7 +383,7 @@ when the window is shown again. Fields the Desk does not send count as empty.
 - **In motion**, with the count: up to three items, each with its ID, title,
   stage and how long, and the holder's thread title under it. A click opens the
   holder's thread when T3 knows it, else the item in the layer.
-- **Next up**, with the count: up to three ready items. A click puts "Start
+- **Next up**, with the count: up to three open items that can start. A click puts "Start
   <id>: run `atelier start <id>` in a fresh checkout and follow what it prints."
   in the composer, never sending it. The prompt is made only from an ID of
   Atelier's form (lowercase letters and digits in dash-separated parts); a row

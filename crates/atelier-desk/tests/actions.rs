@@ -594,7 +594,7 @@ async fn an_agreed_missions_amendment_on_its_own_branch_is_proposed_with_its_oth
     fs::write(&path, text).unwrap();
     let item = format!(
         "---\nschema: atelier.item\nschema_version: 3\nid: demo-i001\ntitle: A new item\n\
-         status: draft\nmission: {OPEN}\nlabels: []\npriority: medium\nblocked_by: []\n\
+         status: open\nmission: {OPEN}\nlabels: []\npriority: medium\nblocked_by: []\n\
          implementers: []\nready: null\ntrivial: null\ncaused_by: null\n\
          created_at: 2026-11-10T09:00:00Z\n---\n\n## Goal\n\nMore.\n\n## Done when\n\n## Scope\n"
     );
@@ -661,7 +661,7 @@ async fn a_stopped_plans_items_are_not_proposed() {
     git(&world.planner, &["switch", "-q", PLAN]);
     let item = format!(
         "---\nschema: atelier.item\nschema_version: 3\nid: demo-i002\ntitle: The plan's item\n\
-         status: draft\nmission: {PLAN}\nlabels: []\npriority: medium\nblocked_by: []\n\
+         status: open\nmission: {PLAN}\nlabels: []\npriority: medium\nblocked_by: []\n\
          implementers: []\nready: null\ntrivial: null\ncaused_by: null\n\
          created_at: 2026-11-10T09:00:00Z\n---\n\n## Goal\n\nIt.\n\n## Done when\n\n## Scope\n"
     );
@@ -908,14 +908,14 @@ async fn an_open_pull_request_is_not_hidden_by_a_newer_closed_one_of_its_branch(
 #[tokio::test]
 async fn a_done_item_and_an_agreed_mission_keep_their_pull_request_once_their_branch_is_gone() {
     let world = world();
-    let (done, dropped, ready) = ("demo-d0ne", "demo-dr0p", "demo-r3dy");
+    let (done, dropped, unstarted) = ("demo-d0ne", "demo-dr0p", "demo-0pen");
     let planner = &world.planner;
     // The plan merged, and the items, with no branch of theirs left.
     git(
         planner,
         &["merge", "-q", "--no-ff", "-m", "Merge the plan", PLAN],
     );
-    let items = [(done, "done"), (dropped, "dropped"), (ready, "ready")];
+    let items = [(done, "done"), (dropped, "dropped"), (unstarted, "open")];
     for (id, status) in items {
         let text = format!(
             "---\nschema: atelier.item\nschema_version: 3\nid: {id}\ntitle: Item {id}\n\
@@ -931,7 +931,7 @@ async fn a_done_item_and_an_agreed_mission_keep_their_pull_request_once_their_br
     git(planner, &["push", "-q", "origin", "main"]);
     git(planner, &["push", "-q", "origin", "--delete", PLAN]);
     git(&world.served, &["pull", "-q", "--prune", "--ff-only"]);
-    for id in [PLAN, done, dropped, ready] {
+    for id in [PLAN, done, dropped, unstarted] {
         let branches = git(
             &world.served,
             &[
@@ -942,7 +942,7 @@ async fn a_done_item_and_an_agreed_mission_keep_their_pull_request_once_their_br
         );
         assert_eq!(branches, "", "{id} has neither branch");
     }
-    let pulls: Vec<Value> = [PLAN, done, dropped, ready]
+    let pulls: Vec<Value> = [PLAN, done, dropped, unstarted]
         .iter()
         .zip(11..)
         .map(|(branch, number): (&&str, u32)| {
@@ -968,11 +968,11 @@ async fn a_done_item_and_an_agreed_mission_keep_their_pull_request_once_their_br
     for (id, number) in [
         (done, json!(12)),
         (dropped, json!(13)),
-        (ready, Value::Null),
+        (unstarted, Value::Null),
     ] {
         let page = get(&world.app, &format!("/api/repos/demo/items/{id}")).await;
         assert_eq!(page["row"]["branch"], Value::Null, "{id}: {page}");
-        // A ready item's branch of that name would be a later one's.
+        // An open item's branch of that name would be a later one's.
         let found = match &page["pull_request"] {
             Value::Null => Value::Null,
             pull => pull["number"].clone(),

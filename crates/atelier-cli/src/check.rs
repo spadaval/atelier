@@ -7,8 +7,8 @@ use crate::commands::{self, Outcome};
 use crate::output::{BaseCheckout, WayBack};
 use crate::{git, output, setup};
 use anyhow::{bail, Context, Result};
-use atelier_core::actions::changes;
-use atelier_core::model::{Config, Status};
+use atelier_core::actions::{changes, changes_mission};
+use atelier_core::model::{Config, MissionStatus, Status};
 use atelier_core::records::{
     is_record, load, parse_config, parse_item, parse_mission, CommitReader, Problem, ReadError,
     Store, CONFIG,
@@ -203,8 +203,9 @@ fn pre_commit(root: &Path, skip: &Skip) -> Result<Outcome> {
     let mut actions = Vec::new();
     if git::has_commit(root, "HEAD")? {
         let head = git::head(root)?;
-        let items = loaded.items.iter().map(|dir| (&dir.path, dir.item.status));
-        let missions = (loaded.missions.iter()).map(|dir| (&dir.path, dir.mission.status.status()));
+        let items = (loaded.items.iter()).map(|dir| (&dir.path, Stored::Item(dir.item.status)));
+        let missions =
+            (loaded.missions.iter()).map(|dir| (&dir.path, Stored::Mission(dir.mission.status)));
         for (path, now) in items.chain(missions) {
             if !changed.contains(path) {
                 continue;
@@ -213,8 +214,7 @@ fn pre_commit(root: &Path, skip: &Skip) -> Result<Outcome> {
             let Some(Ok(before)) = status_at(&mut reader, &head, &path)? else {
                 continue;
             };
-            let mission = path.ends_with("/mission.md");
-            if before != now && !changes(mission, before, now) {
+            if before != now && !before.changes_to(now) {
                 // Only the lifecycle comparison is waived. Parsing and full
                 // staged-record validation above still apply.
                 if let Some(base) = &imported_from {
@@ -224,7 +224,7 @@ fn pre_commit(root: &Path, skip: &Skip) -> Result<Outcome> {
                         }
                     }
                 }
-                actions.push((path.into_owned(), before, now));
+                actions.push((path.into_owned(), before.name(), now.name()));
             }
         }
     }
@@ -273,7 +273,7 @@ fn pre_commit(root: &Path, skip: &Skip) -> Result<Outcome> {
         .chain(
             actions
                 .iter()
-                .map(|(path, from, to)| output::rule_status(path, *from, *to)),
+                .map(|(path, from, to)| output::rule_status(path, from, to)),
         )
         .chain((!base_records.is_empty()).then(|| output::rule_record_on_base(&base)));
     Ok(rules(skip, &unread, broken, text).unwrap_or(Outcome::Done(String::new())))
@@ -451,6 +451,31 @@ fn post_checkout(args: &[String], skip: &Skip) -> String {
     }
 }
 
+/// A record's status, as its kind has it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Stored {
+    Item(Status),
+    Mission(MissionStatus),
+}
+
+impl Stored {
+    /// Whether an action makes this change on a record of this kind.
+    fn changes_to(self, now: Stored) -> bool {
+        match (self, now) {
+            (Stored::Item(from), Stored::Item(to)) => changes(from, to),
+            (Stored::Mission(from), Stored::Mission(to)) => changes_mission(from, to),
+            _ => unreachable!("a record's path gives its kind"),
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Stored::Item(status) => output::status_name(status),
+            Stored::Mission(status) => status.name(),
+        }
+    }
+}
+
 /// The status of the item or mission record at `path` in `commit`: `None`
 /// when the commit has no file there, and the problem when it does not
 /// parse.
@@ -458,7 +483,7 @@ fn status_at(
     reader: &mut CommitReader,
     commit: &str,
     path: &str,
-) -> Result<Option<Result<Status, Problem>>> {
+) -> Result<Option<Result<Stored, Problem>>> {
     let text = match reader.text(commit, path) {
         Err(ReadError::Missing { .. }) => return Ok(None),
         Err(ReadError::Record(problem)) => return Ok(Some(Err(problem))),
@@ -466,8 +491,8 @@ fn status_at(
     };
     let shown = PathBuf::from(format!("{}:{path}", &commit[..commit.len().min(7)]));
     Ok(Some(match path.ends_with("/mission.md") {
-        true => parse_mission(&shown, &text).map(|mission| mission.status.status()),
-        false => parse_item(&shown, &text).map(|item| item.status),
+        true => parse_mission(&shown, &text).map(|mission| Stored::Mission(mission.status)),
+        false => parse_item(&shown, &text).map(|item| Stored::Item(item.status)),
     }))
 }
 

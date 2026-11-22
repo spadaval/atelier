@@ -24,15 +24,13 @@ export function Heading({ children, count, warn }: { children: ReactNode; count?
 }
 
 export const dotClass: Record<string, string> = {
-  draft: "border border-muted-foreground/60",
-  ready: "bg-muted-foreground",
+  open: "bg-muted-foreground",
   building: "bg-info",
   in_review: "bg-violet-500",
   changes_requested: "bg-warning",
   approved: "bg-success",
   done: "bg-success/50",
   dropped: "border border-muted-foreground/40",
-  open: "bg-info",
 };
 
 /** A record's status as a dot, named for a screen reader. */

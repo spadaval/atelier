@@ -86,7 +86,7 @@ Each word has one meaning in the CLI, its help, the docs and the skill.
 | Round | The reviews of one submission. Each `submit` opens a new round. |
 | Finding | One problem in a review, with a recommendation: fix now, defer or no action. It is named by its review and its number, as in `2-m2bn.1`. |
 | Verdict | A review's conclusion: approve or changes. |
-| Ready | Someone with authority said this item should start now. Ready is about intent, and only an item has it. It says nothing about review. |
+| Open | Nobody has started this item and it is not ended. An item is open from the moment it is filed and needs no approval to exist or to start: the judgment is made when someone picks the work up. |
 | Thread | The T3 Code thread that holds a role. Records store its ID. |
 | Role | Lead, implementer, reviewer or planner. A thread gets a role from the command it enters with; `start --mission` makes it a planner of the mission. |
 | Gardener | Whoever keeps a repository easy to navigate, easy to change and easy to validate, and brings the human the redesigns that need their taste. A run looks at one focus area, which the human may name at the start, through agents' threads and the code itself. In the tool a gardener is the implementer of an item labelled `garden`: that item is its run, and the item's Report is its one page. The run merges once review approves it. Its proposals then go to the human in one rolling `needs-human` item, `Garden proposals`, which keeps each until it is answered, and its bugs as `needs-human` items, both through `backlog/garden-proposals`; a planner applies the answers. No command is reserved for it. |
@@ -96,8 +96,8 @@ Each word has one meaning in the CLI, its help, the docs and the skill.
 | Check | `atelier check`, which the Git hooks and CI also run, or one of a project's configured merge checks. |
 | Skip | Going past a rule on purpose, with `ATELIER_SKIP="<reason>"` set for one command. |
 
-"Approve" means only a reviewer's verdict. "Ready" is said of an item only.
-A mission has no go-ahead: its direction is given when it starts, in a
+"Approve" means only a reviewer's verdict. An item has no go-ahead, and
+neither has a mission: a mission's direction is given when it starts, in a
 conversation with the human or a proposal they agreed, and its Why says which.
 
 ## Branches
@@ -113,9 +113,9 @@ Every change a thread makes, to code or to records, lives on a branch that
 
 | Branch | Holds | Made by |
 | --- | --- | --- |
-| `<item-id>` | One item's change: its code and its records | `start <id>` on a ready item, or `start --new` |
+| `<item-id>` | One item's change: its code and its records | `start <id>` on an open item, or `start --new` |
 | `<mission-id>` | A new mission's plan, its reviews, and its items until the plan merges | `start --mission "<title>"` |
-| `backlog/<slug>` | Record changes tied to no started item and no proposed plan: filing a bug, readying an item, dropping one, started or not, leading, closing or stopping an open mission, a lead's notes, and an amendment of an agreed mission's plan with its plan reviews | `start --backlog <slug>` |
+| `backlog/<slug>` | Record changes tied to no started item and no proposed plan: filing a bug, changing an item, dropping one, started or not, leading, closing or stopping an open mission, a lead's notes, and an amendment of an agreed mission's plan with its plan reviews | `start --backlog <slug>` |
 
 `config.toml` may set one branch prefix, such as `x/`, for a host whose
 forge has a naming rule. It applies to all three kinds: `x/<item-id>`,
@@ -172,8 +172,7 @@ shown by `status`, and `start` refuses to switch away from it.
 
 | Status | Held by | Set by | Leaves when |
 | --- | --- | --- | --- |
-| `draft` | Nobody | `new` | Someone runs `ready` on it |
-| `ready` | Nobody | `ready` | A thread runs `start` |
+| `open` | Nobody | `new` | A thread runs `start`, once the record is on the base and its blockers are done; or `close` or `drop` runs |
 | `building` | Implementer | `start` | Done when lines are ticked, the Report is written, and `submit` runs |
 | `in_review` | Reviewer | `submit` | The reviewer runs `verdict` |
 | `changes_requested` | Implementer | `verdict changes` | Each open fix-now finding is fixed, rebutted or answered not built, and `submit` runs, from round 3 on after the lead rules to fix |
@@ -188,9 +187,13 @@ done whatever started status it holds ([design record,
 Merge](design.md#merge)). `close` writes `done` on an item that was never
 started.
 
-Items keep `draft` and `ready`. A draft item is agreed to exist; a ready one
-is agreed to start now. An idea for a mission is a draft item on the base,
-so the base stays the one list of what might be done.
+An unstarted item is `open`, with no approval between filing and starting.
+Work begins because the human, a lead or a plan said so, and nothing starts
+an open item unasked. Later work is held back by a blocker. An idea for a
+mission is an open item on the base, so the base stays the one list of what
+might be done. A record from before 2026-11-22 says `draft` or `ready` for
+`open`; both read as `open`, and `show` and `log` still say who made one
+ready.
 
 A question is not a status, and no record holds one. The implementer asks
 the thread that started it, or an advisor, and writes into the Report
@@ -204,7 +207,7 @@ anything the answer changed ([Review](#review)).
 | `done` | `close` | Never |
 | `dropped` | `drop` | Never |
 
-A mission has no draft status and no go-ahead. What it is depends on where
+A mission has no status of its own for proposed and no go-ahead. What it is depends on where
 its record is read from:
 
 | Shown as | Means |
@@ -217,22 +220,21 @@ its record is read from:
 Its items merge to the base one at a time, so the base shows a mission in
 progress as it is: agreed, with some items done. A mission can be led and
 closed once it is agreed. `start` asks of an item's mission only that it is
-not dropped. Items are made ready one by one, or several in one `ready`
-command, so later work can wait as drafts until the work before it has shown
-what it shows.
+not dropped, so its items need nothing after the plan merges. Work that
+must wait until earlier work has shown what it shows names that work in
+`blocked_by`.
 
 `lead` is attribution, not a lock: it names the thread leading the mission
 so that `status`, `show` and the Desk can say who it is. It reaches the base
 by a record-only change, and a second lead set on another branch loses at
 merge as a conflict.
 
-### Three facts that stay separate
+### Two facts that stay separate
 
 | Fact | Meaning | Recorded as |
 | --- | --- | --- |
 | On the base | Agreed, or finished | The merge that brought it |
 | Reviewed | Independent agents examined this text at this commit | A review file |
-| Ready | This item should start now | The item's status, with who said so |
 
 A mission's plan is reviewed before it reaches the base, and its two
 approving plan reviews are what let it merge. Nobody says go after them.
@@ -267,12 +269,12 @@ closed. Until a drop is published, `status` and `show` say so.
 
 ## Commands
 
-Sixteen commands are built, plus `setup`. The
+Fifteen commands are built, plus `setup`. The
 tool has no site: the human's pages are the Desk's
 ([the Desk](product/desk.md)).
 
 Three commands act on Git: `start`, `submit` and `merge`. Every other
-command that changes a record (`new`, `set`, `ready`, `drop`, `close`,
+command that changes a record (`new`, `set`, `drop`, `close`,
 `lead`, `review` and `verdict`) only writes the file,
 in the checkout it runs in, prints the paths it wrote and the Git command
 that commits them, and stops. It makes no commit, no branch and no push. Run
@@ -284,9 +286,9 @@ branch for the change.
 
 | Command | Behaviour |
 | --- | --- |
-| `status` | Who this thread is, what it holds, what each thing needs, and the next command. Away from an item's branch with nothing held: the ready items `start` would accept now, with none named as the next command, since the thread's task says which to start; one line counting the other ready items by what stops them, missions in progress and what waits on the human, which is not listed as ready. For a thread holding a started item: in the base's checkout, the checkout that has the item's branch or the `git worktree add` that makes one; elsewhere, `start <id>`. Away from an item's branch, it also shows a detached HEAD's commits that no branch holds and, from 20 merged local branches or 10 detached worktrees, one line that counts both and names the Git commands that list them; it deletes nothing. For a mission's lead, its mission, what each item needs, and what is disputed in it. |
+| `status` | Who this thread is, what it holds, what each thing needs, and the next command. Away from an item's branch with nothing held: of the open items `start` would accept now, the 10 most urgent by priority and then ID and how many more `list --startable` lists, with none named as the next command, since the thread's task says which to start; one line counting the other open items by what stops them, missions in progress and what waits on the human, which is not listed as able to start. For a thread holding a started item: in the base's checkout, the checkout that has the item's branch or the `git worktree add` that makes one; elsewhere, `start <id>`. Away from an item's branch, it also shows a detached HEAD's commits that no branch holds and, from 20 merged local branches or 10 detached worktrees, one line that counts both and names the Git commands that list them; it deletes nothing. For a mission's lead, its mission, what each item needs, and what is disputed in it. |
 | `show <id>` | An item in full, with a summary of each review: its round, reviewer, model, the commit it reviewed and its verdict, and each finding's name, recommendation, state and title. A finding's text is in its review file. For a mission, the whole mission on one page: whether it is proposed, agreed, done or dropped, its outcome and criteria, its items grouped by status with who holds each and what blocks each, what is disputed in it as `list --disputed` gives it, and its reviews by round. Either says which ref the record was read from, and, for a fetched ref, how long ago the remote was fetched. |
-| `list` | With no flags, all open work on the base, grouped by mission and then by label, and apart from it what is proposed: missions on unmerged branches and record changes waiting to merge, each with its branch. Narrowed by `--ready`, `--blocked`, `--needs-human`, `--proposed`, `--mission <id>`, `--label <l>`, `--mine` and `--deferred`; `--done` shows finished missions and items instead. `--disputed` lists instead, across open and done items, each open fix-now finding answered `not built`, which waits on the lead, each finding whose Response is `rebutted` with what the next round made of it (kept, withdrawn, fixed, kept at defer or no action, or not yet reviewed), and each plan-review round whose reviewers gave different verdicts; `--mission <id>` narrows it. The listing refuses nothing; `submit` refuses another plan round after two split rounds in a row (see Review). |
+| `list` | With no flags, all open work on the base, grouped by mission and then by label, and apart from it what is proposed: missions on unmerged branches and record changes waiting to merge, each with its branch. Narrowed by `--startable` (open and can start now), `--blocked`, `--needs-human`, `--proposed`, `--mission <id>`, `--label <l>`, `--mine` and `--deferred`; `--done` shows finished missions and items instead. `--disputed` lists instead, across open and done items, each open fix-now finding answered `not built`, which waits on the lead, each finding whose Response is `rebutted` with what the next round made of it (kept, withdrawn, fixed, kept at defer or no action, or not yet reviewed), and each plan-review round whose reviewers gave different verdicts; `--mission <id>` narrows it. The listing refuses nothing; `submit` refuses another plan round after two split rounds in a row (see Review). |
 | `log` | The history of actions, read from Git, one line each and oldest first: when, the commit, which item or mission, the action, the thread where the record holds one, what changed, and any rule its commit skipped. For everything, one item, or one mission with its plan reviews and its items, and only actions `--since` a time. It adds nothing up. |
 | `check` | Validates every record. The Git hooks and CI run it. |
 
@@ -303,11 +305,10 @@ base.
 | --- | --- |
 | `start --mission "<title>"` | Makes branch `<mission-id>` from the base, writes the new mission's record there with status `open` and the caller as its planner, commits it and pushes the branch where a remote is configured. |
 | `start --backlog <slug>` | Makes branch `backlog/<slug>` from the base and pushes it where a remote is configured. It commits nothing, since nothing is claimed. |
-| `new "<title>"` | Writes a draft item and prints its path. `--in <mission>` sets membership. `--from <finding>` makes the item from an unsettled deferred finding of a done item, and marks the finding taken. |
+| `new "<title>"` | Writes an open item and prints its path. `--in <mission>` sets membership. `--from <finding>` makes the item from an unsettled deferred finding of a done item, and marks the finding taken. |
 | `set <id> ...` | Changes front-matter fields: title, priority, labels, mission, blocked-by, and, on a bug, `--caused-by <item>` for the item that introduced it. |
-| `ready <id>... --by <name>` | Marks each named item ready and records who said so. A mission is refused: it needs no go-ahead. |
 | `drop <id> --reason` | Ends work that will not be done: on a backlog branch, for a started item too, or on a started item's own branch. Given an unsettled deferred finding of a done item, it marks the finding dropped. |
-| `close <id>` | Ends an agreed mission whose items are all done or dropped and whose Result is written. With a result text, ends a draft or ready item that has no files to change. |
+| `close <id>` | Ends an agreed mission whose items are all done or dropped and whose Result is written. With a result text, ends an open item that has no files to change. |
 | `submit` and `merge` on a mission's or a backlog branch | As for an item: `submit` pushes the branch and opens its pull request, and `merge` merges it once it has what it needs, then deletes it. A backlog merge that drops a started item also closes that item's pull request. |
 
 Agents edit the Markdown body of a record directly. They never hand-edit front
@@ -317,7 +318,7 @@ matter; `set` and the status commands write it.
 
 | Command | Behaviour |
 | --- | --- |
-| `start <id>` | On a ready item: creates branch `<id>` from the base, sets `building`, binds this thread as implementer, and pushes the branch where a remote is configured, which is the claim. On a started item: switches to its branch and takes it over. For either, where a remote is configured, it first fetches the base and refuses an item done or dropped there, and after its push looks again. `start --new "<title>"` creates an item on a new branch already `building`, for work the human asked for directly. In the checkout that has the base out, `start` makes the branch without switching and prints the Git command that adds a worktree for it. |
+| `start <id>` | On an open item on the base whose blockers are done: creates branch `<id>` from the base, sets `building`, binds this thread as implementer, and pushes the branch where a remote is configured, which is the claim. On a started item: switches to its branch and takes it over. For either, where a remote is configured, it first fetches the base and refuses an item done or dropped there, and after its push looks again. `start --new "<title>"` creates an item on a new branch already `building`, for work the human asked for directly. In the checkout that has the base out, `start` makes the branch without switching and prints the Git command that adds a worktree for it. |
 | `submit` | Where a remote is configured, fetches the base and refuses an item done or dropped there. Checks every Done when line is ticked, the Report is written, and each open fix-now finding has a response; sets `in_review` and commits the item's directory; opens a new round; prints the reviewer's handoff line. On a branch that proposes or changes a plan, it opens a round of plan review, and refuses to once the change's last two rounds split. Where a forge is configured it then pushes the branch and opens its pull request, so CI runs while the review does; a push or pull request that fails is a warning, and `merge` does it later. |
 | `merge` | Runs the checks below and merges the branch. With a forge, the forge merges the pull request, as a merge commit; without one, `merge` makes the merge commit and moves the base locally. If CI has not finished it waits for it, up to 9 minutes, then says "not yet" and is run again later. Once merged, it deletes the branch, on the forge's remote and here. Its only flag is `--trivial "<why>"`, which skips review for a change whose correctness is evident from the diff and records the claim. |
 
@@ -425,7 +426,7 @@ with the harness's own tool, using a line the tool prints:
 | `mission.md` | status (`open`, `done` or `dropped`), labels, lead thread, planner threads | Why, Outcome, Success criteria (optional), Scope, Authority, Result | The human's direction, recorded by the planner, whose Why says whose direction it is; the lead writes Result |
 | `design.md` and other documents | none required | Shape, Design, Sizing, Derisking, Risks and unknowns | Agents |
 | `notes.md` | none | Free text | The lead |
-| `item.md` | status, mission, labels, priority, blocked-by, caused-by, implementer threads, ready, trivial | Goal, Done when, Scope, Report (with Validation and Responses) | The planner writes the definition; the implementer writes the Report |
+| `item.md` | status, mission, labels, priority, blocked-by, caused-by, implementer threads, trivial, and in an old record who made it ready | Goal, Done when, Scope, Report (with Validation and Responses) | The planner writes the definition; the implementer writes the Report |
 | `reviews/<round>-<suffix>.md` | round, commit reviewed, reviewer threads and model, verdict | Summary and limits, then one heading per finding with its recommendation | The reviewer |
 
 Rules:
@@ -466,7 +467,7 @@ record is committed on the base.
   the mission's branch, with its plan reviews, and reach the base when the
   plan merges.
 - Every other record change that belongs to no started item is written on a
-  backlog branch, as is a drop of any item: filing an item, `set`, `ready`,
+  backlog branch, as is a drop of any item: filing an item, `set`,
   `drop`, `lead`, `close`, a lead's notes, an item added to an agreed
   mission, and dropping an agreed mission. Each merges as a record-only
   change. An amendment of an agreed mission's plan is written on a backlog

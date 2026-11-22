@@ -36,7 +36,7 @@ fn start_held(at: &Path, thread: &str, release: PathBuf) -> Held {
 
 #[test]
 fn start_commits_building_then_creates_the_branch_and_status_says_what_is_next() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     let base = git(&root, &["rev-parse", "main"]);
 
@@ -78,7 +78,7 @@ fn start_commits_building_then_creates_the_branch_and_status_says_what_is_next()
 
 #[test]
 fn status_shows_a_done_when_line_wrapped_over_several_lines_whole() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
     let path = root.join(item_path(ID));
@@ -136,7 +136,7 @@ fn status_outside_an_atelier_repository_says_so_and_a_config_that_does_not_parse
 
 #[test]
 fn submit_refuses_with_the_status_list_and_then_commits_the_report_in_review() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
     let head = git(&root, &["rev-parse", "HEAD"]);
@@ -217,28 +217,36 @@ fn submit_refuses_with_the_status_list_and_then_commits_the_report_in_review() {
 }
 
 #[test]
-fn start_on_a_draft_changes_nothing_and_names_ready() {
-    let scratch = Scratch::new(&[(ID, "draft")]);
-    let root = scratch.root();
-    let head = git(&root, &["rev-parse", "HEAD"]);
-    let run = atelier(&root, "t1", &["start", ID]);
-    assert_eq!(run.code, 1);
-    assert_eq!(
-        run.stderr,
-        format!(
-            "{ID} is draft, and `atelier start` runs on an item that is ready. Nothing changed.\n\
-             It is a draft. A planner makes it ready with: atelier ready {ID} --by <name>\n{SKIP}"
-        )
-    );
-    assert!(!branch_exists(&root, ID));
-    assert_eq!(git(&root, &["rev-parse", "HEAD"]), head);
-    assert_eq!(git(&root, &["rev-parse", "--abbrev-ref", "HEAD"]), SCRATCH);
+fn start_takes_an_item_a_record_calls_draft_or_ready_as_the_open_item_it_is() {
+    for old in ["draft", "ready"] {
+        let scratch = Scratch::new(&[(ID, old)]);
+        let root = scratch.root();
+        let listed = atelier(&root, "t1", &["list", "--startable"]);
+        assert_eq!(
+            listed.stdout,
+            format!(
+                "In no mission:\n  No label:\n    {ID} (open, high, can start now): Say hello\n"
+            )
+        );
+        let status = atelier(&root, "t1", &["status"]).stdout;
+        assert!(
+            status.contains(&format!("\n  {ID} (high): Say hello\n")),
+            "{status}"
+        );
+        let shown = atelier(&root, "t1", &["show", ID]).stdout;
+        assert!(shown.contains("\nStatus: open, can start now\n"), "{shown}");
+        let run = atelier(&root, "t1", &["start", ID]);
+        assert_eq!(run.code, 0, "{old}: {}", run.stderr);
+        assert_eq!(field(&root, ID, "status"), "building");
+        // The base keeps the record as it was written.
+        assert_eq!(field(&root, "main", "status"), old);
+    }
 }
 
 #[test]
 fn another_thread_takes_over_a_started_item_in_any_started_status() {
     for status in ["building", "in_review", "changes_requested", "approved"] {
-        let scratch = Scratch::new(&[(ID, "ready")]);
+        let scratch = Scratch::new(&[(ID, "open")]);
         let root = scratch.root();
         // The fixture writes the started item on its branch.
         git(&root, &["switch", "-q", "-c", ID]);
@@ -272,7 +280,7 @@ fn another_thread_takes_over_a_started_item_in_any_started_status() {
 
 #[test]
 fn of_two_threads_starting_one_item_from_two_worktrees_one_creates_the_branch() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     let other = scratch.worktree("other");
     let base = git(&root, &["rev-parse", "main"]);
@@ -302,20 +310,20 @@ fn of_two_threads_starting_one_item_from_two_worktrees_one_creates_the_branch() 
 }
 
 #[test]
-fn a_start_stopped_before_its_branch_leaves_the_item_ready() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+fn a_start_stopped_before_its_branch_leaves_the_item_open() {
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     let mut held = start_held(&root, "t1", scratch.dir.path().join("release"));
     held.child.kill().unwrap();
     held.child.wait().unwrap();
 
     assert!(!branch_exists(&root, ID));
-    assert_eq!(field(&root, "main", "status"), "ready");
+    assert_eq!(field(&root, "main", "status"), "open");
     assert_eq!(git(&root, &["rev-parse", "--abbrev-ref", "HEAD"]), SCRATCH);
     assert_eq!(git(&root, &["status", "--porcelain"]), "");
     let status = atelier(&root, "t1", &["status"]).stdout;
     assert!(
-        status.contains(&format!("Ready to start:\n  {ID} (high): Say hello\n")),
+        status.contains(&format!("Can start now:\n  {ID} (high): Say hello\n")),
         "{status}"
     );
 
@@ -326,7 +334,7 @@ fn a_start_stopped_before_its_branch_leaves_the_item_ready() {
 
 #[test]
 fn status_on_the_base_reads_a_started_item_from_its_branch_until_it_merges() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
     let base = scratch.dir.path().join("base");
@@ -340,7 +348,7 @@ fn status_on_the_base_reads_a_started_item_from_its_branch_until_it_merges() {
         status.stdout,
         format!(
             "{NO_HOOKS}You are thread t3, on the base branch main.\nHeld by other threads:\n  \
-             {ID} (building, held by t1): Say hello\nNothing is ready to start.\n"
+             {ID} (building, held by t1): Say hello\nNothing is open to start.\n"
         )
     );
     // The thread that holds it is pointed back to it.
@@ -370,7 +378,7 @@ fn status_on_the_base_reads_a_started_item_from_its_branch_until_it_merges() {
 #[test]
 fn a_done_or_dropped_record_on_the_base_wins_over_the_branch() {
     for terminal in ["dropped", "done"] {
-        let scratch = Scratch::new(&[(ID, "ready")]);
+        let scratch = Scratch::new(&[(ID, "open")]);
         let root = scratch.root();
         assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
         let base = scratch.dir.path().join("base");
@@ -408,18 +416,18 @@ fn a_done_or_dropped_record_on_the_base_wins_over_the_branch() {
 }
 
 #[test]
-fn start_refuses_a_ready_item_whose_blocker_is_not_done_or_whose_branch_exists() {
-    let scratch = Scratch::new(&[("demo-b10c", "ready")]);
+fn start_refuses_an_open_item_whose_blocker_is_not_done_or_whose_branch_exists() {
+    let scratch = Scratch::new(&[("demo-b10c", "open")]);
     let root = scratch.root();
-    write_item(&root, ID, "ready", &[], &["demo-b10c"], "");
+    write_item(&root, ID, "open", &[], &["demo-b10c"], "");
     on_base(&root, "Blocked item");
 
     let status = atelier(&root, "t1", &["status"]).stdout;
     assert_eq!(
         status,
         format!(
-            "{NO_HOOKS}You are thread t1, on branch {SCRATCH}, which is no item's.\nReady to start:\n  \
-             demo-b10c (high): Say hello\n1 other ready item cannot start yet: 1 waits on a \
+            "{NO_HOOKS}You are thread t1, on branch {SCRATCH}, which is no item's.\nCan start now:\n  \
+             demo-b10c (high): Say hello\n1 other open item cannot start yet: 1 waits on a \
              blocker that is not done. See it with: atelier list\n{MAY_START}"
         )
     );
@@ -429,7 +437,7 @@ fn start_refuses_a_ready_item_whose_blocker_is_not_done_or_whose_branch_exists()
         run.stderr,
         format!(
             "`atelier start {ID}` refused; nothing changed.\nTo start it:\n  \
-             [ ] demo-b10c is done (it is ready)\nThen: atelier start {ID}\n{SKIP}"
+             [ ] demo-b10c is done (it is open)\nThen: atelier start {ID}\n{SKIP}"
         )
     );
     assert!(!branch_exists(&root, ID));
@@ -447,15 +455,15 @@ fn start_refuses_a_ready_item_whose_blocker_is_not_done_or_whose_branch_exists()
     // `status` counts it with the others that cannot start.
     assert!(
         atelier(&root, "t1", &["status"]).stdout.ends_with(
-            "2 ready items cannot start yet: 1 waits on a blocker that is not done, 1 has a \
-             branch of its name already. See them with: atelier list\nNo ready item can start now.\n"
+            "2 open items cannot start yet: 1 waits on a blocker that is not done, 1 has a \
+             branch of its name already. See them with: atelier list\nNo open item can start now.\n"
         )
     );
 }
 
 #[test]
 fn only_the_holder_submits_and_others_are_pointed_at_the_take_over() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
     let head = git(&root, &["rev-parse", "HEAD"]);
@@ -502,7 +510,7 @@ fn refusing_hook(root: &Path) -> PathBuf {
 
 #[test]
 fn a_refused_commit_leaves_submit_to_be_run_again() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
     let head = git(&root, &["rev-parse", "HEAD"]);
@@ -549,7 +557,7 @@ fn a_refused_commit_leaves_submit_to_be_run_again() {
 
 #[test]
 fn a_refused_commit_leaves_the_take_over_to_be_run_again() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     git(&root, &["switch", "-q", "-c", ID]);
     write_item(&root, ID, "building", &["t1"], &[], "");
@@ -585,7 +593,7 @@ fn a_refused_commit_leaves_the_take_over_to_be_run_again() {
 fn a_refusal_lists_the_conditions_of_the_action_refused() {
     // Approved, so `status` names merge next; submit still has its own
     // conditions, and its refusal lists them.
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     git(&root, &["switch", "-q", "-c", ID]);
     write_item(&root, ID, "approved", &["t1"], &[], "");
@@ -678,7 +686,7 @@ fn review_opens_the_rounds_file_and_prints_the_brief_and_run_again_only_the_brie
 
 #[test]
 fn review_runs_on_an_item_in_review_in_the_checkout_on_its_branch() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
     let early = atelier(&root, "t2", &["review", ID]);
@@ -724,7 +732,7 @@ fn review_runs_on_an_item_in_review_in_the_checkout_on_its_branch() {
 
 #[test]
 fn an_author_past_or_present_is_shown_the_brief_and_opens_no_review() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
     // t9 takes it over from t1, and submits it.
@@ -1346,7 +1354,7 @@ fn codex(at: &Path, thread: &str, args: &[&str]) -> Run {
 
 #[test]
 fn a_codex_subagent_reviews_its_parents_item_as_a_thread_of_its_own() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     // The root thread starts the item and submits it, as t1.
     assert_eq!(codex(&root, SESSION, &["start", ID]).code, 0);
@@ -1420,7 +1428,7 @@ fn a_codex_subagent_reviews_its_parents_item_as_a_thread_of_its_own() {
 
 #[test]
 fn a_reviewer_started_in_the_main_checkout_follows_its_task_to_the_items_checkout() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let main = scratch.root();
     git(&main, &["switch", "-q", "main"]);
     assert_eq!(atelier(&main, "t1", &["start", ID]).code, 0);
@@ -1462,7 +1470,7 @@ fn a_reviewer_started_in_the_main_checkout_follows_its_task_to_the_items_checkou
 
 #[test]
 fn status_in_the_bases_checkout_sends_a_holder_to_a_checkout_and_start_elsewhere() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let base = scratch.root();
     git(&base, &["switch", "-q", "main"]);
     let started = atelier(&base, "t1", &["start", ID]);

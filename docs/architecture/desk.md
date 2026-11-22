@@ -583,9 +583,10 @@ What is approximate there:
   commit subjects (`GET /api/history`), not from the records: a step
   committed under another subject is missed, and a subject that only looks
   like a step is counted. An item with no step in the history is dated from
-  when it was readied.
+  when an old record says it was readied, and otherwise has no age.
 - "Waited on you" marks only two things: the steps on items labelled
-  `needs-human`, and the ready marks the human recorded, those whose `by`
+  `needs-human`, and the ready marks old records hold of the human, from
+  before items were open on 2026-11-22: those whose `by`
   starts with the Desk's `caller` (from `GET /api/repos`), shown as one line
   per batch readied together. It knows of nothing else that waited on them.
 
@@ -598,8 +599,8 @@ both follow the rules here. The project's name in T3's thread breadcrumb, the
 project's name in its project strip and the "N more missions" row in its
 sidebar open it. It is the project as a roadmap without dates. *Now*
 holds each agreed mission with any item started or done, and started items
-in no mission; *Next*, agreed missions with nothing started, and ready
-items in no mission; *Later*, proposed plans and draft items in no mission
+in no mission; *Next*, agreed missions with nothing started, and open
+items in no mission; *Later*, proposed plans
 (`GET /api/roadmap` gives the items in no mission). A mission folds open to
 its items with their holders, read from its page
 (`GET /api/repos/{repo}/missions/{id}`) as it opens; those under *Now* start
@@ -706,7 +707,7 @@ Beside `repos`, `built_from` is the commit the server was built from
 (`atelier_desk::BUILT_FROM`), or `unknown`. The app shows its first nine
 characters in the sidebar's footer, with the whole ID in its title.
 `caller` is the configuration's `caller`, the name the human acts under,
-by which mission control tells the ready marks they recorded.
+by which mission control tells the ready marks old records hold of them.
 
 ### `GET /api/repos/{repo}/missions`
 
@@ -761,7 +762,7 @@ An **item row**, in a mission, the inbox and the rail's loose work:
 | `needs_human`, `startable` | `Entry::needs_human`, `Entry::startable` | master |
 | `blockers[] {id, status}`, `waiting_on[]` | `Entry::blockers`; the IDs of `Entry::waiting_on` | master |
 | `holder`, `reviewer` | `Entry::holder`; `Entry::reviewer`, set only while in review | master |
-| `cannot_start[]` | For a ready item, `say::condition_text(id, c)` for each of `Entry::unmet` | master values, psjw text |
+| `cannot_start[]` | For an open item, `say::condition_text(id, c)` for each of `Entry::unmet` | master values, psjw text |
 | `needs[]` | For a started item, `say::condition_text` for each of `Entry::needs`, what its holder's next action lacks | master values, psjw text |
 | `branch {merged, name}` | The branch the record was read from, else the one named for it; absent when there is none | atelier-dciw |
 | `report_written`, `dropped` | `ItemDir::report_written`, `ItemDir::dropped` | master |
@@ -792,7 +793,7 @@ app resolves them against `path`, as the spike's `DocReader` does.
 | Field | Given by | State |
 | --- | --- | --- |
 | `row` | The item row, as above, from `ItemView::entry`; it holds `id`, `title`, `status`, `priority` and `labels` | psjw |
-| `mission`, `blocked_by`, `implementers`, `ready`, `trivial`, `caused_by`, `created_at` | `atelier_core::model::Item` of `Located::record` | master |
+| `mission`, `blocked_by`, `implementers`, `ready` (who said go, in an old record; else `null`), `trivial`, `caused_by`, `created_at` | `atelier_core::model::Item` of `Located::record` | master |
 | `read_from` | `base` or `branch`: whether the record is the base's or the branch's | M7: `ItemView::read_from`, `Located::read_from` |
 | `body` | `Item::body`, the whole Markdown | master |
 | `goal`, `scope`, `report` | `ItemDir::section` | master |
@@ -883,7 +884,7 @@ validate is `400`; one that validates and names nothing is `404`.
 | `repo` | The name the Desk's configuration gives the repository |
 | `kind` | `item` or `mission` |
 | `id`, `title` | The record |
-| `status` | As the record stores it: an item's (`Status`, such as `in_review`) or a mission's (`MissionStatus`: `open`, `done`, `dropped` or the old `draft`) |
+| `status` | As the record reads: an item's (`Status`, such as `open`, which an old `draft` or `ready` reads as, or `in_review`) or a mission's (`MissionStatus`: `open`, `done`, `dropped` or the old `draft`) |
 
 Records are read as `/api/threads` reads them: each item by the record the
 cross-branch rule picks (`Located::record`), so a started item's status is
@@ -957,7 +958,7 @@ on the human there, and what is in motion. An unknown repository is `404`.
 
 | Field | Given by |
 | --- | --- |
-| `ready[] {id, title, priority}` | `/api/motion`'s `ready` without the needs-human items |
+| `ready[] {id, title, priority}` | `/api/motion`'s `ready`, the open items that can start, without the needs-human ones |
 | `waiting` | The needs-human items, the proposed plans and `threads_waiting`, counted |
 | `threads_waiting[] {identity, title}` | Live threads that hold work here and that T3 Code shows `waiting` |
 | `waiting_items[] {id, title}` | The first three things waiting on them: proposed plans, then needs-human items by priority |
@@ -1012,7 +1013,7 @@ unknown repository is `404`, a `days` that is not a number `400`, and a
 | Field | Given by |
 | --- | --- |
 | `events[].commit`, `at`, `subject` | The commit, its committer time, and its subject |
-| `events[].kind`, `id` | From the subject: `planned` (`Plan mission <id>`), `plan_review` (`Review the plan of <id>, round <n>: <verdict>`), `started` (`Start <id>`), `submitted` (`Submit <id> ...`), `review` (`Review <id>, round <n>: <verdict>`), `merged` (`Merge <id>: ...` or `Merge <remote>/<id> ...`), `readied` (`Ready <id>, <id> ...`, one for each ID), `closed` (`Close <id> ...`), `dropped` (`Drop <id>`) and `led` (`Lead <id>`) |
+| `events[].kind`, `id` | From the subject: `planned` (`Plan mission <id>`), `plan_review` (`Review the plan of <id>, round <n>: <verdict>`), `started` (`Start <id>`), `submitted` (`Submit <id> ...`), `review` (`Review <id>, round <n>: <verdict>`), `merged` (`Merge <id>: ...` or `Merge <remote>/<id> ...`), `readied` (`Ready <id>, <id> ...`, one for each ID, in history from before items were open), `closed` (`Close <id> ...`), `dropped` (`Drop <id>`) and `led` (`Lead <id>`) |
 | `events[].round`, `verdict` | A review's round and its verdict as the subject words it, such as `changes requested`; otherwise `null` |
 | `events[].record`, `title` | `item` or `mission` and the record's title, where the repository holds the ID; otherwise `null` |
 
@@ -1053,7 +1054,7 @@ unknown repository is `404`.
 | `items[] {id, title, status, mission, branch, holder, reviewer}` | Each entry in a started status (`actions::STARTED`), its status from the record that counts, which for a started item is its branch's, local or fetched; `branch` is the ref read; `holder` and `reviewer` are agents (`Entry::holder`, `Entry::reviewer`) |
 | `items[].changed_at` | When `branch` last had a commit, from one `git for-each-ref` over the local and fetched branches, given 10 seconds; `null` where it cannot be read |
 | `missions[] {mission, lead}` | Each agreed mission with a started item (`in_progress`), and its lead as an agent |
-| `ready[]` | Up to five ready items that can start now, needs-human ones included, as item rows, highest priority first, then by ID |
+| `ready[]` | Up to five open items that can start now, needs-human ones included, as item rows, highest priority first, then by ID |
 
 An agent's `thread` is T3 Code's live thread with that identity, or `null`.
 Whether T3 Code says the thread is alive is that: a thread T3 Code lists as
@@ -1407,7 +1408,7 @@ records is doing no tracked work, so tying it to a repository would show
 it beside work it is not doing.
 
 An item with none, such as `atelier-psjw` in the same clone
-(`implementers: []`), shows "No thread has started this item." A ready item
+(`implementers: []`), shows "No thread has started this item." An open item
 says that and nothing else; a started one whose holder is no live thread
 shows the holder's identity and "not running in T3 Code".
 
@@ -1427,7 +1428,7 @@ an `ItemView`; `show` prints each.
 | M2 | The paths of a mission's documents at a commit: the files of its directory but `mission.md` and `reviews/` | `atelier_core::records::CommitReader::mission_documents` | Low | High: the strategy is a document now | Low |
 | M4 | An approved item's approval time on `Entry` | `atelier_core::annotate` and `annotate_all`, with `atelier_core::git::approved_at`; the CLI calls them | Low | Medium | Low |
 | M7 | An item's page as `show <item>` prints it, with whether its record came from the base or the branch | `atelier_core::item_view`, returning `ItemView`, and `Located::read_from` (`ReadFrom::Base` or `ReadFrom::Branch`); `show` calls it | Low | Medium | Low |
-| M6 | What in a mission's plan changed between a reviewed commit and the base's tip | `atelier_core::plan::plan_changed_at`, comparing two commits; `plan_changed`, which `ready` and `review` use, still compares the checkout | Low | Medium: tells the human at go whether the review is stale | Low |
+| M6 | What in a mission's plan changed between a reviewed commit and the base's tip | `atelier_core::plan::plan_changed_at`, comparing two commits; `plan_changed`, which `review` uses, still compares the checkout | Low | Medium: tells the human at go whether the review is stale | Low |
 | M5 | The history of actions with the commit, time and thread of each, as `atelier log` is specified ([the design record](../design.md#the-log)), for a mission and its items | `atelier_core::log::history_until`, returning `History`; `log` calls it through `history` | High: a Git walk of both merge parents and branch tips, with record diffs per commit | Medium: the timeline, planned against added, and when an item merged | Medium |
 
 M1 to M4 come before the mission page can match `show`. M5 followed it

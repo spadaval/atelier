@@ -122,7 +122,7 @@ fn each_deferred_finding_of_a_done_item_is_listed_until_taken_or_dropped_once() 
         "Wrote, and did not commit:\n  {item}\n  {REVIEW}\nIt counts once it is committed and its branch is merged: commit it, then run `atelier submit` and `atelier merge` on that branch.\n"
     )));
     let text = read(&root, &item);
-    assert!(text.contains("title: Greet in the locale\nstatus: draft\n"));
+    assert!(text.contains("title: Greet in the locale\nstatus: open\n"));
     assert!(text.ends_with(
         "\n## Goal\n\nTaken from deferred finding demo-d0ne/1-aaaa.1, in .atelier/items/demo-d0ne/reviews/1-aaaa.md:\n\n\
          > Finding 1: The greeting ignores the locale\n> Recommendation: defer\n\
@@ -199,7 +199,7 @@ fn settling_is_refused_with_nothing_written_and_says_why() {
     let root = scratch.root();
     // An item not done, whose finding is deferred. A started item here
     // would read as done: it reaches the base only by its merge.
-    write_item(&root, "demo-0pen", "ready", &[], &[], "Done.");
+    write_item(&root, "demo-0pen", "open", &[], &[], "Done.");
     write_review(
         &root,
         ".atelier/items/demo-0pen/reviews/1-bbbb.md",
@@ -228,7 +228,7 @@ fn settling_is_refused_with_nothing_written_and_says_why() {
         ),
         (
             "demo-0pen/1-bbbb.1",
-            "  [ ] demo-0pen is done (it is ready; only a done item's findings are settled)\n",
+            "  [ ] demo-0pen is done (it is open; only a done item's findings are settled)\n",
             true,
         ),
         (
@@ -337,7 +337,7 @@ fn new_from_writes_neither_the_item_nor_the_taken_line_when_one_cannot_be_writte
 
 #[test]
 fn a_settlement_on_an_approved_items_branch_is_a_change_its_merge_sends_back_to_review() {
-    let scratch = with_done(&[(ID, "ready")]);
+    let scratch = with_done(&[(ID, "open")]);
     let root = scratch.root();
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
     fs::write(root.join("hello.txt"), "hello\n").unwrap();
@@ -428,7 +428,7 @@ fn a_settlement_on_an_approved_items_branch_is_a_change_its_merge_sends_back_to_
 /// deferred findings are listed as they are from the base.
 #[test]
 fn a_merged_items_deferred_findings_are_listed_on_its_own_branch() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
     fs::write(root.join("hello.txt"), "hello\n").unwrap();

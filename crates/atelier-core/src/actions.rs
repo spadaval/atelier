@@ -13,9 +13,6 @@ use std::path::Path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
-    /// `ready` on an item. A mission has no go-ahead, and `ready` refuses
-    /// one.
-    Ready,
     Start,
     /// `start --new`, which creates the item it starts.
     StartNew,
@@ -73,9 +70,10 @@ pub struct Row {
     /// needs the caller to hold the role already, unless it is a planner's,
     /// which no thread holds.
     pub binds: bool,
-    /// The statuses it runs from; none for an action that creates its record.
+    /// The statuses of an item it runs from; none for an action that creates
+    /// its record or runs only on a mission ([`ON_MISSION`]) or a branch.
     pub from: &'static [Status],
-    /// The status the action sets; `None` leaves it unchanged.
+    /// The status the action sets on an item; `None` leaves it unchanged.
     pub to: Option<Status>,
 }
 
@@ -87,33 +85,17 @@ pub const STARTED: &[Status] = &[
     Status::Approved,
 ];
 
-/// The statuses of an item or mission whose front matter a planner may
-/// still change with `set`.
-pub const PLANNED: &[Status] = &[Status::Draft, Status::Ready];
+/// The statuses of a mission that is neither done nor dropped: `open`, or
+/// the old `draft`, which is proposed wherever it is read.
+pub const UNFINISHED: &[MissionStatus] = &[MissionStatus::Draft, MissionStatus::Open];
 
-/// Every status a mission can have. A mission's `open` is `ready` here,
-/// and the old `draft` is `draft` ([`MissionStatus::status`]).
-const MISSION: &[Status] = &[Status::Draft, Status::Ready, Status::Done, Status::Dropped];
-
-/// A mission that is proposed, read from its branch, which has not merged:
-/// `open`, or the old `draft`.
-pub const PROPOSED: &[Status] = &[Status::Draft, Status::Ready];
-
-pub const TABLE: [Row; 23] = [
-    Row {
-        action: Action::Ready,
-        command: "ready",
-        role: Role::Planner,
-        binds: false,
-        from: &[Status::Draft],
-        to: Some(Status::Ready),
-    },
+pub const TABLE: [Row; 22] = [
     Row {
         action: Action::Start,
         command: "start",
         role: Role::Implementer,
         binds: true,
-        from: &[Status::Ready],
+        from: &[Status::Open],
         to: Some(Status::Building),
     },
     Row {
@@ -132,7 +114,7 @@ pub const TABLE: [Row; 23] = [
         role: Role::Planner,
         binds: true,
         from: &[],
-        to: Some(Status::Ready),
+        to: None,
     },
     // The actions of a backlog branch: any thread, in a checkout on that
     // branch, with no record to take a status from. None is an
@@ -171,15 +153,15 @@ pub const TABLE: [Row; 23] = [
         command: "submit",
         role: Role::Planner,
         binds: true,
-        from: PROPOSED,
-        to: Some(Status::Ready),
+        from: &[],
+        to: None,
     },
     Row {
         action: Action::MergeMission,
         command: "merge",
         role: Role::Planner,
         binds: false,
-        from: &[Status::Ready],
+        from: &[],
         to: None,
     },
     Row {
@@ -244,8 +226,7 @@ pub const TABLE: [Row; 23] = [
         role: Role::Planner,
         binds: false,
         from: &[
-            Status::Draft,
-            Status::Ready,
+            Status::Open,
             Status::Building,
             Status::InReview,
             Status::ChangesRequested,
@@ -259,7 +240,7 @@ pub const TABLE: [Row; 23] = [
         command: "close",
         role: Role::Planner,
         binds: false,
-        from: PLANNED,
+        from: &[Status::Open],
         to: Some(Status::Done),
     },
     // Its lead or a planner; no role is checked. It runs on an agreed
@@ -269,15 +250,15 @@ pub const TABLE: [Row; 23] = [
         command: "close",
         role: Role::Planner,
         binds: false,
-        from: &[Status::Ready],
-        to: Some(Status::Done),
+        from: &[],
+        to: None,
     },
     Row {
         action: Action::PlanVerdictChanges,
         command: "verdict changes",
         role: Role::Reviewer,
         binds: false,
-        from: MISSION,
+        from: &[],
         to: None,
     },
     Row {
@@ -285,7 +266,7 @@ pub const TABLE: [Row; 23] = [
         command: "verdict approve",
         role: Role::Reviewer,
         binds: false,
-        from: MISSION,
+        from: &[],
         to: None,
     },
     // A planner on the base, or the implementer of the item whose branch
@@ -304,31 +285,48 @@ pub const TABLE: [Row; 23] = [
         command: "lead",
         role: Role::Lead,
         binds: true,
-        from: &[Status::Ready],
+        from: &[],
         to: None,
     },
 ];
 
+/// An action on a mission, the statuses it runs from and the one it sets.
+pub type OnMission = (Action, &'static [MissionStatus], Option<MissionStatus>);
+
 /// The actions on a mission. `drop` is also an item's; every other action is
 /// only an item's.
-const ON_MISSION: [Action; 8] = [
-    Action::StartMission,
-    Action::SubmitMission,
-    Action::MergeMission,
-    Action::CloseMission,
-    Action::Drop,
-    Action::PlanVerdictChanges,
-    Action::PlanVerdictApprove,
-    Action::Lead,
-];
+pub const ON_MISSION: [OnMission; 8] = {
+    use MissionStatus::{Done, Draft, Dropped, Open};
+    const ANY: &[MissionStatus] = &[Open, Draft, Done, Dropped];
+    [
+        (Action::StartMission, &[], Some(Open)),
+        (Action::SubmitMission, UNFINISHED, Some(Open)),
+        (Action::MergeMission, &[Open], None),
+        (Action::CloseMission, &[Open], Some(Done)),
+        (Action::Drop, UNFINISHED, Some(Dropped)),
+        (Action::PlanVerdictChanges, ANY, None),
+        (Action::PlanVerdictApprove, ANY, None),
+        (Action::Lead, &[Open], None),
+    ]
+};
 
-/// Whether an action on an item, or with `mission` on a mission, changes a
-/// status `from` to `to`: what the pre-commit hook asks of a status
-/// changed in a commit.
-pub fn changes(mission: bool, from: Status, to: Status) -> bool {
-    (TABLE.iter())
-        .filter(|row| row.action == Action::Drop || ON_MISSION.contains(&row.action) == mission)
-        .any(|row| row.from.contains(&from) && row.to == Some(to))
+/// Whether an action on an item changes its status `from` to `to`: what
+/// the pre-commit hook asks of a status changed in a commit.
+pub fn changes(from: Status, to: Status) -> bool {
+    (TABLE.iter()).any(|row| row.from.contains(&from) && row.to == Some(to))
+}
+
+/// [`changes`], of a mission's status.
+pub fn changes_mission(from: MissionStatus, to: MissionStatus) -> bool {
+    (ON_MISSION.iter()).any(|(_, runs, sets)| runs.contains(&from) && *sets == Some(to))
+}
+
+/// The row of `action` as a mission's.
+pub fn on_mission(action: Action) -> &'static OnMission {
+    ON_MISSION
+        .iter()
+        .find(|(on, _, _)| *on == action)
+        .expect("every action on a mission has a row")
 }
 
 pub fn row(action: Action) -> &'static Row {
@@ -350,7 +348,7 @@ pub struct Facts<'a> {
     pub blockers: &'a [(String, Option<Status>)],
     /// The item's mission, if it names one, with the mission's status on
     /// the base; `None` when no such mission is found. See [`mission_of`].
-    pub mission: Option<(String, Option<Status>)>,
+    pub mission: Option<(String, Option<MissionStatus>)>,
     pub caller: &'a Thread,
     /// The checkout on the item's branch, which `merge` reads. The CLI
     /// gathers it where `merge` runs and `status` lists its conditions: on
@@ -430,10 +428,13 @@ pub fn plan_round<'a>(mission: &'a MissionDir, caller: &Thread) -> Round<'a> {
 }
 
 /// The mission `item` names, if any, with its status among `missions`.
-pub fn mission_of(item: &ItemDir, missions: &[MissionDir]) -> Option<(String, Option<Status>)> {
+pub fn mission_of(
+    item: &ItemDir,
+    missions: &[MissionDir],
+) -> Option<(String, Option<MissionStatus>)> {
     let id = item.item.mission.clone()?;
     let found = missions.iter().find(|dir| dir.mission.id == id);
-    let status = found.map(|dir| dir.mission.status.status());
+    let status = found.map(|dir| dir.mission.status);
     Some((id, status))
 }
 
@@ -541,7 +542,7 @@ pub enum Condition {
     /// `None` when the base has no such mission.
     MissionNotOpen {
         id: String,
-        status: Option<Status>,
+        status: Option<MissionStatus>,
     },
     /// A branch named for the item exists, so `start` cannot create it.
     BranchExists,
@@ -648,6 +649,11 @@ pub enum Refusal {
         action: Action,
         status: Status,
     },
+    /// [`Refusal::From`], of a mission's status.
+    FromMission {
+        action: Action,
+        status: MissionStatus,
+    },
     /// The action needs the caller to hold its role on the item, the item
     /// itself or this round's review, and it does not.
     NotHolder {
@@ -670,7 +676,10 @@ impl Refusal {
                 ..
             } => false,
             Refusal::Unmet(unmet) => unmet.iter().all(|c| c.is_rule(action)),
-            Refusal::Role(_) | Refusal::From { .. } | Refusal::NotHolder { .. } => true,
+            Refusal::Role(_)
+            | Refusal::From { .. }
+            | Refusal::FromMission { .. }
+            | Refusal::NotHolder { .. } => true,
         }
     }
 }
@@ -747,9 +756,7 @@ pub fn check_mission(
     facts: &MissionFacts,
 ) -> Result<Option<MissionStatus>, Refusal> {
     match mission_refusals(action, facts) {
-        Ok(found) => {
-            (found.into_iter().next()).map_or(Ok(row(action).to.and_then(MissionStatus::of)), Err)
-        }
+        Ok(found) => (found.into_iter().next()).map_or(Ok(on_mission(action).2), Err),
         Err(problem) => Err(Refusal::Record(problem)),
     }
 }
@@ -757,11 +764,11 @@ pub fn check_mission(
 /// Every reason `action`, a mission's, is refused, as [`refusals`] gives an
 /// item's.
 pub fn mission_refusals(action: Action, facts: &MissionFacts) -> Result<Vec<Refusal>, Problem> {
-    let row = row(action);
-    let status = facts.mission.mission.status.status();
+    let (_, from, _) = on_mission(action);
+    let status = facts.mission.mission.status;
     let mut found = Vec::new();
-    if !row.from.contains(&status) {
-        found.push(Refusal::From { action, status });
+    if !from.contains(&status) {
+        found.push(Refusal::FromMission { action, status });
     }
     // Merging a plan needs one of its planners; `submit` makes the caller
     // one, so a thread that is not takes the plan over there.
@@ -904,7 +911,7 @@ pub fn unmet(action: Action, facts: &Facts) -> Result<Vec<Condition>, Problem> {
     let item = facts.item;
     let mut unmet = Vec::new();
     match action {
-        Action::Ready | Action::StartNew | Action::Drop | Action::Lead => {}
+        Action::StartNew | Action::Drop | Action::Lead => {}
         // On no item: a backlog branch's actions, and a mission's.
         Action::StartMission
         | Action::StartBacklog
@@ -927,7 +934,10 @@ pub fn unmet(action: Action, facts: &Facts) -> Result<Vec<Condition>, Problem> {
             // Of its mission it asks only that it is agreed and not
             // dropped: on the base, and not the old `draft`.
             if let Some((id, status)) = &facts.mission {
-                if matches!(status, None | Some(Status::Draft | Status::Dropped)) {
+                if matches!(
+                    status,
+                    None | Some(MissionStatus::Draft | MissionStatus::Dropped)
+                ) {
                     unmet.push(Condition::MissionNotOpen {
                         id: id.clone(),
                         status: *status,
@@ -1041,9 +1051,9 @@ pub fn unmet(action: Action, facts: &Facts) -> Result<Vec<Condition>, Problem> {
 /// The stop of the item's mission, when it is dropped.
 fn mission_dropped(facts: &Facts) -> Option<Condition> {
     match &facts.mission {
-        Some((id, Some(Status::Dropped))) => Some(Condition::MissionNotOpen {
+        Some((id, Some(MissionStatus::Dropped))) => Some(Condition::MissionNotOpen {
             id: id.clone(),
-            status: Some(Status::Dropped),
+            status: Some(MissionStatus::Dropped),
         }),
         _ => None,
     }
@@ -1118,14 +1128,14 @@ fn stale(item: &ItemDir, review: &ReviewFile, since: &SinceApproval) -> Option<C
     })
 }
 
-/// The action the caller would run next on the item, if any: start a ready
+/// The action the caller would run next on the item, if any: start an open
 /// item; as its holder, submit it or merge it; as this round's reviewer,
 /// `verdict changes` while its file holds an open fix-now finding that does
 /// not wait on the lead, else `verdict approve`; as anyone else, review it when it is in review and
 /// they never implemented it, else take it over.
 pub fn next(facts: &Facts) -> Result<Option<Action>, Problem> {
     let status = facts.status();
-    if status == Status::Ready {
+    if status == Status::Open {
         return Ok(Some(Action::Start));
     }
     if !STARTED.contains(&status) {

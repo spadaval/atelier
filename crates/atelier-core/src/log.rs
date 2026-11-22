@@ -13,8 +13,8 @@ use crate::model::{
 };
 use crate::plan::{changed_sections, is_plan_file};
 use crate::records::{
-    parse_item, parse_mission, parse_review, validate_id, ItemDir, MissionDir, ReadError,
-    ReviewFile,
+    old_status, parse_item, parse_mission, parse_review, validate_id, ItemDir, MissionDir,
+    ReadError, ReviewFile,
 };
 use crate::repo::{item_path, mission_path};
 use crate::skip::{BY_TRAILER, TRAILER};
@@ -47,34 +47,26 @@ pub struct Logged {
     pub skipped_by: Option<Thread>,
 }
 
-/// A status a record moved from and to in one commit; `from` is `None`
-/// when the commit added the record.
+/// A status a record moved from and to in one commit, each as that record
+/// spells it, so an old item's `draft` and `ready` show as history has
+/// them; `from` is `None` when the commit added the record.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Move {
-    pub from: Option<Status>,
-    pub to: Status,
-    /// A mission's move, whose statuses the action table writes as an item's
-    /// ([`crate::model::MissionStatus::status`]).
-    pub mission: bool,
+    pub from: Option<&'static str>,
+    pub to: &'static str,
 }
 
 impl Move {
-    /// `<from> -> <to>`, each as a record spells it; `new` for a record the
-    /// commit added.
+    /// `<from> -> <to>`; `new` for a record the commit added.
     fn shown(&self) -> String {
-        let spelled = |status: Status| match (self.mission, MissionStatus::of(status)) {
-            (true, Some(status)) => status.name(),
-            _ => spelled(status),
-        };
-        let from = self.from.map_or("new", spelled);
-        format!("{from} -> {}", spelled(self.to))
+        format!("{} -> {}", self.from.unwrap_or("new"), self.to)
     }
 }
 
-fn spelled(status: Status) -> &'static str {
+/// How the item record `text`, whose status reads as `status`, spells it.
+fn spelled(status: Status, text: &str) -> &'static str {
     match status {
-        Status::Draft => "draft",
-        Status::Ready => "ready",
+        Status::Open => old_status(text).unwrap_or("open"),
         Status::Building => "building",
         Status::InReview => "in_review",
         Status::ChangesRequested => "changes_requested",
@@ -142,7 +134,8 @@ pub enum Happened {
     PlanMerge {
         amends: bool,
     },
-    /// Made ready, by the name given with `--by`.
+    /// A go-ahead, by the name recorded with it, which only history from
+    /// before items and missions were open holds.
     Ready {
         by: Option<String>,
         status: Move,
@@ -636,6 +629,8 @@ impl Record {
 enum Version {
     Item {
         item: Item,
+        /// Its status as the record spells it.
+        stored: &'static str,
         dropped: Option<String>,
     },
     Mission(MissionDir),
@@ -779,8 +774,8 @@ impl Walker<'_, '_> {
             self.pending.insert(commit.hash.clone(), pending);
         }
         // A record the commit changed with no action of its own, beside one
-        // that has, still shows the rules the commit passed: a `ready` of
-        // two items, one of which was ready already.
+        // that has, still shows the rules the commit passed: a `set` of a
+        // started item beside a `drop` of another.
         if !commit.skips.is_empty() {
             let merge = commit.parents.len() > 1;
             for id in self.records_of(commit)? {
@@ -832,27 +827,28 @@ impl Walker<'_, '_> {
         id: &str,
     ) -> Result<Option<(String, Option<Thread>, Happened)>> {
         let path = item_path(id);
-        let at = |repo: &mut Repo, commit: &str| -> Result<Option<Item>> {
-            let text = repo.reader().blob(&format!("{commit}:{path}"))?;
-            Ok(text.and_then(|text| parse_item(Path::new(&path), &text).ok()))
+        let at = |repo: &mut Repo, commit: &str| -> Result<Option<(Item, &'static str)>> {
+            let Some(text) = repo.reader().blob(&format!("{commit}:{path}"))? else {
+                return Ok(None);
+            };
+            let item = parse_item(Path::new(&path), &text).ok();
+            Ok(item.map(|item| {
+                let stored = spelled(item.status, &text);
+                (item, stored)
+            }))
         };
-        let Some(new) = at(self.repo, &commit.hash)? else {
+        let Some((new, _)) = at(self.repo, &commit.hash)? else {
             return Ok(None);
         };
-        let old = at(self.repo, &commit.parents[1])?;
-        let from = old.map(|old| old.status);
+        let from = at(self.repo, &commit.parents[1])?.map(|(_, stored)| stored);
         // The merge of its own branch brings a started item to the base,
         // where it reads as done; a merge before that wrote `done`.
         let merged = new.status == Status::Done || STARTED.contains(&new.status);
-        if !merged || from == Some(Status::Done) {
+        if !merged || from == Some("done") {
             return Ok(None);
         }
         let action = Happened::Merge {
-            status: Move {
-                from,
-                to: Status::Done,
-                mission: false,
-            },
+            status: Move { from, to: "done" },
             trivial: new.trivial.clone(),
         };
         Ok(Some((
@@ -1010,6 +1006,7 @@ fn version(path: &str, text: &str) -> Result<Version, String> {
             };
             let dropped = dir.dropped().map(str::to_string);
             Ok(Version::Item {
+                stored: spelled(dir.item.status, text),
                 item: dir.item,
                 dropped,
             })
@@ -1061,22 +1058,23 @@ fn gained<'a>(old: Option<&Threads>, new: &'a Threads) -> Vec<(Option<&'a Thread
 /// The actions across an item's versions `old` and `new`, and the status move
 /// they leave to a verdict in the same commit.
 fn item_actions(old: Option<&Version>, new: &Version) -> (Actions, Option<Move>) {
-    let Version::Item { item: new, dropped } = new else {
+    let Version::Item {
+        item: new,
+        stored: to,
+        dropped,
+    } = new
+    else {
         return (Vec::new(), None);
     };
-    let old = match old {
-        Some(Version::Item { item, .. }) => Some(item),
-        _ => None,
+    let (old, from) = match old {
+        Some(Version::Item { item, stored, .. }) => (Some(item), Some(*stored)),
+        _ => (None, None),
     };
-    let from = old.map(|old| old.status);
-    let moved = (from != Some(new.status)).then_some(Move {
-        from,
-        to: new.status,
-        mission: false,
-    });
+    let to = *to;
+    let moved = (from != Some(to)).then_some(Move { from, to });
     let holder = new.implementers.holder().cloned();
     let mut actions = Vec::new();
-    let mut building = moved.filter(|status| status.to == Status::Building);
+    let mut building = moved.filter(|_| new.status == Status::Building);
     for (before, thread) in gained(old.map(|old| &old.implementers), &new.implementers) {
         let status = building.take();
         let action = match before {
@@ -1090,9 +1088,9 @@ fn item_actions(old: Option<&Version>, new: &Version) -> (Actions, Option<Move>)
     }
     let mut verdict = None;
     if let Some(status) = moved {
-        match status.to {
+        match new.status {
             Status::InReview => actions.push((holder.clone(), Happened::Submit { status })),
-            Status::Ready => {
+            Status::Open if to == "ready" => {
                 let by = new.ready.as_ref().map(|ready| ready.by.clone());
                 actions.push((None, Happened::Ready { by, status }));
             }
@@ -1102,7 +1100,7 @@ fn item_actions(old: Option<&Version>, new: &Version) -> (Actions, Option<Move>)
             }
             Status::Done => actions.push((None, Happened::Close { status })),
             Status::Approved | Status::ChangesRequested => verdict = Some(status),
-            Status::Draft | Status::Building => {}
+            Status::Open | Status::Building => {}
         }
     }
     (actions, verdict)
@@ -1123,14 +1121,10 @@ fn mission_actions(old: Option<&Version>, new: &Version) -> Actions {
     if new.lead.is_some() && new.lead != before {
         actions.push((new.lead.clone(), Happened::Lead { from: before }));
     }
-    let from = old.map(|old| old.status.status());
-    let to = new.status.status();
+    let from = old.map(|old| old.status.name());
+    let to = new.status.name();
     if from != Some(to) {
-        let status = Move {
-            from,
-            to,
-            mission: true,
-        };
+        let status = Move { from, to };
         match new.status {
             // Made ready, in a record from when a mission had a go-ahead;
             // an old draft written open by `submit` is no action of its own.
@@ -1165,8 +1159,7 @@ fn planned(new: &Version, time: DateTime<Utc>) -> Option<(Option<Thread>, Happen
         && time - mission.created_at.with_timezone(&Utc) <= NEW_PLAN;
     let status = Move {
         from: None,
-        to: mission.status.status(),
-        mission: true,
+        to: mission.status.name(),
     };
     is_new.then(|| {
         (

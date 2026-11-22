@@ -13,9 +13,9 @@ reviews beside them, and the rules in `config.toml`.
   that did not write the change, runs `atelier review <id>` and `atelier
   verdict`. Once approved, the implementer runs `atelier merge`, which
   marks the item done on `@BASE@`.
-- Planning happens on `@BASE@` with `atelier new`, `set` and `ready`;
-  `ready`, `drop`, `close` and `lead` make their own commit. A mission is
-  read with `atelier show <mission>`.
+- Planning happens on `@BASE@` with `atelier new`, which makes an open item
+  that needs no go-ahead, and `set`; `drop`, `close` and `lead` make their
+  own commit. A mission is read with `atelier show <mission>`.
 - This repository's config names no forge, so nothing pushes for you.
   After `atelier merge`, or after planning on `@BASE@`, push it with
   `git push origin @BASE@`. The pre-push hook checks every commit the push

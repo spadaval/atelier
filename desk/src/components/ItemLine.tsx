@@ -12,11 +12,11 @@ export function itemFacts(row: ItemRow): string[] {
   if (row.dropped) facts.push(`Dropped: ${row.dropped}`);
   if (row.holder) facts.push(`Held by ${row.holder}`);
   if (row.reviewer) facts.push(`Reviewed by ${row.reviewer}`);
-  // A ready item's unmet conditions already name its blockers.
-  const waiting = row.status === "ready" ? [] : row.blockers.filter((b) => row.waiting_on.includes(b.id));
+  // An open item's unmet conditions already name its blockers.
+  const waiting = row.status === "open" ? [] : row.blockers.filter((b) => row.waiting_on.includes(b.id));
   if (waiting.length > 0) facts.push(`Waits on ${waiting.map((b) => `${b.id} (${b.status ? statusName(b.status) : "not found"})`).join(", ")}`);
   facts.push(...row.cannot_start, ...row.needs);
-  if (row.status === "ready" && row.startable) facts.push("Can start now");
+  if (row.status === "open" && row.startable) facts.push("Can start now");
   return facts;
 }
 

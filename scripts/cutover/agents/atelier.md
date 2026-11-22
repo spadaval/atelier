@@ -17,8 +17,8 @@ Records live in `.atelier/`: a mission in `missions/<id>/mission.md`, an
 item in `items/<id>/item.md` with its reviews beside it, and the rules in
 `config.toml`. They are committed with the code they describe.
 
-- Planning happens on `master`: `atelier new`, `atelier set`, then `atelier
-  ready <id> --by <who said go>`. `ready`, `drop`, `close` and `lead` make
+- Planning happens on `master`: `atelier new`, which makes an open item that
+  needs no go-ahead, and `atelier set`. `drop`, `close` and `lead` make
   their own commit; push `master` with `git push` when you are done.
 - An item, in order: `atelier start <id>` (a branch named `<id>`),
   implement, tick every Done when line and write the `## Report`, `atelier

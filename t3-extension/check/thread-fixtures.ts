@@ -54,7 +54,7 @@ const led = mission("atelier-tlm1", "Draw the extension's pages natively", "open
   agent("thread:tl-impl2", "implementer", "atelier-tl02", false),
 ]);
 // A plan proposed on its branch: its record stores `open`, its read says `proposed`.
-const plan = mission("atelier-tpm1", "Schedule the gardener daily", "open", [item("atelier-tp01", "Write the schedule", "draft")], []);
+const plan = mission("atelier-tpm1", "Schedule the gardener daily", "open", [item("atelier-tp01", "Write the schedule", "open")], []);
 plan.mission.state = "proposed";
 plan.mission.in_progress = false;
 
@@ -128,7 +128,7 @@ export const scenarios: Record<string, Scenario> = {
     answers: {
       [paths.thread("thread:idle")]: info("thread:idle", "Answer a question", "completed", 5),
       [paths.ties("thread:idle")]: { thread: "thread:idle", ties: [] },
-      [paths.inbox()]: inbox({ needs: [item("atelier-tn01", "Choose a provider", "ready", { needs_human: true })] }),
+      [paths.inbox()]: inbox({ needs: [item("atelier-tn01", "Choose a provider", "open", { needs_human: true })] }),
       [paths.missions(REPO)]: { commit: "0".repeat(40), missions: [led.mission, plan.mission], loose: 2, fetched } satisfies MissionsResponse,
       [paths.motion()]: {
         repos: [
@@ -139,7 +139,7 @@ export const scenarios: Record<string, Scenario> = {
             fetched,
             items: [{ id: "atelier-tl02", title: ledItems[1].title, status: "building", mission: led.mission.id, branch: "atelier-tl02", holder: agent("thread:tl-impl2", "implementer", null, false), reviewer: null, changed_at: minutes(20) }],
             missions: [],
-            ready: [item("atelier-tn02", "Write the next item", "ready", { startable: true })],
+            ready: [item("atelier-tn02", "Write the next item", "open", { startable: true })],
           },
         ],
         t3: { reachable: true, age_seconds: 5, error: null },

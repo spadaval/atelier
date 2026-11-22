@@ -1,4 +1,4 @@
-//! The planner's commands, `new`, `set`, `ready`, `drop` and `close`,
+//! The planner's commands, `new`, `set`, `drop` and `close`, and the refusal of `ready`,
 //! what `start` needs of their planning, and plan reviews, driven in
 //! scratch repositories.
 
@@ -89,7 +89,7 @@ fn head_and_index(root: &Path) -> (String, String) {
 }
 
 #[test]
-fn new_writes_a_draft_item_commits_nothing_and_says_how_to_commit() {
+fn new_writes_an_open_item_commits_nothing_and_says_how_to_commit() {
     let scratch = Scratch::new(&[]);
     let root = scratch.root();
 
@@ -150,11 +150,11 @@ fn new_writes_a_draft_item_commits_nothing_and_says_how_to_commit() {
         .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()));
     assert_ne!(id, mission_id);
     let text = read(&root, &path);
-    assert_eq!(front(&text, "status"), "draft");
+    assert_eq!(front(&text, "status"), "open");
     assert_eq!(front(&text, "mission"), mission_id);
     assert!(text.ends_with("---\n\n## Goal\n\n## Done when\n\n## Scope\n"));
     assert!(item.stdout.starts_with(&format!(
-        "Created draft item {id}, with empty Goal, Done when and Scope sections to write.\n"
+        "Created open item {id}, with empty Goal, Done when and Scope sections to write.\n"
     )));
 
     // Nothing is committed or staged; the Then line commits the file alone.
@@ -177,7 +177,7 @@ fn new_writes_a_draft_item_commits_nothing_and_says_how_to_commit() {
 
 #[test]
 fn new_in_a_mission_that_does_not_exist_is_refused_and_writes_nothing() {
-    let scratch = Scratch::new(&[(ID, "draft")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     // An item is no mission.
     for missing in ["demo-zzzz", ID] {
@@ -196,14 +196,13 @@ fn new_in_a_mission_that_does_not_exist_is_refused_and_writes_nothing() {
 
 #[test]
 fn the_planning_commands_write_nothing_in_the_bases_checkout_nor_on_an_items_branch() {
-    let scratch = Scratch::new(&[(ID, "draft"), ("demo-b2b2", "ready")]);
+    let scratch = Scratch::new(&[(ID, "open"), ("demo-b2b2", "open")]);
     let root = scratch.root();
     let base = scratch.worktree("base");
     git(&base, &["switch", "-q", "main"]);
     let commands = [
         &["new", "Say hello"][..],
         &["set", ID, "--title", "Hi"],
-        &["ready", ID, "--by", "ada"],
         &["drop", ID, "--reason", "Not needed"],
         &["close", ID, "Not needed"],
         &["lead", "demo-zzzz"],
@@ -245,7 +244,7 @@ const BODY: &str =
 
 #[test]
 fn set_changes_each_named_field_and_nothing_else_in_the_file() {
-    let scratch = Scratch::new(&[("demo-b10c", "draft"), (ID, "ready")]);
+    let scratch = Scratch::new(&[("demo-b10c", "open"), (ID, "open")]);
     let root = scratch.root();
     write_mission(&root, MISSION, "draft");
     let path = root.join(item_path(ID));
@@ -285,7 +284,7 @@ fn set_changes_each_named_field_and_nothing_else_in_the_file() {
         ("mission", MISSION),
         ("blocked_by", "demo-b10c"),
         ("caused_by", "0123abc"),
-        ("status", "ready"),
+        ("status", "open"),
     ] {
         assert_eq!(front(&text, key), value, "{key}");
     }
@@ -348,7 +347,7 @@ fn set_changes_each_named_field_and_nothing_else_in_the_file() {
 #[test]
 fn set_is_refused_with_nothing_written_for_a_field_or_record_it_cannot_change() {
     let scratch = Scratch::new(&[
-        (ID, "draft"),
+        (ID, "open"),
         ("demo-d0ne", "done"),
         ("demo-dr0p", "dropped"),
     ]);
@@ -418,7 +417,6 @@ fn set_is_refused_with_nothing_written_for_a_field_or_record_it_cannot_change() 
     }
 
     // A started item's record changes only on its branch, which is named.
-    assert_eq!(planned(&root, "p1", &["ready", ID, "--by", "s"]).code, 0);
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
     off_base(&root);
     let run = atelier(&root, "p1", &["set", ID, "--title", "T"]);
@@ -434,83 +432,130 @@ fn set_is_refused_with_nothing_written_for_a_field_or_record_it_cannot_change() 
 }
 
 #[test]
-fn ready_marks_each_named_draft_with_who_and_when_changes_no_other_item_and_commits_nothing() {
-    let scratch = Scratch::new(&[(ID, "draft"), ("demo-b10c", "draft")]);
+fn an_item_is_open_when_filed_and_starts_once_its_branch_merges_with_no_readying() {
+    let scratch = Scratch::new(&[]);
     let root = scratch.root();
-    write_mission(&root, MISSION, "draft");
-    join_mission(&root, ID, MISSION);
-    join_mission(&root, "demo-b10c", MISSION);
-    commit_all(&root, "Plan");
-    let before = head_and_index(&root);
+    assert_eq!(
+        atelier(&root, "p1", &["start", "--backlog", "file"]).code,
+        0
+    );
+    let filed = atelier(&root, "p1", &["new", "Say hello"]);
+    assert_eq!(filed.code, 0, "{}", filed.stderr);
+    assert!(!filed.stdout.contains("ready"), "{}", filed.stdout);
+    let path = wrote(&filed.stdout).pop().unwrap();
+    let id = path.split('/').nth(2).unwrap().to_string();
+    assert_eq!(front(&read(&root, &path), "status"), "open");
+    shell(&root, &then(&filed.stdout));
 
-    // Several IDs at once; one named twice is readied once.
-    let run = atelier(&root, "p1", &["ready", ID, "demo-b10c", ID, "--by", "ada"]);
-    assert_eq!(run.code, 0, "{}", run.stderr);
-    assert_eq!(wrote(&run.stdout), [item_path(ID), item_path("demo-b10c")]);
-    for id in [ID, "demo-b10c"] {
-        let text = read(&root, &item_path(id));
-        assert_eq!(front(&text, "status"), "ready");
-        let at = text.lines().find_map(|l| l.strip_prefix("  at: ")).unwrap();
-        assert!(chrono::DateTime::parse_from_rfc3339(at).is_ok(), "{at}");
-        assert!(text.contains("ready:\n  by: ada\n"));
-    }
-    assert!(run
-        .stdout
-        .contains(&format!("Made ready, as ada said: {ID}, demo-b10c.\n")));
-    // No commit, and nothing staged.
-    assert_eq!(head_and_index(&root), before);
-    let mut changed: Vec<String> = git(&root, &["diff", "--name-only"])
-        .lines()
-        .map(str::to_string)
-        .collect();
-    changed.sort();
-    let mut expected = vec![item_path(ID), item_path("demo-b10c")];
-    expected.sort();
-    assert_eq!(changed, expected);
+    // On a branch that has not merged it is proposed, and nobody starts it.
+    let refused = atelier(&root, "t1", &["start", &id]);
+    assert_eq!(refused.code, 1);
+    assert!(
+        refused.stderr.starts_with(&format!(
+            "No item {id} is on the base branch main or on a branch named {id}. Nothing changed.\n"
+        )),
+        "{}",
+        refused.stderr
+    );
+    let listed = atelier(&root, "t1", &["list", "--proposed"]).stdout;
+    assert!(
+        listed.contains(&format!(
+            "{id} (open, medium, on backlog/file): Say hello\n"
+        )),
+        "{listed}"
+    );
+
+    assert_eq!(atelier(&root, "p1", &["submit"]).code, 0);
+    let merged = atelier(&root, "p1", &["merge"]);
+    assert_eq!(merged.code, 0, "{}", merged.stderr);
+    off_base(&root);
+    let shown = atelier(&root, "t1", &["show", &id]).stdout;
+    assert!(shown.contains("\nStatus: open, can start now\n"), "{shown}");
+    assert!(!shown.contains("ready"), "{shown}");
+
+    // Started with nothing between, and the log holds no go-ahead.
+    let started = atelier(&root, "t1", &["start", &id]);
+    assert_eq!(started.code, 0, "{}", started.stderr);
+    let log = atelier(&root, "t1", &["log", &id]).stdout;
+    assert_eq!(log.lines().count(), 1, "{log}");
+    assert!(
+        log.ends_with(&format!(" {id} start t1 open -> building\n")),
+        "{log}"
+    );
 }
 
 #[test]
-fn ready_writes_nothing_when_any_named_id_is_unknown_or_not_a_draft() {
-    let scratch = Scratch::new(&[(ID, "draft"), ("demo-r3dy", "ready"), ("demo-d0ne", "done")]);
+fn ready_is_refused_for_an_item_as_for_a_mission_and_no_help_or_status_names_it() {
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
-    write_mission(&root, MISSION, "ready");
+    write_mission(&root, MISSION, "open");
     commit_all(&root, "Plan");
-    let run = atelier(
-        &root,
-        "p1",
-        &[
-            "ready",
-            ID,
-            "demo-zzzz",
-            "demo-r3dy",
-            MISSION,
-            "not-an-id!",
-            "demo-d0ne",
-            "--by",
-            "s",
-        ],
-    );
-    assert_eq!(run.code, 1);
-    assert_eq!(
-        run.stderr,
-        "`atelier ready` refused; nothing changed.\n  \
-         demo-zzzz: no item or mission has this ID in this checkout or on a branch\n  \
-         not-an-id!: no item or mission has this ID in this checkout or on a branch\n  \
-         demo-m1ss: it is a mission, and a mission needs no go-ahead: its plan reaches the \
-         base once two plan reviews approve it, and its items are made ready one by one\n  \
-         demo-r3dy: it is ready, and `atelier ready` readies a draft\n  \
-         demo-d0ne: it is done, and `atelier ready` readies a draft\n\
-         Run it again with only the drafts to make ready.\n"
-    );
-    assert_eq!(git(&root, &["status", "--porcelain", "-uall"]), "");
-
-    // `--by` is required, and may not be empty.
-    for args in [&["ready", ID][..], &["ready", ID, "--by", ""]] {
+    for args in [
+        &["ready", ID][..],
+        &["ready", MISSION],
+        &["ready", ID, "--by", "s"],
+        &["ready"],
+        &["ready", "--help"],
+    ] {
         let run = atelier(&root, "p1", args);
-        assert_eq!(run.code, 2, "{args:?}");
-        assert!(run.stderr.contains("--by"), "{}", run.stderr);
+        assert_eq!(run.code, 1, "{args:?}: {}", run.stdout);
+        assert_eq!(
+            run.stderr,
+            "`atelier ready` refused; nothing changed.\nItems need no go-ahead, and nor does a \
+             mission: `atelier start <id>` takes any open item that is on the base and whose \
+             blockers are done, and a mission is agreed when its plan merges.\n",
+            "{args:?}"
+        );
     }
     assert_eq!(git(&root, &["status", "--porcelain", "-uall"]), "");
+
+    let help = atelier(&root, "p1", &["--help"]).stdout;
+    let commands = help
+        .lines()
+        .filter_map(|line| line.strip_prefix("  ")?.split_whitespace().next());
+    for command in commands.filter(|word| word.chars().all(|c| c.is_ascii_lowercase())) {
+        assert_ne!(command, "ready", "{help}");
+        let shown = atelier(&root, "p1", &[command, "--help"]).stdout;
+        assert!(!shown.contains("atelier ready"), "{shown}");
+        assert!(!shown.contains("--ready"), "{shown}");
+        assert!(!shown.contains("draft"), "{shown}");
+    }
+    let status = atelier(&root, "p1", &["status"]).stdout;
+    assert!(!status.contains("ready"), "{status}");
+}
+
+#[test]
+fn an_old_records_status_is_respelled_only_by_a_command_that_changes_it() {
+    let scratch = Scratch::new(&[(ID, "draft"), ("demo-r3dy", "ready")]);
+    let root = scratch.root();
+    let ready = item_path("demo-r3dy");
+    let readied = read(&root, &ready).replace(
+        "ready: null",
+        "ready:\n  by: ada\n  at: 2026-11-10T09:00:00Z",
+    );
+    fs::write(root.join(&ready), readied).unwrap();
+    commit_all(&root, "As written before items were open");
+
+    for id in [ID, "demo-r3dy"] {
+        let before = read(&root, &item_path(id));
+        // A `set` to what it says already changes nothing.
+        let run = atelier(&root, "p1", &["set", id, "--priority", "high"]);
+        assert_eq!(run.code, 0, "{}", run.stderr);
+        assert_eq!(read(&root, &item_path(id)), before);
+        let shown = atelier(&root, "p1", &["show", id]).stdout;
+        assert!(shown.contains("\nStatus: open, can start now\n"), "{shown}");
+        assert_eq!(
+            shown.contains("\nMade ready by ada at 2026-11-10 09:00:00 +00:00\n"),
+            id != ID,
+            "{shown}"
+        );
+        assert!(!shown.contains("Not made ready"), "{shown}");
+    }
+    let run = atelier(&root, "p1", &["set", "demo-r3dy", "--priority", "low"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let text = read(&root, &ready);
+    assert_eq!(front(&text, "status"), "open");
+    assert!(text.contains("ready:\n  by: ada\n"), "{text}");
 }
 
 /// A remote `origin`, a bare repository holding the base, which the
@@ -546,7 +591,7 @@ fn with_remote(scratch: &Scratch) -> std::path::PathBuf {
 
 #[test]
 fn status_names_each_record_change_not_committed_and_each_commit_not_pushed() {
-    let scratch = Scratch::new(&[(ID, "draft")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     let remote = with_remote(&scratch);
     let run = atelier(&root, "p1", &["start", "--backlog", "plan"]);
@@ -560,7 +605,8 @@ fn status_names_each_record_change_not_committed_and_each_commit_not_pushed() {
         git(&remote, &["rev-parse", "backlog/plan"]),
         git(&root, &["rev-parse", "main"])
     );
-    assert_eq!(atelier(&root, "p1", &["ready", ID, "--by", "s"]).code, 0);
+    let set = atelier(&root, "p1", &["set", ID, "--priority", "low"]);
+    assert_eq!(set.code, 0, "{}", set.stderr);
     let new = atelier(&root, "p1", &["new", "Say goodbye"]);
     let added = wrote(&new.stdout).pop().unwrap();
     // Not a record: a change outside them.
@@ -617,9 +663,9 @@ fn status_names_each_record_change_not_committed_and_each_commit_not_pushed() {
 }
 
 #[test]
-fn start_needs_the_items_mission_agreed_and_ready_refuses_a_mission() {
+fn a_mission_stored_as_draft_is_proposed_so_it_cannot_be_led_and_its_items_cannot_start() {
     // An old `draft` on the base is proposed: nobody starts its items.
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     write_mission(&root, MISSION, "draft");
     join_mission(&root, ID, MISSION);
@@ -640,24 +686,18 @@ fn start_needs_the_items_mission_agreed_and_ready_refuses_a_mission() {
     let status = atelier(&root, "t1", &["status"]).stdout;
     assert!(
         status.ends_with(
-            "1 ready item cannot start yet: 1 is in a mission that is dropped or not agreed. \
-             See it with: atelier list\nNo ready item can start now.\n"
+            "1 open item cannot start yet: 1 is in a mission that is dropped or not agreed. \
+             See it with: atelier list\nNo open item can start now.\n"
         ),
         "{status}"
     );
-    // A mission needs no go-ahead, and `ready` refuses one.
+    // It shows as proposed, and nobody leads it.
+    let shown = atelier(&root, "t1", &["show", MISSION]).stdout;
+    assert!(shown.contains("\nStatus: proposed\n"), "{shown}");
     git(&root, &["switch", "-q", "-c", "backlog/go", "main"]);
-    let refused = atelier(&root, "p1", &["ready", MISSION, "--by", "s"]);
-    assert_eq!(refused.code, 1);
-    assert_eq!(
-        refused.stderr,
-        format!(
-            "`atelier ready` refused; nothing changed.\n  {MISSION}: it is a mission, and a \
-             mission needs no go-ahead: its plan reaches the base once two plan reviews approve \
-             it, and its items are made ready one by one\nRun it again with only the drafts to \
-             make ready.\n"
-        )
-    );
+    let lead = atelier(&root, "l1", &["lead", MISSION]);
+    assert_eq!(lead.code, 1);
+    assert!(lead.stderr.ends_with(SKIP), "{}", lead.stderr);
     assert_eq!(git(&root, &["status", "--porcelain"]), "");
     off_base(&root);
 
@@ -674,21 +714,71 @@ fn start_needs_the_items_mission_agreed_and_ready_refuses_a_mission() {
 }
 
 #[test]
-fn status_on_the_base_lists_only_what_can_start_and_counts_the_rest_by_cause() {
-    let scratch = Scratch::new(&[("demo-a1aa", "ready"), ("demo-c3cc", "draft")]);
+fn status_names_the_ten_most_urgent_that_can_start_and_a_leads_own_items_whole() {
+    let scratch = Scratch::new(&[]);
     let root = scratch.root();
-    write_item(&root, "demo-b2bb", "ready", &[], &["demo-c3cc"], "");
-    write_item(&root, "demo-d4dd", "ready", &[], &[], "");
+    write_mission(&root, MISSION, "open");
+    let ids: Vec<String> = (0..10).map(|n| format!("demo-i{n:03}")).collect();
+    for id in &ids {
+        write_item(&root, id, "open", &[], &[], "");
+        join_mission(&root, id, MISSION);
+    }
+    commit_all(&root, "Plan ten");
+    // Ten can start: all are named, and no line counts more.
+    let status = atelier(&root, "t1", &["status"]).stdout;
+    assert_eq!(status.matches(" (high): Say hello").count(), 10, "{status}");
+    assert!(!status.contains(" more: "), "{status}");
+
+    // Two more, the first by priority though not by ID.
+    for id in ["demo-z998", "demo-z999"] {
+        write_item(&root, id, "open", &[], &[], "");
+        join_mission(&root, id, MISSION);
+    }
+    let path = root.join(item_path("demo-z999"));
+    let urgent = fs::read_to_string(&path)
+        .unwrap()
+        .replace("priority: high", "priority: critical");
+    fs::write(&path, urgent).unwrap();
+    commit_all(&root, "Plan two more");
+    let mut listed = "Can start now:\n  demo-z999 (critical): Say hello\n".to_string();
+    for id in &ids[..9] {
+        listed += &format!("  {id} (high): Say hello\n");
+    }
+    listed += "  and 2 more: atelier list --startable\n";
+    let status = atelier(&root, "t1", &["status"]).stdout;
+    assert!(status.contains(&listed), "{status}");
+    // The flag it names lists them all.
+    let all = atelier(&root, "t1", &["list", "--startable"]).stdout;
+    assert_eq!(all.matches("can start now").count(), 12, "{all}");
+
+    // The lead of their mission still sees each of them.
+    assert_eq!(planned(&root, "lead1", &["lead", MISSION]).code, 0);
+    let status = atelier(&root, "lead1", &["status"]).stdout;
+    let (general, led) = status.split_once("You lead mission").unwrap();
+    assert!(general.contains(&listed), "{status}");
+    assert_eq!(
+        led.matches(", can start now): Say hello").count(),
+        12,
+        "{status}"
+    );
+}
+
+#[test]
+fn status_on_the_base_lists_only_what_can_start_and_counts_the_rest_by_cause() {
+    let scratch = Scratch::new(&[("demo-a1aa", "open"), ("demo-c3cc", "dropped")]);
+    let root = scratch.root();
+    write_item(&root, "demo-b2bb", "open", &[], &["demo-c3cc"], "");
+    write_item(&root, "demo-d4dd", "open", &[], &[], "");
     write_mission(&root, MISSION, "draft");
     join_mission(&root, "demo-d4dd", MISSION);
     commit_all(&root, "Plan");
 
-    let others = "2 other ready items cannot start yet: 1 waits on a blocker that is not done, \
+    let others = "2 other open items cannot start yet: 1 waits on a blocker that is not done, \
                   1 is in a mission that is dropped or not agreed. See them with: atelier list\n";
     assert_eq!(
         atelier(&root, "t1", &["status"]).stdout,
         format!(
-            "{NO_HOOKS}You are thread t1, on branch {SCRATCH}, which is no item's.\nReady to start:\n  \
+            "{NO_HOOKS}You are thread t1, on branch {SCRATCH}, which is no item's.\nCan start now:\n  \
              demo-a1aa (high): Say hello\n{others}{MAY_START}"
         )
     );
@@ -702,13 +792,13 @@ fn status_on_the_base_lists_only_what_can_start_and_counts_the_rest_by_cause() {
     assert_eq!(atelier(&root, "t1", &["start", "demo-a1aa"]).code, 0);
     let base = scratch.worktree("base");
     git(&base, &["switch", "-q", "main"]);
-    let count = "2 ready items cannot start yet: 1 waits on a blocker that is not done, \
+    let count = "2 open items cannot start yet: 1 waits on a blocker that is not done, \
                  1 is in a mission that is dropped or not agreed. See them with: atelier list\n";
     assert_eq!(
         atelier(&base, "t2", &["status"]).stdout,
         format!(
             "{NO_HOOKS}You are thread t2, on the base branch main.\n{count}Held by other \
-             threads:\n  demo-a1aa (building, held by t1): Say hello\nNo ready item can start now.\n"
+             threads:\n  demo-a1aa (building, held by t1): Say hello\nNo open item can start now.\n"
         )
     );
     assert_eq!(
@@ -833,7 +923,7 @@ fn a_start_new_stopped_before_its_branch_leaves_no_branch_and_no_item() {
     let status = atelier(&root, "t1", &["status"]).stdout;
     assert_eq!(
         status,
-        format!("{NO_HOOKS}You are thread t1, on branch {SCRATCH}, which is no item's.\nNothing is ready to start.\n")
+        format!("{NO_HOOKS}You are thread t1, on branch {SCRATCH}, which is no item's.\nNothing is open to start.\n")
     );
 }
 
@@ -857,7 +947,7 @@ fn the_printed_commit_works_from_a_subdirectory_and_with_paths_a_shell_would_spl
     // A backlog branch checked out at a path with a space, with an
     // uncommitted mission document whose name has a space and a quote;
     // `status` is run from a directory under it.
-    let scratch = Scratch::new(&[(ID, "draft")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     let base = scratch.dir.path().join("base copy");
     git(
@@ -875,7 +965,7 @@ fn the_printed_commit_works_from_a_subdirectory_and_with_paths_a_shell_would_spl
     write_mission(&base, MISSION, "open");
     join_mission(&base, ID, MISSION);
     commit_all(&base, "Plan");
-    let run = atelier(&base, "p1", &["ready", ID, "--by", "s"]);
+    let run = atelier(&base, "p1", &["set", ID, "--priority", "low"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     shell(&base, &then(&run.stdout));
     let document = format!(".atelier/missions/{MISSION}/design notes 'v2'.md");
@@ -955,11 +1045,11 @@ fn tip(root: &Path, rev: &str) -> String {
 
 #[test]
 fn drop_puts_its_reason_first_in_the_report_and_needs_a_reason_and_a_record_not_done() {
-    let scratch = Scratch::new(&[(ID, "ready"), ("demo-d0ne", "done")]);
+    let scratch = Scratch::new(&[(ID, "open"), ("demo-d0ne", "done")]);
     let root = scratch.root();
     // The item has a Report with text and Responses to a finding of its review.
     let report = "It half works.\n\n### Responses\n\n- 1-aaaa.1: fixed in abc1234\n";
-    write_item(&root, ID, "ready", &[], &[], report);
+    write_item(&root, ID, "open", &[], &[], report);
     let review = format!(
         "---\nschema: atelier.review\nschema_version: 3\nround: 1\ncommit: abc1234\n\
          reviewers:\n- r1\nmodel: null\nverdict: changes\ncreated_at: 2026-11-10T09:00:00Z\n---\n\
@@ -1013,7 +1103,7 @@ fn drop_puts_its_reason_first_in_the_report_and_needs_a_reason_and_a_record_not_
         assert_eq!(run.code, 1);
         assert!(
             run.stderr.starts_with(&format!(
-                "{id} is {status}, and `atelier drop` runs on an item that is draft, ready, \
+                "{id} is {status}, and `atelier drop` runs on an item that is open, \
                  building, in review, changes requested, approved. Nothing changed.\n"
             )),
             "{}",
@@ -1026,7 +1116,7 @@ fn drop_puts_its_reason_first_in_the_report_and_needs_a_reason_and_a_record_not_
 #[test]
 fn a_dropped_mission_changes_no_item_and_start_on_one_says_it_was_dropped() {
     const STARTED: &str = "demo-st4r";
-    let scratch = Scratch::new(&[(ID, "ready"), (STARTED, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open"), (STARTED, "open")]);
     let root = scratch.root();
     write_mission(&root, MISSION, "ready");
     join_mission(&root, ID, MISSION);
@@ -1051,7 +1141,7 @@ fn a_dropped_mission_changes_no_item_and_start_on_one_says_it_was_dropped() {
     );
     assert_eq!(read(&root, &item_path(ID)), item);
 
-    // Neither a ready item nor a started one is started, or taken over.
+    // Neither an open item nor a started one is started, or taken over.
     for id in [ID, STARTED] {
         let run = atelier(&root, "t2", &["start", id]);
         assert_eq!(run.code, 1, "{id}");
@@ -1078,7 +1168,7 @@ fn a_dropped_mission_changes_no_item_and_start_on_one_says_it_was_dropped() {
 
 #[test]
 fn a_started_item_is_dropped_on_its_branch_and_then_refused_everywhere_with_its_reason() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     let work = scratch.worktree("work");
     assert_eq!(atelier(&work, "t1", &["start", ID]).code, 0);
@@ -1196,7 +1286,7 @@ fn a_started_item_is_dropped_on_its_branch_and_then_refused_everywhere_with_its_
 #[test]
 fn a_terminal_status_on_the_base_wins_over_a_branch_record_that_does_not_parse() {
     for terminal in ["dropped", "done"] {
-        let scratch = Scratch::new(&[(ID, "ready")]);
+        let scratch = Scratch::new(&[(ID, "open")]);
         let root = scratch.root();
         let work = scratch.worktree("work");
         assert_eq!(atelier(&work, "t1", &["start", ID]).code, 0);
@@ -1371,7 +1461,7 @@ fn an_item_only_on_its_branch_is_dropped_with_its_definition_and_not_its_reviews
 
 #[test]
 fn close_ends_an_item_with_no_branch_with_its_result_and_names_merge_for_a_started_one() {
-    let scratch = Scratch::new(&[(ID, "ready"), ("demo-st4r", "ready"), ("demo-d0ne", "done")]);
+    let scratch = Scratch::new(&[(ID, "open"), ("demo-st4r", "open"), ("demo-d0ne", "done")]);
     let root = scratch.root();
     assert_eq!(
         atelier(&scratch.worktree("work"), "t1", &["start", "demo-st4r"]).code,
@@ -1402,7 +1492,7 @@ fn close_ends_an_item_with_no_branch_with_its_result_and_names_merge_for_a_start
     let run = planned(&root, "p1", &["close", "demo-d0ne", "Again"]);
     assert_eq!(run.code, 1);
     assert!(run.stderr.starts_with(
-        "demo-d0ne is done, and `atelier close` runs on an item that is draft, ready. Nothing changed.\n"
+        "demo-d0ne is done, and `atelier close` runs on an item that is open. Nothing changed.\n"
     ));
     assert_eq!(read(&root, &item_path(ID)), before);
 
@@ -1590,8 +1680,7 @@ fn a_mission_goes_from_its_branch_through_two_plan_reviews_and_its_items_to_clos
         &["show", &format!("main:{}", mission_path(&mission))],
     );
     assert_eq!(front(&text, "status"), "open");
-    // Agreed, its items are made ready one by one, with no go for it.
-    plan(&root, &["ready", &a, "--by", "ada"]);
+    // Agreed, its items start with nothing between.
 
     // The item's work, through review to its merge.
     let work = scratch.worktree("work");
@@ -1615,14 +1704,14 @@ fn a_mission_goes_from_its_branch_through_two_plan_reviews_and_its_items_to_clos
     // Planning goes on from the base the merge left.
     off_base(&root);
 
-    // The other item is a draft and the Result empty: close lists both.
+    // The other item is open and the Result empty: close lists both.
     let run = planned(&root, "p1", &["close", &mission]);
     assert_eq!(run.code, 1);
     assert_eq!(
         run.stderr,
         format!(
             "`atelier close {mission}` refused; nothing changed.\nTo close it:\n  [ ] {b} is done \
-             or dropped (it is draft)\n  [ ] Result: written under `## Result`\nThen: atelier \
+             or dropped (it is open)\n  [ ] Result: written under `## Result`\nThen: atelier \
              close {mission}\n{SKIP}"
         )
     );
@@ -1652,7 +1741,7 @@ fn a_mission_goes_from_its_branch_through_two_plan_reviews_and_its_items_to_clos
 
 #[test]
 fn review_of_a_mission_opens_a_plan_review_and_its_verdict_commits_only_that_file() {
-    let scratch = Scratch::new(&[(ID, "draft")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     write_mission(&root, MISSION, "draft");
     join_mission(&root, ID, MISSION);
@@ -1710,7 +1799,7 @@ fn review_of_a_mission_opens_a_plan_review_and_its_verdict_commits_only_that_fil
         format!("You are a reviewer of the plan of mission {MISSION} (thread r1), round 1.\n"),
         "\n## Outcome\n\nGreetings.\n".to_string(),
         format!("Its other documents:\n  .atelier/missions/{MISSION}/design.md\n"),
-        format!("Its items:\n  {} (draft): Say hello\n", item_path(ID)),
+        format!("Its items:\n  {} (open): Say hello\n", item_path(ID)),
         format!("Your review file: {file}\n"),
         "  atelier verdict changes --model <your model>   if the file holds an open fix-now finding\n".into(),
         "  atelier verdict approve --model <your model>   if it holds none\n".into(),
@@ -1804,7 +1893,7 @@ fn review_of_a_mission_opens_a_plan_review_and_its_verdict_commits_only_that_fil
 
 #[test]
 fn a_plan_review_shows_the_plan_as_its_commit_holds_it_and_names_what_is_not_committed() {
-    let scratch = Scratch::new(&[(ID, "draft")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     write_mission(&root, MISSION, "draft");
     join_mission(&root, ID, MISSION);
@@ -1829,7 +1918,7 @@ fn a_plan_review_shows_the_plan_as_its_commit_holds_it_and_names_what_is_not_com
         format!("Review the plan as commit {} holds it", &head[..7]),
         "\n## Outcome\n\nGreetings.\n".to_string(),
         format!(
-            "Its other documents:\n  {design}\nIts items:\n  {} (draft): Say hello\n",
+            "Its other documents:\n  {design}\nIts items:\n  {} (open): Say hello\n",
             item_path(ID)
         ),
         format!(
@@ -1870,12 +1959,12 @@ fn a_plan_review_shows_the_plan_as_its_commit_holds_it_and_names_what_is_not_com
 
     // An item of the plan whose record here does not parse is named, and the
     // brief still reads the commit.
-    let broken = read(&root, &item_path(ID)).replace("status: draft", "status: broken");
+    let broken = read(&root, &item_path(ID)).replace("status: open", "status: broken");
     fs::write(root.join(item_path(ID)), broken).unwrap();
     let unread = atelier(&root, "r1", &["review", MISSION]);
     assert_eq!(unread.code, 0, "{}", unread.stderr);
     for shown in [
-        format!("  {} (draft): Say hello\n", item_path(ID)),
+        format!("  {} (open): Say hello\n", item_path(ID)),
         format!(
             "this review does not cover those changes: {}\n",
             item_path(ID)
@@ -1913,7 +2002,7 @@ fn two_blind_plan_reviews_each_commit_their_file_and_merge_counts_only_what_stil
     let root = scratch.root();
     git(&root, &["switch", "-q", "-c", MISSION, "main"]);
     write_mission(&root, MISSION, "open");
-    write_item(&root, ID, "draft", &[], &[], "");
+    write_item(&root, ID, "open", &[], &[], "");
     join_mission(&root, ID, MISSION);
     commit_all(&root, "Plan");
     let reviewed = tip(&root, "HEAD");
@@ -2056,7 +2145,7 @@ fn approved_plan(scratch: &Scratch) -> String {
         "Shape\n",
     )
     .unwrap();
-    write_item(&root, ID, "draft", &[], &[], "");
+    write_item(&root, ID, "open", &[], &[], "");
     join_mission(&root, ID, MISSION);
     commit_all(&root, "Plan");
     let commit = tip(&root, "HEAD");
@@ -2320,7 +2409,7 @@ fn an_agreed_missions_record_changes_merge_on_check_and_its_plan_needs_two_revie
 
 #[test]
 fn an_items_branch_that_changes_a_plan_does_not_merge_on_its_code_review() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     write_mission(&root, MISSION, "open");
     join_mission(&root, ID, MISSION);
