@@ -376,7 +376,8 @@ fn dropped_copy(located: &Located, why: &str) -> Item {
 
 /// Names each other item that the branch of `id`, here or on the remote as
 /// fetched, added and the base does not hold, since dropping `id` leaves
-/// them on that branch.
+/// them on that branch. One on both is named from the copy the reader
+/// reads: the remote's where it is strictly ahead, else the local one.
 fn added_there(repo: &mut Repo, id: &str) -> Result<String> {
     let (root, base_tip) = (repo.root.clone(), repo.base_tip.clone());
     let branch = repo.branch_of(id);
@@ -386,7 +387,12 @@ fn added_there(repo: &mut Repo, id: &str) -> Result<String> {
     }
     if let Some(remote) = repo.remote() {
         if let Some(tip) = atelier_core::git::remote_tip(&root, remote, &branch)? {
-            tips.push((format!("{remote}/{branch}"), tip));
+            let ahead = match tips.first() {
+                Some((_, local)) => *local != tip && crate::git::is_ancestor(&root, local, &tip)?,
+                None => false,
+            };
+            let at = if ahead { 0 } else { tips.len() };
+            tips.insert(at, (format!("{remote}/{branch}"), tip));
         }
     }
     let mut added = BTreeMap::new();

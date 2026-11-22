@@ -263,6 +263,37 @@ fn a_drop_names_each_item_the_branch_added_and_the_command_that_brings_it() {
 }
 
 #[test]
+fn a_drop_names_a_filed_item_as_the_newer_of_the_branchs_two_copies_has_it() {
+    let hub = Hub::new(&[(ID, "ready")]);
+    let a = hub.clone("a");
+    working(&hub, &a);
+    write_item(&a, "demo-f1ed", "draft", &[], &[], "");
+    git(&a, &["add", "-A"]);
+    git(&a, &["commit", "-qm", "File"]);
+    git(&a, &["push", "-q", "origin", ID]);
+    // This clone's branch is there; then another clone rewrites what it filed.
+    let b = hub.clone("b");
+    git(&b, &["fetch", "-q", "origin"]);
+    git(&b, &["branch", "-q", ID, &format!("origin/{ID}")]);
+    let path = a.join(item_path("demo-f1ed"));
+    let text = fs::read_to_string(&path).unwrap();
+    fs::write(
+        &path,
+        text.replace("title: Say hello", "title: Say goodbye"),
+    )
+    .unwrap();
+    git(&a, &["commit", "-qam", "Retitle"]);
+    git(&a, &["push", "-q", "origin", ID]);
+    git(&b, &["fetch", "-q", "origin"]);
+
+    let run = dropping(&hub, &b);
+    let named = format!(
+        "  demo-f1ed: Say goodbye\n    git checkout origin/{ID} -- .atelier/items/demo-f1ed\n"
+    );
+    assert!(run.stdout.contains(&named), "{}", run.stdout);
+}
+
+#[test]
 fn an_item_only_on_its_branch_is_dropped_on_a_backlog_branch_with_its_definition() {
     let scratch = Scratch::new(&[]);
     let root = scratch.root();
