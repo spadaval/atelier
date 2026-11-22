@@ -26,9 +26,9 @@ Today `GET /api/repos/{repo}/missions/{id}/history` returns 404, and `atelier_co
 ## Done when
 
 - [ ] `crates/atelier-core/src/log.rs` emits mission-plan lifecycle actions:
-  - `Happened::Plan` when a mission record first appears (attributed to its first planner, or `-` if none).
-  - `Happened::PlanMerge` when a first-parent merge onto `base` brings a mission record onto `base` as open/agreed (or merges a plan amendment).
-  - `crates/atelier-cli/src/history.rs`, `crates/atelier-cli/tests/log.rs`, and `docs/design.md` ("The log") format, test, and document both actions.
+  - `Happened::Plan` (printed as `plan`) when a mission record first appears as a new plan (`status: open` without a pre-existing `lead`/`Result`, avoiding falsely dating pre-cutover closed/led missions converted in bulk), attributed to its first planner (or `-` if none).
+  - `Happened::PlanMerge` (printed as `plan-merge` — distinct from `merge` so `garden.md`'s `$4 == "merge"` item counter never miscounts merged plans as items) when a first-parent merge onto `base` brings a mission record onto `base` as open/agreed (or merges a plan amendment).
+  - `crates/atelier-cli/src/history.rs`, `crates/atelier-cli/tests/log.rs`, and `docs/design.md` ("The log") format, test (including proving `plan-merge` is printed rather than `merge`), and document both actions (noting that pre-cutover records have no v3 record history before conversion).
 - [ ] `atelier_core::log` (or Desk's wrapper calling it via `Repo::open_committed`) enforces a bounded execution deadline (15s) and caches mission history by repo ref tips.
 - [ ] `GET /api/repos/{repo}/missions/{id}/history` is implemented in `crates/atelier-desk/src/server.rs`, returning the mission's and its items' actions from `atelier_core::log::history` (404 for unknown repo or unknown mission ID, 400 for invalid ID), with typed response structs in `crates/atelier-desk/src/api.rs` (including timestamp, commit, record id, action, thread, detail, and skips) and regenerated TypeScript types in `desk/src/api/` (`cargo nextest run -p atelier-desk --test types` passes).
 - [ ] `GET /api/history` and `GET /api/launch` keep their existing commit-subject reader and JSON contract unchanged so `t3-extension/fixture-desk.mjs` and pre-cutover history continue working with zero edits under `t3-extension/`. File a follow-up item on a backlog branch (or note in Report for the lead to file) to migrate `/api/history` and `/api/launch` once `t3-extension/` is next opened.
