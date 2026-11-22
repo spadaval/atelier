@@ -55,6 +55,7 @@ table says what it guards.
 | `kept-finding-wrong` | 1 | The lead, after round 2's reviewer kept a finding that is wrong on the facts and whose fix breaks a Done when example | Done on main with both examples holding, and a ruling on record with its reason | 1 / 5 | 5 / 5 |
 | `kept-finding-right` | 1 | The same with the finding right, and the implementer's rebuttal confidently wrong | Both examples hold on main by the grader's own test | 0 / 5 | 5 / 5 |
 | `three-findings` | 1 | The implementer of an item in changes requested with three fix-now findings: one right, one true but not worth building (it needs exchange rates the repository lacks), one wrong on the facts | The right one is fixed by the grader's test, the costly one is not built, the wrong one is rebutted; the judge finds the costly one taken to the lead with a true reason | not run / 10 of 10 | not run / 10 of 10 |
+| `outside-problem` | 3 | The implementer of a refactor that must leave both commands' output as it is, and so runs `summary`, which adds a refund where the README says it subtracts one, outside the item's Scope | The item is done on main by an Atelier merge, and the judge finds a new item's record there that describes the planted problem, filed by any thread of the run | not run | not run |
 
 `three-findings` ran with the skill only, ten runs a cell, after
 atelier-hlsw's `not built` answer
@@ -324,7 +325,7 @@ mkdir -p /var/tmp/af-evals/bin && cp target/debug/atelier /var/tmp/af-evals/bin/
 export EVAL_ATELIER=/var/tmp/af-evals/bin/atelier-$sha
 run=evals/agent-factory/harness/run.py
 loop="loop loop-changes non-atelier-repo settle-within-authority \
-  kept-finding-wrong kept-finding-right three-findings lead-looks-trivial \
+  kept-finding-wrong kept-finding-right three-findings lead-looks-trivial outside-problem \
   lead-stalled-item done-when-conflict vacuous-test-review costly-hardening \
   overbuilt-generality overbuilt-layer overbuilt-robustness control-large control-lean \
   later-round-cosmetic later-round-wrong later-round-fix-wrong"
