@@ -463,7 +463,6 @@ pub fn plan_diff(
     (from, to): (&str, &str),
     items: bool,
 ) -> Result<Vec<String>> {
-    let own = format!("{}/", mission_dir(id));
     let mut found = Vec::new();
     let (before, after) = (repo.mission_at(from, id)?, repo.mission_at(to, id)?);
     match (&before, &after) {
@@ -471,17 +470,10 @@ pub fn plan_diff(
         (None, Some(_)) => found.push(format!("{} is added", mission_path(id))),
         (Some(_), None) => found.push(format!("{} is removed", mission_path(id))),
         (Some(before), Some(after)) => {
-            for heading in PLAN_SECTIONS {
-                let text =
-                    |dir: &MissionDir| dir.section(heading).map(str::trim).map(str::to_string);
-                if text(before) != text(after) {
-                    found.push(format!("its {heading}"));
-                }
-            }
+            let changed = changed_sections(before, after);
+            found.extend(changed.into_iter().map(|heading| format!("its {heading}")));
         }
     }
-    let notes = format!("{own}notes.md");
-    let reviews = format!("{own}reviews/");
     for path in git::changed(&repo.root, from, to)? {
         if let Some(rest) = path.strip_prefix(".atelier/items/") {
             let Some(item) = rest.split('/').next().filter(|_| items) else {
@@ -499,15 +491,28 @@ pub fn plan_diff(
             }
             continue;
         }
-        let other = path.starts_with(&own)
-            && path != mission_path(id)
-            && path != notes
-            && !path.starts_with(&reviews);
-        if other {
+        if is_plan_file(id, &path) {
             found.push(path);
         }
     }
     Ok(found)
+}
+
+/// The [`PLAN_SECTIONS`] that differ between a mission's versions.
+pub(crate) fn changed_sections(before: &MissionDir, after: &MissionDir) -> Vec<&'static str> {
+    let differs = |heading: &&str| {
+        before.section(heading).map(str::trim) != after.section(heading).map(str::trim)
+    };
+    PLAN_SECTIONS.into_iter().filter(differs).collect()
+}
+
+/// Whether `path` is a file of mission `id`'s plan beside its `mission.md`:
+/// any other in its directory but `notes.md` and its reviews.
+pub(crate) fn is_plan_file(id: &str, path: &str) -> bool {
+    let rest = path.strip_prefix(&format!("{}/", mission_dir(id)));
+    rest.is_some_and(|rest| {
+        rest != "mission.md" && rest != "notes.md" && !rest.starts_with("reviews/")
+    })
 }
 
 /// Why a plan review of the current round does not count toward a merge.
