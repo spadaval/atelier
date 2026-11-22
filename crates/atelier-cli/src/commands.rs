@@ -853,6 +853,7 @@ fn approved_needs(repo: &mut Repo, entries: &mut [Entry], items: &[Located]) -> 
 /// `<file>` exists. `start` stops between its commit and its branch
 /// (`ATELIER_TEST_HOLD_BEFORE_BRANCH`), and `merge` after reading what it
 /// checks (`ATELIER_TEST_HOLD_AFTER_READ`). Only debug builds have it.
+#[cfg_attr(not(debug_assertions), allow(unused_variables))]
 pub(crate) fn hold(variable: &str) {
     #[cfg(debug_assertions)]
     if let Some(release) = std::env::var_os(variable) {
