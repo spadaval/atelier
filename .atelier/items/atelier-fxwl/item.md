@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-fxwl
 title: Silence the unused-variable warning that every release build of atelier prints
-status: in_review
+status: approved
 mission: null
 labels: []
 priority: medium
