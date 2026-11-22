@@ -28,3 +28,14 @@ about the other. Each publishes its own verdict to the branch. Fix what they
 find, submit again for a new round, and run `atelier merge` once both
 reviewers of a round approve. The merge is the agreement; nobody says go
 after it.
+
+From round 2 on, reviewers check what changed and the findings carried, so
+commit each fix and keep other rewriting out of it.
+
+When two rounds in a row of one plan change split, one reviewer approving and
+the other asking for changes, stop: `submit` refuses another round. The same
+holds for an amendment, whose count starts at none. Bring the open findings
+to the human to rule, and write the ruling in the mission's `notes.md`. Then
+do as ruled: `ATELIER_SKIP="<ruling>" atelier merge`; or amend, commit, and
+`ATELIER_SKIP="<ruling>" atelier submit` for another round; or drop the
+change.

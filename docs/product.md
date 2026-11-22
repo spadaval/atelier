@@ -167,7 +167,7 @@ base the forge merged into.
 | `ready` | Nobody | `ready` | A thread runs `start` |
 | `building` | Implementer | `start` | Done when lines are ticked, the Report is written, and `submit` runs |
 | `in_review` | Reviewer | `submit` | The reviewer runs `verdict` |
-| `changes_requested` | Implementer | `verdict changes` | Each open fix-now finding is fixed, rebutted or answered not built, and `submit` runs |
+| `changes_requested` | Implementer | `verdict changes` | Each open fix-now finding is fixed, rebutted or answered not built, and `submit` runs, from round 3 on after the lead rules to fix |
 | `approved` | Implementer | `verdict approve` | The merge checks pass on the head, and `merge` runs; or the approval went stale, and `submit` runs again |
 | `done` | Nobody | The merge of its branch, or `close` | Never |
 | `dropped` | Nobody | `drop` | Never |
@@ -274,7 +274,7 @@ in the checkout that has the base out, it writes nothing and names the
 | --- | --- |
 | `status` | Who this thread is, what it holds, what each thing needs, and the next command. On the base with nothing held: the ready items `start` would accept now, one line counting the other ready items by what stops them, missions in progress and what waits on the human, which is not listed as ready. For a mission's lead, its mission, what each item needs, and what is disputed in it. |
 | `show <id>` | An item in full, with a summary of each review: its round, reviewer, model, the commit it reviewed and its verdict, and each finding's name, recommendation, state and title. A finding's text is in its review file. For a mission, the whole mission on one page: whether it is proposed, agreed, done or dropped, its outcome and criteria, its items grouped by status with who holds each and what blocks each, what is disputed in it as `list --disputed` gives it, and its reviews by round. Either says which ref the record was read from, and, for a fetched ref, how long ago the remote was fetched. |
-| `list` | With no flags, all open work on the base, grouped by mission and then by label, and apart from it what is proposed: missions on unmerged branches and record changes waiting to merge, each with its branch. Narrowed by `--ready`, `--blocked`, `--needs-human`, `--proposed`, `--mission <id>`, `--label <l>`, `--mine` and `--deferred`; `--done` shows finished missions and items instead. `--disputed` lists instead, across open and done items, each open fix-now finding answered `not built`, which waits on the lead, each finding whose Response is `rebutted` with what the next round made of it (kept, withdrawn, fixed, kept at defer or no action, or not yet reviewed), and each plan-review round whose reviewers gave different verdicts; `--mission <id>` narrows it. Nothing refuses or warns on any of them. |
+| `list` | With no flags, all open work on the base, grouped by mission and then by label, and apart from it what is proposed: missions on unmerged branches and record changes waiting to merge, each with its branch. Narrowed by `--ready`, `--blocked`, `--needs-human`, `--proposed`, `--mission <id>`, `--label <l>`, `--mine` and `--deferred`; `--done` shows finished missions and items instead. `--disputed` lists instead, across open and done items, each open fix-now finding answered `not built`, which waits on the lead, each finding whose Response is `rebutted` with what the next round made of it (kept, withdrawn, fixed, kept at defer or no action, or not yet reviewed), and each plan-review round whose reviewers gave different verdicts; `--mission <id>` narrows it. The listing refuses nothing; `submit` refuses another plan round after two split rounds in a row (see Review). |
 | `log` | The history of actions, read from Git, one line each and oldest first: when, the commit, which item or mission, the action, the thread where the record holds one, what changed, and any rule its commit skipped. For everything, one item, or one mission with its plan reviews and its items, and only actions `--since` a time. It adds nothing up. |
 | `check` | Validates every record. The Git hooks and CI run it. |
 
@@ -306,7 +306,7 @@ matter; `set` and the status commands write it.
 | Command | Behaviour |
 | --- | --- |
 | `start <id>` | On a ready item: creates branch `<id>` from the base, sets `building`, binds this thread as implementer, and pushes the branch where a remote is configured, which is the claim. On a started item: switches to its branch and takes it over. `start --new "<title>"` creates an item on a new branch already `building`, for work the human asked for directly. In the checkout that has the base out, `start` makes the branch without switching and prints the Git command that adds a worktree for it. |
-| `submit` | Checks every Done when line is ticked, the Report is written, and each open fix-now finding has a response; sets `in_review` and commits the item's directory; opens a new round; prints the reviewer's handoff line. Where a forge is configured it then pushes the branch and opens its pull request, so CI runs while the review does; a push or pull request that fails is a warning, and `merge` does it later. |
+| `submit` | Checks every Done when line is ticked, the Report is written, and each open fix-now finding has a response; sets `in_review` and commits the item's directory; opens a new round; prints the reviewer's handoff line. On a branch that proposes or changes a plan, it opens a round of plan review, and refuses to once the change's last two rounds split. Where a forge is configured it then pushes the branch and opens its pull request, so CI runs while the review does; a push or pull request that fails is a warning, and `merge` does it later. |
 | `merge` | Runs the checks below and merges the branch. With a forge, the forge merges the pull request, as a merge commit; without one, `merge` makes the merge commit and moves the base locally. If CI has not finished it waits for it, up to 9 minutes, then says "not yet" and is run again later. Its only flag is `--trivial "<why>"`, which skips review for a change whose correctness is evident from the diff and records the claim. |
 
 ### Reviewer
@@ -341,7 +341,11 @@ wrapped line that begins `#123` is text, not a heading. It
 gives the round of an item in review or with changes requested. A finding
 whose rebuttal a reviewer kept says the rebuttal has had its one try. A
 finding answered `not built` stops the merge until the lead rules, and
-`status` says how the lead rules. On
+`status` says how the lead rules. When round 3 or later asked for changes
+it says the 3-round cap is reached and gives the lead's rulings in place of
+`Then: atelier submit`, and the lead's `status` gives them too. On a branch
+that proposes or changes a plan it gives where that plan's review stands,
+and after two split rounds in a row the human's ruling as the way out. On
 an approved item it names, before `Then: atelier merge`, the merge checks the
 base's `config.toml` lists, which `merge` runs on the merged tree. It does not
 say when they last passed, since nothing records that.
@@ -473,7 +477,17 @@ record is committed on the base.
   definition, the diff, the Report with its validation, earlier rounds' open
   findings with the author's responses, and the branch's
   pull request where a forge is configured, where CI's result can be read.
-  It carries no author reasoning beyond the Report.
+  It carries no author reasoning beyond the Report. From round 2 on it puts
+  first what changed since the last round. Where the base was merged in
+  between, that diff names only the paths the branch changes. Where the last
+  round's commit is no longer in the branch's history, there is no such
+  diff, and the reviewer is asked to review the whole change.
+- **Three rounds, then the lead.** When round 3 or later asks for changes,
+  the implementer takes it to the mission's lead, or with no mission to the
+  thread that started it, before submitting again. The lead merges with
+  `ATELIER_SKIP="<ruling>"`, adjusts its Scope or Done when, drops it, or
+  rules to fix it, and then `submit` opens the next round. `status` says so;
+  `submit` does not enforce it.
 - **Recommendations.** Fix now, defer, or no action.
 - **A fix-now finding blocks the merge, and has three exits.** The
   implementer fixes it. Where it is wrong, the implementer rebuts it with a
@@ -504,9 +518,9 @@ record is committed on the base.
   way: it merges past the finding with its ruling as the skip's reason, has
   the implementer fix it, or moves the disputed work out of the item's
   Scope into an item of its own.
-- **The skill applies two of these rules:** a rebuttal's one try and the
-  fresh reviewer for a rebuttal. The tool refuses neither; `status` shows the
-  round and the one-try rule.
+- **The skill applies three of these rules:** a rebuttal's one try, the
+  fresh reviewer for a rebuttal and the 3-round cap. The tool refuses none;
+  `status` shows the round, the one-try rule and the cap.
 - **Deferred findings stay in their review file.** Merge creates no
   follow-up records. `list --deferred` shows the ones not yet settled, across
   done items, and the gardener settles each: `new --from` takes it into an
@@ -523,6 +537,20 @@ record is committed on the base.
   the other's; one that goes looking, with `show` or a fetch, can read a
   verdict already pushed, and that is accepted, since the tool's checks are
   nudges for trusted agents.
+- **A later plan round checks what changed.** From round 2 on, the brief
+  gives first the diff of the plan's own paths since the last round, or says
+  the plan is unchanged. On an amendment that diff has the items the
+  amendment edited, an edit it took back included, and not what the base
+  merged. The reviewer judges that and the carried findings, and blocks on
+  an unchanged part only for a serious defect that was missed, else
+  `defer`. Where the last round has no one commit in this history, the
+  reviewer gets the whole plan.
+- **Two split rounds, then the human.** A round splits when one reviewer
+  approves and another asks for changes. After two in a row on one plan
+  change, `submit` refuses another round, and `status` and `merge` say to
+  bring the open findings to the human. On their ruling the planner merges,
+  or amends and submits, with `ATELIER_SKIP="<ruling>"`, or drops the
+  change. An amendment counts only its own rounds, so it starts at none.
 
 ## Proof and validation
 

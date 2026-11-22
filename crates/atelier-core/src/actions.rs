@@ -442,6 +442,10 @@ pub fn approval(item: &ItemDir) -> Option<&ReviewFile> {
         .find(|r| r.name.round == latest && r.review.verdict == Some(Verdict::Approve))
 }
 
+/// The round from which changes requested go to the mission's lead, not
+/// straight into another round of review.
+pub const ROUND_CAP: u32 = 3;
+
 /// The sections of an item that a review approves along with the code.
 const REQUIREMENTS: [&str; 3] = ["Goal", "Done when", "Scope"];
 

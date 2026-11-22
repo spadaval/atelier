@@ -2,9 +2,10 @@
 //! <mission>` and a lead's `status` print: each rebuttal in an item's
 //! Responses with what the next round made of it, each round of a plan's
 //! review whose reviewers gave different verdicts, and each open fix-now
-//! finding answered `not built`, which waits on the lead. The first two
-//! are found, never enforced: nothing refuses or warns on one. The third
-//! `merge` holds until the lead rules.
+//! finding answered `not built`, which waits on the lead. Nothing refuses
+//! on a rebuttal, nor on one split round: two in a row end the review of a
+//! plan change (`plan::SPLITS`). The third `merge` holds until the lead
+//! rules.
 
 use crate::model::{
     FindingName, Now, Outcome, Recommendation, Response, ReviewName, Status, Thread, Verdict,

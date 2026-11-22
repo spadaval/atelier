@@ -5,7 +5,8 @@ use anyhow::{anyhow, Context, Result};
 use atelier_core::actions::{check, row, unmet, Action, Checkout, Facts, MissionFacts, STARTED};
 use atelier_core::forge::Github;
 use atelier_core::model::{validate_slug, Forge, MissionStatus, Named, Status};
-use atelier_core::records::{render_item, render_mission, validate_id};
+use atelier_core::plan::{approvals, Approvals};
+use atelier_core::records::{render_item, render_mission, validate_id, Problem, ReadError};
 use atelier_core::repo::{facts, item_dir, item_path, mission_path, planning, write_and_commit};
 use atelier_core::{
     annotate, annotate_all, entry, overview, refused, Done, Entry, Located, Refused, Repo,
@@ -109,6 +110,7 @@ fn orientation(repo: &mut Repo) -> Result<String> {
         }
         _ => None,
     };
+    let reviewing = plan_reviews(repo)?;
     let mut unsaved = unsaved(repo)?;
     // A stop of a mission this checkout holds dropped, until published.
     for id in repo.store().ids("missions")? {
@@ -129,10 +131,43 @@ fn orientation(repo: &mut Repo) -> Result<String> {
         &repo.base,
         kind,
         &overview,
+        &reviewing,
         &dropped,
         &unreached,
         &unsaved,
     ))
+}
+
+/// [`plans_standing`], or the record a commit holds that does not read:
+/// `status` says it and goes on, since it is where the fix is found.
+fn plan_reviews(repo: &mut Repo) -> Result<Result<Vec<Approvals>, Problem>> {
+    match plans_standing(repo) {
+        Ok(plans) => Ok(Ok(plans)),
+        Err(error) => match error.downcast::<ReadError>() {
+            Ok(ReadError::Record(problem)) => Ok(Err(problem)),
+            Ok(other) => Err(other.into()),
+            Err(error) => Err(error),
+        },
+    }
+}
+
+/// Where the review stands of each plan the checked-out records branch
+/// proposes or changes, as its HEAD holds them; a dropped one has none.
+fn plans_standing(repo: &mut Repo) -> Result<Vec<Approvals>> {
+    if records_branch(repo)?.is_none() {
+        return Ok(Vec::new());
+    }
+    let head = git::head(&repo.root)?;
+    let mut found = Vec::new();
+    for (id, on_base) in plans_here(repo, &head)?.0 {
+        let Some(dir) = repo.mission_at(&head, &id)? else {
+            continue;
+        };
+        if dir.mission.status != MissionStatus::Dropped {
+            found.push(approvals(repo, &id, &head, on_base)?);
+        }
+    }
+    Ok(found)
 }
 
 /// The record changes the checkout has not committed, as `check` lists
@@ -657,31 +692,18 @@ fn submit_records(repo: &mut Repo) -> Result<Outcome> {
 /// The missions whose plan the checked-out records branch proposes or
 /// changes, each with the round of plan review its submit opens, once the
 /// caller is written as a planner of each and that is committed; or the
-/// refusal of a plan dropped on its branch. A proposed plan's old `draft`
-/// is written `open`.
+/// refusal of a plan dropped on its branch, or of one whose review stops at
+/// the split rounds. A proposed plan's old `draft` is written `open`.
 fn planned_here(repo: &mut Repo) -> Result<Result<Vec<(String, u32)>, Outcome>> {
     let head = git::head(&repo.root)?;
-    let fork = git::run(&repo.root, &["merge-base", &repo.base_tip, &head])?;
-    let changed = git::changed_from_base(&repo.root, &repo.base_tip, &head)?;
-    let mut ids: Vec<String> = merge::plans_changed(repo, (&fork, &head), &changed)?
-        .into_iter()
-        .map(|(id, _, _)| id)
-        .collect();
-    // A plan on its own branch is submitted with nothing changed yet, as
-    // after `start --mission`.
-    let own = match repo.named() {
-        Some(Named::Record(id)) if !atelier_core::plan::agreed(repo, &id)? => Some(id),
-        _ => None,
-    };
-    if let Some(id) = own.as_ref().filter(|id| !ids.contains(id)) {
-        ids.insert(0, id.clone());
-    }
+    let (mut ids, own) = plans_here(repo, &head)?;
     let mut plans = Vec::new();
     let mut written = Vec::new();
     let mut messages = Vec::new();
     // A mission the branch removes has no record here to write.
-    ids.retain(|id| repo.root.join(mission_path(id)).exists());
-    for id in ids {
+    ids.retain(|(id, _)| repo.root.join(mission_path(id)).exists());
+    let mut reviewed = Vec::new();
+    for (id, on_base) in ids {
         let dir = repo.store().mission(&id)?;
         if own.as_deref() == Some(id.as_str()) {
             let facts = MissionFacts {
@@ -695,6 +717,7 @@ fn planned_here(repo: &mut Repo) -> Result<Result<Vec<(String, u32)>, Outcome>> 
             }
         }
         plans.push((id.clone(), next_round(&dir)));
+        reviewed.push(approvals(repo, &id, &head, on_base)?);
         let mut mission = dir.mission;
         let mut changed = false;
         if mission.status == MissionStatus::Draft && own.as_deref() == Some(id.as_str()) {
@@ -713,6 +736,14 @@ fn planned_here(repo: &mut Repo) -> Result<Result<Vec<(String, u32)>, Outcome>> 
             written.push((mission_path(&id), render_mission(&mission)));
         }
     }
+    let stopped: Vec<&Approvals> = reviewed.iter().filter(|plan| plan.stopped()).collect();
+    if !stopped.is_empty() {
+        let text = output::plan_split_refused(&reviewed);
+        let rules = stopped.iter().map(|plan| output::rule_plan_split(&plan.id));
+        if let Some(refused) = repo.skip.refuse(rules, text) {
+            return Ok(Err(refused.into()));
+        }
+    }
     if !written.is_empty() {
         let paths: Vec<&str> = written.iter().map(|(path, _)| path.as_str()).collect();
         let message = match messages.as_slice() {
@@ -722,6 +753,34 @@ fn planned_here(repo: &mut Repo) -> Result<Result<Vec<(String, u32)>, Outcome>> 
         write_and_commit(repo, &written, &paths, &message)?;
     }
     Ok(Ok(plans))
+}
+
+/// Missions whose plan a branch proposes or changes, each with whether it
+/// is agreed.
+type Plans = Vec<(String, bool)>;
+
+/// The missions whose plan the checked-out records branch at `head`
+/// proposes or changes, each with whether it is agreed, and the one whose
+/// own branch this is, while proposed.
+fn plans_here(repo: &mut Repo, head: &str) -> Result<(Plans, Option<String>)> {
+    let fork = git::run(&repo.root, &["merge-base", &repo.base_tip, head])?;
+    let changed = git::changed_from_base(&repo.root, &repo.base_tip, head)?;
+    let mut ids: Vec<(String, bool)> = merge::plans_changed(repo, (&fork, head), &changed)?
+        .into_iter()
+        .map(|(id, _, on_base)| (id, on_base))
+        .collect();
+    // A plan on its own branch is submitted with nothing changed yet, as
+    // after `start --mission`.
+    let own = match repo.named() {
+        Some(Named::Record(id)) if !atelier_core::plan::agreed(repo, &id)? => Some(id),
+        _ => None,
+    };
+    if let Some(id) = own.as_ref() {
+        if !ids.iter().any(|(listed, _)| listed == id) {
+            ids.insert(0, (id.clone(), false));
+        }
+    }
+    Ok((ids, own))
 }
 
 /// The round of plan review a submit of `dir`'s plan opens: the latest

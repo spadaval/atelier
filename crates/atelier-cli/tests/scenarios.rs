@@ -1267,7 +1267,7 @@ fn changes_in_round_1() -> (Scratch, String) {
 }
 
 #[test]
-fn status_shows_the_round_and_refuses_nothing_after_three_without_an_approval() {
+fn status_shows_the_round_and_at_three_waits_on_a_ruling_that_submit_does_not_enforce() {
     let (scratch, first) = changes_in_round_1();
     let root = scratch.root();
     let status = atelier(&root, "t1", &["status"]).stdout;
@@ -1281,25 +1281,21 @@ fn status_shows_the_round_and_refuses_nothing_after_three_without_an_approval() 
     let status = atelier(&root, "t1", &["status"]).stdout;
     assert!(
         status.contains("Status: changes requested in round 3\n")
-            && status.contains("\nTo return it to review:\n"),
+            && status.contains("\nTo return it to review:\n")
+            && status.contains("reached its 3-round cap")
+            && !status.contains("Then: atelier submit"),
         "{status}"
     );
     let base = scratch.worktree("base");
     let away = atelier(&base, "t1", &["status"]).stdout;
     assert!(
         away.contains(&format!(
-            "You hold:\n  {ID} (changes requested in round 3): Say hello\n"
+            "You hold:\n  {ID} (changes requested in round 3): Say hello\n    Round 3 reached the review cap: its mission's lead rules before it is submitted again.\n"
         )),
         "{away}"
     );
-    for said in [&status, &away] {
-        assert!(
-            !said.contains("escalat") && !said.contains("rounds have ended"),
-            "{said}"
-        );
-    }
 
-    // Submit opens round 4, whose reviewer and implementer see its number.
+    // Submit, unrefused, opens round 4, whose reviewer and implementer see its number.
     let head = git(&root, &["rev-parse", "--short", "HEAD"]);
     append(
         &root,

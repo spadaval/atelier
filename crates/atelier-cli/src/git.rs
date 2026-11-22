@@ -4,8 +4,8 @@
 
 use anyhow::{bail, Context, Result};
 pub use atelier_core::git::{
-    branch_tip, changed, checkout_of, current_branch, has_commit, head, is_ancestor, relayed, root,
-    run, uncommitted, untracked,
+    branch_tip, changed, changed_from_base, changed_on_branch, checkout_of, current_branch,
+    has_commit, head, is_ancestor, relayed, root, run, uncommitted, untracked,
 };
 use atelier_core::git::{git, listing, names, output, run_with, with_skips};
 use atelier_core::Skip;
@@ -98,17 +98,6 @@ pub fn commit_tree(
         args.extend(["-p", parent]);
     }
     run(repo, &args)
-}
-
-/// The paths the commit `head` changes against the commit `base`: since
-/// the two parted, as a pull request shows them.
-pub fn changed_from_base(repo: &Path, base: &str, head: &str) -> Result<Vec<String>> {
-    let range = format!("{base}...{head}");
-    let listed = listing(
-        repo,
-        &["diff", "--name-only", "-z", "--no-renames", &range, "--"],
-    )?;
-    Ok(names(&listed))
 }
 
 /// Creates the local branch `name` at `commit`, or returns `false` when a

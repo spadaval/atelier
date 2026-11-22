@@ -30,6 +30,13 @@ the reviewer, tell the implementer to fix it, and write the ruling in
 may instead change its Scope or Done when on its branch and file the rest
 as an item.
 
+An item whose round 3 or later asked for changes has reached the cap on
+automated review, and waits for your ruling. Read its open findings, then
+rule one of: merge it with `ATELIER_SKIP="<ruling>" atelier merge`, adjust
+its Scope or Done when, drop it, or have it fixed. Only once you rule to fix
+it does its implementer submit the next round; write that ruling in
+`notes.md`.
+
 ## Doing Less
 
 Where the work turns out much harder than the plan took it to be, you may

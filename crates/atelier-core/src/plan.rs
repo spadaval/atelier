@@ -9,7 +9,7 @@ use crate::model::{Item, Mission, MissionStatus, Named, Ready, Status};
 use crate::records::{put_first, validate, validate_id, ItemDir, MissionDir, Problem, ReviewFile};
 use crate::repo::{is_planning, item_dir, item_path, mission_dir, mission_path};
 use crate::skip::Refused;
-use crate::{git, say, Located, Repo};
+use crate::{git, say, split_rounds, Located, Repo};
 use anyhow::{anyhow, Result};
 use std::path::PathBuf;
 
@@ -487,14 +487,7 @@ pub fn plan_diff(
             let Some(item) = rest.split('/').next().filter(|_| items) else {
                 continue;
             };
-            // An item whose record at either commit does not read is
-            // counted.
-            let mut of_mission = |at: &str| {
-                repo.item_at(at, item).map_or(true, |dir| {
-                    dir.is_some_and(|d| d.item.mission.as_deref() == Some(id))
-                })
-            };
-            if of_mission(from) || of_mission(to) {
+            if of_mission(repo, id, item, (from, to)) {
                 found.push(path);
             }
             continue;
@@ -508,6 +501,100 @@ pub fn plan_diff(
         }
     }
     Ok(found)
+}
+
+/// Whether `item` is of mission `id` at the commit `from` or `to`. An item
+/// whose record at either does not read is counted.
+fn of_mission(repo: &mut Repo, id: &str, item: &str, (from, to): (&str, &str)) -> bool {
+    [from, to].into_iter().any(|at| {
+        repo.item_at(at, item).map_or(true, |dir| {
+            dir.is_some_and(|d| d.item.mission.as_deref() == Some(id))
+        })
+    })
+}
+
+/// What a round of plan review has to check beside the findings it carries.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlanDelta {
+    /// The completed round before it, and the one commit that round reviewed.
+    pub round: u32,
+    pub from: String,
+    /// The plan's paths changed since; none when the plan is unchanged.
+    pub paths: Vec<String>,
+}
+
+/// The [`PlanDelta`] of round `round` of `mission`'s plan review at the
+/// commit `head`; `None`, for a review of the whole plan, when no round
+/// before it completed, or that round's reviews are not of one commit in
+/// the history of `head`.
+pub fn plan_delta(
+    repo: &mut Repo,
+    mission: &MissionDir,
+    round: u32,
+    head: &str,
+) -> Result<Option<PlanDelta>> {
+    let last = (mission.reviews.iter())
+        .map(|file| file.name.round)
+        .filter(|last| *last < round && completed(mission, *last))
+        .max();
+    let Some(last) = last else {
+        return Ok(None);
+    };
+    let mut commits: Vec<&str> = (mission.reviews.iter())
+        .filter(|file| file.name.round == last)
+        .map(|file| file.review.commit.as_str())
+        .collect();
+    commits.dedup();
+    let [from] = commits.as_slice() else {
+        return Ok(None);
+    };
+    if !git::has_commit(&repo.root, from)? || !git::is_ancestor(&repo.root, from, head)? {
+        return Ok(None);
+    }
+    Ok(Some(PlanDelta {
+        round: last,
+        from: from.to_string(),
+        paths: plan_paths(repo, &mission.mission.id, (from, head))?,
+    }))
+}
+
+/// Whether every review of round `round` of `mission`'s plan has a verdict.
+fn completed(mission: &MissionDir, round: u32) -> bool {
+    (mission.reviews.iter())
+        .filter(|file| file.name.round == round)
+        .all(|file| file.review.verdict.is_some())
+}
+
+/// The paths that differ between the commits `from` and `to` and are mission
+/// `id`'s plan's own: its directory but its reviews and `notes.md`, and the
+/// directories, but their reviews, of its items at either commit. Once it is
+/// agreed, of the items only the paths the amendment itself changes against
+/// the base at either commit, so what it took back is among them and what
+/// the base merged is not. [`plan_changed_at`] is wider, and no diff to read.
+fn plan_paths(repo: &mut Repo, id: &str, (from, to): (&str, &str)) -> Result<Vec<String>> {
+    let amended = match agreed(repo, id)? {
+        true => Some(git::changed_on_branch(
+            &repo.root,
+            &repo.base_tip,
+            (from, to),
+        )?),
+        false => None,
+    };
+    let own = format!("{}/", mission_dir(id));
+    let mut paths = git::changed(&repo.root, from, to)?;
+    paths.retain(|path| {
+        if let Some(file) = path.strip_prefix(&own) {
+            return file != "notes.md" && !file.starts_with("reviews/");
+        }
+        let in_item = path.strip_prefix(".atelier/items/");
+        let Some((item, file)) = in_item.and_then(|rest| rest.split_once('/')) else {
+            return false;
+        };
+        !file.starts_with("reviews/")
+            && amended.as_ref().is_none_or(|paths| paths.contains(path))
+            && of_mission(repo, id, item, (from, to))
+    });
+    Ok(paths)
 }
 
 /// Why a plan review of the current round does not count toward a merge.
@@ -545,10 +632,19 @@ pub struct Approvals {
     /// The current round; 0 when the plan has no review.
     pub round: u32,
     pub reviews: Vec<Counted>,
+    /// Whether the plan change under review has a review of its own: one at
+    /// `head` that is not on the base.
+    pub reviewed: bool,
+    /// How many of that change's latest rounds split, in a row.
+    pub splits: usize,
 }
 
 /// How many approving plan reviews a plan needs to merge.
 pub const APPROVALS: usize = 2;
+
+/// How many split rounds in a row end the review of a plan change, for the
+/// human to rule.
+pub const SPLITS: usize = 2;
 
 impl Approvals {
     pub fn counted(&self) -> usize {
@@ -558,6 +654,25 @@ impl Approvals {
     pub fn enough(&self) -> bool {
         self.counted() >= APPROVALS
     }
+
+    /// Whether review of the plan change stops here for the human to rule.
+    pub fn stopped(&self) -> bool {
+        self.splits >= SPLITS && !self.enough()
+    }
+}
+
+/// How many rounds at the end of `change`'s reviews split in a row: each
+/// completed, with an approval and a request for changes.
+fn trailing_splits(change: &MissionDir) -> usize {
+    let split: Vec<u32> = (split_rounds(change).into_iter())
+        .map(|split| split.round)
+        .collect();
+    let mut rounds: Vec<u32> = change.reviews.iter().map(|r| r.name.round).collect();
+    rounds.sort_unstable_by(|a, b| b.cmp(a));
+    rounds.dedup();
+    (rounds.into_iter())
+        .take_while(|round| split.contains(round) && completed(change, *round))
+        .count()
 }
 
 /// The [`Approvals`] of mission `id`'s plan at the commit `head`.
@@ -567,8 +682,18 @@ pub fn approvals(repo: &mut Repo, id: &str, head: &str, on_base: bool) -> Result
             id: id.to_string(),
             round: 0,
             reviews: Vec::new(),
+            reviewed: false,
+            splits: 0,
         });
     };
+    // The change's own reviews, by name: an amendment made beside this one
+    // may have merged a round of the same number.
+    let base = repo.base_tip.clone();
+    let on_base_tip = repo
+        .mission_at(&base, id)?
+        .map_or(vec![], |dir| dir.reviews);
+    let mut change = mission.clone();
+    (change.reviews).retain(|file| !on_base_tip.iter().any(|base| base.name == file.name));
     let round = mission
         .reviews
         .iter()
@@ -614,5 +739,78 @@ pub fn approvals(repo: &mut Repo, id: &str, head: &str, on_base: bool) -> Result
         id: id.to_string(),
         round,
         reviews,
+        reviewed: !change.reviews.is_empty(),
+        splits: trailing_splits(&change),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::records::{parse_mission, parse_review};
+    use std::path::Path;
+
+    /// A mission with a plan review for each of `reviews`: its name and its
+    /// verdict.
+    fn mission(reviews: &[(&str, &str)]) -> MissionDir {
+        let path = Path::new("mission.md");
+        let text = "---\nschema: atelier.mission\nschema_version: 3\nid: demo-m1ss\ntitle: Greet\n\
+                    status: open\nlabels: []\nlead: null\ncreated_at: 2026-11-22T09:00:00Z\n---\n";
+        let reviews = reviews.iter().map(|(name, verdict)| {
+            let name: crate::model::ReviewName = name.parse().unwrap();
+            let text = format!(
+                "---\nschema: atelier.review\nschema_version: 3\nround: {}\ncommit: abc1234\n\
+                 reviewers:\n- r1\nmodel: null\nverdict: {verdict}\n\
+                 created_at: 2026-11-22T09:00:00Z\n---\n",
+                name.round
+            );
+            ReviewFile {
+                path: path.to_path_buf(),
+                review: parse_review(path, &text).unwrap(),
+                name,
+            }
+        });
+        MissionDir {
+            path: path.to_path_buf(),
+            mission: parse_mission(path, text).unwrap(),
+            reviews: reviews.collect(),
+        }
+    }
+
+    #[test]
+    fn only_completed_split_rounds_at_the_end_count_toward_the_exit() {
+        let (yes, no, open) = ("approve", "changes", "null");
+        type Case<'a> = (&'a [(&'a str, &'a str)], usize);
+        let cases: [Case; 7] = [
+            (&[], 0),
+            (&[("1-aaaa", yes), ("1-bbbb", no)], 1),
+            (&[("1-aaaa", no), ("1-bbbb", no)], 0),
+            (
+                &[
+                    ("1-aaaa", yes),
+                    ("1-bbbb", no),
+                    ("2-cccc", no),
+                    ("2-dddd", yes),
+                ],
+                2,
+            ),
+            // A round that did not split breaks the row.
+            (
+                &[
+                    ("1-aaaa", yes),
+                    ("1-bbbb", no),
+                    ("2-cccc", no),
+                    ("3-dddd", yes),
+                    ("3-eeee", no),
+                ],
+                1,
+            ),
+            // A round not over has not split.
+            (&[("1-aaaa", yes), ("1-bbbb", no), ("2-cccc", open)], 0),
+            (&[("1-aaaa", yes), ("1-bbbb", no), ("1-cccc", open)], 0),
+        ];
+        for (reviews, splits) in cases {
+            assert_eq!(trailing_splits(&mission(reviews)), splits, "{reviews:?}");
+        }
+    }
 }

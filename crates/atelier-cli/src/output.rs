@@ -8,7 +8,7 @@ use crate::setup::{Harness, Step};
 use atelier_core::actions::{Action, Condition, Refusal};
 use atelier_core::forge::{CiRun, ForgeError, MergeState, PullRequest};
 use atelier_core::model::{Config, Priority, Response, Status, Thread, Verdict};
-use atelier_core::plan::{Approvals, NotCounted, APPROVALS};
+use atelier_core::plan::{Approvals, NotCounted, PlanDelta, APPROVALS, SPLITS};
 use atelier_core::records::Problem;
 use atelier_core::{Carried, Entry, Overview};
 use std::path::Path;
@@ -84,6 +84,9 @@ pub fn item(
     let done = entry.next.is_none() && entry.reviewed.is_some() && !entry.holds;
     if entry.next == Some(Action::TakeOver) || done {
         next = visiting(id, leads, &next);
+        if let (Some(_), Some(round)) = (leads, entry.capped) {
+            next += &cap_for_lead(id, round);
+        }
     }
     // Before `merge`, what it will run and wait for; a stale approval is
     // sent to `submit` instead.
@@ -97,7 +100,8 @@ pub fn item(
     }
     let code = outside(id, &entry.uncommitted);
     if entry.next == Some(Action::Submit) && !code.is_empty() {
-        let then = next.rfind("Then: ").expect("it ends with a Then line");
+        // At the round cap the lead's ruling takes the Then line's place.
+        let then = next.rfind("Then: ").unwrap_or(next.len());
         next.insert_str(then, &format!("Not committed: {}\n", some(&code)));
     }
     let undefined = match entry.undefined {
@@ -163,7 +167,8 @@ fn gates(config: &Config) -> String {
 /// `status` away from an item's branch. `dropped` is each item dropped on
 /// the base while its branch is there, with why, and `unreached` each item
 /// dropped on its branch whose drop has not reached the base. `unsaved` is
-/// what [`unsaved`] says of the checkout.
+/// what [`unsaved`] says of the checkout. `plans` is the plans the
+/// checked-out records branch changes, with where their review stands.
 #[allow(clippy::too_many_arguments)]
 pub fn overview(
     caller: &Thread,
@@ -171,6 +176,7 @@ pub fn overview(
     base: &str,
     kind: Option<&str>,
     overview: &Overview,
+    plans: &Result<Vec<Approvals>, Problem>,
     dropped: &[(String, Option<String>)],
     unreached: &[(String, Option<String>)],
     unsaved: &str,
@@ -182,6 +188,12 @@ pub fn overview(
         (None, _) => "a detached HEAD".into(),
     };
     let mut text = format!("You are thread {caller}, on {place}.\n");
+    text += &match plans {
+        Ok(plans) => plan_standing(plans),
+        Err(problem) => {
+            format!("Plan review not shown, since a committed record does not read: {problem}\n")
+        }
+    };
     if !overview.held.is_empty() {
         text += "You hold:\n";
         for entry in &overview.held {
@@ -192,6 +204,9 @@ pub fn overview(
                 since(entry),
                 entry.title
             );
+            if let Some(round) = entry.capped {
+                text += &format!("    Round {round} reached the review cap: its mission's lead rules before it is submitted again.\n");
+            }
         }
     }
     if !overview.ready.is_empty() {
@@ -235,6 +250,10 @@ pub fn overview(
     text += &crate::view_output::overview(overview);
     text += unsaved;
     text += &crate::view_output::led(&overview.led);
+    // A planner stopped for the human's ruling is pointed at no other work.
+    if plans.iter().flatten().any(Approvals::stopped) {
+        return text;
+    }
     // A lead holding nothing hands its mission's items to other threads,
     // and is not pointed at one itself.
     if overview.held.is_empty() && !overview.led.is_empty() {
@@ -277,10 +296,7 @@ pub fn unsaved(
         );
     }
     if let (Some(branch), Some(remote), false) = (branch, remote, unpushed.is_empty()) {
-        let git = match at {
-            Some(at) => format!("git -C {}", quoted(&at.display().to_string())),
-            None => "git".into(),
-        };
+        let git = git_command(at);
         let commits = match unpushed.len() {
             1 => "1 commit".to_string(),
             n => format!("{n} commits"),
@@ -912,7 +928,7 @@ pub fn plan_submitted(branch: &str, plans: &[(String, u32)], head: &str, forge: 
     }
     text += &forge;
     text += &format!("Give each reviewer its own checkout at that commit, as `git worktree add --detach <path> {head}` makes one, so that neither sees the other's review.\n");
-    let then = format!("Then wait for both verdicts. Each reviewer pushes its review file to {branch}; once two approve, bring them here with `git pull`, and run `atelier merge`. If either asks for changes, change the plan, commit, and run `atelier submit` again for the next round.");
+    let then = format!("Then wait for both verdicts. Each reviewer pushes its review file to {branch}; once two approve, bring them here with `git pull`, and run `atelier merge`. If either asks for changes, change the plan, commit, and run `atelier submit` again for the next round, unless that makes {SPLITS} rounds in a row on this change where one approves and the other asks for changes: review stops there, and you bring the open findings to the human to rule.");
     text + &handoff("Each of two reviewers", &tasks, &then)
 }
 
@@ -1029,13 +1045,37 @@ pub struct Brief<'a> {
     pub sections: Vec<(&'a str, &'a str)>,
     pub base: &'a str,
     pub commit: &'a str,
-    /// The commit the round before reviewed.
-    pub previous: Option<&'a str>,
+    /// The round before's, from round 2 on.
+    pub previous: Option<Previous>,
+    /// The checkout, where a printed Git command must name it.
+    pub at: Option<&'a Path>,
     pub carried: &'a [Carried],
     /// The caller's review file; `None` for an author.
     pub path: Option<&'a str>,
     /// What [`brief_pull_request`] says, where a forge is configured.
     pub pull_request: Option<String>,
+}
+
+/// The commit the round before reviewed, and the diff that can be given
+/// since it.
+pub enum Previous {
+    /// The branch alone changed since: the whole diff.
+    All(String),
+    /// The base was merged in since: the paths the branch changes.
+    Scoped(String, Vec<String>),
+    /// It is not in the history of the commit under review: no diff.
+    Lost(String),
+}
+
+/// The command that shows what changed from commit `from` to `to`, in
+/// `paths` alone where any are given.
+fn diff(at: Option<&Path>, from: &str, to: &str, paths: &[String]) -> String {
+    let mut line = format!("  {} diff {from} {to}", git_command(at));
+    if !paths.is_empty() {
+        let paths: Vec<String> = paths.iter().map(|path| quoted(path)).collect();
+        line += &format!(" -- {}", paths.join(" "));
+    }
+    line + "\n"
 }
 
 /// The brief's line on branch `id`'s pull request, as the forge `found` it.
@@ -1063,8 +1103,13 @@ pub fn brief(brief: &Brief) -> String {
             "You are the reviewer of {id} (thread {}), round {round}.\n",
             brief.caller
         );
-        text += &match brief.previous {
-            None => format!("Review the change on branch {id} as someone who did not write it: check that it meets each Done when line, that it is correct, and that the Report's claims hold. {LOOK}\n\n"),
+        text += &match &brief.previous {
+            None => format!("{}\n\n", whole_change(id)),
+            Some(Previous::Lost(reviewed)) => format!(
+                "The last round reviewed commit {}, which is not in this commit's history, so there is no diff since then. {} Judge each open finding below too.\n\n",
+                short(reviewed),
+                whole_change(id)
+            ),
             Some(_) => later_round(round),
         };
     }
@@ -1074,10 +1119,23 @@ pub fn brief(brief: &Brief) -> String {
         text += "\n";
     }
     let whole = format!("  git diff {}...{commit}\n", brief.base);
-    text += &match brief.previous {
+    let since = match &brief.previous {
+        None | Some(Previous::Lost(_)) => None,
+        Some(Previous::All(from)) => Some(format!(":\n{}", diff(brief.at, from, commit, &[]))),
+        Some(Previous::Scoped(_, paths)) if paths.is_empty() => Some(format!(
+            ": nothing of this branch's, only {} merged in.\n",
+            brief.base
+        )),
+        Some(Previous::Scoped(from, paths)) => Some(format!(
+            ", in the paths this branch changes, since {} was merged in between:\n{}",
+            brief.base,
+            diff(brief.at, from, commit, paths)
+        )),
+    };
+    text += &match since {
         None => format!("\nThe change, at commit {commit}:\n{whole}"),
-        Some(previous) => format!(
-            "\nWhat changed since the last round's review, at commit {commit}:\n  git diff {previous} {commit}\n\
+        Some(since) => format!(
+            "\nWhat changed since the last round's review, at commit {commit}{since}\
              The whole change:\n{whole}"
         ),
     };
@@ -1096,6 +1154,11 @@ pub fn brief(brief: &Brief) -> String {
 
 /// How every round's reviewer is to look.
 const LOOK: &str = "Read the code, run what proves it, and write down each problem you find. The author's reasoning is left out on purpose; judge what is there.";
+
+/// What a reviewer of the whole change on item `id`'s branch is told.
+fn whole_change(id: &str) -> String {
+    format!("Review the change on branch {id} as someone who did not write it: check that it meets each Done when line, that it is correct, and that the Report's claims hold. {LOOK}")
+}
 
 /// What a reviewer in `round`, after the first, is told the round is for:
 /// the earlier rounds read the whole change, so this one checks their
@@ -1187,6 +1250,10 @@ pub struct PlanBrief<'a> {
     pub items: Vec<(String, Status, String)>,
     /// The paths of the plan that differ in this checkout from `commit`.
     pub changed: Vec<String>,
+    /// What a later round checks; `None` for a review of the whole plan.
+    pub delta: Option<PlanDelta>,
+    /// The checkout, where a printed Git command must name it.
+    pub at: Option<&'a Path>,
     pub carried: &'a [Carried],
     pub path: &'a str,
     /// Where the review file goes once it is committed.
@@ -1231,13 +1298,18 @@ impl Landing {
 
 pub fn plan_brief(brief: &PlanBrief) -> String {
     let PlanBrief { id, round, .. } = *brief;
+    let task = match &brief.delta {
+        Some(delta) => later_plan_round(delta, brief.commit, brief.at),
+        None => format!(
+            "Review the plan as commit {} holds it, as someone who did not write it: the mission below, its other documents and its items. Read them, and write down each problem you find.",
+            short(brief.commit)
+        ),
+    };
     let mut text = format!(
         "You are a reviewer of the plan of mission {id} (thread {}), round {round}.\n\
-         Review the plan as commit {} holds it, as someone who did not write it: the mission below, its other documents and its items. Read them, and write down each problem you find. Another reviewer may review the same plan blind, in a checkout of its own.\n\n\
+         {task} Another reviewer may review the same plan blind, in a checkout of its own.\n\n\
          Mission {id}: {}\n",
-        brief.caller,
-        short(brief.commit),
-        brief.title
+        brief.caller, brief.title
     );
     for (heading, content) in &brief.sections {
         text += &format!("\n## {heading}\n{}\n", content.trim_end());
@@ -1270,6 +1342,27 @@ pub fn plan_brief(brief: &PlanBrief) -> String {
         "the mission starts",
         "writes it, changing no status, and prints the Git command that commits it alone",
     ) + "No command commits or pushes your review: you do, with Git. Run the command `verdict` prints, which commits the file alone, then push the commit to the branch of the plan:\n" + &brief.landing.commands() + "Tell whoever started you the commit. Your review is then done.\n"
+}
+
+/// What a plan's reviewer after the first round is told, with the diff
+/// first: check `delta` at `commit` and the findings carried, and block on
+/// what did not change only for a serious defect.
+fn later_plan_round(delta: &PlanDelta, commit: &str, at: Option<&Path>) -> String {
+    let PlanDelta { round, from, paths } = delta;
+    let reviewed = format!("since round {round} reviewed it at commit {}", short(from));
+    let what = match paths.is_empty() {
+        true => format!(
+            "The plan is unchanged {reviewed}, so there is no diff to read.\nThis round judges each open finding carried from earlier rounds, below."
+        ),
+        false => format!(
+            "What changed in the plan {reviewed}:\n{}This round checks those changes and judges each open finding carried from earlier rounds, below.",
+            diff(at, from, commit, paths)
+        ),
+    };
+    format!(
+        "{what} A new finding in a part of the plan that did not change blocks only if it is a serious defect the earlier rounds missed: record that one as `fix now`, and any other as `defer`.\nThe plan as commit {} holds it follows, for reference.",
+        short(commit)
+    )
 }
 
 pub fn plan_not_committed(id: &str, commit: &str, commit_line: &str) -> String {
@@ -1846,7 +1939,50 @@ pub fn plan_unapproved(
         Some(remote) => format!(" Reviewers push their files to {branch}; fetch them with `git pull {remote} {branch}` first if they are there."),
         None => String::new(),
     };
-    text + &format!("Run `atelier submit` here to open the next round of plan reviews, and start two reviewers, each in a checkout of its own at the commit submitted.{fetch}\n")
+    let stopped = split_exits(unapproved.iter().map(|(_, approvals)| approvals));
+    let next = match stopped.is_empty() {
+        true => "Run `atelier submit` here to open the next round of plan reviews, and start two reviewers, each in a checkout of its own at the commit submitted.",
+        false => stopped.trim_end(),
+    };
+    text + &format!("{next}{fetch}\n")
+}
+
+/// The human's ruling as the way out, for each of `plans` whose review
+/// stops at the split rounds.
+fn split_exits<'a>(plans: impl IntoIterator<Item = &'a Approvals>) -> String {
+    (plans.into_iter())
+        .filter(|plan| plan.stopped())
+        .map(|plan| plan_split_exit(&plan.id, plan.splits))
+        .collect()
+}
+
+/// `submit` refused, since review of some of `plans` stops for the human.
+pub fn plan_split_refused(plans: &[Approvals]) -> String {
+    format!(
+        "`atelier submit` refused; nothing changed.\n{}",
+        split_exits(plans)
+    )
+}
+
+pub fn rule_plan_split(id: &str) -> String {
+    format!("Plan review of a change to mission {id} stops after {SPLITS} split rounds in a row")
+}
+
+/// Where the review of each plan a records branch changes stands.
+fn plan_standing(plans: &[Approvals]) -> String {
+    let mut text = String::new();
+    for plan in plans {
+        let id = &plan.id;
+        text += &match plan.reviewed {
+            true => format!(
+                "Plan review of mission {id}, round {}: {} of {APPROVALS} approvals count.\n",
+                plan.round,
+                plan.counted()
+            ),
+            false => format!("Plan review of mission {id}: no review of this change here yet.\n"),
+        };
+    }
+    text + &split_exits(plans)
 }
 
 /// `merge` of item `id`'s branch, which adds or changes the plans of
