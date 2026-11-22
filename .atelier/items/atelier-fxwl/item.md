@@ -37,6 +37,6 @@ In: one attribute on `hold` in `crates/atelier-cli/src/commands.rs`.
 One line: `#[cfg_attr(not(debug_assertions), allow(unused_variables))]` on
 `commands::hold`. `cargo build --release -p atelier-cli --locked` then
 finishes with no warning, where it printed one before, and `cargo fmt --
---check` passes. Nobody reviewed it: the attribute changes no behaviour in
-either build, which the diff shows whole. The lead of `atelier-ww7w` made
+--check` passes. The attribute changes no behaviour in either build, which
+the diff shows whole. The lead of `atelier-ww7w` made
 it outside that mission's plan, as upkeep found on the way.
