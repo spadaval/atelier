@@ -30,8 +30,10 @@ Both of round 1's deferred findings still hold. I reproduced Finding 1 in a repo
 
 ## Finding 1: `atelier log` drops an item's `merge` when the base had no records yet
 Recommendation: defer
+Dropped by mcp:launch:b3b5ffd62a4c227e4ec8ce23f1e32b83538dd28e5e6c91e0a2d3d91ead863ef6: filed as atelier-tuln
 `Walker::commit` in `crates/atelier-core/src/log.rs` (the `commit.parents.len() > 1` branch) only emits `Happened::Merge` when the walk still sees a merge. The walk lists with `--parents`, so Git rewrites a merge to one parent when the first parent changed no record files. I reproduced the Report's case: a repository with only `config.toml`, `start --new`, a Report, `merge --trivial`; `atelier log` printed the `start` line and no `merge`. `plan-merge` is not this hole: it looks up the full hash in the second `git log`. This is older than this item; the Report already asks the lead to file it.
 
 ## Finding 2: a backlog merge past a rule still prints `merge` for every record it changed
 Recommendation: defer
+Dropped by mcp:launch:b3b5ffd62a4c227e4ec8ce23f1e32b83538dd28e5e6c91e0a2d3d91ead863ef6: filed as atelier-itqc
 `Happened::Passed { merge: true }` is still named `merge` in `Happened::name` (`crates/atelier-core/src/log.rs`). After this change a plan's merge is `plan-merge`, so garden.md's `$4 == "merge"` no longer counts those. A backlog branch merged past a rule still goes through `records_of` and `Passed`, so each record it changed still looks like a merged item. The CLI test `a_proposed_plans_lead_and_merge_and_a_set_of_a_started_item_each_show_their_passed_rule` still asserts that line. The Report names this and suggests a name of its own, such as `records-merge`. Out of this item's Done when.

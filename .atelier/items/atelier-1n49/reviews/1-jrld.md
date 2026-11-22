@@ -26,5 +26,6 @@ Each Done when line holds. One documentation gap remains, already named for the 
 
 ## Finding 1: Extension README still omits the release-script trigger and test
 Recommendation: defer
+Dropped by mcp:launch:b3b5ffd62a4c227e4ec8ce23f1e32b83538dd28e5e6c91e0a2d3d91ead863ef6: filed as a Done when line of atelier-jz8q, which waits for t3-extension/ to reopen
 
 `t3-extension/README.md` "In CI" (lines 1008-1019) lists the extension job's paths as `t3-extension/`, `desk/`, `crates/atelier-desk/`, the workspace Cargo files, `rust-toolchain.toml`, `.github/workflows/ci.yml` and `scripts/ci-jobs.sh`, and its steps as package install, typecheck, build, then `run-tests.mjs` after building `atelier-desk` and the Desk app. This change adds `scripts/t3-extension-release*` to `needs_extension` in `scripts/ci-jobs.sh:46` and runs `scripts/t3-extension-release.test.sh` as a step of the `extension` job in `.github/workflows/ci.yml:163`. The README names neither. The item's scope leaves `t3-extension/` out, so this is later work.
