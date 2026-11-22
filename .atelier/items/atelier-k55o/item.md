@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-k55o
 title: '`ready` accepts an item whose Goal and Done when are empty'
-status: draft
+status: dropped
 mission: null
 labels:
 - bug
@@ -27,3 +27,7 @@ created_at: 2026-10-17T01:10:57.961551559Z
 ## Context
 
 Rewritten on 2026-11-11 from the old tool's form of this bug (`issue create` writing "Done when was not specified."), when the backlog was swept after the 0.5 cutover. A draft may stay empty: capture now, refine later.
+
+## Report
+
+Dropped: Moot since atelier-v06d merged (3f97eaae8): the ready command is gone, so nothing readies an empty item, and atelier-dh7a's Authority forbids making start refuse an open item for what its text lacks.
