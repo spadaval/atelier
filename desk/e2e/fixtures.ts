@@ -493,6 +493,8 @@ export const items: Record<string, ItemPage> = {
 
 const inReview = otherMissions.find(([id]) => id === "atelier-qr5s")![3][0];
 items["atelier-u1ko"] = itemPage(inReview, {
+  // Filed after items were open: no one readied it.
+  ready: null,
   mission: "atelier-qr5s",
   threads: [{ identity: codexChild, role: "reviewer", item: null, thread: null }],
   t3: unreachable,

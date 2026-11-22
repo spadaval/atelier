@@ -122,6 +122,23 @@ test("every mission in the rail opens a page that renders, and the loose count l
   }
 });
 
+test("a proposed mission and an agreed one have glyphs of their own", async ({ page }) => {
+  const glyph = page.getByTestId("status").locator("svg");
+  await load(page, "/r/atelier/mission/atelier-295u");
+  await expect(glyph).toHaveClass(/lucide-circle-dashed/);
+  await load(page, "/r/atelier/mission/atelier-g6rp");
+  await expect(glyph).toHaveClass(/lucide-circle(\s|$)/);
+});
+
+test("an item's page says who readied it only where an old record does", async ({ page }) => {
+  const details = page.getByRole("complementary", { name: "Item details" });
+  await load(page, "/r/atelier/item/atelier-1ie1");
+  await expect(details.locator("dt", { hasText: "Readied" }).locator("+ dd")).toContainText("ada");
+  await load(page, "/r/atelier/item/atelier-u1ko");
+  await expect(details.locator("dt", { hasText: "Status" })).toBeVisible();
+  await expect(details.locator("dt", { hasText: "Readied" })).toHaveCount(0);
+});
+
 test("a repository opens on the mission with work in progress, and on a phone on its rail", async ({ page }) => {
   await load(page, "/r/atelier");
   if (phone(page)) {

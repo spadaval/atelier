@@ -22,9 +22,10 @@ describe("counts", () => {
 
 describe("missions and fetches", () => {
   it("gives a mission's glyph from where it stands", () => {
-    expect(missionState({ state: "proposed", in_progress: false })).toBe("draft");
+    expect(missionState({ state: "proposed", in_progress: false })).toBe("proposed");
+    expect(missionState({ state: "open", in_progress: false })).toBe("open");
     expect(missionState({ state: "open", in_progress: true })).toBe("building");
-    expect(missionState({ state: "stopped", in_progress: false })).toBe("dropped");
+    expect(missionState({ state: "stopped", in_progress: false })).toBe("stopped");
   });
 
   it("says when a repository was fetched, how often, and why it last failed", () => {
