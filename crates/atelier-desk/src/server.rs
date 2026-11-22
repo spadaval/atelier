@@ -13,7 +13,7 @@ use crate::news::News;
 use crate::read::PrState;
 use crate::stop::{self, Stopping};
 use crate::threads::Threads;
-use crate::{read, sessions};
+use crate::{bounded, read, sessions};
 use anyhow::Result;
 use atelier_core::model::ForgeProvider;
 use atelier_core::records::validate_id;
@@ -30,6 +30,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tower::ServiceExt;
 use tower_http::services::{ServeDir, ServeFile};
 
@@ -39,6 +40,9 @@ mod views;
 /// value `1`. A page of another site cannot send it without the browser
 /// asking this server first, which it does not answer.
 pub const APP_HEADER: &str = "x-atelier-desk";
+
+/// How long a read of a mission's history may take.
+const MISSION_HISTORY_LIMIT: Duration = Duration::from_secs(15);
 
 /// A response kept with the commits it was read from.
 type Slot = (Vec<String>, Arc<dyn Any + Send + Sync>);
@@ -359,6 +363,10 @@ pub fn router_for(desk: Arc<Desk>) -> Router {
         .route("/api/repos", get(repos))
         .route("/api/repos/{repo}/missions", get(missions))
         .route("/api/repos/{repo}/missions/{id}", get(mission))
+        .route(
+            "/api/repos/{repo}/missions/{id}/history",
+            get(mission_history),
+        )
         .route("/api/repos/{repo}/doc", get(doc))
         .route("/api/repos/{repo}/items/{id}", get(item))
         .route("/api/embed", get(embed))
@@ -574,6 +582,33 @@ async fn mission(
         page.can_stop &= desk.config.state.is_some();
         page.fetched = desk.fetched(&repo, &dir);
         Ok(page)
+    })
+    .await
+}
+
+/// `GET /api/repos/{repo}/missions/{id}/history`, kept while the commits it
+/// was read from are unchanged, and given [`MISSION_HISTORY_LIMIT`].
+async fn mission_history(
+    State(desk): State<Arc<Desk>>,
+    UrlPath((repo, id)): UrlPath<(String, String)>,
+) -> Response {
+    blocking(move || {
+        checked(&id)?;
+        let dir = desk.served(&repo)?;
+        let deadline = Instant::now() + MISSION_HISTORY_LIMIT;
+        // The walk stops itself at the deadline; the wait is bounded as
+        // well, for a Git read that hangs before or within it.
+        let read = move || {
+            let missing = || format!("No mission {id} is on the base or on a branch.");
+            let route = format!("mission-history {id}");
+            let mut page = desk.repo_route(&repo, &route, missing, |r| {
+                read::mission_history(r, &id, deadline)
+            })?;
+            page.fetched = desk.fetched(&repo, &dir);
+            Ok(page)
+        };
+        bounded::within(MISSION_HISTORY_LIMIT, read)
+            .map_err(|error| Failure::Failed(format!("{error:#}")))?
     })
     .await
 }

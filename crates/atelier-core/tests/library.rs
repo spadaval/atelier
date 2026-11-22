@@ -243,3 +243,18 @@ fn history_returns_the_actions_as_data_to_a_repository_opened_as_the_desk_opens_
         .unwrap()
         .is_none());
 }
+
+#[test]
+fn history_past_its_deadline_is_an_error_and_before_it_is_the_whole_history() {
+    let (_dir, root) = scratch("ready");
+    let skip = Skip::new(None);
+    let mut repo = Repo::open_committed(&root, Thread("desk".into()), &skip).unwrap();
+    let mut until = |deadline| atelier_core::history_until(&mut repo, None, None, Some(deadline));
+    let now = std::time::Instant::now();
+    let error = until(now).unwrap_err();
+    assert!(error.to_string().contains("deadline"), "{error}");
+    let found = until(now + std::time::Duration::from_secs(60))
+        .unwrap()
+        .unwrap();
+    assert_eq!(found.actions.len(), 1, "{:?}", found.actions);
+}
