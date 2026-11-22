@@ -1070,7 +1070,8 @@ fn item_actions(old: Option<&Version>, new: &Version) -> (Actions, Option<Move>)
         Some(Version::Item { item, stored, .. }) => (Some(item), Some(*stored)),
         _ => (None, None),
     };
-    let moved = (from != Some(*to)).then_some(Move { from, to: *to });
+    let to = *to;
+    let moved = (from != Some(to)).then_some(Move { from, to });
     let holder = new.implementers.holder().cloned();
     let mut actions = Vec::new();
     let mut building = moved.filter(|_| new.status == Status::Building);
@@ -1089,7 +1090,7 @@ fn item_actions(old: Option<&Version>, new: &Version) -> (Actions, Option<Move>)
     if let Some(status) = moved {
         match new.status {
             Status::InReview => actions.push((holder.clone(), Happened::Submit { status })),
-            Status::Open if *to == "ready" => {
+            Status::Open if to == "ready" => {
                 let by = new.ready.as_ref().map(|ready| ready.by.clone());
                 actions.push((None, Happened::Ready { by, status }));
             }
