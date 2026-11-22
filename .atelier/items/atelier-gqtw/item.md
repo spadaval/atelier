@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-gqtw
 title: Drop started items in one backlog branch and clean up merged branches and stale worktrees
-status: changes_requested
+status: in_review
 mission: atelier-ww7w
 labels: []
 priority: medium
@@ -125,13 +125,27 @@ head.
   over between Git's timestamp and its pre-commit hook. A new test fails
   without the fix, and the flaky test then passed 220 runs of 220.
 
+### Round 1
+
+The second reviewer, Grok 4.6, ran out of balance before it wrote a finding.
+The lead named Gemini 4 Neon in its place, which found two bugs, both
+reproduced by a failing test before the fix:
+
+- `GET /api/repos/{repo}/missions/{id}` and `POST /api/sessions` each made
+  the other answer 404, because this change kept another type under their
+  shared cache key. The Desk's cache key now holds the type, so no route can
+  repeat this, and the two read through one function.
+- `drop` named a stale local copy of an item the branch filed where the
+  fetched branch was ahead. It was recommended as a deferral, and is fixed
+  here because that `git checkout` is how the work gets rescued.
+
 ### Verification
 
-Run on `10b752de9`, with `origin/master` at `f2449baa8` merged in:
+Run on `ce50941a9`, with `origin/master` at `f2449baa8` merged in:
 
 - `cargo fmt -- --check`, `git diff --check` and
   `cargo clippy --all-targets --locked -- -D warnings`: clean.
-- `cargo nextest run --locked`, the whole workspace: 456 passed, 1 skipped.
+- `cargo nextest run --locked`, the whole workspace: 459 passed, 1 skipped.
   The new behaviour is in `crates/atelier-cli/tests/cleanup.rs`,
   and the Desk's in `crates/atelier-desk/tests/actions.rs`.
 - `evals/agent-factory/test.sh target/debug/atelier`: all pass, with two
@@ -158,3 +172,8 @@ the first real run.
   would refuse and `merge` would keep its branches. Every configured
   repository on this host names `origin`.
 - The 307 branches already merged stay until someone removes them.
+
+### Responses
+
+- 1-ca9z.1: fixed in d511edd8f
+- 1-ca9z.2: fixed in ce50941a9
