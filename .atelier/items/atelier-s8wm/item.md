@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-s8wm
 title: Give a plan review whose two reviewers keep disagreeing a way to end
-status: draft
+status: dropped
 mission: null
 labels: []
 priority: medium
@@ -40,3 +40,7 @@ reads it.
 
 `skills/agent-factory/roles/planner.md` and the lines the binary prints to a
 planner. Not how a mission runs once its plan has merged.
+
+## Report
+
+Dropped: Covered by atelier-h6ij in mission atelier-ww7w (agreed with Sumeet on 2026-11-22)

@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-yhaf
 title: Stop status telling the base's checkout that start switches it to a held item's branch
-status: draft
+status: dropped
 mission: null
 labels: []
 priority: medium
@@ -33,3 +33,7 @@ next-loop: `atelier start slug-k3fa` twice in work/repo).
 - [ ] Elsewhere, where `start` does switch, `status` still names `start`.
 
 ## Scope
+
+## Report
+
+Dropped: Covered by atelier-zc9b in mission atelier-ww7w (agreed with Sumeet on 2026-11-22)

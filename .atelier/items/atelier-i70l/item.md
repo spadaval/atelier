@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-i70l
 title: Drop the old record paths from scripts/ci-jobs.sh
-status: draft
+status: dropped
 mission: null
 labels: []
 priority: medium
@@ -27,3 +27,7 @@ created_at: 2026-11-11T16:48:44.538227539Z
 ## Context
 
 Found by atelier-2mlh, the first item under the new tool, whose search for leftovers of the old fallback matched these lines. Small; start it whenever CI's job rule is next touched.
+
+## Report
+
+Dropped: Covered by atelier-1n49 in mission atelier-ww7w (agreed with Sumeet on 2026-11-22)
