@@ -98,7 +98,7 @@ function MotionRow({ repo, item, names }: { repo: string; item: MotionItem; name
   );
 }
 
-function ReadyRow({ repo, row }: { repo: string; row: ItemRow }) {
+function StartableRow({ repo, row }: { repo: string; row: ItemRow }) {
   return <Row repo={repo} id={row.id} title={row.title} status={row.status} extra={<Priority priority={row.priority} />} />;
 }
 
@@ -133,7 +133,7 @@ export function ProjectGlance({ repo }: { repo: string }) {
   const active = (missions.data?.missions ?? []).filter((m) => m.state === "open").sort((a, b) => Number(b.in_progress) - Number(a.in_progress));
   const items = moved;
   const needs = (waiting?.needs_human ?? []).flatMap((g) => g.items);
-  const ready = (moving?.ready ?? []).filter((r) => !r.needs_human);
+  const startable = (moving?.ready ?? []).filter((r) => !r.needs_human);
   const plans = waiting?.proposed ?? [];
   const threads = waiting?.threads ?? [];
   const waits = needs.length + plans.length + threads.length;
@@ -199,10 +199,10 @@ export function ProjectGlance({ repo }: { repo: string }) {
             ))}
           </Block>
 
-          <Block title="Next up" tally={ready.length}>
-            {ready.length === 0 ? <p className="card-empty">Nothing is ready to start.</p> : null}
-            {ready.map((row) => (
-              <ReadyRow key={row.id} repo={repo} row={row} />
+          <Block title="Next up" tally={startable.length}>
+            {startable.length === 0 ? <p className="card-empty">Nothing can start now.</p> : null}
+            {startable.map((row) => (
+              <StartableRow key={row.id} repo={repo} row={row} />
             ))}
           </Block>
         </>

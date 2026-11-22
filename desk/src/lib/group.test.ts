@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ItemRow } from "../api/ItemRow";
-import { groupByStatus, waitingOnYou } from "./group";
+import { groupByStatus, openByPriority, waitingOnYou } from "./group";
 
 function row(id: string, status: ItemRow["status"], more: Partial<ItemRow> = {}): ItemRow {
   return {
@@ -46,5 +46,19 @@ describe("waitingOnYou", () => {
   it("lists open needs-human items", () => {
     const items = [row("c", "open", { needs_human: true }), row("d", "done", { needs_human: true }), row("e", "open")];
     expect(waitingOnYou(items).map((i) => i.id)).toEqual(["c"]);
+  });
+});
+
+describe("openByPriority", () => {
+  it("keeps only open items, the most urgent first and then by ID", () => {
+    const items = [
+      row("a", "open", { priority: "low" }),
+      row("e", "open", { priority: "high" }),
+      row("f", "building", { priority: "critical" }),
+      row("d", "open", { priority: "medium" }),
+      row("c", "open", { priority: "high" }),
+      row("g", "open", { priority: "critical" }),
+    ];
+    expect(openByPriority(items).map((i) => i.id)).toEqual(["g", "c", "e", "d", "a"]);
   });
 });

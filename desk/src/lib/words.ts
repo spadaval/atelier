@@ -35,10 +35,9 @@ export function finished(counts: StatusCount[]): number {
   return counts.filter((c) => c.status === "done" || c.status === "dropped").reduce((sum, c) => sum + c.count, 0);
 }
 
-/** Where a mission stands, for its glyph: work under way shows as running. */
-export function missionState(mission: Pick<MissionRow, "state" | "in_progress">): string {
-  if (mission.in_progress) return "building";
-  return { proposed: "draft", open: "open", stop_pending: "changes_requested", stopped: "dropped", done: "done" }[mission.state];
+/** Where a mission stands, for its glyph: its own state, or work under way, which shows as running. */
+export function missionState(mission: Pick<MissionRow, "state" | "in_progress">): MissionState | "building" {
+  return mission.in_progress ? "building" : mission.state;
 }
 
 /** A mission's state in words, for its pill. */

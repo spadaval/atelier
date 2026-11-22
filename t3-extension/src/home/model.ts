@@ -29,17 +29,23 @@ export function begun(m: Pick<MissionRow, "in_progress" | "counts">): boolean {
 export type LaneName = "now" | "next" | "later";
 export type Lane = { name: LaneName; title: string; hint: string; missions: MissionRow[]; loose: ItemRow[]; count: number };
 
+const URGENCY: ItemRow["priority"][] = ["critical", "high", "medium", "low"];
+
+/** The open items among those in no mission, the most urgent first, then by ID (desk/src/lib/group.ts, openByPriority). */
+const openByPriority = (items: ItemRow[]) =>
+  items.filter((i) => i.status === "open").sort((a, b) => URGENCY.indexOf(a.priority) - URGENCY.indexOf(b.priority) || (a.id < b.id ? -1 : 1));
+
 /**
  * Now: agreed missions begun, and started items in no mission. Next: agreed missions with nothing
- * started, and open items in no mission. Later: proposed plans. A mission
- * stopping, stopped or done is in none of them.
+ * started, and open items in no mission, as one list by priority and then ID. Later: proposed
+ * plans. A mission stopping, stopped or done is in none of them.
  */
 export function lanes(missions: MissionRow[], loose: ItemRow[]): Lane[] {
   const open = missions.filter((m) => m.state === "open");
   const lane = (name: LaneName, title: string, hint: string, ms: MissionRow[], items: ItemRow[]): Lane => ({ name, title, hint, missions: ms, loose: items, count: ms.length + items.length });
   return [
     lane("now", "Now", "missions in progress, and started work in no mission", open.filter(begun), loose.filter((i) => STARTED.has(i.status))),
-    lane("next", "Next", "agreed, nothing started, and open work", open.filter((m) => !begun(m)), loose.filter((i) => i.status === "open")),
+    lane("next", "Next", "agreed, nothing started, and open work", open.filter((m) => !begun(m)), openByPriority(loose)),
     lane("later", "Later", "proposed plans", missions.filter((m) => m.state === "proposed"), []),
   ];
 }
@@ -53,7 +59,7 @@ export function startsOpen(lane: LaneName, all: Lane[]): boolean {
 }
 
 /** How many of a lane's loose items show before "Show N more". */
-export const looseShown = (lane: LaneName) => (lane === "later" ? 5 : 8);
+export const LOOSE_SHOWN = 8;
 
 /** A mission's items, open work first in the order of the lifecycle, finished ones last. */
 const ORDER: Status[] = ["building", "in_review", "changes_requested", "approved", "open", "done", "dropped"];

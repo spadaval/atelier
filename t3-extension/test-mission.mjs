@@ -80,7 +80,7 @@ try {
     assert.equal(await read(`p.dataset.missionPage`), 'running');
     assert.equal(await read(`text(p.querySelector('h1'))`), 'Make the mission page say what needs you');
     assert.equal(await read(`text(p.querySelector('[data-state]'))`), 'Running');
-    assert.match(await read(`text(p)`), /1 of 8 merged/);
+    assert.match(await read(`text(p)`), /1 of 10 merged/);
     assert.equal(await read(`text(p.querySelector('[data-summary]'))`), 'Two items are being built, one is in review and one is merging. One item waits on you and one thread has been quiet for 47m.');
     assert.deepEqual(await rows('needs-you'), ['item:atelier-r001', 'thread:thread:quiet']);
     assert.match(await read(`text(p.querySelector('[data-row="item:atelier-r001"]'))`), /atelier-r001 is labelled needs-human\. One item waits behind it\.Open item$/);
@@ -92,14 +92,16 @@ try {
   });
   await check('running: Not started, Merged and Outcome and success criteria are each one folded line that opens in place; no list of the mission\'s steps', async () => {
     assert.deepEqual(await read(`[...p.querySelectorAll('[data-fold]')].map(f => [f.dataset.fold, text(f), f.children.length])`), [
-      ['Not started', 'Not started2 can start, 1 wait on others', 1],
+      ['Not started', 'Not started2 can start, 3 wait', 1],
       ['Merged', 'Merged1', 1],
       ['Outcome and success criteria', 'Outcome and success criteria', 1],
     ]);
     await click('[data-fold="Merged"] button');
     assert.match(await read(`text(p.querySelector('[data-fold="Merged"]'))`), /Show the Result as writtenmerged 2h 0m ago.*commit subjects/);
     await click('[data-fold="Not started"] button');
-    assert.deepEqual(await read(`[...p.querySelectorAll('[data-fold="Not started"] [data-row]')].map(r => text(r))`), ['Stack the page below 560 pixelscan start', 'Name each key on its buttoncan start', 'Wait for the decisionwaits on atelier-r001']);
+    assert.deepEqual(await read(`[...p.querySelectorAll('[data-fold="Not started"] [data-row]')].map(r => text(r))`), ['Stack the page below 560 pixelscan start', 'Name each key on its buttoncan start', 'Wait for the decisionwaits on atelier-r001', 'Add what the amendment askswaits on origin/atelier-rm01 to merge', 'Start over on a clean branchcannot start until No branch atelier-r010 exists yet (one does; if nothing on it is needed, delete it with `git branch -D atelier-r010`)']);
+    // A long reason is cut short and leaves the title its room.
+    assert.ok(await read(`p.querySelector('[data-fold="Not started"] [data-row="item:atelier-r010"] span').getBoundingClientRect().width > 100`), 'the reason squeezed the title out');
     await click('[data-fold="Outcome and success criteria"] button');
     assert.match(await read(`text(p.querySelector('[data-fold="Outcome and success criteria"]'))`), /says what needs you\..*no progress log.*needs-you-first/);
     assert.doesNotMatch(await read('text(p)'), /Progress Log|Plan merged: mission agreed|Started atelier-|Submitted atelier-/);
@@ -125,7 +127,7 @@ try {
   await check('running: the page reads the mission, its history and each listed thread in full, through the gate\'s forms', async () => {
     const reads = [...new Set(await page.evaluate('missionReads'))].sort();
     assert.deepEqual(reads, [
-      '/api/history?repo=atelier&ids=atelier-rm01,atelier-r001,atelier-r002,atelier-r003,atelier-r004,atelier-r005,atelier-r006,atelier-r007,atelier-r008',
+      '/api/history?repo=atelier&ids=atelier-rm01,atelier-r001,atelier-r002,atelier-r003,atelier-r004,atelier-r005,atelier-r006,atelier-r007,atelier-r008,atelier-r009,atelier-r010',
       '/api/repos/atelier/missions/atelier-rm01',
       '/api/thread?id=thread%3Abusy&full=1', '/api/thread?id=thread%3Alead&full=1', '/api/thread?id=thread%3Amerging&full=1', '/api/thread?id=thread%3Aquiet&full=1',
     ]);

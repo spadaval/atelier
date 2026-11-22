@@ -82,8 +82,9 @@ In order of importance:
 - **A mission**: its sections, documents, items and plan reviews, read from
   its branch while it is proposed, with the branch, its pull request and the
   verdicts of its last round. Its state is proposed, agreed, stop not
-  published yet, stopped, or done. A proposed plan has "Stop this plan"; an
-  agreed mission shows the commands that stop it.
+  published yet, stopped, or done. Each item not started says that it can
+  start now or what it cannot start until. A proposed plan has "Stop this
+  plan"; an agreed mission shows the commands that stop it.
 - **A mission's history** is served at
   `GET /api/repos/{repo}/missions/{id}/history` (M5), read from the records
   as `atelier log` reads it: when the plan was written, merged and amended,
@@ -136,7 +137,8 @@ settled on in a spike on 2026-11-16:
   *Needs you*, each item labelled needs-human and each thread waiting on a
   person or quiet for 30 minutes, with the button that deals with it; *At
   work*, each other live thread with its latest line; and the items not
-  started, the merged ones and the Outcome, each folded to a line. Once
+  started, each saying it can start or what it waits on, the merged ones
+  and the Outcome, each folded to a line. Once
   done it shows the Result as written, a lane per item over time from the
   plan's merge to the close, and the merged items with the most review
   rounds first, each opening its pull request. It has no log of the
@@ -144,9 +146,11 @@ settled on in a spike on 2026-11-16:
   The Desk's own mission control page stays until the release that draws
   the mission page natively is installed (atelier-yy4j).
 - **The project home**, over T3 Code's main area, for one repository:
-  what is under way now, what comes next and what later, each mission
-  folding open to its items and who holds them, and a strip of what
-  started and merged each day this week. The T3 extension draws it itself,
+  what is under way now, what comes next and which plans are proposed for
+  later, each mission folding open to its items and who holds them, and a
+  strip of what started and merged each day this week. Open items in no
+  mission are one list under what comes next, the most urgent first.
+  The T3 extension draws it itself,
   in React with T3 Code's own components, from the Desk's reads. The
   project's name in a thread's breadcrumb or under the composer opens it,
   as does the row for a repository's other missions in the sidebar. A

@@ -281,7 +281,7 @@ function Running({
       <div className="mt-4">
         <Fold name="Not started" label={notStarted.label}>
           <ItemList
-            rows={notStarted.rows.map((row) => ({ row, note: row.startable ? "can start" : `waits on ${row.waiting_on.join(", ") || "others"}` }))}
+            rows={notStarted.rows.map((row) => ({ row, note: m.startNote(row) }))}
             openItem={openItem}
           />
         </Fold>
@@ -322,10 +322,12 @@ function ItemList({ rows, openItem }: { rows: { row: { id: string; title: string
           data-row={`item:${row.id}`}
           onClick={() => openItem(row.id)}
           title={`${row.id}: open its page`}
-          className="grid h-7 cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-2.5 rounded-md px-2 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+          className="grid h-7 cursor-pointer grid-cols-[minmax(0,1fr)_fit-content(60%)] items-center gap-2.5 rounded-md px-2 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
         >
           <span className="truncate">{row.title}</span>
-          <span className="text-muted-foreground text-xs">{note}</span>
+          <span className="truncate text-muted-foreground text-xs" title={note}>
+            {note}
+          </span>
         </button>
       ))}
     </div>

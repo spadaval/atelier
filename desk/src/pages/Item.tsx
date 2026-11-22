@@ -197,8 +197,14 @@ function ItemDetail({ repo, page }: { repo: string; page: ItemPage }) {
                 </dd>
               </>
             ) : null}
-            <dt>Ready</dt>
-            <dd>{page.ready ? `${page.ready.by}, ${dateTime(page.ready.at)}` : "Not yet"}</dd>
+            {page.ready ? (
+              <>
+                <dt>Readied</dt>
+                <dd>
+                  {page.ready.by}, {dateTime(page.ready.at)}
+                </dd>
+              </>
+            ) : null}
             {row.branch ? (
               <>
                 <dt>Branch</dt>
