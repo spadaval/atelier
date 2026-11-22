@@ -5,7 +5,7 @@ id: atelier-ww7w
 title: Cut review, CI, and branch overhead, and close the garden and Desk history loops
 status: open
 labels: []
-lead: null
+lead: mcp:launch:b3b5ffd62a4c227e4ec8ce23f1e32b83538dd28e5e6c91e0a2d3d91ead863ef6
 planners:
 - 92ddb56e-5c41-43a2-a697-03aa5ee83459
 created_at: 2026-11-22T05:30:19.649159093Z
