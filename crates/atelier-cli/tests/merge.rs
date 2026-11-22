@@ -1034,8 +1034,9 @@ fn with_a_forge_submit_pushes_the_branch_and_opens_its_pull_request() {
         run.stdout,
         format!(
             "Submitted {ID} for review.\nPushed branch {ID} to origin. {PULL}\
-             A reviewer {START_ONE}  Run atelier review {ID} and follow what it prints.\n\
-             Then wait for its verdict, and run `atelier status`.\n"
+             A reviewer {START_ONE}  In {}, run atelier review {ID} and follow what it prints.\n\
+             Then wait for its verdict, and run `atelier status`.\n",
+            git(&root, &["rev-parse", "--show-toplevel"])
         )
     );
     assert_eq!(forge.remote(ID), Some(head(&root, ID)));

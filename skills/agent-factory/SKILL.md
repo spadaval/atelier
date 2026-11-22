@@ -5,7 +5,9 @@ description: Use in repositories tracked with Atelier, to plan or shape work, le
 
 # Agent Factory
 
-Run `atelier status` first. If `atelier` is not found, or `status` fails
+Run `atelier status` first. If your session started in a different
+repository from your task, run it again in the task's checkout.
+If `atelier` is not found, or `status` fails
 because this is not a Git checkout or has no Atelier config, this is not an
 Atelier repository: stop using this skill and do the task directly.
 

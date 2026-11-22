@@ -11,7 +11,7 @@ use atelier_core::model::{Config, Priority, Response, Status, Thread, Verdict};
 use atelier_core::plan::{Approvals, NotCounted, PlanDelta, APPROVALS, SPLITS};
 use atelier_core::records::Problem;
 use atelier_core::{Carried, Entry, Overview, Refused};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 pub(crate) use atelier_core::say::*;
@@ -121,10 +121,11 @@ pub fn item(
         None => String::new(),
     };
     format!(
-        "{who}Title: {}\nStatus: {}{}\n{undefined}{unsaved}{next}",
+        "{who}Title: {}\nStatus: {}{}\n{undefined}{unsaved}{}{next}",
         entry.title,
         status_name(entry.status),
         since(entry),
+        malformed(entry),
     )
 }
 
@@ -169,6 +170,8 @@ fn gates(config: &Config) -> String {
 /// dropped on its branch whose drop has not reached the base. `unsaved` is
 /// what [`unsaved`] says of the checkout. `plans` is the plans the
 /// checked-out records branch changes, with where their review stands.
+/// `there` is, in the base's checkout, how the caller gets to the first item
+/// it holds, since `start` does not switch that checkout.
 #[allow(clippy::too_many_arguments)]
 pub fn overview(
     caller: &Thread,
@@ -180,6 +183,7 @@ pub fn overview(
     dropped: &[(String, Option<String>)],
     unreached: &[(String, Option<String>)],
     unsaved: &str,
+    there: Option<&str>,
 ) -> String {
     let place = match (branch, kind) {
         (Some(branch), _) if branch == base => format!("the base branch {base}"),
@@ -204,6 +208,9 @@ pub fn overview(
                 since(entry),
                 entry.title
             );
+            for problem in &entry.malformed {
+                text += &format!("  {}\n", condition(&entry.id, problem));
+            }
             if let Some(round) = entry.capped {
                 text += &format!("    Round {round} reached the review cap: its mission's lead rules before it is submitted again.\n");
             }
@@ -259,18 +266,40 @@ pub fn overview(
     if overview.held.is_empty() && !overview.led.is_empty() {
         return text;
     }
-    let startable = overview.ready.iter().find(|entry| entry.unmet.is_empty());
-    match (overview.held.first(), startable) {
-        (Some(held), _) => {
-            text += &format!("Then: atelier start {} (switches to its branch)\n", held.id)
+    match overview.held.first() {
+        Some(held) => match there {
+            Some(there) => text += there,
+            None => text += &format!("Then: atelier start {} (switches to its branch)\n", held.id),
+        },
+        // Which to start is the task's to say: a thread given one task
+        // takes a named item for its next step.
+        None if !overview.ready.is_empty() => {
+            text += "Start one only if that is your task: atelier start <id>\n";
         }
-        (None, Some(ready)) => text += &format!("Then: atelier start {}\n", ready.id),
-        (None, None) if overview.cannot_start.is_empty() => {
-            text += "Nothing is ready to start.\n";
-        }
-        (None, None) => text += "No ready item can start now.\n",
+        None if overview.cannot_start.is_empty() => text += "Nothing is ready to start.\n",
+        None => text += "No ready item can start now.\n",
     }
     text
+}
+
+/// How `status` in the base's checkout sends the holder of `id` to `path`,
+/// the checkout that has its branch.
+pub fn work_in(id: &str, path: &Path) -> String {
+    format!(
+        "{id}'s branch is checked out in {0}; work there.\nThen: cd {0}\n",
+        quoted(&path.display().to_string())
+    )
+}
+
+/// How `status` in the base's checkout sends the holder of `id` to a new
+/// checkout of `branch` at `path`. `stale` says Git still lists a checkout
+/// of it whose directory is gone, which it will not add another beside.
+pub fn work_in_new(id: &str, branch: &str, path: &Path, stale: bool) -> String {
+    let prune = if stale { "git worktree prune && " } else { "" };
+    format!(
+        "{id}'s branch needs a checkout of its own; work there.\nThen: {prune}git worktree add {} {branch}\n",
+        quoted(&path.display().to_string())
+    )
 }
 
 /// What `status` says of what the checkout `at` names, as for
@@ -742,33 +771,74 @@ fn commits<T>(found: &[(String, String, T)], what: impl Fn(&T) -> String) -> Str
     text
 }
 
-/// The pre-push hook's refusal of a push of `base`, whose commit on the
-/// remote, if it has one this clone has, is `old`: the new commits on its
-/// first-parent line that are not Atelier merges.
-pub fn push_refused(base: &str, old: Option<&str>, plain: &[(String, String, ())]) -> String {
-    let back = match old.map(short) {
-        Some(old) => format!("git branch -f {base} {old}"),
-        None => format!("moving {base} back to the remote's commit"),
+/// How to take refused commits off the base, where one command line can: the
+/// base's tip is the commit pushed, and a branch `start` makes there holds
+/// them all.
+pub struct WayBack {
+    /// The remote's commit, which the base goes back to; whole, since the
+    /// command is run as printed.
+    pub old: String,
+    pub base_checkout: BaseCheckout,
+}
+
+/// Which checkout has the base out, for how it can be moved.
+pub enum BaseCheckout {
+    Here,
+    At(PathBuf),
+    /// None has, so Git lets `branch -f` move it.
+    Nowhere,
+}
+
+/// What the pre-push hook says to do with the commits it refused. The
+/// steps are one `&&` line, so a `start` that fails leaves the base, which
+/// is then all that holds them, where it is.
+fn off_base(base: &str, back: Option<&WayBack>) -> String {
+    let Some(WayBack { old, base_checkout }) = back else {
+        return format!(
+            "Move them to a branch: `atelier start --new \"<title>\"` starts an item that holds code, `atelier start --backlog <slug>` a branch for record changes. Once that branch holds them, move {base} back to the remote's commit, and atelier merge brings the branch in.\n"
+        );
     };
+    let at = match base_checkout {
+        BaseCheckout::At(path) => Some(path.as_path()),
+        BaseCheckout::Here | BaseCheckout::Nowhere => None,
+    };
+    let git = git_command(at);
+    let (cd, reset) = (
+        at.map_or(String::new(), |path| {
+            format!("cd {} && ", quoted(&path.display().to_string()))
+        }),
+        format!("{git} reset --keep {old}"),
+    );
+    let (back, refused) = match base_checkout {
+        BaseCheckout::Nowhere => (format!("git branch -f {base} {old}"), String::new()),
+        BaseCheckout::Here | BaseCheckout::At(_) => (
+            reset.clone(),
+            format!(
+                "If uncommitted changes make the reset refuse, nothing is lost and the new branch already has the commits: save the changes with `{git} stash push -u`, finish with `{reset}`, then run `git stash apply` in the new branch's checkout.\n"
+            ),
+        ),
+    };
+    format!(
+        "Move them to a new item's branch and put {base} back with:\n  {cd}atelier start --new \"<title>\" && {back}\n{refused}For record changes alone, use `atelier start --backlog <slug>` in place of `start --new`. atelier merge then brings the branch in.\n"
+    )
+}
+
+/// The pre-push hook's refusal of a push of `base`: the new commits on its
+/// first-parent line that are not Atelier merges, and the way `back`.
+pub fn push_refused(base: &str, back: Option<&WayBack>, plain: &[(String, String, ())]) -> String {
     let mut text = format!(
         "Atelier's pre-push hook refused this push; nothing was pushed.\nRule: {base} receives only merges made by atelier merge. Each new commit on {base}'s first-parent line is one. These are not:\n"
     );
     text += &commits(plain, |()| "not an Atelier merge".to_string());
-    text + &format!(
-        "Move them to a branch: atelier start --new \"<title>\" starts an item that holds code, atelier start --backlog <slug> a branch for record changes. Then {back} takes them off {base}, and atelier merge brings the branch in.\n"
-    )
+    text + &off_base(base, back)
 }
 
-/// The pre-push hook's refusal of a push that moves `base` where a forge
-/// on `remote` is configured; `old` is the remote's commit, if this clone
-/// has it.
-pub fn push_moves_base(base: &str, remote: &str, old: Option<&str>) -> String {
-    let back = match old.map(short) {
-        Some(old) => format!("`git branch -f {base} {old}` puts {base} back"),
-        None => format!("moving {base} back to {remote}'s commit puts it back"),
-    };
+/// The pre-push hook's refusal of a push that moves `base` where a forge is
+/// configured, and the way `back`.
+pub fn push_moves_base(base: &str, back: Option<&WayBack>) -> String {
     format!(
-        "Atelier's pre-push hook refused this push; nothing was pushed.\nRule: {base} is moved only by the forge's merge of a pull request. With a forge configured, atelier merge has the forge merge each branch's pull request and never pushes {base}, so no push may move it.\nPut the commits on a branch and run atelier merge there; {back}.\n"
+        "Atelier's pre-push hook refused this push; nothing was pushed.\nRule: {base} is moved only by the forge's merge of a pull request. With a forge configured, atelier merge has the forge merge each branch's pull request and never pushes {base}, so no push may move it.\n{}",
+        off_base(base, back)
     )
 }
 
@@ -944,8 +1014,9 @@ fn outside(id: &str, uncommitted: &[String]) -> Vec<String> {
     outside.cloned().collect()
 }
 
-/// `forge` is what `submit` did on the forge, if one is configured.
-pub fn submitted(id: &str, uncommitted: &[String], forge: &str) -> String {
+/// `checkout` is the one submitted from, and `forge` what `submit` did on
+/// the forge, if one is configured.
+pub fn submitted(id: &str, checkout: &Path, uncommitted: &[String], forge: &str) -> String {
     let code = outside(id, uncommitted);
     let mut text = format!("Submitted {id} for review.\n{forge}");
     if !code.is_empty() {
@@ -954,7 +1025,7 @@ pub fn submitted(id: &str, uncommitted: &[String], forge: &str) -> String {
             some(&code)
         );
     }
-    text + &start_reviewer(id)
+    text + &start_reviewer(id, Some(checkout))
 }
 
 /// `submit` on a records branch `branch` while `paths` are uncommitted.
@@ -1071,7 +1142,7 @@ pub fn submit_base_unread(id: &str, base: &str, remote: &str, error: &anyhow::Er
 
 pub fn not_on_item(command: &str, branch: Option<&str>) -> String {
     format!(
-        "`atelier {command}` runs on an item's branch, and this checkout is on {}. Nothing changed.\n`atelier status` lists what you hold; `atelier start <id>` switches to its branch.\n",
+        "`atelier {command}` runs on an item's branch, and this checkout is on {}. Nothing changed.\n`atelier status` lists what you hold and says how to get to its branch.\n",
         place(branch)
     )
 }
@@ -1090,10 +1161,10 @@ pub fn review_taken_over(id: &str, round: u32, before: Option<&Thread>) -> Strin
     }
 }
 
-pub fn author(id: &str, caller: &Thread) -> String {
+pub fn author(id: &str, caller: &Thread, checkout: Option<&Path>) -> String {
     format!(
         "You (thread {caller}) have implemented {id}, and an author does not review its own work. Nothing changed.\n{}What a reviewer is shown:\n\n",
-        start_reviewer(id)
+        start_reviewer(id, checkout)
     )
 }
 

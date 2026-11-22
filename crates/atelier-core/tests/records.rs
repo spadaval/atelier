@@ -664,7 +664,7 @@ fn a_dropped_record_gives_the_reason_on_the_first_line_of_its_report_or_result()
         .section("Report")
         .unwrap()
         .contains("It prints them.\n\n### Responses"));
-    assert_eq!(item.responses().unwrap().len(), 3);
+    assert_eq!(item.responses().len(), 3);
     assert_eq!(
         store.mission("atelier-icv4").unwrap().dropped(),
         Some("no time")
@@ -766,7 +766,7 @@ fn findings_are_named_by_review_stem_and_number() {
     assert_eq!(findings[2].was.as_ref().unwrap().to_string(), "1-k3fa.1");
     assert_eq!(findings[2].now, Some(Now::Kept));
 
-    let responses = dir.responses().unwrap();
+    let responses = dir.responses();
     assert_eq!(responses.len(), 3);
     assert!(matches!(&responses[0], Response::Fixed { finding, commit }
         if finding.to_string() == "2-m2bn.1" && commit == "0123abc"));
@@ -1243,4 +1243,24 @@ fn a_response_line_of_no_form_names_the_three_forms() {
          `<finding>: fixed in <commit>`, `<finding>: rebutted: <fact>` or \
          `<finding>: not built: <reason>`",
     );
+}
+
+#[test]
+fn a_malformed_response_is_a_problem_and_hides_no_other() {
+    let item = "items/atelier-06jc/item.md";
+    let problems = problems_after(&[(item, ": not built: a second", " not built: a second")]);
+    assert_one_problem(
+        &problems,
+        item,
+        "Responses",
+        "`- 2-m2bn.3 not built: a second brief is larger than the change` is not `<finding>: fixed in <commit>`",
+    );
+
+    let mut files = example();
+    let text = &mut files.iter_mut().find(|(path, _)| *path == item).unwrap().1;
+    *text = text.replacen(": not built: a second", " not built: a second", 1);
+    let files: Vec<(&str, &str)> = files.iter().map(|(p, t)| (*p, t.as_str())).collect();
+    let dir = load(&files, "atelier-06jc");
+    assert_eq!(dir.responses().len(), 2);
+    assert_eq!(dir.malformed_responses().len(), 1);
 }

@@ -129,6 +129,12 @@ fn orientation(repo: &mut Repo) -> Result<String> {
         let located = repo.find_mission(&id)?;
         unsaved += &crate::views::unpublished_stop(repo, &located)?.unwrap_or_default();
     }
+    let there = match overview.held.first() {
+        Some(held) if repo.branch.as_deref() == Some(repo.base.as_str()) => {
+            Some(way_to(repo, &held.id)?)
+        }
+        _ => None,
+    };
     Ok(output::overview(
         &repo.caller,
         repo.branch.as_deref(),
@@ -139,6 +145,7 @@ fn orientation(repo: &mut Repo) -> Result<String> {
         &dropped,
         &unreached,
         &unsaved,
+        there.as_deref(),
     ))
 }
 
@@ -155,6 +162,19 @@ fn piled_up(repo: &Repo) -> Result<String> {
     Ok(match merged >= MANY_MERGED || detached >= MANY_DETACHED {
         true => output::piled_up(&repo.base, merged, detached),
         false => String::new(),
+    })
+}
+
+/// How the base's checkout, which `start` never switches, sends the holder
+/// of item `id` to its branch: the checkout that has it, else a new one.
+fn way_to(repo: &Repo, id: &str) -> Result<String> {
+    let branch = repo.branch_of(id);
+    Ok(match git::checkout_of(&repo.root, &branch)? {
+        Some(path) if path.exists() => output::work_in(id, &path),
+        found => {
+            let path = worktree_path(repo, &branch);
+            output::work_in_new(id, &branch, &path, found.is_some())
+        }
     })
 }
 
@@ -720,6 +740,7 @@ pub fn submit(repo: &mut Repo) -> Result<Outcome> {
     };
     Ok(Outcome::Done(output::submitted(
         &item.id,
+        &repo.root,
         &left,
         &(unfetched + &shared),
     )))
@@ -948,6 +969,7 @@ fn approved_needs(repo: &mut Repo, entries: &mut [Entry], items: &[Located]) -> 
             mission: None,
             caller: holder,
             checkout: Some(&checkout),
+            worktree: None,
         };
         entry.needs = unmet(Action::Merge, &facts)?;
     }

@@ -174,6 +174,7 @@ pub fn planned_facts<'a>(repo: &'a Repo, located: &Located, record: &'a ItemDir)
         mission: None,
         caller: &repo.caller,
         checkout: None,
+        worktree: None,
     }
 }
 

@@ -180,8 +180,9 @@ fn submit_refuses_with_the_status_list_and_then_commits_the_report_in_review() {
     assert_eq!(
         submitted.stdout,
         format!(
-            "Submitted {ID} for review.\nA reviewer {START_ONE}  Run atelier review {ID} and follow \
-             what it prints.\nThen wait for its verdict, and run `atelier status`.\n"
+            "Submitted {ID} for review.\nA reviewer {START_ONE}  In {}, run atelier review {ID} and \
+             follow what it prints.\nThen wait for its verdict, and run `atelier status`.\n",
+            git(&root, &["rev-parse", "--show-toplevel"])
         )
     );
     // One commit, holding the status and the Report; nothing left over.
@@ -348,9 +349,13 @@ fn status_on_the_base_reads_a_started_item_from_its_branch_until_it_merges() {
         held.contains(&format!("You hold:\n  {ID} (building): Say hello\n")),
         "{held}"
     );
-    assert!(held.ends_with(&format!(
-        "Then: atelier start {ID} (switches to its branch)\n"
-    )));
+    assert!(
+        held.ends_with(&format!(
+            "Then: cd {}\n",
+            git(&root, &["rev-parse", "--show-toplevel"])
+        )),
+        "{held}"
+    );
 
     // Merged: the base's copy, which says building, came only with the
     // merge of its branch, so it reads as done.
@@ -415,7 +420,7 @@ fn start_refuses_a_ready_item_whose_blocker_is_not_done_or_whose_branch_exists()
         format!(
             "{NO_HOOKS}You are thread t1, on branch {SCRATCH}, which is no item's.\nReady to start:\n  \
              demo-b10c (high): Say hello\n1 other ready item cannot start yet: 1 waits on a \
-             blocker that is not done. See it with: atelier list\nThen: atelier start demo-b10c\n"
+             blocker that is not done. See it with: atelier list\n{MAY_START}"
         )
     );
     let run = atelier(&root, "t1", &["start", ID]);
@@ -1411,4 +1416,209 @@ fn a_codex_subagent_reviews_its_parents_item_as_a_thread_of_its_own() {
     let run = codex(&root, SESSION, &["merge"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert_eq!(field(&root, "main", "status"), "approved");
+}
+
+#[test]
+fn a_reviewer_started_in_the_main_checkout_follows_its_task_to_the_items_checkout() {
+    let scratch = Scratch::new(&[(ID, "ready")]);
+    let main = scratch.root();
+    git(&main, &["switch", "-q", "main"]);
+    assert_eq!(atelier(&main, "t1", &["start", ID]).code, 0);
+    let work = scratch.dir.path().join(format!("repo-{ID}"));
+    run_then(&main, &atelier(&main, "t1", &["status"]).stdout);
+    finish_and_submit(&work, "t1");
+
+    // The same task from each place that prints it.
+    let status = atelier(&work, "t1", &["status"]).stdout;
+    let again = atelier(&work, "t1", &["submit"]).stderr;
+    let author = atelier(&main, "t1", &["review", ID]).stderr;
+    let task = |said: &str| {
+        let found = said.lines().find(|line| line.starts_with("  In "));
+        found.expect(said).trim().to_string()
+    };
+    let given = task(&status);
+    assert_eq!(task(&again), given);
+    assert_eq!(task(&author), given);
+    assert!(!given.contains('`'), "{given}");
+
+    // A reviewer that starts in the main checkout and does what it says.
+    let (at, rest) = given
+        .strip_prefix("In ")
+        .unwrap()
+        .split_once(", run ")
+        .unwrap();
+    let run = rest.strip_suffix(" and follow what it prints.").unwrap();
+    let review = sh(&main, "t2", &format!("cd {at} && {run}"));
+    assert_eq!(review.code, 0, "{}", review.stderr);
+    assert!(
+        review.stdout.contains(&format!(
+            "You are the reviewer of {ID} (thread t2), round 1.\n"
+        )),
+        "{}",
+        review.stdout
+    );
+    assert_eq!(reviews(&work).len(), 1);
+}
+
+#[test]
+fn status_in_the_bases_checkout_sends_a_holder_to_a_checkout_and_start_elsewhere() {
+    let scratch = Scratch::new(&[(ID, "ready")]);
+    let base = scratch.root();
+    git(&base, &["switch", "-q", "main"]);
+    let started = atelier(&base, "t1", &["start", ID]);
+    assert_eq!(started.code, 0, "{}", started.stderr);
+    assert!(
+        !started.stdout.contains("Then: atelier start"),
+        "{}",
+        started.stdout
+    );
+
+    // No checkout has the branch: the command that makes one.
+    let work = scratch.dir.path().join(format!("repo-{ID}"));
+    let status = atelier(&base, "t1", &["status"]).stdout;
+    assert_eq!(
+        status,
+        started.stdout[started.stdout.find(NO_HOOKS).unwrap()..]
+    );
+    assert!(
+        status.contains("Then: git worktree add ") && status.ends_with(&format!(" {ID}\n")),
+        "{status}"
+    );
+    run_then(&base, &status);
+    assert_eq!(git(&work, &["symbolic-ref", "--short", "HEAD"]), ID);
+
+    // One has it: that one.
+    let at = git(&work, &["rev-parse", "--show-toplevel"]);
+    let status = atelier(&base, "t1", &["status"]).stdout;
+    assert!(status.ends_with(&format!("Then: cd {at}\n")), "{status}");
+
+    // One had it, and its directory is gone.
+    fs::remove_dir_all(&work).unwrap();
+    let status = atelier(&base, "t1", &["status"]).stdout;
+    assert!(
+        status.contains("Then: git worktree prune && git worktree add "),
+        "{status}"
+    );
+    run_then(&base, &status);
+    assert_eq!(git(&work, &["symbolic-ref", "--short", "HEAD"]), ID);
+
+    // Out of the base's checkout `start` switches, so it is still named.
+    git(&base, &["worktree", "remove", work.to_str().unwrap()]);
+    git(&base, &["checkout", "-q", "--detach"]);
+    let status = atelier(&base, "t1", &["status"]).stdout;
+    assert!(
+        status.ends_with(&format!(
+            "Then: atelier start {ID} (switches to its branch)\n"
+        )),
+        "{status}"
+    );
+    assert_eq!(atelier(&base, "t1", &["start", ID]).code, 0);
+    assert_eq!(git(&base, &["symbolic-ref", "--short", "HEAD"]), ID);
+}
+
+/// `atelier` as `thread` with a reason to skip rules by.
+fn skipping(at: &Path, thread: &str, args: &[&str]) -> Run {
+    let mut command = atelier_command(at, thread, args);
+    let output = command.env("ATELIER_SKIP", "testing").output().unwrap();
+    Run {
+        code: output.status.code().unwrap_or(-1),
+        stdout: String::from_utf8(output.stdout).unwrap(),
+        stderr: String::from_utf8(output.stderr).unwrap(),
+    }
+}
+
+#[test]
+fn a_malformed_response_is_reported_by_every_gate_and_stops_no_reading() {
+    let (scratch, first) = changes_in_round_1();
+    let root = scratch.root();
+    let bad = format!("- {first}.1 not built: too large");
+    append(&root, &item_path(ID), &format!("{bad}\n"));
+    git(&root, &["commit", "-qam", "Answer"]);
+    let named = format!(
+        "Responses: `{bad}` is not `<finding>: fixed in <commit>`, `<finding>: rebutted: <fact>` or `<finding>: not built: <reason>`"
+    );
+    let read = |at: &Path, thread: &str, args: &[&str]| {
+        let run = atelier(at, thread, args);
+        assert_eq!(run.code, 0, "{args:?}: {}", run.stderr);
+        run.stdout
+    };
+    let refused = |thread: &str, args: &[&str]| {
+        let run = atelier(&root, thread, args);
+        assert_eq!(run.code, 1, "{args:?}: {}", run.stderr);
+        assert!(
+            (run.stdout.clone() + &run.stderr).contains(&named),
+            "{args:?}: {}",
+            run.stderr
+        );
+        run.stderr
+    };
+
+    // Unread, it answers nothing, and is never taken for `not built`.
+    let status = read(&root, "t1", &["status"]);
+    assert!(status.contains(&named), "{status}");
+    assert!(
+        status.contains(&format!("Finding {first}.1 (fix now)")),
+        "{status}"
+    );
+    let base = scratch.worktree("base");
+    let away = read(&base, "t1", &["status"]);
+    assert!(away.contains(&named), "{away}");
+    assert!(read(&base, "t9", &["show", ID]).contains(&bad));
+    assert!(refused("t9", &["check"]).ends_with(SKIP));
+    assert_eq!(skipping(&root, "t9", &["check"]).code, 0);
+    assert!(refused("t1", &["submit"]).ends_with(SKIP));
+
+    // A line that reads still counts beside it.
+    append(
+        &root,
+        &item_path(ID),
+        &format!("- {first}.1: fixed in abc1234\n"),
+    );
+    let said = refused("t1", &["submit"]);
+    assert!(
+        !said.contains(&format!("Finding {first}.1 (fix now)")),
+        "{said}"
+    );
+    let run = skipping(&root, "t1", &["submit"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    // The commit's trailer names the record from the root, not by where
+    // this checkout happens to be.
+    let message = git(&root, &["log", "-1", "--format=%B"]);
+    let trailer = format!("Atelier-Skip: Every record is valid ({}: ", item_path(ID));
+    assert!(message.contains(&trailer), "{message}");
+
+    // In review, where its holder has no next action, it is still said.
+    let waiting = read(&root, "t1", &["status"]);
+    assert_eq!(waiting.matches(&named).count(), 1, "{waiting}");
+    let brief = read(&root, "t3", &["review", ID]);
+    assert!(
+        brief.contains("The author's response: fixed in abc1234"),
+        "{brief}"
+    );
+    let (_, path) = review_of(&root, 2);
+    let fixed = common::read(&root, &path).replace("Now: kept", "Now: fixed");
+    fs::write(root.join(&path), fixed).unwrap();
+    let reviewing = read(&root, "t3", &["status"]);
+    assert_eq!(reviewing.matches(&named).count(), 1, "{reviewing}");
+    assert!(refused("t3", &["verdict", "changes"]).ends_with(SKIP));
+    assert!(refused("t3", &["verdict", "approve"]).ends_with(SKIP));
+    let run = skipping(&root, "t3", &["verdict", "approve"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    run_then(&root, &run.stdout);
+
+    // `merge` takes no skip of it: the merged tree must be valid, and the
+    // line may be a question to the lead.
+    let approved = read(&root, "t1", &["status"]);
+    assert_eq!(approved.matches(&named).count(), 1, "{approved}");
+    assert!(!refused("t1", &["merge"]).contains("ATELIER_SKIP"));
+    let run = skipping(&root, "t1", &["merge"]);
+    assert_eq!(run.code, 1);
+    assert!(run.stderr.ends_with(NOT_SKIPPABLE), "{}", run.stderr);
+
+    // Fixed, it merges on the approval it has.
+    let mended = common::read(&root, &item_path(ID)).replace(&format!("{bad}\n"), "");
+    fs::write(root.join(item_path(ID)), mended).unwrap();
+    git(&root, &["commit", "-qam", "Mend the line"]);
+    let run = atelier(&root, "t1", &["merge"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
 }

@@ -274,7 +274,9 @@ fn an_item_only_on_its_branch_is_dropped_on_a_backlog_branch_with_its_definition
         .replace("## Goal\n", "## Goal\n\nSneeze.\n")
         .replace("## Done when\n", "## Done when\n\n- [x] It sneezes.\n")
         .replace("## Scope\n", "## Scope\n\nOne sneeze.\n");
-    fs::write(work.join(&path), text + "\n## Report\n\nIt sneezes.\n").unwrap();
+    // A malformed response on its branch does not stop the drop either.
+    let report = "\n## Report\n\nIt sneezes.\n\n### Responses\n\n- not a response\n";
+    fs::write(work.join(&path), text + report).unwrap();
     git(&work, &["commit", "-qam", "Sneeze"]);
     let branch = head(&work);
 
@@ -661,7 +663,10 @@ fn a_failed_catch_up_leaves_both_refs_untouched_until_merge_runs_again() {
         ],
     );
     let status = hub.atelier(&at, "t2", &["status"]).stdout;
-    assert!(!status.contains(&format!("atelier start {ID}")), "{status}");
+    assert!(
+        !status.contains("Ready to start:") && status.contains("Held by other threads:"),
+        "{status}"
+    );
 
     git(&a, &["config", "--unset", "remote.origin.uploadpack"]);
     git(&a, &["fetch", "-q", "origin"]);

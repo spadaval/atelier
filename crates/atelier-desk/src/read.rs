@@ -834,7 +834,7 @@ pub fn item(repo: &mut Repo, id: &str) -> Result<Option<ItemPage>> {
     let section = |heading| record.section(heading).map(|s| s.trim().to_string());
     let reviews = record.reviews.iter();
     let responses = record
-        .responses()?
+        .responses()
         .into_iter()
         .map(|response| match response {
             atelier_core::model::Response::Fixed { finding, commit } => ResponseLine::Fixed {

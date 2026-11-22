@@ -158,6 +158,22 @@ not built](#findings-not-built)). An installed binary from before
 2026-11-19 refuses it as a line of no form; an item without one reads as
 it did.
 
+A line of no form, or naming a finding in another form, is a problem of
+that line and not of the record (atelier-zc9b): until then one such line
+made every command on the item exit 2, which no skip passes.
+`ItemDir::responses` gives the lines that read and
+`ItemDir::malformed_responses` a problem for each other, quoting it with
+the three forms. As a condition the problem names the record by its path
+from the root, since a skip copies it into a commit. A malformed line answers nothing, so it is never taken
+for a fix, a rebuttal or a `not built`, and it is never dropped silently:
+`validate` reports it, so `check`, pre-commit and the check of a merged
+tree do; `submit`, both verdicts and `merge` have it as a condition
+(`Condition::MalformedResponse`); `status` lists it while the item is
+started, whatever it waits for, and shows it to the mission's lead. It is
+a rule everywhere but at `merge`, which a skip cannot pass: the merged
+tree must validate, and the line may be a question to the lead. `status`,
+`show` and `review` work on the item throughout.
+
 The front matter has no field for why an item ended without a merge, so
 the body holds it. `drop` writes `Dropped: <reason>`, the reason on one
 line, as the first line under `## Report`, before any other text or
@@ -404,17 +420,17 @@ will check.
 | `start --new` | Implementer | none | `building` | none; the item is created on its new branch |
 | `start --mission` | Planner | none | `draft`, which atelier-2vdq makes `open` | none; the mission is created on its new branch, which `start` pushes where a remote is configured; atelier-2vdq adds the caller to `planners` |
 | `start --backlog` | Any | none | none | no branch `backlog/<slug>` exists, local or on the remote; the remote can be reached |
-| `submit` | Implementer | `building`, `changes_requested`, `approved` | `in_review` | where a remote is configured, the base fetched then has the item neither done nor dropped; Done when ticked; Report written; each open fix-now finding has a line in Responses. After its commit, where a forge is configured, it pushes the branch and opens its pull request; a failure of either is a warning, and `merge` does it |
+| `submit` | Implementer | `building`, `changes_requested`, `approved` | `in_review` | where a remote is configured, the base fetched then has the item neither done nor dropped; Done when ticked; Report written; each open fix-now finding has a line in Responses, and no line there is malformed. After its commit, where a forge is configured, it pushes the branch and opens its pull request; a failure of either is a warning, and `merge` does it |
 | `submit` (mission) | Planner | proposed | unchanged | in a checkout on the mission's branch; no record the branch changes is uncommitted, and the plan has not split in its last two rounds of review; then it pushes the branch and opens its pull request where a forge is configured. From atelier-2vdq: the mission is not dropped, and a caller not in `planners` is added to it, in a commit of `mission.md` alone, and takes the plan over |
 | `submit` (backlog) | Any | none | none | in a checkout on the backlog branch; no record the branch changes is uncommitted, and no plan it changes has split in its last two rounds of review; then it pushes the branch and opens its pull request where a forge is configured. Not an implementer's action on an item. From atelier-2vdq: where the branch changes an agreed mission's plan, a caller not in that mission's `planners` is added to it the same way, and opens the next plan round |
 | `review` | Reviewer | `in_review` | unchanged | the caller is not in the item's `implementers` |
-| `verdict changes` | Reviewer | `in_review` | `changes_requested` | the file validates; it has an open fix-now finding; no finding of it has a `Decided:` line or carries a finding a decision settled |
-| `verdict approve` | Reviewer | `in_review` | `approved` | the file validates; no fix-now finding of the item is open, the file's or one it does not carry; no finding of it has a `Decided:` line or carries a finding a decision settled |
+| `verdict changes` | Reviewer | `in_review` | `changes_requested` | the file validates; no line in Responses is malformed; it has an open fix-now finding; no finding of it has a `Decided:` line or carries a finding a decision settled |
+| `verdict approve` | Reviewer | `in_review` | `approved` | the file validates; no line in Responses is malformed; no fix-now finding of the item is open, the file's or one it does not carry; no finding of it has a `Decided:` line or carries a finding a decision settled |
 | `review` of a plan | Reviewer | proposed, or `open` with its plan changed on the backlog branch the checkout is on | unchanged | the caller is not in the mission's `planners` |
 | `verdict changes` on a plan review | Reviewer | as `review` of a plan | unchanged | the file validates; it has an open fix-now finding; no finding has a `Decided:` line |
 | `verdict approve` on a plan review | Reviewer | as `review` of a plan | unchanged | the file validates; no fix-now finding is open among the file's own and those of earlier rounds; no finding has a `Decided:` line |
-| `merge` | Implementer | `approved` | `done`, read from the merge | a review of the latest round approves it and still covers the head; nothing uncommitted in tracked files or the item's directory; the item and its mission are not dropped |
-| `merge --trivial` | Implementer | `building` | `done`, read from the merge | Done when ticked; Report written; no review file; nothing uncommitted in tracked files or the item's directory; the item and its mission are not dropped |
+| `merge` | Implementer | `approved` | `done`, read from the merge | a review of the latest round approves it and still covers the head; no line in Responses is malformed; nothing uncommitted in tracked files or the item's directory; the item and its mission are not dropped |
+| `merge --trivial` | Implementer | `building` | `done`, read from the merge | Done when ticked; Report written; no review file; no line in Responses is malformed; nothing uncommitted in tracked files or the item's directory; the item and its mission are not dropped |
 | `merge` (mission) | Planner | proposed | agreed, by being on the base | Until atelier-2vdq, refused as a backlog branch that adds a mission is, a rule a skip passes. From atelier-2vdq: two reviews of the current round, from threads not in `planners`, approve, and the plan has not changed since the commit each reviewed; the mission is not dropped on its branch; no code changed; nothing uncommitted |
 | `merge` (backlog) | Any | none | none | in a checkout on the backlog branch; no code changed (no path outside `.atelier/`, and not `config.toml`), which is no rule; it adds no mission and changes no mission's plan, which until atelier-2vdq gives a plan its gate is a rule refused; it brings no item record in a started status; `atelier check` passes on the merged tree; nothing uncommitted. No review file is asked for. Not an implementer's action on an item |
 | `close` (item) | Any | `draft`, `ready` | `done` | a result text; no branch `<id>` exists |
@@ -840,7 +856,15 @@ reads; nothing is written there.
   does not make the worktree itself: the tool would then own a path and its
   removal, which the harness already owns (T3 Code makes a worktree per
   thread).
-- `status`, `show`, `list`, `log` and `check` run there as anywhere.
+- `status`, `show`, `list`, `log` and `check` run there as anywhere. Since
+  `start` switches nothing there, `status` sends a thread holding a started
+  item to the checkout that has its branch (`git::checkout_of`), or prints
+  the `git worktree add` that makes one, after a `git worktree prune` where
+  the one listed is gone. Naming `start` there made agents that follow
+  `Then:` lines loop. Elsewhere it still names `start <id>`. To a thread
+  holding nothing `status` names no item as the next command, in any
+  checkout: a delegated thread took the top ready item for its task, or
+  would have, in another repository.
 
 ### A detached HEAD
 
@@ -1521,6 +1545,20 @@ stopping at it.
   `.atelier/items/` through, for planning committed on the base, and
   refused one that set an item `done` while its branch existed; both went
   with planning on the base.
+  Its way out is run as printed, so it prints steps only where they lose
+  nothing (`check::way_back`): the local base is at the commit pushed,
+  strictly ahead of the remote's old one, and is the tip `start` branches
+  from. The branch `start --new` makes there then holds the commits, with
+  no cherry-pick, and `git reset --keep <old>`, in the checkout that has
+  the base out, puts the base back with uncommitted changes kept in the
+  working tree, unstaged; Git
+  refuses `branch -f` of a branch that is checked out, and it is printed
+  only where none has the base out. The two are one `&&` line, so a
+  `start` that fails leaves the base holding the commits. Where changes
+  overlap, `reset --keep` refuses and the hook says to stash, reset and
+  apply them on the new branch. Anywhere else, such as a push of another
+  branch to the base or a base the forge's has moved past, it prints no
+  reset, which would orphan the commits or move the wrong branch.
 - **post-checkout** ends in success whatever it finds, a panic included:
   when `status` fails, as on a record that does not parse, it prints why.
 
@@ -1596,7 +1634,8 @@ rule names.
   their checkout, and `merge` confirms them unchanged,
   index entries, modes and contents, and a submodule's commit and its own
   uncommitted changes, with its other inputs.
-- **Not rules:** a record that does not read; code on a mission's or a
+- **Not rules:** a record that does not read; a malformed response at
+  `merge`; code on a mission's or a
   backlog branch, which needs an item and its review, since no code merges
   unreviewed; a plan changed on an item's branch; an ID, a mission or a finding
   that does not exist, and a finding settled already; a missing or
