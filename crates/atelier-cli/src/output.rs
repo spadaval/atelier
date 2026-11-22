@@ -25,6 +25,10 @@ pub(crate) fn priority_name(priority: Priority) -> &'static str {
     }
 }
 
+/// How many of the items that can start `status` names, the most urgent.
+/// The session-start hook prints it, and a backlog can hold hundreds.
+const STARTABLE_SHOWN: usize = 10;
+
 pub(crate) fn holder(entry: &Entry) -> String {
     match &entry.holder {
         Some(thread) => format!("held by {thread}"),
@@ -218,13 +222,17 @@ pub fn overview(
     }
     if !overview.startable.is_empty() {
         text += "Can start now:\n";
-        for entry in &overview.startable {
+        for entry in overview.startable.iter().take(STARTABLE_SHOWN) {
             text += &format!(
                 "  {} ({}): {}\n",
                 entry.id,
                 priority_name(entry.priority),
                 entry.title
             );
+        }
+        let more = overview.startable.len().saturating_sub(STARTABLE_SHOWN);
+        if more > 0 {
+            text += &format!("  and {more} more: atelier list --startable\n");
         }
     }
     text += &cannot_start(&overview.cannot_start, !overview.startable.is_empty());

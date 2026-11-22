@@ -714,6 +714,56 @@ fn a_mission_stored_as_draft_is_proposed_so_it_cannot_be_led_and_its_items_canno
 }
 
 #[test]
+fn status_names_the_ten_most_urgent_that_can_start_and_a_leads_own_items_whole() {
+    let scratch = Scratch::new(&[]);
+    let root = scratch.root();
+    write_mission(&root, MISSION, "open");
+    let ids: Vec<String> = (0..10).map(|n| format!("demo-i{n:03}")).collect();
+    for id in &ids {
+        write_item(&root, id, "open", &[], &[], "");
+        join_mission(&root, id, MISSION);
+    }
+    commit_all(&root, "Plan ten");
+    // Ten can start: all are named, and no line counts more.
+    let status = atelier(&root, "t1", &["status"]).stdout;
+    assert_eq!(status.matches(" (high): Say hello").count(), 10, "{status}");
+    assert!(!status.contains(" more: "), "{status}");
+
+    // Two more, the first by priority though not by ID.
+    for id in ["demo-z998", "demo-z999"] {
+        write_item(&root, id, "open", &[], &[], "");
+        join_mission(&root, id, MISSION);
+    }
+    let path = root.join(item_path("demo-z999"));
+    let urgent = fs::read_to_string(&path)
+        .unwrap()
+        .replace("priority: high", "priority: critical");
+    fs::write(&path, urgent).unwrap();
+    commit_all(&root, "Plan two more");
+    let mut listed = "Can start now:\n  demo-z999 (critical): Say hello\n".to_string();
+    for id in &ids[..9] {
+        listed += &format!("  {id} (high): Say hello\n");
+    }
+    listed += "  and 2 more: atelier list --startable\n";
+    let status = atelier(&root, "t1", &["status"]).stdout;
+    assert!(status.contains(&listed), "{status}");
+    // The flag it names lists them all.
+    let all = atelier(&root, "t1", &["list", "--startable"]).stdout;
+    assert_eq!(all.matches("can start now").count(), 12, "{all}");
+
+    // The lead of their mission still sees each of them.
+    assert_eq!(planned(&root, "lead1", &["lead", MISSION]).code, 0);
+    let status = atelier(&root, "lead1", &["status"]).stdout;
+    let (general, led) = status.split_once("You lead mission").unwrap();
+    assert!(general.contains(&listed), "{status}");
+    assert_eq!(
+        led.matches(", can start now): Say hello").count(),
+        12,
+        "{status}"
+    );
+}
+
+#[test]
 fn status_on_the_base_lists_only_what_can_start_and_counts_the_rest_by_cause() {
     let scratch = Scratch::new(&[("demo-a1aa", "open"), ("demo-c3cc", "dropped")]);
     let root = scratch.root();
