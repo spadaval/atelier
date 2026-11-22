@@ -103,17 +103,39 @@ deletes the branch it merged, so merged branches stop piling up.
 - The CLI test fixture now works on a branch named `scratch`, since planning
   on a detached HEAD is refused. That is most of the edits to existing tests.
 
+### After atelier-zc9b merged
+
+Round 1's first reviewer was cancelled on the lead's word when master
+(`f2449baa8`) began to conflict with this branch. It had recorded no finding,
+and its review file, the empty template pinned to `7588ec64b`, was never
+committed and was taken out, so the next reviewer opens round 1 on the new
+head.
+
+- The five conflicts are resolved by hand in `3883bf5b1`. Both items'
+  behaviour stays: `status` keeps zc9b's endings and gains this item's two
+  lines, `submit` names the checkout and still warns on a failed fetch, and
+  the pre-push way out works as printed, since `start --new` does not fetch.
+- The test that a failed catch-up never re-offers a merged item would have
+  passed vacuously without zc9b's removed `Then:` line. It now reads the
+  lists. The one-branch drop is also tested over a branch with a malformed
+  Responses line.
+- `10b752de9` fixes a bug that predates both items and made
+  `evals/agent-factory/test.sh` fail at random (3 of 160 runs of the test on
+  master's binary): the harness lost a hook's skip when the second ticked
+  over between Git's timestamp and its pre-commit hook. A new test fails
+  without the fix, and the flaky test then passed 220 runs of 220.
+
 ### Verification
 
-Run on the branch with `origin/master` merged in:
+Run on `10b752de9`, with `origin/master` at `f2449baa8` merged in:
 
 - `cargo fmt -- --check`, `git diff --check` and
   `cargo clippy --all-targets --locked -- -D warnings`: clean.
-- `cargo nextest run -p atelier-core -p atelier-cli -p atelier-desk --locked`:
-  445 passed. The new behaviour is in `crates/atelier-cli/tests/cleanup.rs`,
+- `cargo nextest run --locked`, the whole workspace: 456 passed, 1 skipped.
+  The new behaviour is in `crates/atelier-cli/tests/cleanup.rs`,
   and the Desk's in `crates/atelier-desk/tests/actions.rs`.
 - `evals/agent-factory/test.sh target/debug/atelier`: all pass, with two
-  fixtures changed for the deleted branch.
+  fixtures changed for the deleted branch and the harness fix above.
 - `pnpm test` in `desk/`: 57 passed.
 - `node t3-extension/run-tests.mjs`: all 7 test files passed, unmodified. The
   inotify ENOSPC expected on this host did not occur.
