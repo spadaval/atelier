@@ -27,3 +27,10 @@ Filed as drafts, from what `atelier-1n49` and `atelier-js4a` found and left:
 `atelier-tuln` and `atelier-itqc` (two `atelier log` bugs), `atelier-vfnn`
 (`scripts/ci-jobs.sh` fails open) and `atelier-kjc4` (the extension's test
 fails now and then in CI).
+
+## 2026-11-22: after `atelier-7637`
+
+Filed `atelier-10d6` (`start --backlog` advises another slug, which the garden
+procedure now forbids) and marked the draft `atelier-bbia` stale: it and two
+lines of `docs/product/desk.md` still describe a garden session. The live
+skill checkout, `~/projects/atelier-skill`, was moved to `4d7fab468`.
