@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-o2vv
 title: Keep status from pointing a delegated thread at an unrelated item
-status: ready
+status: dropped
 mission: null
 labels: []
 priority: medium
@@ -29,3 +29,7 @@ A thread that another thread starts with one task can be sent the wrong way by w
 ## Context
 
 Preliminary; plan it before starting. Seen on 2026-11-11 in the runs of atelier-2mlh and of worldcrafter-s9lp in demiurge. `SKILL.md` already routes a thread by its task where `status` names no role, which is why neither run went wrong.
+
+## Report
+
+Dropped: Covered by atelier-zc9b in mission atelier-ww7w (agreed with Sumeet on 2026-11-22)

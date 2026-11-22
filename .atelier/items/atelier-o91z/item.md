@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-o91z
 title: Refuse a malformed Responses line where it is written, instead of erroring every command on the item
-status: draft
+status: dropped
 mission: null
 labels:
 - redesign
@@ -34,3 +34,7 @@ Found by atelier-t2jo (`evals/agent-factory/results/2026-11-10-next-loop-changes
 Relationships of the old record that the new format has no field for.
 
 - discovered_from: atelier-t2jo (Run fresh agents through a round of changes requested, the path most items take)
+
+## Report
+
+Dropped: Covered by atelier-zc9b in mission atelier-ww7w (agreed with Sumeet on 2026-11-22)

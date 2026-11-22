@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-u49o
 title: Say in the reviewer's task line which checkout to run atelier review in
-status: draft
+status: dropped
 mission: null
 labels: []
 priority: medium
@@ -35,3 +35,7 @@ one allowed failed call on it before following the refusal. Runs are in
   checkout.
 
 ## Scope
+
+## Report
+
+Dropped: Covered by atelier-zc9b in mission atelier-ww7w (agreed with Sumeet on 2026-11-22)

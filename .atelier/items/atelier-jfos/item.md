@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-jfos
 title: Have the pre-push hook's way out move main in the checkout that has main out
-status: draft
+status: dropped
 mission: null
 labels: []
 priority: medium
@@ -35,3 +35,7 @@ f4d29ba76.
   item's branch and leave main at the commit given; a test runs them.
 
 ## Scope
+
+## Report
+
+Dropped: Covered by atelier-zc9b in mission atelier-ww7w (agreed with Sumeet on 2026-11-22)
