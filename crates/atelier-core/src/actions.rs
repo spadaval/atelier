@@ -817,10 +817,17 @@ fn invalid(problems: Vec<Problem>, file: &ReviewFile) -> Vec<Condition> {
     own.map(Condition::Invalid).collect()
 }
 
-/// A condition for each line of `item`'s Responses that is no response.
+/// A condition for each line of `item`'s Responses that is no response. It
+/// names the record by its path from the root, whichever copy was read: a
+/// skip writes it into a commit, as the pre-commit hook's rule of it does.
 pub(crate) fn malformed(item: &ItemDir) -> Vec<Condition> {
+    let file = std::path::PathBuf::from(crate::repo::item_path(&item.item.id));
     let problems = item.malformed_responses().into_iter();
-    problems.map(Condition::MalformedResponse).collect()
+    let from_root = problems.map(|problem| Problem {
+        file: file.clone(),
+        ..problem
+    });
+    from_root.map(Condition::MalformedResponse).collect()
 }
 
 /// What a verdict in `file` needs, given every finding, decision and

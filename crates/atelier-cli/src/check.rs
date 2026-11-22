@@ -359,7 +359,7 @@ fn pre_push(root: &Path, input: &str, skip: &Skip) -> Result<Outcome> {
     let base = config.base_branch.clone();
     let target = format!("refs/heads/{base}");
     let forge = config.forge.as_ref().map(|forge| forge.remote.as_str());
-    let mut back = None;
+    let mut pushed = None;
     let mut moves = false;
     let mut plain = Vec::new();
     for line in input.lines() {
@@ -377,10 +377,7 @@ fn pre_push(root: &Path, input: &str, skip: &Skip) -> Result<Outcome> {
             true => None,
             false => Some(remote),
         };
-        back = match known {
-            Some(old) => way_back(root, &config, local, old)?,
-            None => None,
-        };
+        pushed = known.map(|old| (local, old));
         if forge.is_some() {
             moves = true;
             continue;
@@ -391,6 +388,13 @@ fn pre_push(root: &Path, input: &str, skip: &Skip) -> Result<Outcome> {
             }
         }
     }
+    if !moves && plain.is_empty() {
+        return Ok(Outcome::Done(String::new()));
+    }
+    let back = match pushed {
+        Some((local, old)) => way_back(root, &config, local, old)?,
+        None => None,
+    };
     if moves {
         let text = output::push_moves_base(&base, back.as_ref());
         let rule = output::rule_base_moved(&base);
@@ -398,9 +402,6 @@ fn pre_push(root: &Path, input: &str, skip: &Skip) -> Result<Outcome> {
             .refuse([rule], text)
             .map(Outcome::from)
             .unwrap_or(Outcome::Done(String::new())));
-    }
-    if plain.is_empty() {
-        return Ok(Outcome::Done(String::new()));
     }
     let text = output::push_refused(&base, back.as_ref(), &plain);
     let broken =

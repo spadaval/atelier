@@ -1581,6 +1581,11 @@ fn a_malformed_response_is_reported_by_every_gate_and_stops_no_reading() {
     );
     let run = skipping(&root, "t1", &["submit"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
+    // The commit's trailer names the record from the root, not by where
+    // this checkout happens to be.
+    let message = git(&root, &["log", "-1", "--format=%B"]);
+    let trailer = format!("Atelier-Skip: Every record is valid ({}: ", item_path(ID));
+    assert!(message.contains(&trailer), "{message}");
 
     // In review, where its holder has no next action, it is still said.
     let waiting = read(&root, "t1", &["status"]);

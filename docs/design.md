@@ -163,7 +163,8 @@ that line and not of the record (atelier-zc9b): until then one such line
 made every command on the item exit 2, which no skip passes.
 `ItemDir::responses` gives the lines that read and
 `ItemDir::malformed_responses` a problem for each other, quoting it with
-the three forms. A malformed line answers nothing, so it is never taken
+the three forms. As a condition the problem names the record by its path
+from the root, since a skip copies it into a commit. A malformed line answers nothing, so it is never taken
 for a fix, a rebuttal or a `not built`, and it is never dropped silently:
 `validate` reports it, so `check`, pre-commit and the check of a merged
 tree do; `submit`, both verdicts and `merge` have it as a condition
@@ -1469,7 +1470,8 @@ stopping at it.
   strictly ahead of the remote's old one, and is the tip `start` branches
   from. The branch `start --new` makes there then holds the commits, with
   no cherry-pick, and `git reset --keep <old>`, in the checkout that has
-  the base out, puts the base back with uncommitted changes kept; Git
+  the base out, puts the base back with uncommitted changes kept in the
+  working tree, unstaged; Git
   refuses `branch -f` of a branch that is checked out, and it is printed
   only where none has the base out. The two are one `&&` line, so a
   `start` that fails leaves the base holding the commits. Where changes
