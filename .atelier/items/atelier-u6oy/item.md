@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-u6oy
 title: Let atelier new file an item on whatever branch the agent is on, and lose none when that branch is dropped
-status: changes_requested
+status: in_review
 mission: atelier-dh7a
 labels: []
 priority: medium
@@ -101,6 +101,21 @@ What changed:
   `verdict` prints after it, say to push the verdict and then file on a
   backlog branch. `verdict` needed it too, since it ended with "and stop".
 
+The binary grows by 174 lines of non-test Rust, from 24,333 on `master`
+(1d815029a) to 24,507 (`scripts/count_non_test_rust.py`): `atelier-core`
+9,803 to 9,916, `atelier-cli` 8,520 to 8,581, the Desk unchanged. Each
+part is one a Done when line asks for, and there was no old path to take
+out, since the branch rule still holds for every other command:
+
+| Lines | For |
+| ---: | --- |
+| 46 | `drop` naming what is uncommitted too, with its commit command |
+| 40 | telling an added open item from any other change, for staleness |
+| 30 | where `new` runs, and its refusal on a branch that will not merge |
+| 30 | `new` saying on an item's branch that it makes no approval stale |
+| 15 | the two reviewers' briefs |
+| 13 | `merge` seeing a filed item that is not committed |
+
 ### Validation
 
 `crates/atelier-cli/tests/filing.rs` runs on clones of a bare remote with
@@ -122,16 +137,27 @@ the printed briefs.
 - I removed each of six rules in turn (the exemption, its base check, its
   open check, the uncommitted check, the dropped-branch refusal and
   drop's look at the checkout) and a test failed each time.
-- On the branch with `origin/master` (cc62f7819) merged: `cargo fmt --
-  --check`, `cargo clippy --all-targets -- -D warnings` and `cargo
-  nextest run --workspace` (470 passed) are clean, and `atelier check`
-  passes with the built and the installed binary.
+- Round 1's run of the suite here was misleading: two filing tests found
+  this host's installed `atelier` through a Git hook, and failed in CI,
+  which has none. The cause was the shared test environment, which left
+  any Git process to find the host's `atelier`. It now puts the binary
+  under test first for every process it starts, so a test added later
+  cannot do the same.
+- On the branch with `origin/master` (1d815029a) merged, `cargo fmt --
+  --check` and `cargo clippy --all-targets --locked -- -D warnings` are
+  clean, and `cargo nextest run --locked --workspace` passes all 470 three
+  ways: as this host runs; with no `atelier` on `PATH`, as in CI; and with
+  a decoy `atelier` first on `PATH` that logs each call, which logged none
+  (two before the fix, the two CI failed on).
 - The built binary's `list` exits 0 in astromech, life-on-rails,
   cosplay-studio, demiurge and worldcrafter. I wrote nothing there.
 - I ran review, `new` after approval, `merge` and `drop` by hand in a
   scratch repository with the built binary and its hooks.
 - Not run here: the Desk's and the extension's tests. Neither reads what
   changed, and CI runs whichever `scripts/ci-jobs.sh` selects.
+
+Finding 1-71uc.2 (no action) is left: the refusal names the uncommitted
+record's path, which is what the reader acts on.
 
 ### Filed on this branch, with the new `new`
 
@@ -145,3 +171,7 @@ They reach `master` with this merge.
   approval holds; only the wait is left, and `docs/product.md` says so.
 - atelier-jk0s: `new` can reuse the ID of an item on another unmerged
   branch, though `docs/design.md` says it cannot.
+
+### Responses
+
+1-71uc.1: fixed in 055566964
