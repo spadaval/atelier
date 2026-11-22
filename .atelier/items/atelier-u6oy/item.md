@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-u6oy
 title: Let atelier new file an item on whatever branch the agent is on, and lose none when that branch is dropped
-status: in_review
+status: changes_requested
 mission: atelier-dh7a
 labels: []
 priority: medium
