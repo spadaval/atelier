@@ -1244,7 +1244,7 @@ fn list_with_200_named_remote_branches_takes_under_two_seconds() {
         let path = seed.join(item_path(id));
         let text = fs::read_to_string(&path).unwrap();
         let started = text
-            .replace("status: ready", "status: building")
+            .replace("status: open", "status: building")
             .replace("implementers: []", "implementers:\n- t1");
         fs::write(&path, started).unwrap();
         git(&seed, &["commit", "-qam", "Start"]);
@@ -1584,7 +1584,7 @@ fn a_plan_dropped_on_its_branch_with_two_approvals_does_not_merge_and_the_stop_c
 fn a_stop_of_an_agreed_mission_refuses_its_open_and_started_items_in_a_clone_that_has_fetched() {
     const OPEN: &str = "demo-r3dy";
     const MISSION: &str = "demo-m1ss";
-    let hub = Hub::new(&[(ID, "open"), (OPEN, "ready")]);
+    let hub = Hub::new(&[(ID, "open"), (OPEN, "open")]);
     let (a, b) = (hub.clone("a"), hub.clone("b"));
     // The mission agreed on the base, with both items in it.
     git(&a, &["checkout", "-q", "main"]);

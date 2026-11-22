@@ -80,10 +80,11 @@ fn before(minutes: i64) -> String {
         .to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
 
-/// A repository on `main`: mission ALPHA agreed, with items draft, ready
-/// (needs-human), started on its own branch by `t1`, and done; mission
-/// BETA proposed; items in no mission that are ready (needs-human), ready
-/// at low priority, ready at high priority, and done. Its history has a
+/// A repository on `main`: mission ALPHA agreed, with open items (as old
+/// records spell them, `draft` and `ready` with needs-human), one started on
+/// its own branch by `t1`, and one done; mission BETA proposed; items in no
+/// mission that are open (an old `ready` with needs-human), open at low
+/// priority, open at high priority, and done. Its history has a
 /// commit for each step Atelier's commands name, one 30 days old.
 fn scratch(root: &Path) {
     fs::create_dir_all(root).unwrap();

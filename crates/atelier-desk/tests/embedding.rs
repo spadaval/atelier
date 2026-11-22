@@ -116,7 +116,7 @@ fn demo(root: &Path) {
     git(root, &["switch", "-q", "main"]);
 }
 
-/// Repository `bare`, with no remote, and one ready item.
+/// Repository `bare`, with no remote, and one open item.
 fn bare(root: &Path) {
     fs::create_dir_all(root).unwrap();
     git(root, &["init", "-q", "-b", "main"]);

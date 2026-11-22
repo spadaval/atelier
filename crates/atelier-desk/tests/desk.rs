@@ -629,8 +629,8 @@ async fn what_is_proposed_in_motion_and_disputed_is_read_from_the_branches() {
     git(root, &["commit", "-qm", "Plan"]);
     // A backlog branch that adds an item and changes another.
     git(root, &["switch", "-qc", "backlog/more", "main"]);
-    put(root, item("demo-c002", "draft", "null", "[]", ""));
-    put(root, item("demo-a001", "draft", ALPHA, "[urgent]", ""));
+    put(root, item("demo-c002", "open", "null", "[]", ""));
+    put(root, item("demo-a001", "open", ALPHA, "[urgent]", ""));
     git(root, &["add", "-A"]);
     git(root, &["commit", "-qm", "More"]);
     // The started item: held by t1, with a finding it rebutted.
