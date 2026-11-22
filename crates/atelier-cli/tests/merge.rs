@@ -945,11 +945,7 @@ impl Forge {
     /// `atelier` with the fake gh first on `PATH`, and a wait for CI of 20
     /// seconds, polling every 50 milliseconds.
     fn command(&self, at: &Path, thread: &str, args: &[&str]) -> Command {
-        let path = format!(
-            "{}:{}",
-            self.gh.join("bin").display(),
-            std::env::var("PATH").unwrap()
-        );
+        let path = format!("{}:{}", self.gh.join("bin").display(), path());
         let mut command = atelier_command(at, thread, args);
         command
             .env("PATH", path)
