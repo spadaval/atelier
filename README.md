@@ -109,8 +109,8 @@ Merged demo-m82p into main with merge commit dcf9f0b; it is done.
 
 The item, both reviews and the change now sit together on `main`.
 
-An item that is planned ahead takes two more steps first: `new` writes it as
-a draft, and `ready` records who said it should start now.
+An item that is planned ahead takes one more step first: `new` writes it as
+an open item, which any thread can start once that reaches the base.
 
 ## What the tool does
 
@@ -148,7 +148,7 @@ made on a branch that `atelier start` creates, so Atelier works on a
 repository whose base is protected. There are three kinds of branch: one
 named for an item, which holds its change and its records; one named for a
 new mission, which holds its plan; and `backlog/<slug>`, for record changes
-tied to neither, such as filing a bug or making an item ready. A branch
+tied to neither, such as filing a bug or dropping an item. A branch
 merges on what it holds:
 
 | A branch that | Merges once |
@@ -238,7 +238,7 @@ a cause with counted evidence. It is an item like any other, labelled
 | Who | Commands |
 | --- | --- |
 | Anyone | `status`, `show`, `list`, `log`, `check` |
-| Planner | `start --mission`, `start --backlog`, `new`, `set`, `ready`, `drop`, `close` |
+| Planner | `start --mission`, `start --backlog`, `new`, `set`, `drop`, `close` |
 | Implementer | `start`, `submit`, `merge` |
 | Reviewer | `review`, `verdict` |
 | Lead | `lead` |
@@ -409,7 +409,7 @@ $ git commit -m "Track with Atelier" && git push
 $ atelier setup               # the Git hooks, in this clone
 $ atelier status
 You are thread alice, on the base branch main.
-Nothing is ready to start.
+Nothing is open to start.
 ```
 
 Run `atelier setup` once in every other clone. Then install the skill and

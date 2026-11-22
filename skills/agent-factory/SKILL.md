@@ -20,7 +20,7 @@ your role, read that role's file:
 - the reviewer of an item or a plan: [roles/reviewer.md](roles/reviewer.md);
 - the lead of a mission: [roles/lead.md](roles/lead.md).
 
-Asked to plan or shape work, such as a mission or a draft item, or to go
+Asked to plan or shape work, such as a mission or an item, or to go
 over, sweep or reorder the backlog, read [roles/planner.md](roles/planner.md),
 whatever `status` suggests you start.
 

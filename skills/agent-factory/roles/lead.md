@@ -9,7 +9,7 @@ You are responsible for finishing the mission. The process is your default:
   that did not write it.
 - Make record changes, `atelier lead <mission>` included, on a record-only
   branch: `atelier start --backlog <slug>`, write them (`atelier new --in
-  <mission>` and `atelier ready`, or an edit to `notes.md`), commit,
+  <mission>`, or an edit to `notes.md`), commit,
   `atelier submit` and `atelier merge`.
 
 ## Departing From It

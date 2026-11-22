@@ -160,7 +160,7 @@ sidebar and project strip read their missions, threads and what can start
 from the Desk too, and draw them themselves. The mission page's lanes and
 merge times, mission control's progress log and the week's strip are read
 from commit subjects, so they can miss a step, and "waited on you" marks
-only the items they readied and those labelled needs-human.
+only the items an old record says they readied and those labelled needs-human.
 
 Every page that reads a repository says when the Desk last fetched its
 remote. The Desk fetches each one on a timer its configuration sets, every

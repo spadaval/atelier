@@ -24,11 +24,15 @@ item in `items/<id>/item.md` with its reviews beside it, and the rules in
   three kinds: `<item-id>` for an item's code and records, `<mission-id>`
   for a new mission's plan, its items and its plan reviews, and
   `backlog/<slug>` for record changes tied to neither, such as filing,
-  readying or dropping an item, leading or closing a mission, or a lead's
+  changing or dropping an item, leading or closing a mission, or a lead's
   notes.
-- Only `start`, `submit` and `merge` act on Git. `new`, `set`, `ready`,
-  `drop`, `close`, `lead`, `review` and `verdict` write files and commit
-  nothing; commit and push them with Git.
+- Only `start`, `submit` and `merge` act on Git. `new`, `set`, `drop`,
+  `close`, `lead`, `review` and `verdict` write files and commit nothing;
+  commit and push them with Git.
+- An item is open from the moment it is filed and needs no go-ahead: once
+  its record is on `master` and its blockers are done, `atelier start <id>`
+  takes it. To hold later work back, give it a blocker (`atelier set <id>
+  --blocked-by <ids>`).
 - A mission starts from the human's direction: `atelier start --mission
   "<title>"`, write the plan and its items, `atelier submit`, and two
   reviewers who did not plan it each run `atelier review <mission>` and push
