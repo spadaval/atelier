@@ -148,8 +148,8 @@ window began:
 that `list` says is changed on `backlog/garden-proposals` is read with `git
 show <branch>:.atelier/items/<id>/item.md`, from that branch or its
 `origin/` copy. What these hold is covered, so it is not brought again as
-new: an unanswered proposal stays open in its item until the human answers. Each
-proposal or bug that the last merged run's Report lists and none of them
+new: an unanswered proposal stays open in its item until the human answers.
+Each proposal or bug that the last merged run's Report lists and none of them
 covers was left by a run that stopped after its merge: carry it onto this
 page, marked with the run and date it came from and outside the limit of
 three, and step 7 files it. Do the same with an item that Report lists as
@@ -230,9 +230,9 @@ the merge, get onto that branch as below, and on it:
   `item.md` in this checkout says done or dropped, whatever `list` says.
   With no open one, run `atelier new "Garden proposals"` and `atelier set
   <id> --labels needs-human,garden`. Under `### Open` in its Goal, keep
-  every unanswered proposal, and add the page's new and carried ones, each as `- <run> P<n>,
-  <date>: <the change>. <its cause>. See that run's Report.` Only the human's
-  answer takes one off that list.
+  every unanswered proposal, and add the page's new and carried ones, each
+  as `- <run> P<n>, <date>: <the change>. <its cause>. See that run's
+  Report.` Only the human's answer takes one off that list.
 - **Bugs.** For each bug to file that no item covers, run `atelier new
   "<what is broken>"` and `atelier set <id> --labels bug,needs-human
   --caused-by <item or commit>`, and put the evidence in its Goal.
