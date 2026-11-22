@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-7637
 title: Decouple garden upkeep merges from human proposal sessions
-status: changes_requested
+status: in_review
 mission: atelier-ww7w
 labels: []
 priority: medium
@@ -70,6 +70,8 @@ Four choices the item left open:
 - `evals/agent-factory/test.sh "$(command -v atelier)"`, with the installed 0.7.0, not a build of this tree (no Rust changed): exit 0 at e018cf7b8, "All eval fixtures and harness tests pass."
 - `git diff --check`: exit 0.
 - A dry run of the branch rule and the planner's steps, with installed 0.7.0 in scratch clones with a bare remote and no forge: the branch was made when absent; reused and fast-forwarded when merged (`start --backlog` refuses then); refused to `git switch` when another worktree held it; and, in a second clone, tracked from the remote alone and merged with a moved base while unmerged. A partial answer left the rest under `### Open`, readying a bug took `needs-human` off it, and `close` ended the item once all were answered.
+- After round 1's finding and a merge of master (70a2e2801): `atelier check` and `evals/agent-factory/test.sh`, both exit 0 at 4d75ba286.
+- The lookup, which the first dry run had not exercised, run with installed 0.7.0 in six states: never merged, open and merged, edited unmerged, closed unmerged, closed and merged (`--done`), and a clone whose local base is behind its forge remote's. `atelier list --label garden` finds the item in each. `--needs-human --label garden` misses the never-merged one. With a close not merged, `list` shows the item as open on the base, so Steps 4 and 7 now read status and content from the branch's own copy; both reads showed `status: done` there.
 - Not run: the same cycle through GitHub. Read instead: `merge::pull_request` looks up only open pull requests, so a reused branch gets a new one.
 
 ### Left for the lead
@@ -78,3 +80,5 @@ Four choices the item left open:
 - `atelier start --backlog` on an existing branch suggests "Pick another slug", which this procedure must never do, so the procedure says to ignore that. Changing the message is Rust, which is out of Scope.
 
 ### Responses
+
+1-15h5.1: fixed in 84271944b
