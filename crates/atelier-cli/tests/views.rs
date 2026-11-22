@@ -50,6 +50,9 @@ fn item(root: &Path, id: &str, status: &str, title: &str, fields: [&str; 4], bod
 
 /// The question waiting on `demo-d4dd`, as the lead's `status` lists it.
 /// The fixture, with `demo-d4dd` started by t1 in the worktree `second`.
+///
+/// Its items and missions are written as before items were open, `draft` or
+/// `ready` with who said go, so each view here reads the old form.
 fn fixture() -> (Scratch, PathBuf) {
     let scratch = Scratch::new(&[]);
     let root = scratch.root();
@@ -144,13 +147,12 @@ fn stdout(at: &Path, thread: &str, args: &[&str]) -> String {
 }
 
 const M1: &str = "Mission demo-m1ss (in progress): Greet everyone\n";
-const A1: &str = "    demo-a1aa (ready, high, can start now): Say hello\n";
-const B2: &str =
-    "    demo-b2bb (ready, medium, blocked by demo-a1aa, which is ready): Say goodbye\n";
-const C3: &str = "    demo-c3cc (draft, medium): Say hi\n";
+const A1: &str = "    demo-a1aa (open, high, can start now): Say hello\n";
+const B2: &str = "    demo-b2bb (open, medium, blocked by demo-a1aa, which is open): Say goodbye\n";
+const C3: &str = "    demo-c3cc (open, medium, can start now): Say hi\n";
 const D4: &str = "    demo-d4dd (building, medium, held by t1): Wave\n";
-const F6: &str = "    demo-f6ff (ready, medium, waits on a human): Choose a name\n";
-const G7: &str = "    demo-g7gg (ready, medium, can start now): Add a version flag\n";
+const F6: &str = "    demo-f6ff (open, medium, waits on a human): Choose a name\n";
+const G7: &str = "    demo-g7gg (open, medium, can start now): Add a version flag\n";
 
 #[test]
 fn list_shows_open_work_by_mission_and_label_and_each_flag_narrows_it() {
@@ -167,8 +169,8 @@ fn list_shows_open_work_by_mission_and_label_and_each_flag_narrows_it() {
     assert_eq!(stdout(&second, "p1", &["list"]), all);
 
     assert_eq!(
-        list(&["--ready"]),
-        format!("{M1}  Labelled ui:\n{A1}In no mission:\n  Labelled cli:\n{G7}  Labelled needs-human:\n{F6}")
+        list(&["--startable"]),
+        format!("{M1}  No label:\n{C3}  Labelled ui:\n{A1}In no mission:\n  Labelled cli:\n{G7}  Labelled needs-human:\n{F6}")
     );
     assert_eq!(list(&["--blocked"]), format!("{M1}  No label:\n{B2}"));
     assert_eq!(
@@ -185,10 +187,13 @@ fn list_shows_open_work_by_mission_and_label_and_each_flag_narrows_it() {
     );
     // Flags narrow together.
     assert_eq!(
-        list(&["--ready", "--label", "ui"]),
+        list(&["--startable", "--label", "ui"]),
         format!("{M1}  Labelled ui:\n{A1}")
     );
-    assert_eq!(list(&["--ready", "--blocked"]), "No open work matches.\n");
+    assert_eq!(
+        list(&["--startable", "--blocked"]),
+        "No open work matches.\n"
+    );
     // A finished mission and its items, and a dropped item.
     let finished = "Mission demo-m2dn (done): Set up the project\n  No label:\n    \
                     demo-e5ee (done, low): Create the repository\n\
@@ -235,19 +240,19 @@ fn status_on_the_base_shows_what_can_start_the_missions_in_progress_and_what_wai
         stdout(&root, "p1", &["status"]),
         NO_HOOKS.to_string()
             + "You are thread p1, on branch scratch, which is no item's.\n\
-         Ready to start:\n  demo-a1aa (high): Say hello\n  demo-g7gg (medium): Add a version flag\n\
-         1 other ready item cannot start yet: 1 waits on a blocker that is not done. \
+         Can start now:\n  demo-a1aa (high): Say hello\n  demo-c3cc (medium): Say hi\n  demo-g7gg (medium): Add a version flag\n\
+         1 other open item cannot start yet: 1 waits on a blocker that is not done. \
          See it with: atelier list\n\
          Held by other threads:\n  demo-d4dd (building, held by t1): Wave\n\
          Missions in progress:\n  demo-m1ss (in progress): Greet everyone\n\
          Waiting on a human (labelled needs-human):\n  \
-         demo-f6ff (ready, medium, waits on a human): Choose a name\n\
+         demo-f6ff (open, medium, waits on a human): Choose a name\n\
          " + MAY_START
     );
 }
 
 #[test]
-fn lead_takes_a_ready_mission_and_hands_each_item_that_can_start_to_another_thread() {
+fn lead_takes_an_open_mission_and_hands_each_item_that_can_start_to_another_thread() {
     let (scratch, second) = fixture();
     let root = scratch.root();
     let path = ".atelier/missions/demo-m1ss/mission.md";
@@ -274,14 +279,19 @@ fn lead_takes_a_ready_mission_and_hands_each_item_that_can_start_to_another_thre
     assert_eq!(git(&root, &["status", "--porcelain"]), "");
 
     // A started item says what its holder's `status` lists as unmet.
-    let items = "Its items:\n  Draft:\n    demo-c3cc (medium): Say hi\n  Ready:\n    \
+    let items = "Its items:\n  Open:\n    \
                  demo-a1aa (high, can start now): Say hello\n    \
-                 demo-b2bb (medium, blocked by demo-a1aa, which is ready): Say goodbye\n  \
+                 demo-b2bb (medium, blocked by demo-a1aa, which is open): Say goodbye\n    \
+                 demo-c3cc (medium, can start now): Say hi\n  \
                  Building:\n    demo-d4dd (medium, held by t1): Wave\n      \
                  [ ] Done when: It is done.\n      [ ] Report: written under `## Report`\n";
+    let start_each = START_ONE
+        .replace("start one yourself", "start one for each task yourself")
+        .replace("give it this task", "give it its task");
     let handoff = format!(
-        "An implementer {START_ONE}  Run atelier start demo-a1aa and follow what it prints.\n\
-         Then wait for it to finish, and run `atelier status`.\n"
+        "Each implementer {start_each}  Run atelier start demo-a1aa and follow what it prints.\n\
+         \x20 Run atelier start demo-c3cc and follow what it prints.\n\
+         Then wait for each to finish, and run `atelier status`.\n"
     );
     let led = stdout(&root, "lead1", &["lead", "demo-m1ss"]);
     // It writes the mission alone, and commits nothing.
@@ -367,9 +377,10 @@ fn show_prints_a_mission_on_one_page_with_its_items_disputes_and_plan_reviews() 
         "Mission demo-m1ss: Greet everyone\nRead from: main\nStatus: in progress\nLead: nobody\n\
          Planners: none recorded\nLabels: none\n\n\
          ## Outcome\n\nEvery greeting works.\n\n## Success criteria\n\n- hello: `hello` prints hello.\n\n\
-         Items:\n  Draft:\n    demo-c3cc (medium): Say hi\n  Ready:\n    \
+         Items:\n  Open:\n    \
          demo-a1aa (high, can start now): Say hello\n    \
-         demo-b2bb (medium, blocked by demo-a1aa, which is ready): Say goodbye\n  \
+         demo-b2bb (medium, blocked by demo-a1aa, which is open): Say goodbye\n    \
+         demo-c3cc (medium, can start now): Say hi\n  \
          Building:\n    demo-d4dd (medium, held by t1): Wave\n\n\
          Disputed:\n  None.\n\n\
          Plan reviews:\n  None.\n"
@@ -398,7 +409,7 @@ fn show_prints_a_started_item_from_its_branch_wherever_it_runs_and_a_done_one() 
     let root = scratch.root();
     let header = |done_when: &str| {
         format!(
-            "Item demo-d4dd: Wave\nRead from: demo-d4dd\nStatus: building, held by t1\nMission: demo-m1ss (ready)\n\
+            "Item demo-d4dd: Wave\nRead from: demo-d4dd\nStatus: building, held by t1\nMission: demo-m1ss (open)\n\
              Labels: ui\nPriority: medium\nBlocked by: none\n\
              Made ready by ada at 2026-11-10 09:00:00 +00:00\n\n\
              ## Goal\n\nDo it.\n\n## Done when\n\n- [{done_when}] It is done.\n\n\
@@ -424,7 +435,7 @@ fn show_prints_a_started_item_from_its_branch_wherever_it_runs_and_a_done_one() 
     assert!(done.contains("## Report\n\nCreated.\n"), "{done}");
     let blocked = stdout(&root, "p1", &["show", "demo-b2bb"]);
     assert!(
-        blocked.contains("\nBlocked by: demo-a1aa (ready)\n"),
+        blocked.contains("\nBlocked by: demo-a1aa (open)\n"),
         "{blocked}"
     );
 }

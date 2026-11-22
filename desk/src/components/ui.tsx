@@ -12,7 +12,7 @@ import { countsLine, fetchedLine, statusName, statusTitle } from "../lib/words";
 
 const GLYPHS: Record<string, [typeof Circle, string]> = {
   draft: [CircleDashed, "dim"],
-  ready: [Circle, "plain"],
+  open: [Circle, "plain"],
   building: [CircleDot, "run"],
   in_review: [Eye, "review"],
   changes_requested: [RotateCcw, "bad"],

@@ -26,7 +26,7 @@ fn merging() -> Scratch {
 }
 
 fn merging_record(status: &str, blockers: &[&str]) -> Scratch {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     fs::write(root.join("conflict"), "base\n").unwrap();
     on_base(&root, "Common ancestor");
@@ -154,7 +154,7 @@ fn unverified_or_edited_imports_still_refuse_through_hook() {
 #[test]
 fn configured_remote_base_is_trusted_but_an_unconfigured_remote_is_not() {
     for trusted in [false, true] {
-        let scratch = Scratch::new(&[(ID, "ready")]);
+        let scratch = Scratch::new(&[(ID, "open")]);
         let root = scratch.root();
         if trusted {
             append(&root, ".atelier/config.toml", "\n[forge]\nprovider = \"github\"\nremote = \"upstream\"\nci_workflow = \"ci.yml\"\n");

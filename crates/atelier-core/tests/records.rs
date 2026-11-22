@@ -237,7 +237,8 @@ fn load(files: &[(&str, &str)], id: &str) -> ItemDir {
 fn each_record_kind_reads_and_writes_back_the_same_file() {
     let path = Path::new("item.md");
     assert_eq!(render_item(&parse_item(path, ITEM).unwrap()), ITEM);
-    assert_eq!(render_item(&parse_item(path, BLOCKER).unwrap()), BLOCKER);
+    let open = BLOCKER.replace("status: draft", "status: open");
+    assert_eq!(render_item(&parse_item(path, &open).unwrap()), open);
     // A mission as this tool writes it: open, with its planners.
     let mission = MISSION.replace("status: ready", "status: open").replace(
         "ready:\n  by: ada\n  at: 2026-11-09T19:56:00-05:00\n",
@@ -298,7 +299,10 @@ fn an_item_gives_its_sections_and_a_review_each_finding_as_written() {
 #[test]
 fn a_body_keeps_its_leading_and_trailing_newlines() {
     let path = Path::new("item.md");
-    let tight = BLOCKER.replace("---\n## Goal", "---\n\n## Goal") + "\n";
+    let tight = BLOCKER
+        .replace("status: draft", "status: open")
+        .replace("---\n## Goal", "---\n\n## Goal")
+        + "\n";
     let loose = parse_item(path, &tight).unwrap();
     assert!(loose.body.starts_with("\n## Goal") && loose.body.ends_with("d\n\n"));
     assert_ne!(loose.body, parse_item(path, BLOCKER).unwrap().body);
@@ -350,6 +354,32 @@ fn creating_reviews_of_a_round_gives_each_its_own_name() {
 #[test]
 fn the_example_tree_is_valid() {
     assert_eq!(problems_after(&[]), []);
+}
+
+#[test]
+fn an_items_old_draft_and_ready_read_as_open_and_are_not_respelled_unchanged() {
+    let path = Path::new("x");
+    let readied = BLOCKER.replace("status: draft", "status: ready").replace(
+        "ready: null",
+        "ready:\n  by: ada\n  at: 2026-11-09T19:56:00-05:00",
+    );
+    for (old, by) in [(BLOCKER.to_string(), None), (readied, Some("ada"))] {
+        let dir = atelier(&[("items/atelier-b10c/item.md", &old)]);
+        let store = Store::new(dir.path());
+        let mut item = store.item("atelier-b10c").unwrap().item;
+        assert_eq!(item.status, Status::Open);
+        assert_eq!(item.ready.as_ref().map(|ready| ready.by.as_str()), by);
+        // Written unchanged, it keeps the file it had.
+        store.write_item(&item).unwrap();
+        let file = dir.path().join("items/atelier-b10c/item.md");
+        assert_eq!(fs::read_to_string(&file).unwrap(), old);
+        // Changed, it is written open, and keeps who said go.
+        item.title = "Renamed".into();
+        store.write_item(&item).unwrap();
+        let text = fs::read_to_string(&file).unwrap();
+        assert!(text.contains("\nstatus: open\n"), "{text}");
+        assert_eq!(parse_item(path, &text).unwrap(), item);
+    }
 }
 
 #[test]

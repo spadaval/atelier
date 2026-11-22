@@ -139,7 +139,7 @@ function row(id: string, title: string, status: ItemRow["status"], more: Partial
 }
 
 function counts(items: ItemRow[]): StatusCount[] {
-  const order = ["draft", "ready", "building", "in_review", "changes_requested", "approved", "done", "dropped"] as const;
+  const order = ["open", "building", "in_review", "changes_requested", "approved", "done", "dropped"] as const;
   return order.map((status) => ({ status, count: items.filter((i) => i.status === status).length })).filter((c) => c.count > 0);
 }
 
@@ -162,18 +162,19 @@ function mission(id: string, title: string, state: MissionRow["state"], items: I
 }
 
 export const z4crItems: ItemRow[] = [
-  row("atelier-94pv", "Move the spike's app to desk/ on the new API", "draft", {
+  row("atelier-94pv", "Move the spike's app to desk/ on the new API", "open", {
     blockers: [{ id: "atelier-uwxy", status: "building" }],
     waiting_on: ["atelier-uwxy"],
+    cannot_start: ["atelier-uwxy is done (it is building)"],
   }),
-  row("atelier-e05n", "Show the agents working on a mission and its items", "draft", { priority: "medium" }),
-  row("atelier-h3hl", "Let the human start a planning session from a page", "draft", { priority: "medium" }),
-  row("atelier-va99", "Install the Desk as a service on this host, on converted clones", "draft", { priority: "medium" }),
-  row("atelier-qxmr", "Point the Desk at the live repositories after this host's cutover", "draft", { priority: "low" }),
-  row("atelier-psjw", "Move the actions and repository access into atelier-core", "ready", {
+  row("atelier-e05n", "Show the agents working on a mission and its items", "open", { priority: "medium" }),
+  row("atelier-h3hl", "Let the human start a planning session from a page", "open", { priority: "medium" }),
+  row("atelier-va99", "Install the Desk as a service on this host, on converted clones", "open", { priority: "medium" }),
+  row("atelier-qxmr", "Point the Desk at the live repositories after this host's cutover", "open", { priority: "low" }),
+  row("atelier-psjw", "Move the actions and repository access into atelier-core", "open", {
     cannot_start: ["atelier-psjw is blocked by atelier-uwxy"],
   }),
-  row("atelier-aab1", "Find how atelier serve can read T3 thread status", "ready", { labels: ["needs-human"], needs_human: true, startable: true }),
+  row("atelier-aab1", "Find how atelier serve can read T3 thread status", "open", { labels: ["needs-human"], needs_human: true, startable: true }),
   row("atelier-uwxy", "Serve the Desk's reading routes from commits: the atelier-desk crate", "building", {
     holder: thread,
     branch: { merged: false, name: "origin/atelier-uwxy" },
@@ -271,8 +272,8 @@ export const z4cr: MissionPage = {
 export const planPr = { number: 412, url: "https://github.com/spadaval/atelier/pull/412", state: "OPEN" };
 
 const otherMissions: [string, string, MissionRow["state"], ItemRow[], Partial<MissionRow>?][] = [
-  ["atelier-295u", "Give the gardener `atelier log` and a readiness checklist", "proposed", [row("atelier-k1aa", "Write the log", "draft")]],
-  ["atelier-k9rf", "Try a plan whose stop is refused", "proposed", [row("atelier-k9r1", "Write the plan", "draft")]],
+  ["atelier-295u", "Give the gardener `atelier log` and a readiness checklist", "proposed", [row("atelier-k1aa", "Write the log", "open")]],
+  ["atelier-k9rf", "Try a plan whose stop is refused", "proposed", [row("atelier-k9r1", "Write the plan", "open")]],
   ["atelier-g6rp", "Ship Agent Factory from this repository", "open", []],
   ["atelier-st0p", "A mission someone is stopping", "stop_pending", []],
   ["atelier-pr0x", "A plan whose pull request will not close", "proposed", []],
@@ -280,7 +281,7 @@ const otherMissions: [string, string, MissionRow["state"], ItemRow[], Partial<Mi
     "atelier-qr5s",
     "Move all five repositories and Agent Factory onto the new loop, one cutover per host",
     "open",
-    [row("atelier-u1ko", "Delete the old workspace", "in_review", { reviewer: "codex-reviewer" }), row("atelier-wd1i", "Run the cutover on this host", "ready")],
+    [row("atelier-u1ko", "Delete the old workspace", "in_review", { reviewer: "codex-reviewer" }), row("atelier-wd1i", "Run the cutover on this host", "open")],
   ],
 ];
 
@@ -527,7 +528,7 @@ export const inbox: InboxResponse = {
       error: null,
       needs_human: [
         { mission: "atelier-z4cr", mission_title: z4cr.mission.title, items: [z4crItems.find((i) => i.id === "atelier-aab1")!] },
-        { mission: null, mission_title: null, items: [row("atelier-pywh", "Read the fleet site on your phone for taste", "ready", { labels: ["needs-human"], needs_human: true, priority: "low", startable: true })] },
+        { mission: null, mission_title: null, items: [row("atelier-pywh", "Read the fleet site on your phone for taste", "open", { labels: ["needs-human"], needs_human: true, priority: "low", startable: true })] },
       ],
       proposed: [missionPages["atelier-295u"].mission, missionPages["atelier-k9rf"].mission],
       threads: [live.asking],
@@ -605,7 +606,7 @@ export const motion: MotionResponse = {
         },
       ],
       missions: [{ mission: z4cr.mission, lead: { identity: live.lor.id, role: "lead", item: null, thread: mark(live.lor) } }],
-      ready: [row("atelier-wd1i", "Run the cutover on this host", "ready", { startable: true, priority: "medium" })],
+      ready: [row("atelier-wd1i", "Run the cutover on this host", "open", { startable: true, priority: "medium" })],
     },
   ],
   t3,
@@ -848,14 +849,14 @@ export function threadInfo(id: string, full: boolean): ThreadInfo | null {
 
 /** The items in no mission, for `/api/roadmap`. */
 export const loose: ItemRow[] = [
-  row("atelier-c1z3", "Ready the scorecard scripts and rubric for the rerun", "ready", { startable: true }),
-  row("atelier-7w9s", "Convert the work host with the cutover runbook", "ready", {
+  row("atelier-c1z3", "Ready the scorecard scripts and rubric for the rerun", "open", { startable: true }),
+  row("atelier-7w9s", "Convert the work host with the cutover runbook", "open", {
     labels: ["needs-human"],
     needs_human: true,
-    blockers: [{ id: "atelier-52g7", status: "draft" }],
+    blockers: [{ id: "atelier-52g7", status: "open" }],
     waiting_on: ["atelier-52g7"],
   }),
-  row("atelier-52g7", "Make the cutover find the docs that name removed commands", "draft", { priority: "medium" }),
+  row("atelier-52g7", "Make the cutover find the docs that name removed commands", "open", { priority: "medium" }),
   row("atelier-0019", "Garden atelier, 2026-11-11", "approved", { holder: "thread:gone" }),
 ];
 

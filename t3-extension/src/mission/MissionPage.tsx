@@ -281,7 +281,7 @@ function Running({
       <div className="mt-4">
         <Fold name="Not started" label={notStarted.label}>
           <ItemList
-            rows={notStarted.rows.map((row) => ({ row, note: row.status === "draft" ? "draft" : row.startable ? "can start" : `waits on ${row.waiting_on.join(", ") || "others"}` }))}
+            rows={notStarted.rows.map((row) => ({ row, note: row.startable ? "can start" : `waits on ${row.waiting_on.join(", ") || "others"}` }))}
             openItem={openItem}
           />
         </Fold>

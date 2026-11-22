@@ -41,7 +41,7 @@ export const statusTitle = (status: string) => {
   const name = statusName(status);
   return name.charAt(0).toUpperCase() + name.slice(1);
 };
-/** `5 draft, 2 ready`: a mission's items per status, as one line. */
+/** `5 open, 1 building`: a mission's items per status, as one line. */
 export const countsLine = (counts: StatusCount[]) => (counts.length ? counts.map((c) => `${c.count} ${statusName(c.status)}`).join(", ") : "No items");
 export const total = (counts: StatusCount[]) => counts.reduce((sum, c) => sum + c.count, 0);
 export const finished = (counts: StatusCount[]) => counts.filter((c) => closed(c.status)).reduce((sum, c) => sum + c.count, 0);

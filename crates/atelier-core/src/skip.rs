@@ -217,7 +217,7 @@ pub fn refused(action: Action, refusal: &Refusal, facts: &Facts) -> Result<Refus
     let entry = match refusal {
         Refusal::Record(problem) => return Err(problem.clone().into()),
         Refusal::From { .. } | Refusal::Unmet(_) => Some(entry(facts)?),
-        Refusal::Role(_) | Refusal::NotHolder { .. } => None,
+        Refusal::Role(_) | Refusal::FromMission { .. } | Refusal::NotHolder { .. } => None,
     };
     let id = &facts.item.item.id;
     Ok(say::refusal(

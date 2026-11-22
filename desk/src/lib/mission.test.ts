@@ -45,7 +45,7 @@ describe("an item's stage", () => {
 });
 
 describe("the progress log", () => {
-  const items = [row("a-0001", "building"), row("a-0002", "ready", true), row("a-0003", "ready")];
+  const items = [row("a-0001", "building"), row("a-0002", "open", true), row("a-0003", "open")];
   const events = [
     event("2026-11-16T10:00:00Z", "started", "a-0001"),
     event("2026-11-16T09:00:00Z", "readied", "a-0001"),
@@ -77,8 +77,8 @@ describe("the progress log", () => {
 describe("a mission under way", () => {
   it("is one with an item started or done", () => {
     const counts = (...list: [ItemRow["status"], number][]) => list.map(([status, count]) => ({ status, count }));
-    expect(begun({ in_progress: true, counts: counts(["ready", 2]) })).toBe(true);
-    expect(begun({ in_progress: false, counts: counts(["ready", 2], ["done", 1]) })).toBe(true);
-    expect(begun({ in_progress: false, counts: counts(["draft", 1], ["ready", 2], ["dropped", 1]) })).toBe(false);
+    expect(begun({ in_progress: true, counts: counts(["open", 2]) })).toBe(true);
+    expect(begun({ in_progress: false, counts: counts(["open", 2], ["done", 1]) })).toBe(true);
+    expect(begun({ in_progress: false, counts: counts(["open", 3], ["dropped", 1]) })).toBe(false);
   });
 });

@@ -421,7 +421,7 @@ fn take_over(repo: &mut Repo, id: &str, branch: &str, located: &Located) -> Resu
 /// on a new branch named for it.
 pub fn start_new(repo: &mut Repo, title: &str) -> Result<Outcome> {
     let id = repo.new_id()?;
-    let mut item = plan::draft_item(&id, title, None);
+    let mut item = plan::open_item(&id, title, None);
     item.status = row(Action::StartNew).to.expect("start --new sets a status");
     item.implementers.take(repo.caller.clone());
     let claim = Claim {

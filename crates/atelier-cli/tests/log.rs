@@ -14,6 +14,20 @@ const DONE: &str = "demo-d0ne";
 const DONE_REVIEW: &str = ".atelier/items/demo-d0ne/reviews/1-aaaa.md";
 const REASON: &str = "Ada said to";
 
+/// Writes item `id` as the binary from before items were open made one
+/// ready: `ready`, with who said go.
+fn readied(root: &Path, id: &str) {
+    let path = root.join(item_path(id));
+    let text = fs::read_to_string(&path)
+        .unwrap()
+        .replace("status: draft", "status: ready")
+        .replace(
+            "ready: null",
+            "ready:\n  by: ada\n  at: 2026-11-10T09:00:00Z",
+        );
+    fs::write(path, text).unwrap();
+}
+
 /// `atelier log` with `args`, which must succeed; its lines.
 fn log(root: &Path, args: &[&str]) -> Vec<String> {
     let mut all = vec!["log"];
@@ -85,7 +99,9 @@ fn the_plain_path_prints_its_actions_in_order_and_the_same_lines_once_its_branch
 ) {
     let scratch = Scratch::new(&[(ID, "draft")]);
     let root = scratch.root();
-    ok(planned(&root, "p1", &["ready", ID, "--by", "ada"]));
+    // History from before items were open keeps its go-ahead's line.
+    readied(&root, ID);
+    on_base(&root, "Ready it");
     ok(atelier(&root, "t1", &["start", ID]));
     hello(&root);
     finish_and_submit(&root, "t1");
@@ -137,7 +153,7 @@ fn codex(at: &Path, child: &str, args: &[&str]) -> Run {
 
 #[test]
 fn a_take_over_shows_both_implementers_and_a_review_taken_over_both_reviewers() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     ok(atelier(&root, "t1", &["start", ID]));
     ok(atelier(&root, "t3", &["start", ID]));
@@ -152,9 +168,7 @@ fn a_take_over_shows_both_implementers_and_a_review_taken_over_both_reviewers() 
     assert_eq!(
         actions(&root, &log(&root, &[])),
         [
-            // The fixture's first commit adds the item ready.
-            format!("{ID} ready - new -> ready"),
-            format!("{ID} start t1 ready -> building"),
+            format!("{ID} start t1 open -> building"),
             format!("{ID} take-over t3 from t1"),
             format!("{ID} submit t3 building -> in_review"),
             format!("{ID} review t2 {review}"),
@@ -252,11 +266,9 @@ fn a_mission_shows_its_ready_lead_plan_review_and_close_with_its_items_actions()
     write_mission(&root);
     git(&root, &["commit", "-qam", "Plan the mission"]);
     on_base(&root, "Add the mission");
-    ok(planned(
-        &root,
-        "p1",
-        &["ready", ID, "demo-0ther", "--by", "ada"],
-    ));
+    readied(&root, ID);
+    readied(&root, "demo-0ther");
+    on_base(&root, "Ready both");
     // Made ready as a mission was before it had no go-ahead, by the old
     // tool, which wrote who said go.
     let path = format!(".atelier/missions/{MISSION}/mission.md");
@@ -313,8 +325,10 @@ fn a_mission_shows_its_ready_lead_plan_review_and_close_with_its_items_actions()
 
 #[test]
 fn a_skip_ends_the_line_of_the_action_whose_commit_carries_it_with_its_thread() {
-    let scratch = Scratch::new(&[(ID, "draft")]);
+    let scratch = Scratch::new(&[("demo-b10c", "open")]);
     let root = scratch.root();
+    write_item(&root, ID, "open", &[], &["demo-b10c"], "");
+    on_base(&root, "Plan a blocked item");
     let output = atelier_command(&root, "t1", &["start", ID])
         .env("ATELIER_SKIP", REASON)
         .output()
@@ -323,7 +337,7 @@ fn a_skip_ends_the_line_of_the_action_whose_commit_carries_it_with_its_thread() 
     assert_eq!(
         actions(&root, &log(&root, &[])),
         [format!(
-            "{ID} start t1 draft -> building; skip {ID} is ready (it is draft): {REASON} (by t1)"
+            "{ID} start t1 open -> building; skip demo-b10c is done (it is open): {REASON} (by t1)"
         )]
     );
 }
@@ -337,10 +351,11 @@ fn show(root: &Path, id: &str) -> String {
 
 #[test]
 fn a_skip_from_before_its_thread_was_recorded_says_so_in_the_log_and_the_missions_page() {
-    let scratch = Scratch::new(&[(ID, "draft")]);
+    let scratch = Scratch::new(&[("demo-b10c", "open")]);
     let root = scratch.root();
+    write_item(&root, ID, "open", &[], &["demo-b10c"], "");
     write_mission(&root);
-    // Agreed, so that only the item's status is a rule its start passes.
+    // Agreed, so that only the item's blocker is a rule its start passes.
     let path = format!(".atelier/missions/{MISSION}/mission.md");
     let agreed = read(&root, &path).replace(
         "status: draft\nlabels: []\nlead: null\nready: null\n",
@@ -356,7 +371,7 @@ fn a_skip_from_before_its_thread_was_recorded_says_so_in_the_log_and_the_mission
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
-    let rule = format!("{ID} is ready (it is draft): {REASON}");
+    let rule = format!("demo-b10c is done (it is open): {REASON}");
     let message = git(&root, &["log", "-1", "--format=%B"]);
     assert!(
         message.ends_with(&format!("\n\nAtelier-Skip: {rule}\nAtelier-Skip-By: t1")),
@@ -378,7 +393,7 @@ fn a_skip_from_before_its_thread_was_recorded_says_so_in_the_log_and_the_mission
     assert_eq!(
         actions(&root, &log(&root, &[ID])),
         [format!(
-            "{ID} start t1 draft -> building; skip {rule} (thread not recorded)"
+            "{ID} start t1 open -> building; skip {rule} (thread not recorded)"
         )]
     );
     assert!(
@@ -401,7 +416,7 @@ fn since_leaves_out_the_actions_committed_before_it() {
             .unwrap();
         assert!(output.status.success(), "{output:?}");
     };
-    at("2026-01-01T00:00:00Z", "p1", &["ready", ID, "--by", "ada"]);
+    readied(&root, ID);
     // The agent commits it, and its backlog branch's merge moves the base.
     let committed = identity(
         Command::new("git")
@@ -450,7 +465,7 @@ fn since_leaves_out_the_actions_committed_before_it() {
 fn two_actions_on_one_record_in_one_commit_show_as_their_net_change() {
     let scratch = Scratch::new(&[(ID, "draft")]);
     let root = scratch.root();
-    // Made ready and closed at once: only closed.
+    // In old history, made ready and closed at once: only closed.
     let path = root.join(item_path(ID));
     write_item(&root, ID, "done", &[], &[], "Not needed.\n");
     let text = fs::read_to_string(&path).unwrap().replace(
@@ -522,6 +537,7 @@ fn an_id_no_record_has_is_refused_as_show_refuses_it() {
 /// branch's actions would be lost with the branch.
 #[test]
 fn actions_on_a_branch_whose_records_a_plain_merge_matches_survive_its_deletion() {
+    // An old record, so that the revert has a line of its own.
     let scratch = Scratch::new(&[(ID, "ready")]);
     let root = scratch.root();
     ok(atelier(&root, "t1", &["start", ID]));
@@ -731,7 +747,7 @@ fn a_proposed_plans_lead_and_merge_and_a_set_of_a_started_item_each_show_their_p
     let dirty = "Ada keeps the note";
     skipping(&root, "p1", dirty, &["merge"]);
     let backlog = short(&root, "main");
-    let rule = format!("{ID} is draft or ready (it is building)");
+    let rule = format!("{ID} is open (it is building)");
     let page = show(&root, MISSION);
     assert!(
         rules_passed(&page).contains(&format!("  {ID}, change in {set}, by p1: {rule}: {lower}")),
@@ -764,10 +780,24 @@ fn a_record_with_no_action_beside_one_with_an_action_still_shows_the_rule_its_co
     let root = scratch.root();
     write_mission(&root);
     on_base(&root, "Add the mission");
-    // One ready already, in the mission; one a draft, in none.
+    // History from before items were open: one go-ahead in one commit for
+    // an item ready already, in the mission, and a draft, in none.
     let again = "Ada reconfirmed the ready item";
-    let run = skipping(&root, "p1", again, &["ready", ID, OTHER, "--by", "ada"]);
-    run_then(&root, &run.stdout);
+    readied(&root, ID);
+    readied(&root, OTHER);
+    let skipped = format!("Atelier-Skip: {ID} is draft (it is ready): {again}");
+    git(
+        &root,
+        &[
+            "commit",
+            "-qam",
+            "Ready both",
+            "--trailer",
+            &skipped,
+            "--trailer",
+            "Atelier-Skip-By: p1",
+        ],
+    );
     git(&root, &["branch", "-f", "main", "HEAD"]);
     let commit = short(&root, "HEAD");
     let rule = format!("{ID} is draft (it is ready): {again}");
@@ -911,17 +941,17 @@ fn a_proposed_mission_fetched_alone_or_ahead_of_its_local_branch_shows_its_passe
 
 #[test]
 fn a_rule_passed_on_a_backlog_branch_not_merged_yet_shows_on_the_missions_page() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "done")]);
     let root = scratch.root();
     write_mission(&root);
     on_base(&root, "Add the mission");
     ok(atelier(&root, "p1", &["start", "--backlog", "tidy"]));
     let again = "Ada reconfirmed it";
-    let run = skipping(&root, "p1", again, &["ready", ID, "--by", "ada"]);
+    let run = skipping(&root, "p1", again, &["set", ID, "--priority", "low"]);
     run_then(&root, &run.stdout);
     let commit = short(&root, "HEAD");
     off_base(&root);
-    let rule = format!("{ID} is draft (it is ready): {again}");
+    let rule = format!("{ID} is open (it is done): {again}");
     assert_eq!(
         rules_passed(&show(&root, MISSION)),
         [format!("  {ID}, change in {commit}, by p1: {rule}")]
@@ -950,16 +980,16 @@ fn an_item_only_on_a_backlog_branch_not_merged_yet_shows_its_passed_rule_on_its_
     run_then(&root, &run.stdout);
     let added = git(&root, &["diff", "--name-only", "HEAD~1", "HEAD"]);
     let new = added.split('/').nth(2).unwrap().to_string();
-    let run = atelier(&root, "p1", &["ready", &new, "--by", "ada"]);
+    let run = atelier(&root, "p1", &["close", &new, "Nothing to change."]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     run_then(&root, &run.stdout);
     let again = "Ada reconfirmed it";
-    let run = skipping(&root, "p1", again, &["ready", &new, "--by", "ada"]);
+    let run = skipping(&root, "p1", again, &["set", &new, "--priority", "low"]);
     run_then(&root, &run.stdout);
     let commit = short(&root, "HEAD");
     off_base(&root);
 
-    let rule = format!("{new} is draft (it is ready): {again}");
+    let rule = format!("{new} is open (it is done): {again}");
     let page = show(&root, MISSION);
     assert!(page.contains(&format!("  {new} ")), "{page}");
     assert_eq!(

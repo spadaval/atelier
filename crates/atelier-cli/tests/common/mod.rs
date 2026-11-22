@@ -362,7 +362,7 @@ pub fn finish_and_submit(root: &Path, thread: &str) {
 
 /// A scratch repository whose item t1 started, changed and submitted.
 pub fn submitted() -> Scratch {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
     fs::write(root.join("hello.txt"), "hello\n").unwrap();

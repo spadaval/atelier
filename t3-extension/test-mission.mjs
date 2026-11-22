@@ -92,14 +92,14 @@ try {
   });
   await check('running: Not started, Merged and Outcome and success criteria are each one folded line that opens in place; no list of the mission\'s steps', async () => {
     assert.deepEqual(await read(`[...p.querySelectorAll('[data-fold]')].map(f => [f.dataset.fold, text(f), f.children.length])`), [
-      ['Not started', 'Not started1 can start, 1 wait on others, 1 draft', 1],
+      ['Not started', 'Not started2 can start, 1 wait on others', 1],
       ['Merged', 'Merged1', 1],
       ['Outcome and success criteria', 'Outcome and success criteria', 1],
     ]);
     await click('[data-fold="Merged"] button');
     assert.match(await read(`text(p.querySelector('[data-fold="Merged"]'))`), /Show the Result as writtenmerged 2h 0m ago.*commit subjects/);
     await click('[data-fold="Not started"] button');
-    assert.deepEqual(await read(`[...p.querySelectorAll('[data-fold="Not started"] [data-row]')].map(r => text(r))`), ['Stack the page below 560 pixelscan start', 'Name each key on its buttondraft', 'Wait for the decisionwaits on atelier-r001']);
+    assert.deepEqual(await read(`[...p.querySelectorAll('[data-fold="Not started"] [data-row]')].map(r => text(r))`), ['Stack the page below 560 pixelscan start', 'Name each key on its buttoncan start', 'Wait for the decisionwaits on atelier-r001']);
     await click('[data-fold="Outcome and success criteria"] button');
     assert.match(await read(`text(p.querySelector('[data-fold="Outcome and success criteria"]'))`), /says what needs you\..*no progress log.*needs-you-first/);
     assert.doesNotMatch(await read('text(p)'), /Progress Log|Plan merged: mission agreed|Started atelier-|Submitted atelier-/);

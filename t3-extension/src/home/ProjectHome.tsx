@@ -2,7 +2,7 @@
 // roadmap without dates, Now, Next and Later, each mission folding open to its items and who holds
 // them, and a strip of the last seven days. Its layout is the Desk's page's, in T3's components and
 // colours; its rules are model.ts.
-import { ChevronDown, ChevronRight, Circle, CircleCheck, CircleDashed, CircleDot, CircleX, Eye, GitMerge, Play, RotateCcw, ShieldCheck, Target, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Circle, CircleCheck, CircleDot, CircleX, Eye, GitMerge, Play, RotateCcw, ShieldCheck, Target, X } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { HistoryResponse } from "../../../desk/src/api/HistoryResponse";
 import type { ItemRow } from "../../../desk/src/api/ItemRow";
@@ -109,8 +109,7 @@ function Note({ children }: { children: ReactNode }) {
 
 /** Where work stands, as one glyph, as the Desk draws it (desk/src/components/ui.tsx, StatusGlyph). */
 const GLYPHS: Record<Status, [typeof Circle, string]> = {
-  draft: [CircleDashed, "text-muted-foreground/60"],
-  ready: [Circle, "text-muted-foreground"],
+  open: [Circle, "text-muted-foreground"],
   building: [CircleDot, "text-info-foreground"],
   in_review: [Eye, "text-violet-500"],
   changes_requested: [RotateCcw, "text-destructive-foreground"],
@@ -125,8 +124,7 @@ function Glyph({ status }: { status: Status }) {
 
 /** A mission's items per status, as one bar, in the Desk's order and status colours. */
 const BAR: Record<Status, string> = {
-  draft: "bg-border",
-  ready: "bg-muted-foreground/40",
+  open: "bg-muted-foreground/40",
   building: "bg-info",
   in_review: "bg-violet-500",
   changes_requested: "bg-destructive",

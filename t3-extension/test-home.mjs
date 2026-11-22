@@ -74,16 +74,18 @@ try {
   const lanes = () => read(`[...p.querySelectorAll('[data-lane]')].map(lane => [lane.dataset.lane, [...lane.querySelectorAll('[data-mission-row]')].map(r => r.dataset.missionRow), [...lane.querySelectorAll('[data-loose] [data-item-row]')].map(r => r.dataset.itemRow)])`);
 
   await open('full');
-  await check('Now, Next and Later: the begun mission, the agreed one with nothing started and the proposed plan, each with its loose items; a done mission in none', async () => {
+  await check('Now, Next and Later: the begun mission, the agreed one with nothing started and the proposed plan; loose items started and open; a done mission in none', async () => {
     assert.equal(await read(`p.dataset.projectHome`), 'shown');
     assert.equal(await read(`text(p.querySelector('h1'))`), 'atelier');
     assert.deepEqual(await lanes(), [
       ['now', ['atelier-nm01'], ['atelier-l001']],
-      ['next', ['atelier-xm01'], ['atelier-l002']],
-      ['later', ['atelier-lm01'], ['atelier-l003']],
+      ['next', ['atelier-xm01'], ['atelier-l002', 'atelier-l003']],
+      ['later', ['atelier-lm01'], []],
     ]);
     assert.match(await read(`text(p.querySelector('[data-lane="now"]'))`), /^Now2missions in progress, and started work in no mission/);
     assert.match(await read(`text(p.querySelector('[data-mission-row="atelier-nm01"]'))`), /^Draw the project home nativelyatelier-nm011 need you1\/5/);
+    // The open items in no mission count in their lane.
+    assert.match(await read(`text(p.querySelector('[data-lane="next"]'))`), /^Next3agreed, nothing started, and open work/);
     // Each item in no mission shows its priority, as the Desk's page does; a mission's items do not.
     assert.deepEqual(await read(`[...p.querySelectorAll('[data-loose] [data-item-row]')].map(r => [r.dataset.itemRow, r.querySelector('[data-priority]')?.dataset.priority, r.querySelectorAll('[data-priority] i.bg-border').length])`), [['atelier-l001', 'critical', 0], ['atelier-l002', 'high', 0], ['atelier-l003', 'low', 2]]);
     assert.equal(await read(`p.querySelector('[data-items] [data-priority]')`), null);
@@ -96,7 +98,7 @@ try {
     assert.equal(await read(`text(p.querySelector('[data-item-row="atelier-n002"] [data-holder]'))`), 'Implement the fold');
     assert.equal(await read(`text(p.querySelector('[data-item-row="atelier-n003"] [data-holder]'))`), 'review: thread …ewer01');
     assert.match(await read(`text(p.querySelector('[data-item-row="atelier-n004"]'))`), /blocked by atelier-n002 \(building\)/);
-    assert.match(await read(`text(p.querySelector('[data-item-row="atelier-n005"]'))`), /Needs youready$/);
+    assert.match(await read(`text(p.querySelector('[data-item-row="atelier-n005"]'))`), /Needs youopen$/);
     assert.equal(await read(`p.querySelector('[data-item-row="atelier-n001"] [data-holder]')`), null, 'a done item names a holder');
     await click('[data-mission-row="atelier-xm01"] [data-action="fold"]');
     await until(() => read(`p.querySelectorAll('[data-items="atelier-xm01"] [data-item-row]').length === 2`), 'Next\'s mission folded open');

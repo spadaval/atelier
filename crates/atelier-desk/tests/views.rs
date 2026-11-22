@@ -118,8 +118,8 @@ fn scratch(root: &Path) {
         "[]",
         "critical",
     );
-    item(root, "demo-c002", "ready", "null", "[]", "[]", "low");
-    item(root, "demo-c003", "ready", "null", "[]", "[]", "high");
+    item(root, "demo-c002", "open", "null", "[]", "[]", "low");
+    item(root, "demo-c003", "open", "null", "[]", "[]", "high");
     item(root, "demo-c004", "done", "null", "[]", "[]", "high");
     git(root, &["add", "-A"]);
     let old = Some("2026-01-01T09:00:00Z");
@@ -240,10 +240,11 @@ async fn the_sidebar_lists_each_open_mission_with_its_threads() {
 async fn the_project_strip_says_what_can_start_what_waits_and_what_moves() {
     let served = serve(None);
     let launch = ok(&served.app, "/api/launch?repo=demo").await;
-    // Ready and startable, needing no human, highest priority first.
+    // Open and startable, needing no human, highest priority first; an old
+    // `draft` is one.
     assert_eq!(
         strings(&launch["ready"], "id"),
-        ["demo-c003", "demo-c002"],
+        ["demo-a001", "demo-c003", "demo-c002"],
         "{launch}"
     );
     assert_eq!(launch["ready"][0]["priority"], "high");
@@ -280,7 +281,13 @@ async fn motion_and_an_item_carry_the_fields_the_views_read() {
     assert_eq!(changed, tip);
     assert_eq!(
         strings(&repo["ready"], "id"),
-        ["demo-c001", "demo-a002", "demo-c003", "demo-c002"]
+        [
+            "demo-c001",
+            "demo-a001",
+            "demo-a002",
+            "demo-c003",
+            "demo-c002"
+        ]
     );
 
     // Read again with nothing changed, motion and the project strip run no
@@ -367,6 +374,11 @@ async fn the_roadmap_lists_the_open_items_in_no_mission() {
     assert_eq!(
         strings(&roadmap["loose"], "id"),
         ["demo-c001", "demo-c002", "demo-c003"]
+    );
+    // Each unstarted one is open, as the clients sort them.
+    assert_eq!(
+        strings(&roadmap["loose"], "status"),
+        ["open", "open", "open"]
     );
     let (status, _) = get(&served.app, "/api/roadmap?repo=elsewhere").await;
     assert_eq!(status, StatusCode::NOT_FOUND);

@@ -1,4 +1,4 @@
-//! The planner's commands besides `ready` (`atelier_core::ready`): `new`,
+//! The planner's commands: `new`,
 //! `set`, `drop` and `close`. Each reads and writes records in the checkout
 //! it runs in, on the branch the change belongs on, validates what it
 //! writes (`atelier_core::plan`), commits nothing, and ends with the Git
@@ -8,7 +8,7 @@ use crate::commands::Outcome;
 use crate::output;
 use anyhow::{anyhow, Result};
 use atelier_core::actions::{
-    check, settle_refusals, Action, MissionFacts, Refusal, PLANNED, STARTED,
+    check, settle_refusals, Action, MissionFacts, Refusal, STARTED, UNFINISHED,
 };
 use atelier_core::model::{
     Finding, FindingName, Item, ItemSchema, Mission, MissionSchema, MissionStatus, Named, Priority,
@@ -26,14 +26,14 @@ const ITEM_BODY: &str = "\n## Goal\n\n## Done when\n\n## Scope\n";
 const MISSION_BODY: &str =
     "\n## Why\n\n## Outcome\n\n## Success criteria\n\n## Scope\n\n## Authority\n\n## Result\n";
 
-/// A new draft item with empty Goal, Done when and Scope sections.
-pub fn draft_item(id: &str, title: &str, mission: Option<String>) -> Item {
+/// A new open item with empty Goal, Done when and Scope sections.
+pub fn open_item(id: &str, title: &str, mission: Option<String>) -> Item {
     Item {
         schema: ItemSchema::Item,
         schema_version: SchemaVersion,
         id: id.to_string(),
         title: title.to_string(),
-        status: Status::Draft,
+        status: Status::Open,
         mission,
         labels: Vec::new(),
         priority: Priority::Medium,
@@ -78,7 +78,7 @@ pub fn new(
         let take = Settle::Take { id, title, into };
         return settle(repo, "new --from", name, take);
     }
-    let item = draft_item(&id, title, into);
+    let item = open_item(&id, title, into);
     let said = output::created_item(&id);
     let message = format!("Plan {id}");
     Ok(save(repo, "new", vec![item], Vec::new(), &said, &message)?.into())
@@ -151,9 +151,13 @@ pub fn set(repo: &mut Repo, id: &str, fields: Fields) -> Result<Outcome> {
             return Ok(Outcome::Refused(output::item_only(id, &item_only)));
         }
         let mut mission = repo.store().mission(id)?.mission;
-        let status = mission.status.status();
-        if let Some(refused) = unplanned(repo, id, status, output::not_planned(id, status)) {
-            return Ok(refused.into());
+        let status = mission.status;
+        if !UNFINISHED.contains(&status) {
+            let text = output::not_planned(id, status.name());
+            let rule = output::rule_mission_from(id, UNFINISHED, status);
+            if let Some(refused) = repo.skip.refuse([rule], text) {
+                return Ok(refused.into());
+            }
         }
         if let Some(title) = fields.title {
             mission.title = title;
@@ -170,12 +174,15 @@ pub fn set(repo: &mut Repo, id: &str, fields: Fields) -> Result<Outcome> {
         return Ok(Outcome::Refused(output::set_unknown(id)));
     };
     let status = record.item.status;
-    let text = match STARTED.contains(&status) {
-        true => output::set_started(id, status),
-        false => output::not_planned(id, status),
-    };
-    if let Some(refused) = unplanned(repo, id, status, text) {
-        return Ok(refused.into());
+    if status != Status::Open {
+        let text = match STARTED.contains(&status) {
+            true => output::set_started(id, status),
+            false => output::not_planned(id, output::status_name(status)),
+        };
+        let rule = output::rule_from(id, &[Status::Open], status);
+        if let Some(refused) = repo.skip.refuse([rule], text) {
+            return Ok(refused.into());
+        }
     }
     // Planning is the base's record, whatever a branch holds.
     let mut item = located.base.as_ref().unwrap_or(record).item.clone();
@@ -204,17 +211,6 @@ pub fn set(repo: &mut Repo, id: &str, fields: Fields) -> Result<Outcome> {
     let said = format!("Set the fields of item {id}.\n");
     let message = format!("Set fields of {id}");
     Ok(save(repo, "set", vec![item], Vec::new(), &said, &message)?.into())
-}
-
-/// `set` on a record that is `status`, refused unless it is a draft or
-/// ready, with `text`.
-fn unplanned(repo: &Repo, id: &str, status: Status, text: String) -> Option<Refused> {
-    match PLANNED.contains(&status) {
-        true => None,
-        false => repo
-            .skip
-            .refuse([output::rule_from(id, PLANNED, status)], text),
-    }
 }
 
 /// `drop`: ends an item or a mission that will not be done, with the
@@ -423,7 +419,7 @@ fn added_there(repo: &mut Repo, id: &str) -> Result<String> {
 }
 
 /// `close`: ends an agreed mission whose items are all done or dropped and
-/// whose Result is written, or, with its result, a draft or ready item that
+/// whose Result is written, or, with its result, an open item that
 /// has no branch.
 pub fn close(repo: &mut Repo, id: &str, result: Option<&str>) -> Result<Outcome> {
     if let Some(refused) = misplaced(repo, "close", Belongs::Backlog)? {
@@ -500,7 +496,7 @@ pub fn not_agreed(repo: &mut Repo, command: &str, id: &str) -> Result<Option<Ref
 
 /// How `new --from` or `drop` settles a deferred finding.
 enum Settle<'a> {
-    /// Into a new draft item with this ID and title, in this mission if
+    /// Into a new open item with this ID and title, in this mission if
     /// any.
     Take {
         id: String,
@@ -562,7 +558,7 @@ fn settle(repo: &mut Repo, command: &str, name: &str, how: Settle) -> Result<Out
             title,
             into,
         } => {
-            let mut item = draft_item(&new, title, into);
+            let mut item = open_item(&new, title, into);
             item.body = taken_body(name, &review, &found);
             let said = output::finding_taken(name, &new);
             let message = format!("Take finding {name} into {new}");

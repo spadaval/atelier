@@ -214,7 +214,7 @@ pub struct ItemRow {
     pub holder: Option<String>,
     /// Who holds this round's review, while it is in review.
     pub reviewer: Option<String>,
-    /// For a ready item, why it cannot start now.
+    /// For an open item, why it cannot start now.
     pub cannot_start: Vec<String>,
     /// For a started item, what its holder's next action still lacks.
     pub needs: Vec<String>,
@@ -542,7 +542,7 @@ pub struct SideThread {
 /// strip.
 #[derive(Debug, Clone, Serialize, TS)]
 pub struct LaunchResponse {
-    /// Up to five ready items that can start now and need no human.
+    /// Up to five open items that can start now and need no human.
     pub ready: Vec<LaunchReady>,
     /// How many things wait on the human: needs-human items, proposed
     /// plans and waiting threads.
@@ -964,7 +964,7 @@ pub struct MotionRepo {
     pub items: Vec<MotionItem>,
     /// Each agreed mission with a started item.
     pub missions: Vec<MotionMission>,
-    /// Up to five ready items that can start now, highest priority first.
+    /// Up to five open items that can start now, highest priority first.
     pub ready: Vec<ItemRow>,
 }
 
@@ -1101,8 +1101,7 @@ macro_rules! named {
 named!(
     Status,
     atelier_core::model::Status,
-    Draft,
-    Ready,
+    Open,
     Building,
     InReview,
     ChangesRequested,

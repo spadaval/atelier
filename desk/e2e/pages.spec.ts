@@ -42,7 +42,7 @@ test("the mission page shows the title, status and counts atelier show prints", 
   await load(page, "/r/atelier/mission/atelier-z4cr");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(z4cr.mission.title);
   await expect(page.getByTestId("status")).toHaveText("Agreed");
-  await expect(page.locator(".paper-head").getByTestId("counts")).toHaveText("5 draft2 ready1 building1 done");
+  await expect(page.locator(".paper-head").getByTestId("counts")).toHaveText("7 open1 building1 done");
   // Overview: what waits on the human first, then the mission's sections.
   const overview = page.locator(".paper-body");
   for (const heading of ["Waiting on you", "Why", "Success criteria", "Scope", "Authority", "Result", "Plan reviews"]) {
@@ -62,12 +62,14 @@ test("the mission page shows the title, status and counts atelier show prints", 
 
 test("the Work tab groups items by status in lifecycle order, and a done item shows its Report and fixes", async ({ page }) => {
   await load(page, "/r/atelier/mission/atelier-z4cr?tab=work");
-  await expect(page.locator(".group-title")).toHaveText(["Draft 5", "Ready 2", "Building 1", "Done 1"]);
+  await expect(page.locator(".group-title")).toHaveText(["Open 7", "Building 1", "Done 1"]);
   const building = page.getByRole("region", { name: "Building" });
   await expect(building).toContainText("Held by thread:delegated-");
   await expect(building).toContainText("atelier-uwxy needs its Report written");
-  await expect(page.getByRole("region", { name: "Draft" })).toContainText("Waits on atelier-uwxy (building)");
-  await expect(page.getByRole("region", { name: "Ready" })).toContainText("atelier-psjw is blocked by atelier-uwxy");
+  const open = page.getByRole("region", { name: "Open" });
+  for (const id of ["atelier-94pv", "atelier-e05n", "atelier-psjw"]) await expect(open).toContainText(id);
+  await expect(open).toContainText("atelier-psjw is blocked by atelier-uwxy");
+  await expect(open).toContainText("atelier-uwxy is done (it is building)");
   await page.getByRole("button", { name: "Report and fixes" }).click();
   const report = page.locator(".report");
   await expect(report).toContainText("All Done when lines hold.");

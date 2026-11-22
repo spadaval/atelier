@@ -11,7 +11,7 @@ import type { WaitingThread } from "./WaitingThread";
  */
 export type LaunchResponse = {
 /**
- * Up to five ready items that can start now and need no human.
+ * Up to five open items that can start now and need no human.
  */
 ready: Array<LaunchReady>,
 /**

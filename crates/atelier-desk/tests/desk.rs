@@ -61,10 +61,11 @@ fn put(root: &Path, (path, text): (String, String)) {
     write(root, &path, &text);
 }
 
-/// A repository on `main` whose mission ALPHA is ready, with items draft,
-/// ready (needs-human), building on its own branch with a question, and
-/// done; mission BETA is a draft with one ready item; and one item, which
-/// needs a human, is in no mission. The checkout has `main` out.
+/// A repository on `main` written as before items were open: mission ALPHA,
+/// stored `ready`, has open items stored `draft` and `ready` (needs-human),
+/// one building on its own branch with a question, and one done; mission
+/// BETA is an old draft with one open item; and one item, which needs a
+/// human, is in no mission. The checkout has `main` out.
 fn scratch(root: &Path) {
     fs::create_dir_all(root).unwrap();
     git(root, &["init", "-q", "-b", "main"]);
@@ -196,7 +197,7 @@ async fn each_mission_agrees_with_show_and_the_inbox_with_list() {
     // The started item counts as its branch's record says, building.
     let alpha = ok(&served.app, &format!("/api/repos/demo/missions/{ALPHA}")).await;
     let expected = serde_json::json!([
-        {"status": "draft", "count": 1}, {"status": "ready", "count": 1},
+        {"status": "open", "count": 2},
         {"status": "building", "count": 1}, {"status": "done", "count": 1}
     ]);
     assert_eq!(alpha["mission"]["counts"], expected);
