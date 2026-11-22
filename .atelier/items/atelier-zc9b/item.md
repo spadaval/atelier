@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-zc9b
 title: Fix recurring CLI friction in submit handoffs, status on base, pre-push recovery, and Responses parsing
-status: in_review
+status: approved
 mission: atelier-ww7w
 labels: []
 priority: medium
