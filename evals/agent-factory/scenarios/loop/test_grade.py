@@ -335,7 +335,8 @@ class DepartureTest(Fixture):
         self.build()
         self.approve("rev")
         self.atelier("impl", "merge")
-        self.sh("git", "switch", "-q", ID)
+        # The merge deleted the item's branch: a branch of the commit's own.
+        self.sh("git", "switch", "-q", "-c", "notes")
         self.atelier("impl", "setup")
         (self.repo / "notes.txt").write_text("later\n")
         self.sh("git", "add", "notes.txt")
