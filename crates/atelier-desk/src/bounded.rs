@@ -1,6 +1,6 @@
 //! Commands the reads run for the views a host shows (`git log`,
-//! `gh pr view`), each given a deadline, so a hung command fails one read
-//! and holds no request open.
+//! `gh pr view`), and a mission's history read through the core, each given
+//! a deadline, so a hung command fails one read and holds no request open.
 
 use anyhow::{anyhow, bail, Context, Result};
 use std::io::Read;
@@ -66,9 +66,28 @@ pub fn run(command: &mut Command, limit: Duration) -> Result<Vec<u8>> {
     Ok(output.stdout)
 }
 
+/// What `work` gives, or an error once `limit` has passed. It runs on a
+/// thread of its own, which is left to end: a blocked read cannot be
+/// stopped, so work that can run long also takes the deadline itself.
+pub fn within<T: Send + 'static>(
+    limit: Duration,
+    work: impl FnOnce() -> T + Send + 'static,
+) -> Result<T> {
+    let (send, receive) = mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = send.send(work());
+    });
+    receive.recv_timeout(limit).map_err(|error| match error {
+        mpsc::RecvTimeoutError::Timeout => {
+            anyhow!("the read did not finish within {} seconds", limit.as_secs())
+        }
+        mpsc::RecvTimeoutError::Disconnected => anyhow!("the read failed"),
+    })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::run;
+    use super::{run, within};
     use std::process::Command;
     use std::time::{Duration, Instant};
 
@@ -106,6 +125,17 @@ mod tests {
             Duration::from_millis(300),
         );
         assert!(format!("{:#}", held.unwrap_err()).contains("did not finish"));
+        assert!(started.elapsed() < Duration::from_secs(5));
+    }
+
+    #[test]
+    fn work_past_its_limit_is_not_waited_for() {
+        assert_eq!(within(Duration::from_secs(5), || 7).unwrap(), 7);
+        let started = Instant::now();
+        let late = within(Duration::from_millis(100), || {
+            std::thread::sleep(Duration::from_secs(10));
+        });
+        assert!(late.unwrap_err().to_string().contains("did not finish"));
         assert!(started.elapsed() < Duration::from_secs(5));
     }
 

@@ -15,11 +15,13 @@ use atelier_core::plan::plan_changed_at;
 use atelier_core::records::{CommitReader, ItemDir, MissionDir, ReadError, ReviewFile};
 use atelier_core::say::condition_text;
 use atelier_core::{
-    annotate, disputes, entries, git, in_progress, item_view, items_of, list, mission_view, Entry,
-    Filter, Judged, Located, Record, Repo, Skip, LIFECYCLE,
+    annotate, disputes, entries, git, history_until, in_progress, item_view, items_of, list,
+    mission_view, Entry, Filter, Judged, Located, Record, Repo, Skip, LIFECYCLE,
 };
+use chrono::{DateTime, SecondsFormat, Utc};
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::time::Instant;
 
 /// Opens the repository at `dir` for reading from commits, for `caller`,
 /// from the checkout that has its base branch out where one does, since
@@ -375,6 +377,51 @@ pub fn mission(repo: &mut Repo, id: &str) -> Result<Option<MissionPage>> {
         t3: T3State::default(),
         fetched: FetchMark::default(),
         mission: row,
+    }))
+}
+
+/// The actions on mission `id` and its items, as `atelier log <id>` finds
+/// them, or an error once `deadline` has passed; `None` where `id` is no
+/// mission, an item's ID included.
+pub fn mission_history(
+    repo: &mut Repo,
+    id: &str,
+    deadline: Instant,
+) -> Result<Option<MissionHistoryResponse>> {
+    // The log takes an item's ID too, and this route does not.
+    if repo.find_mission(id)?.record().is_none() {
+        return Ok(None);
+    }
+    let Some(found) = history_until(repo, Some(id), None, Some(deadline))? else {
+        return Ok(None);
+    };
+    let timestamp = |at: &DateTime<Utc>| at.to_rfc3339_opts(SecondsFormat::Secs, true);
+    let actions = (found.actions.into_iter())
+        .map(|logged| MissionAction {
+            timestamp: timestamp(&logged.time),
+            detail: logged.action.changed(),
+            action: logged.action.name().to_string(),
+            commit: logged.commit,
+            id: logged.id,
+            thread: logged.thread.map(|thread| thread.0),
+            skips: logged.skips,
+            skipped_by: logged.skipped_by.map(|thread| thread.0),
+        })
+        .collect();
+    let passed_over = (found.passed_over.into_iter())
+        .map(|passed| PassedOverVersion {
+            timestamp: timestamp(&passed.time),
+            commit: passed.commit,
+            id: passed.id,
+            path: passed.path,
+            problem: passed.problem,
+        })
+        .collect();
+    Ok(Some(MissionHistoryResponse {
+        commit: repo.base_tip.clone(),
+        actions,
+        passed_over,
+        fetched: FetchMark::default(),
     }))
 }
 
