@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-7637
 title: Decouple garden upkeep merges from human proposal sessions
-status: in_review
+status: approved
 mission: atelier-ww7w
 labels: []
 priority: medium
