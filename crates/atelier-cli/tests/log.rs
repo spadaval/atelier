@@ -111,11 +111,11 @@ fn the_plain_path_prints_its_actions_in_order_and_the_same_lines_once_its_branch
     assert_eq!(actions(&root, &merged), all);
     // The merge line is the merge commit's; the others are the branch's.
     assert_eq!(commit_of(&merged[5]), short(&root, "main"));
-    assert_eq!(commit_of(&merged[4]), short(&root, ID));
+    assert_eq!(commit_of(&merged[4]), short(&root, "main^2"));
 
-    git(&root, &["checkout", "-q", "--detach", "main"]);
-    git(&root, &["branch", "-qD", ID]);
+    // `merge` deleted the branch, and nothing that moves changes the lines.
     assert!(!branch_exists(&root, ID));
+    off_base(&root);
     assert_eq!(log(&root, &[]), merged);
     assert_eq!(log(&root, &[ID]), merged);
 }
@@ -207,8 +207,7 @@ fn a_deferred_finding_settled_on_a_gardeners_branch_shows_once_merged() {
     ok(atelier(&root, "r1", &["review", ID]));
     ok(verdict(&root, "r1", &["verdict", "approve"]));
     ok(atelier(&root, "g1", &["merge"]));
-    git(&root, &["checkout", "-q", "--detach", "main"]);
-    git(&root, &["branch", "-qD", ID]);
+    assert!(!branch_exists(&root, ID));
 
     let lines = log(&root, &[DONE]);
     assert_eq!(
@@ -529,7 +528,7 @@ fn actions_on_a_branch_whose_records_a_plain_merge_matches_survive_its_deletion(
     let started = short(&root, "HEAD");
     hello(&root);
     git(&root, &["revert", "--no-edit", &started]);
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     git(
         &root,
         &["merge", "-q", "--no-ff", "-m", "Merge the attempt", ID],
@@ -716,9 +715,9 @@ fn a_proposed_plans_lead_and_merge_and_a_set_of_a_started_item_each_show_their_p
 
     // A started item's priority set on a backlog branch: no action, and
     // its rule still shows.
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     ok(atelier(&root, "t1", &["start", ID]));
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     ok(atelier(&root, "p1", &["start", "--backlog", "tidy"]));
     let lower = "Ada lowered it";
     let run = skipping(&root, "p1", lower, &["set", ID, "--priority", "low"]);
@@ -898,7 +897,7 @@ fn a_proposed_mission_fetched_alone_or_ahead_of_its_local_branch_shows_its_passe
             "HEAD",
         ],
     );
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     git(&root, &["branch", "-qD", MISSION]);
     shows(&root);
 
@@ -921,7 +920,7 @@ fn a_rule_passed_on_a_backlog_branch_not_merged_yet_shows_on_the_missions_page()
     let run = skipping(&root, "p1", again, &["ready", ID, "--by", "ada"]);
     run_then(&root, &run.stdout);
     let commit = short(&root, "HEAD");
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     let rule = format!("{ID} is draft (it is ready): {again}");
     assert_eq!(
         rules_passed(&show(&root, MISSION)),
@@ -958,7 +957,7 @@ fn an_item_only_on_a_backlog_branch_not_merged_yet_shows_its_passed_rule_on_its_
     let run = skipping(&root, "p1", again, &["ready", &new, "--by", "ada"]);
     run_then(&root, &run.stdout);
     let commit = short(&root, "HEAD");
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
 
     let rule = format!("{new} is draft (it is ready): {again}");
     let page = show(&root, MISSION);
@@ -1062,7 +1061,7 @@ fn a_plan_shows_when_it_was_written_and_merged_and_each_amendment_and_never_as_a
     // A section changed, and then a document alone, each merged with the
     // rule it passed on its line.
     let amended = |slug: &str, change: &dyn Fn()| {
-        git(&root, &["checkout", "-q", "--detach", "main"]);
+        off_base(&root);
         ok(atelier(&root, "l1", &["start", "--backlog", slug]));
         change();
         skipping(&root, "l1", "Ada agreed it", &["merge"]);

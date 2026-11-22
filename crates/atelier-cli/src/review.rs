@@ -130,8 +130,9 @@ fn behind(repo: &Repo, located: &atelier_core::Located) -> Option<Outcome> {
 }
 
 /// `command` refused in the base's own checkout, where nothing is written.
+/// A reviewer's detached checkout is where it runs.
 fn on_base(repo: &mut Repo, command: &str) -> Result<Option<Outcome>> {
-    Ok(misplaced(repo, command, Belongs::Backlog)?.map(Outcome::from))
+    Ok(misplaced(repo, command, Belongs::Review)?.map(Outcome::from))
 }
 
 /// The sections of a mission's record, in order.

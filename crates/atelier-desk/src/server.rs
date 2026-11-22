@@ -4,7 +4,7 @@
 use crate::api::{
     ActionRequest, ApiError, DisputedRepo, DisputedResponse, EmbedResponse, FetchMark, Hold,
     InboxRepo, InboxResponse, MissionRow, MissionState, MotionRepo, MotionResponse, PrMark,
-    ProposedRepo, ProposedResponse, RepoSummary, ReposResponse, SessionRequest, StopAction,
+    ProposedRepo, ProposedResponse, RepoSummary, ReposResponse, SessionRequest, Status, StopAction,
     ThreadsResponse, TiesResponse,
 };
 use crate::config::Config;
@@ -569,15 +569,18 @@ async fn mission(
     blocking(move || {
         checked(&id)?;
         let missing = || format!("No mission {id} is on the base or on a branch.");
-        let mut page = desk.repo_route(&repo, &format!("mission {id}"), missing, |r| {
-            read::mission(r, &id)
+        let (mut page, own) = desk.repo_route(&repo, &format!("mission {id}"), missing, |r| {
+            Ok(read::mission(r, &id)?.map(|page| (page, r.branch_of(&id))))
         })?;
         let dir = desk.served(&repo)?;
         let snapshot = desk.threads.snapshot();
         snapshot.join(&mut page.threads);
         page.t3 = snapshot.state;
-        page.pull_request =
-            (page.mission.branch.clone()).and_then(|b| desk.pull_request(&repo, &dir, &b));
+        // A merged branch is deleted, and its pull request is still the
+        // forge's, under the name the convention gives the branch.
+        let agreed = page.mission.state != MissionState::Proposed;
+        let branch = (page.mission.branch.clone()).or_else(|| agreed.then_some(own));
+        page.pull_request = branch.and_then(|b| desk.pull_request(&repo, &dir, &b));
         desk.settle(&repo, &dir, &mut page.mission);
         page.can_stop &= desk.config.state.is_some();
         page.fetched = desk.fetched(&repo, &dir);
@@ -620,16 +623,18 @@ async fn item(
     blocking(move || {
         checked(&id)?;
         let missing = || format!("No item {id} is on the base or on a branch.");
-        let mut page = desk.repo_route(&repo, &format!("item {id}"), missing, |r| {
-            read::item(r, &id)
+        let (mut page, own) = desk.repo_route(&repo, &format!("item {id}"), missing, |r| {
+            Ok(read::item(r, &id)?.map(|page| (page, r.branch_of(&id))))
         })?;
         let snapshot = desk.threads.snapshot();
         snapshot.join(&mut page.threads);
         page.t3 = snapshot.state;
         let dir = desk.served(&repo)?;
         page.fetched = desk.fetched(&repo, &dir);
-        page.pull_request =
-            (page.row.branch.as_ref()).and_then(|b| desk.pull_request(&repo, &dir, &b.name));
+        let ended = matches!(page.row.status, Status::Done | Status::Dropped);
+        let branch =
+            (page.row.branch.as_ref().map(|b| b.name.clone())).or_else(|| ended.then_some(own));
+        page.pull_request = branch.and_then(|b| desk.pull_request(&repo, &dir, &b));
         Ok(page)
     })
     .await

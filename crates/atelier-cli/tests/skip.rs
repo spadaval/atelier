@@ -121,8 +121,9 @@ fn a_skipped_rule_is_printed_and_trailed_in_the_commit_of_start_submit_verdict_a
         skipped(&[&status, approval])
             + &format!(
                 "main's config.toml names no merge check, so none ran.\n\
-                 Merged {ID} into main with merge commit {}; it is done.\n",
-                git(&root, &["rev-parse", "--short=7", "main"])
+                 Merged {ID} into main with merge commit {}; it is done.\n{}",
+                git(&root, &["rev-parse", "--short=7", "main"]),
+                deleted(ID, &git(&root, &["rev-parse", "main^2"]))
             )
     );
     // Merged in a started status, which on the base reads as done.
@@ -140,7 +141,7 @@ fn set_with_a_skip_changes_a_started_items_base_record() {
     let scratch = Scratch::new(&[(ID, "ready")]);
     let root = scratch.root();
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     let run = skipping(&root, "p1", REASON, &["set", ID, "--priority", "low"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     let rule = format!("{ID} is draft or ready (it is building)");
@@ -259,7 +260,7 @@ fn what_is_not_a_rule_is_refused_with_the_variable_set_and_says_so() {
     // has it.
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
     let other = scratch.worktree("other");
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     git(&other, &["switch", "-q", ID]);
     let run = skipping(&root, "t2", REASON, &["start", ID]);
     assert_eq!(run.code, 1, "{}", run.stderr);

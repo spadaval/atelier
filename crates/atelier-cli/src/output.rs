@@ -10,7 +10,7 @@ use atelier_core::forge::{CiRun, ForgeError, MergeState, PullRequest};
 use atelier_core::model::{Config, Priority, Response, Status, Thread, Verdict};
 use atelier_core::plan::{Approvals, NotCounted, PlanDelta, APPROVALS, SPLITS};
 use atelier_core::records::Problem;
-use atelier_core::{Carried, Entry, Overview};
+use atelier_core::{Carried, Entry, Overview, Refused};
 use std::path::Path;
 use std::time::Duration;
 
@@ -451,6 +451,101 @@ pub fn lost_claim(what: &str, branch: &str, remote: &str, holder: Option<&Thread
     let holder = holder.map_or("Another thread".to_string(), |t| t.to_string());
     format!(
         "`atelier start` refused; nothing changed here.\n{holder} holds {what}: {remote} already has branch {branch}, so this clone's claim lost, and the branch it made is removed. It fetched {remote}/{branch}.\nTo take it over, run `atelier start {what}` again.\n"
+    )
+}
+
+/// `start <id>` could not fetch the base, which it judges by.
+pub fn base_unread(id: &str, base: &str, remote: &str, error: &anyhow::Error) -> String {
+    format!(
+        "`atelier start` refused; nothing changed.\n{remote} cannot be reached to fetch {base}, which says whether {id} is already done or dropped: {error:#}\nRun it again once {remote} answers.\n"
+    )
+}
+
+/// The claim was pushed and the base could not be fetched to confirm it.
+pub fn claim_unconfirmed(
+    id: &str,
+    branch: &str,
+    base: &str,
+    remote: &str,
+    error: &anyhow::Error,
+) -> String {
+    format!(
+        "`atelier start {id}` pushed branch {branch}, then could not fetch {base} from {remote} to confirm {id} is still open: {error:#}\nRun `atelier start {id}` again once {remote} answers, before working on it.\n"
+    )
+}
+
+/// `id` became `status` on the base while `start` claimed it.
+pub fn start_finished(id: &str, branch: &str, base: &str, remote: &str, status: Status) -> String {
+    format!(
+        "`atelier start {id}` refused: {id} became {} on {base} while it started. The local branch is removed, and this checkout is as it was.\nWarning: the branch {branch} it pushed stays on {remote}, where it counts for nothing, since {base}'s record wins.\n",
+        status_name(status)
+    )
+}
+
+/// `id` became `status` on the base while it was taken over; `here` is
+/// the branch this checkout was switched to for it.
+pub fn take_over_finished(
+    id: &str,
+    branch: &str,
+    base: &str,
+    remote: &str,
+    status: Status,
+    here: Option<&str>,
+) -> String {
+    let here = here.map_or(String::new(), |here| {
+        format!(" This checkout is on {here}.")
+    });
+    format!(
+        "`atelier start {id}` refused: {id} became {} on {base} while it was taken over, so nothing is left to do on it.\nBranch {branch} is kept here and on {remote}, with the work already on it.{here}\n",
+        status_name(status)
+    )
+}
+
+/// The commits only a detached HEAD holds, at most the first ten.
+fn loose(commits: &[String]) -> String {
+    let mut text = String::new();
+    for commit in commits.iter().take(10) {
+        text += &format!("  {commit}\n");
+    }
+    if commits.len() > 10 {
+        text += &format!("  and {} more\n", commits.len() - 10);
+    }
+    text
+}
+
+/// How to keep commits only a detached HEAD holds.
+const KEEP_LOOSE: &str = "Keep them with `git branch <name> HEAD`, then `git cherry-pick` them onto the branch they belong on.";
+
+/// What `status` says of commits only a detached HEAD holds.
+pub fn unattached(commits: &[String]) -> String {
+    if commits.is_empty() {
+        return String::new();
+    }
+    format!(
+        "Commits of this detached HEAD on no branch, remote-tracking branch or tag, which a switch away would lose:\n{}{KEEP_LOOSE}\n",
+        loose(commits)
+    )
+}
+
+/// `start` refused where it would switch away from such commits.
+pub fn start_strands(commits: &[String]) -> Refused {
+    Refused::then(
+        format!(
+            "`atelier start` refused; nothing changed.\nThis detached HEAD holds commits on no branch, remote-tracking branch or tag, which switching away would lose:\n{}",
+            loose(commits)
+        ),
+        format!("{KEEP_LOOSE} Then run `atelier start` again."),
+    )
+}
+
+pub fn rule_start_strands() -> String {
+    "`atelier start` does not switch away from commits on no branch".into()
+}
+
+/// `status`'s line where merged branches or detached worktrees piled up.
+pub fn piled_up(base: &str, merged: usize, detached: usize) -> String {
+    format!(
+        "Piled up in this clone: {merged} local branches merged into {base}, {detached} detached worktrees. See them with `git branch --merged {base}` and `git worktree list`.\n"
     )
 }
 
@@ -967,6 +1062,13 @@ pub fn submit_no_pull_request(id: &str, error: &ForgeError, pushed: bool) -> Str
     )
 }
 
+/// `submit` could not fetch the base, so judged by the last fetch.
+pub fn submit_base_unread(id: &str, base: &str, remote: &str, error: &anyhow::Error) -> String {
+    format!(
+        "Warning: fetching {base} from {remote} failed, so whether {id} is done or dropped was judged by the last fetch: {error:#}\n"
+    )
+}
+
 pub fn not_on_item(command: &str, branch: Option<&str>) -> String {
     format!(
         "`atelier {command}` runs on an item's branch, and this checkout is on {}. Nothing changed.\n`atelier status` lists what you hold; `atelier start <id>` switches to its branch.\n",
@@ -1479,6 +1581,45 @@ pub fn dropped_started(id: &str, branch: &str, reason: &str, remote: Option<&str
     format!(
         "Dropped item {id} on its branch {branch}: {reason}\n{push}\nThe base's copy of {id} is dropped on a backlog branch after that: `atelier start --backlog drop-{id}`, then there `atelier drop {id} --reason \"{reason}\"`, commit, `atelier submit` and `atelier merge`. Until then `status` and `list` say the drop has not reached the base.\n"
     )
+}
+
+/// `drop` of started item `id` written on a backlog branch. `branch` is
+/// the item's, whose pull request `merge` closes where there is a
+/// `remote`.
+pub fn dropped_on_backlog(id: &str, branch: &str, reason: &str, remote: Option<&str>) -> String {
+    let closes = match remote {
+        Some(_) => " That merge closes its pull request, if one is open.",
+        None => "",
+    };
+    format!(
+        "Dropped started item {id}: {reason}\nOnce this branch merges, {id}'s `submit`, `merge` and take-over are refused. Branch {branch} is left as it is.{closes}\n"
+    )
+}
+
+/// The items `added`, each its ID, title and the ref that holds it, which
+/// the branch of dropped `id` filed and the base does not hold.
+pub fn dropped_adds(
+    id: &str,
+    branch: &str,
+    base: &str,
+    added: &[(String, String, String)],
+) -> String {
+    if added.is_empty() {
+        return String::new();
+    }
+    let mut text = format!(
+        "Branch {branch} also adds items that are not on {base}, and dropping {id} leaves them behind. For each still wanted, run its command on a backlog branch and commit it:\n"
+    );
+    for (other, title, on) in added {
+        let dir = atelier_core::repo::item_dir(other);
+        text += &format!("  {other}: {title}\n    git checkout {on} -- {dir}\n");
+    }
+    text
+}
+
+/// `drop` of an item the base holds done, whose branch may be gone.
+pub fn drop_done(id: &str, base: &str) -> String {
+    format!("`atelier drop {id}` refused; nothing written.\n{id} is done on {base}, so it cannot be dropped. Merge {base} into this branch to see it done.\n")
 }
 
 /// `drop` of an item whose branch the base, or the forge's copy of it,
@@ -2036,6 +2177,61 @@ pub fn problem_line(problem: &Problem) -> String {
 
 pub fn already_merged(id: &str, base: &str) -> String {
     format!("{id} is already merged into {base}; nothing is left to do on it.\n")
+}
+
+/// The comment on the pull request of dropped `id` that `merge` closes.
+pub fn dropped_comment(id: &str, base: &str, by: &str) -> String {
+    format!("{id} is dropped on {base}, by the merge of {by}.")
+}
+
+pub fn dropped_closed(id: &str, pull: &PullRequest) -> String {
+    format!("Closed pull request #{} of dropped {id}.\n", pull.number)
+}
+
+pub fn dropped_not_closed(id: &str, error: &ForgeError) -> String {
+    let (reason, _) = forge_reason(error);
+    format!(
+        "Warning: could not close an open pull request of dropped {id}: {reason}. Close it on the forge.\n"
+    )
+}
+
+/// The branch stays, since the base as fetched does not hold its merge.
+pub fn branch_kept(branch: &str, base: &str, remote: Option<&str>) -> String {
+    let everywhere = remote.map_or(String::new(), |remote| format!(" here and on {remote}"));
+    format!(
+        "Kept branch {branch}{everywhere}, since {base} as this clone has it does not hold the merge yet. Fetch, then run `atelier merge` again to delete it.\n"
+    )
+}
+
+pub fn remote_deleted(branch: &str, remote: &str) -> String {
+    format!("Deleted branch {branch} on {remote}.\n")
+}
+
+pub fn remote_already_deleted(branch: &str, remote: &str) -> String {
+    format!("Warning: {remote} had already deleted branch {branch}.\n")
+}
+
+pub fn remote_not_deleted(branch: &str, remote: &str, error: &anyhow::Error) -> String {
+    format!(
+        "Warning: branch {branch} stays on {remote}, which refused its deletion at the merged commit, as after a later push to it: {error:#}\n"
+    )
+}
+
+pub fn branch_deleted(branch: &str, head: &str) -> String {
+    format!(
+        "Deleted branch {branch} here; this checkout is on a detached HEAD at {}. For further changes, run `atelier start --backlog <slug>` or `atelier start <id>`.\n",
+        short(head)
+    )
+}
+
+pub fn branch_attached(branch: &str) -> String {
+    format!(
+        "Left branch {branch} checked out, since this checkout holds changes the merge does not. Take them to a branch made with `atelier start --backlog <slug>` or `atelier start <id>`.\n"
+    )
+}
+
+pub fn cleanup_failed(branch: &str, error: &anyhow::Error) -> String {
+    format!("Warning: the merge stands, and cleaning up branch {branch} failed: {error:#}\n")
 }
 
 /// What ends every refusal of a rule, after the way out.

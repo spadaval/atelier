@@ -231,7 +231,7 @@ fn start_on_a_draft_changes_nothing_and_names_ready() {
     );
     assert!(!branch_exists(&root, ID));
     assert_eq!(git(&root, &["rev-parse", "HEAD"]), head);
-    assert_eq!(git(&root, &["rev-parse", "--abbrev-ref", "HEAD"]), "HEAD");
+    assert_eq!(git(&root, &["rev-parse", "--abbrev-ref", "HEAD"]), SCRATCH);
 }
 
 #[test]
@@ -243,7 +243,7 @@ fn another_thread_takes_over_a_started_item_in_any_started_status() {
         git(&root, &["switch", "-q", "-c", ID]);
         write_item(&root, ID, status, &["t1"], &[], "");
         git(&root, &["commit", "-qam", "Started"]);
-        git(&root, &["checkout", "-q", "--detach", "main"]);
+        off_base(&root);
         let tip = git(&root, &["rev-parse", ID]);
 
         let run = atelier(&root, "t2", &["start", ID]);
@@ -310,7 +310,7 @@ fn a_start_stopped_before_its_branch_leaves_the_item_ready() {
 
     assert!(!branch_exists(&root, ID));
     assert_eq!(field(&root, "main", "status"), "ready");
-    assert_eq!(git(&root, &["rev-parse", "--abbrev-ref", "HEAD"]), "HEAD");
+    assert_eq!(git(&root, &["rev-parse", "--abbrev-ref", "HEAD"]), SCRATCH);
     assert_eq!(git(&root, &["status", "--porcelain"]), "");
     let status = atelier(&root, "t1", &["status"]).stdout;
     assert!(
@@ -413,7 +413,7 @@ fn start_refuses_a_ready_item_whose_blocker_is_not_done_or_whose_branch_exists()
     assert_eq!(
         status,
         format!(
-            "{NO_HOOKS}You are thread t1, on a detached HEAD.\nReady to start:\n  \
+            "{NO_HOOKS}You are thread t1, on branch {SCRATCH}, which is no item's.\nReady to start:\n  \
              demo-b10c (high): Say hello\n1 other ready item cannot start yet: 1 waits on a \
              blocker that is not done. See it with: atelier list\nThen: atelier start demo-b10c\n"
         )
@@ -438,7 +438,7 @@ fn start_refuses_a_ready_item_whose_blocker_is_not_done_or_whose_branch_exists()
         "{}",
         run.stderr
     );
-    assert_eq!(git(&root, &["rev-parse", "--abbrev-ref", "HEAD"]), "HEAD");
+    assert_eq!(git(&root, &["rev-parse", "--abbrev-ref", "HEAD"]), SCRATCH);
     // `status` counts it with the others that cannot start.
     assert!(
         atelier(&root, "t1", &["status"]).stdout.ends_with(
@@ -549,7 +549,7 @@ fn a_refused_commit_leaves_the_take_over_to_be_run_again() {
     git(&root, &["switch", "-q", "-c", ID]);
     write_item(&root, ID, "building", &["t1"], &[], "");
     git(&root, &["commit", "-qam", "Started"]);
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     let tip = git(&root, &["rev-parse", ID]);
     let hook = refusing_hook(&root);
 

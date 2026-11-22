@@ -125,6 +125,117 @@ pub fn move_branch(repo: &Path, name: &str, commit: &str, from: &str) -> Result<
     run(repo, &["update-ref", &reference, commit, from]).map(drop)
 }
 
+/// Fetches `branch` of `remote` into its remote-tracking branch, and
+/// nothing else. It leaves `FETCH_HEAD`, whose time is when this clone last
+/// fetched everything, as it was.
+pub fn fetch_branch(repo: &Path, remote: &str, branch: &str) -> Result<()> {
+    let refspec = format!("+refs/heads/{branch}:refs/remotes/{remote}/{branch}");
+    let args = [
+        "fetch",
+        "--quiet",
+        "--no-write-fetch-head",
+        "--no-tags",
+        remote,
+        &refspec,
+    ];
+    let Err(error) = run(repo, &args) else {
+        return Ok(());
+    };
+    // Git refuses to move a ref another fetch in this clone moved first, as
+    // of two threads starting at once; that one brought the same tip.
+    let tracked = atelier_core::git::remote_tip(repo, remote, branch)?;
+    match remote_tip(repo, remote, branch) {
+        Ok(Some(tip)) if tracked.as_deref() == Some(tip.as_str()) => Ok(()),
+        _ => Err(error),
+    }
+}
+
+/// Deletes `branch` on `remote`, refused when it is no longer at `at`
+/// there, with the pre-push hook given `skip`'s reason.
+pub fn delete_remote_branch(
+    repo: &Path,
+    remote: &str,
+    branch: &str,
+    at: &str,
+    skip: &Skip,
+) -> Result<()> {
+    let lease = format!("--force-with-lease=refs/heads/{branch}:{at}");
+    let args = ["push", "--quiet", remote, &lease, "--delete", branch];
+    relayed(repo, &args, skip)
+}
+
+/// Detaches the checkout's HEAD at `commit`, which it is at, with no hook
+/// run, since no file changes.
+pub fn detach(repo: &Path, commit: &str) -> Result<()> {
+    let args = [
+        "-c",
+        "core.hooksPath=/dev/null",
+        "switch",
+        "--quiet",
+        "--detach",
+        commit,
+    ];
+    run(repo, &args).map(drop)
+}
+
+/// The commits of a detached HEAD that no branch, remote-tracking branch
+/// or tag holds, oldest first, each its short ID and subject: none while
+/// one holds HEAD, or a branch is checked out. Any other ref, as a
+/// harness's checkpoint, keeps nothing where Atelier or a push finds it.
+pub fn unattached(repo: &Path) -> Result<Vec<String>> {
+    if current_branch(repo)?.is_some() {
+        return Ok(Vec::new());
+    }
+    let holding = run(
+        repo,
+        &[
+            "for-each-ref",
+            "--count=1",
+            "--format=%(refname)",
+            "--contains=HEAD",
+            "refs/heads",
+            "refs/remotes",
+            "refs/tags",
+        ],
+    )?;
+    if !holding.is_empty() {
+        return Ok(Vec::new());
+    }
+    let args = [
+        "log",
+        "--no-color",
+        "--reverse",
+        "--format=%h %s",
+        "HEAD",
+        "--not",
+        "--branches",
+        "--remotes",
+        "--tags",
+    ];
+    Ok(run(repo, &args)?.lines().map(str::to_string).collect())
+}
+
+/// How many local branches other than `base` are in the history of `tip`,
+/// whatever their names.
+pub fn merged_branches(repo: &Path, base: &str, tip: &str) -> Result<usize> {
+    let merged = format!("--merged={tip}");
+    let args = ["for-each-ref", "--format=%(refname)", &merged, "refs/heads"];
+    let base = format!("refs/heads/{base}");
+    Ok(run(repo, &args)?
+        .lines()
+        .filter(|name| *name != base)
+        .count())
+}
+
+/// How many of the clone's worktrees are on a detached HEAD.
+pub fn detached_worktrees(repo: &Path) -> Result<usize> {
+    let listed = listing(repo, &["worktree", "list", "--porcelain", "-z"])?;
+    Ok(listed
+        .split('\0')
+        .filter(|line| *line == "detached")
+        .count())
+}
+
 /// Deletes the local branch `name`, refused when it is no longer at `at`.
 pub fn delete_branch(repo: &Path, name: &str, at: &str) -> Result<()> {
     let reference = format!("refs/heads/{name}");

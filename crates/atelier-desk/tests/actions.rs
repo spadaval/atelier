@@ -904,3 +904,79 @@ async fn an_open_pull_request_is_not_hidden_by_a_newer_closed_one_of_its_branch(
     let page = get(&world.app, &format!("/api/repos/demo/missions/{PLAN}")).await;
     assert_eq!(page["pull_request"]["number"], 7, "the open one is linked");
 }
+
+#[tokio::test]
+async fn a_done_item_and_an_agreed_mission_keep_their_pull_request_once_their_branch_is_gone() {
+    let world = world();
+    let (done, dropped, ready) = ("demo-d0ne", "demo-dr0p", "demo-r3dy");
+    let planner = &world.planner;
+    // The plan merged, and the items, with no branch of theirs left.
+    git(
+        planner,
+        &["merge", "-q", "--no-ff", "-m", "Merge the plan", PLAN],
+    );
+    let items = [(done, "done"), (dropped, "dropped"), (ready, "ready")];
+    for (id, status) in items {
+        let text = format!(
+            "---\nschema: atelier.item\nschema_version: 3\nid: {id}\ntitle: Item {id}\n\
+             status: {status}\nmission: null\nlabels: []\npriority: high\nblocked_by: []\n\
+             implementers: []\nready: null\ntrivial: null\ncaused_by: null\n\
+             created_at: 2026-11-10T09:00:00Z\n---\n\n## Goal\n\nDo it.\n\n\
+             ## Done when\n\n- [x] It is done.\n\n## Report\n\nDropped: Not needed\n"
+        );
+        write(planner, &format!(".atelier/items/{id}/item.md"), &text);
+    }
+    git(planner, &["add", "-A"]);
+    git(planner, &["commit", "-qm", "End them"]);
+    git(planner, &["push", "-q", "origin", "main"]);
+    git(planner, &["push", "-q", "origin", "--delete", PLAN]);
+    git(&world.served, &["pull", "-q", "--prune", "--ff-only"]);
+    for id in [PLAN, done, dropped, ready] {
+        let branches = git(
+            &world.served,
+            &[
+                "for-each-ref",
+                &format!("refs/heads/{id}"),
+                &format!("refs/remotes/origin/{id}"),
+            ],
+        );
+        assert_eq!(branches, "", "{id} has neither branch");
+    }
+    let pulls: Vec<Value> = [PLAN, done, dropped, ready]
+        .iter()
+        .zip(11..)
+        .map(|(branch, number): (&&str, u32)| {
+            json!({
+                "number": number,
+                "url": format!("https://forge.example/pull/{number}"),
+                "state": "MERGED",
+                "headRefName": branch,
+            })
+        })
+        .collect();
+    let gh = world.dir.path().join("gh");
+    let script = format!(
+        "#!/bin/sh\ncase \"$*\" in\n*'--state open'*) echo '[]' ;;\n*) echo '{}' ;;\nesac\n",
+        Value::from(pulls)
+    );
+    fs::write(&gh, script).unwrap();
+    world.desk.fetch_all();
+
+    let page = get(&world.app, &format!("/api/repos/demo/missions/{PLAN}")).await;
+    assert_eq!(page["mission"]["branch"], Value::Null, "{page}");
+    assert_eq!(page["pull_request"]["number"], 11, "{page}");
+    for (id, number) in [
+        (done, json!(12)),
+        (dropped, json!(13)),
+        (ready, Value::Null),
+    ] {
+        let page = get(&world.app, &format!("/api/repos/demo/items/{id}")).await;
+        assert_eq!(page["row"]["branch"], Value::Null, "{id}: {page}");
+        // A ready item's branch of that name would be a later one's.
+        let found = match &page["pull_request"] {
+            Value::Null => Value::Null,
+            pull => pull["number"].clone(),
+        };
+        assert_eq!(found, number, "{id}: {page}");
+    }
+}
