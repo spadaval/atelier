@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-js4a
 title: Add mission-plan actions to atelier_core::log and implement Desk mission history (M5)
-status: in_review
+status: approved
 mission: atelier-ww7w
 labels: []
 priority: medium
