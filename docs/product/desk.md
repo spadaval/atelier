@@ -84,6 +84,13 @@ In order of importance:
   verdicts of its last round. Its state is proposed, agreed, stop not
   published yet, stopped, or done. A proposed plan has "Stop this plan"; an
   agreed mission shows the commands that stop it.
+- **A mission's history** is served at
+  `GET /api/repos/{repo}/missions/{id}/history` (M5), read from the records
+  as `atelier log` reads it: when the plan was written, merged and amended,
+  and each action on its items. No page draws it yet. The progress log and
+  the week strip still read `/api/history`, which is estimated from commit
+  subjects and stays so until `t3-extension/fixture-desk.mjs`, whose history
+  is empty commits, is updated.
 - **Proposed**: every proposed plan, with its branch, pull request and last
   round's verdicts, and every other branch that changes records, with what
   it adds, changes or drops. A plan dropped on its branch is not proposed.
