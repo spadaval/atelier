@@ -585,11 +585,11 @@ fn plan_paths(repo: &mut Repo, id: &str, (from, to): (&str, &str)) -> Result<Vec
         )?),
         false => None,
     };
-    let own = format!("{}/", mission_dir(id));
+    let record = mission_path(id);
     let mut paths = git::changed(&repo.root, from, to)?;
     paths.retain(|path| {
-        if let Some(file) = path.strip_prefix(&own) {
-            return file != "notes.md" && !file.starts_with("reviews/");
+        if *path == record || is_plan_file(id, path) {
+            return true;
         }
         let in_item = path.strip_prefix(".atelier/items/");
         let Some((item, file)) = in_item.and_then(|rest| rest.split_once('/')) else {
