@@ -3,12 +3,13 @@ schema: atelier.item
 schema_version: 3
 id: atelier-gqtw
 title: Drop started items in one backlog branch and clean up merged branches and stale worktrees
-status: ready
+status: building
 mission: atelier-ww7w
 labels: []
 priority: medium
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A337c6277-e094-40d2-a1c8-de83cd3a5839%3Adelegate-task%3Ada024f49-25bc-4592-abd3-1c35332545ef
 ready:
   by: Sumeet, in conversation on 2026-11-22
   at: 2026-11-22T05:33:31.467134267Z
