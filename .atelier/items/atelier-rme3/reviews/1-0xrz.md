@@ -33,6 +33,7 @@ Value clearly outweighs the cost and risk; a smaller change would leave the rema
 ## Finding 1: Branch-name suffix heuristic misclassifies an adding branch ending with the item ID, and `startNote` has no empty-condition fallback
 
 Recommendation: defer
+Taken: atelier-jr1b by mcp:launch:d9ce201b02acc943fe31a743127b2bc6eadad19a1d9e5ad882baa055012ff415
 
 Location: `desk/src/lib/mission.ts:20`, `t3-extension/src/mission/model.ts:215-217`
 
