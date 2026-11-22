@@ -24,11 +24,9 @@
 use crate::git;
 use crate::model::Forge;
 use serde_json::Value;
-use std::fs::File;
-use std::io::{Read, Seek};
 use std::path::Path;
-use std::process::{Child, Command, ExitStatus, Stdio};
-use std::time::{Duration, Instant};
+use std::process::{Command, Stdio};
+use std::time::Instant;
 
 /// Why the forge could not answer.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -331,7 +329,7 @@ impl Github {
             }
             Err(error) => return Err(ForgeError::Unreachable(error.to_string())),
         };
-        let status = match wait(&mut child, self.deadline) {
+        let status = match git::wait(&mut child, self.deadline) {
             Ok(Some(status)) => status,
             Ok(None) => {
                 return Err(ForgeError::Unreachable(format!(
@@ -340,8 +338,8 @@ impl Github {
             }
             Err(error) => return Err(ForgeError::Unreachable(error.to_string())),
         };
-        let stdout = read_all(&mut stdout).map_err(unreachable)?;
-        let stderr = read_all(&mut stderr).map_err(unreachable)?;
+        let stdout = git::read_all(&mut stdout).map_err(unreachable)?;
+        let stderr = git::read_all(&mut stderr).map_err(unreachable)?;
         if !status.success() {
             let stderr = String::from_utf8_lossy(&stderr);
             // gh exits 4 when it needs a sign-in; `gh auth status` exits 1
@@ -364,34 +362,6 @@ impl Github {
             }));
         }
         Ok(stdout)
-    }
-}
-
-/// Everything written to `file`, from its start.
-fn read_all(file: &mut File) -> std::io::Result<Vec<u8>> {
-    file.rewind()?;
-    let mut bytes = Vec::new();
-    file.read_to_end(&mut bytes)?;
-    Ok(bytes)
-}
-
-/// Waits for `child` to exit, or until `deadline`, when it is killed and
-/// `None` is returned.
-fn wait(child: &mut Child, deadline: Option<Instant>) -> std::io::Result<Option<ExitStatus>> {
-    let Some(deadline) = deadline else {
-        return child.wait().map(Some);
-    };
-    loop {
-        if let Some(status) = child.try_wait()? {
-            return Ok(Some(status));
-        }
-        let now = Instant::now();
-        if now >= deadline {
-            child.kill()?;
-            child.wait()?;
-            return Ok(None);
-        }
-        std::thread::sleep((deadline - now).min(Duration::from_millis(20)));
     }
 }
 

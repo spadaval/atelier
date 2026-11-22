@@ -24,6 +24,7 @@ use chrono::{DateTime, NaiveDate, TimeDelta, Utc};
 use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
 use std::rc::Rc;
+use std::time::Instant;
 
 /// One action, found in one commit.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -320,6 +321,18 @@ pub fn history(
     of: Option<&str>,
     since: Option<DateTime<Utc>>,
 ) -> Result<Option<History>> {
+    history_until(repo, of, since, None)
+}
+
+/// [`history`], given up with an error once `deadline` has passed: its Git
+/// listings are killed then, and no further commit or record is read.
+pub fn history_until(
+    repo: &mut Repo,
+    of: Option<&str>,
+    since: Option<DateTime<Utc>>,
+    deadline: Option<Instant>,
+) -> Result<Option<History>> {
+    in_time(deadline)?;
     // Every branch the convention names, local and remote-tracking, as
     // `show` reads them: a mission's lookup by name reads the tip `show`
     // reads, and the walk takes every tip, a backlog branch's included.
@@ -359,10 +372,11 @@ pub fn history(
             revisions.push(tip.clone());
         }
     }
-    let commits = walk(&repo.root, &revisions)?;
-    let merges = mission_merges(&repo.root, &base_tip)?;
+    let commits = walk(&repo.root, &revisions, deadline)?;
+    let merges = mission_merges(&repo.root, &base_tip, deadline)?;
     let mut walker = Walker {
         repo,
+        deadline,
         merges,
         appeared: BTreeSet::new(),
         versions: HashMap::new(),
@@ -371,6 +385,7 @@ pub fn history(
         history: History::default(),
     };
     for commit in &commits {
+        in_time(deadline)?;
         walker.commit(commit)?;
     }
     let mut history = walker.history;
@@ -389,6 +404,7 @@ pub fn history(
                 .collect();
             let mut members = BTreeSet::new();
             for item in ids {
+                in_time(deadline)?;
                 if in_mission(repo, &base_tip, &walked, &item, mission)? {
                     members.insert(item);
                 }
@@ -404,6 +420,13 @@ pub fn history(
         .passed_over
         .retain(|passed| keep(&passed.id) && recent(&passed.time));
     Ok(Some(history))
+}
+
+fn in_time(deadline: Option<Instant>) -> Result<()> {
+    if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+        bail!("the history was not read by its deadline");
+    }
+    Ok(())
 }
 
 /// Whether the item `id`'s record names `mission`: on the base's tip,
@@ -457,7 +480,7 @@ struct Change {
 /// parents before children. `--full-history` follows both sides of every
 /// merge: without it Git follows only the side a merge matches on the
 /// record paths, and the other side's actions are lost.
-fn walk(root: &Path, revisions: &[String]) -> Result<Vec<Commit>> {
+fn walk(root: &Path, revisions: &[String], deadline: Option<Instant>) -> Result<Vec<Commit>> {
     let trailer = |key: &str| format!("%(trailers:key={key},valueonly,separator=%x1f)");
     let format = format!(
         "--format=%x01%H%x02%h%x02%P%x02%ct%x02{}%x02{}%x02{}%x03",
@@ -483,7 +506,7 @@ fn walk(root: &Path, revisions: &[String]) -> Result<Vec<Commit>> {
     ];
     args.extend(revisions.iter().map(String::as_str));
     args.extend(["--", ".atelier/items", ".atelier/missions"]);
-    let listed = git::listing(root, &args)?;
+    let listed = git::listing_until(root, &args, deadline)?;
     listed.split('\x01').skip(1).map(commit).collect()
 }
 
@@ -491,7 +514,11 @@ fn walk(root: &Path, revisions: &[String]) -> Result<Vec<Commit>> {
 /// files against its first parent, with those files. [`walk`] cannot say:
 /// it lists no files for a merge, and the parents it gives are the nearest
 /// listed commits, which drop a base that had no record yet.
-fn mission_merges(root: &Path, base_tip: &str) -> Result<HashMap<String, Vec<String>>> {
+fn mission_merges(
+    root: &Path,
+    base_tip: &str,
+    deadline: Option<Instant>,
+) -> Result<HashMap<String, Vec<String>>> {
     let args = [
         "log",
         "-z",
@@ -507,7 +534,7 @@ fn mission_merges(root: &Path, base_tip: &str) -> Result<HashMap<String, Vec<Str
         "--",
         ".atelier/missions",
     ];
-    let listed = git::listing(root, &args)?;
+    let listed = git::listing_until(root, &args, deadline)?;
     let merge = |entry: &str| {
         let (hash, files) = entry
             .split_once('\x03')
@@ -625,6 +652,7 @@ type Pending = HashMap<String, (String, Option<Rc<Version>>)>;
 
 struct Walker<'r, 's> {
     repo: &'r mut Repo<'s>,
+    deadline: Option<Instant>,
     /// Each version read, or what is wrong with it, by its path and blob.
     versions: HashMap<(String, String), Result<Rc<Version>, String>>,
     /// After each commit that has one, the records whose version there does
@@ -898,7 +926,7 @@ impl Walker<'_, '_> {
                 if let Some(id) = commit.merged.as_ref().filter(|id| validate_id(id).is_ok()) {
                     return Ok(vec![id.clone()]);
                 }
-                let listed = git::listing(
+                let listed = git::listing_until(
                     &self.repo.root,
                     &[
                         "diff",
@@ -911,6 +939,7 @@ impl Walker<'_, '_> {
                         ".atelier/items",
                         ".atelier/missions",
                     ],
+                    self.deadline,
                 )?;
                 git::names(&listed)
             }

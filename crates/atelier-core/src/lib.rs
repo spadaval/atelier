@@ -30,7 +30,7 @@ pub use disputed::{
     disputes, not_built, rebuttals, split_rounds, Disputes, Judged, NotBuilt, Rebuttal, SplitRound,
 };
 pub use identity::identity;
-pub use log::{history, Happened, History, Logged, Move, PassedOver};
+pub use log::{history, history_until, Happened, History, Logged, Move, PassedOver};
 pub use plan::{ready, Done};
 pub use repo::{Links, Repo, Walked};
 pub use review::{answer, carried, carried_plan, waits_on_lead, Carried};

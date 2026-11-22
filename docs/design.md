@@ -1278,6 +1278,10 @@ that had no record yet.
   are ordered by it, lines of one commit keep the order of the table above,
   and commits of one time keep Git's order, parents first.
 
+A caller may give the walk a deadline (`history_until`), as the Desk does:
+its Git listings are killed then, it reads no further commit, and it is an
+error rather than part of a history. The command gives none.
+
 In astromech on 2026-11-11, `atelier log` from a debug build printed 88
 lines in 0.06 to 0.08 seconds, starting six Git processes.
 
