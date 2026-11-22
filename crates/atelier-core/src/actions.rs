@@ -586,8 +586,7 @@ pub enum Condition {
     NoApproval,
     /// The approval no longer covers the head: since the commit it
     /// reviewed, these paths outside the item's directory that file no new
-    /// item, or these of its
-    /// requirement sections, changed.
+    /// item, or these of its requirement sections, changed.
     Stale {
         round: u32,
         commit: String,

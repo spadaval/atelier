@@ -815,7 +815,7 @@ impl<'s> Repo<'s> {
     }
 
     /// The records that only file a new item between the commits `from`
-    /// and `to`: each is added since, is on no tip of the base, and is open
+    /// and `to`: each is added since, is not on the base's tip, and is open
     /// as `to` holds it. One that does not read files nothing.
     fn filed(&mut self, from: &str, to: &str) -> Result<Vec<String>> {
         let mut filed = Vec::new();

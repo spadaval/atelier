@@ -608,7 +608,8 @@ It checks:
 2. The configured merge checks pass on the merged tree. Where the forge names
    a CI workflow, CI passed on the head, or on an earlier commit of the
    branch from which the head differs only inside the item's directory, such
-   as the commit `submit` pushed before `verdict approve` committed. The
+   as the commit `submit` pushed before `verdict approve` committed. An
+   item filed after that push is outside it, so CI runs again for it. The
    latest finished run among those decides, except that when it failed and
    a newer one is still running, the newer one is waited for.
 

@@ -1716,7 +1716,7 @@ pub fn dropped_adds(id: &str, branch: &str, base: &str, added: &[LeftBehind]) ->
         text += &format!("  {}: {}\n", item.id, item.title);
         if let Some(commit) = &item.commit_first {
             text += &format!(
-                "    It is not committed as it stands. Before its checkout leaves {branch}, commit it there:\n    {commit}\n"
+                "    It is not committed as it stands. Before its checkout leaves {branch}, commit it there:\n    {commit}\n    Then, on the backlog branch:\n"
             );
         }
         text += &format!("    git checkout {} -- {dir}\n", item.on);
