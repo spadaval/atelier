@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-js4a
 title: Add mission-plan actions to atelier_core::log and implement Desk mission history (M5)
-status: approved
+status: in_review
 mission: atelier-ww7w
 labels: []
 priority: medium
@@ -90,14 +90,24 @@ wait-until-deadline, moved, not copied) and `bounded.rs` in the Desk.
   holds 122,431 of the host's 122,567 inotify watches. With `fs.watch`
   replaced by polling in the test process alone (a preload outside the
   repository), both pass. That hides only whether the file watcher works,
-  which this change does not touch. CI's `extension` job runs all seven
-  unmodified on the pull request, and `merge` waits for it.
-- Against this repository with the built Desk: atelier-ww7w's 34 actions equal
+  which this change does not touch. **CI's `extension` job ran them
+  unmodified on 7f71563 and passed**
+  (https://github.com/spadaval/atelier/actions/runs/44998265862/job/137133979345).
+- Against this repository with the built Desk, before submit: atelier-ww7w's
+  34 actions then (it gains one with each step of its items) equal
   `atelier log atelier-ww7w`, in 1.0 seconds and 0.05 cached. atelier-g6rp and
   atelier-qr5s get no `plan`. atelier-osel gets its plan, merge and amendment.
   An item's ID is 404 and a bad one 400.
 - With an old blob replaced by a FIFO, so that `git cat-file` hangs, the route
   answered 500 after 15.00 seconds.
+
+### After round 1
+
+Round 1 approved, with two deferred findings, which are bugs 2 and 3 below.
+Since then the branch changed only by `git merge origin/master`, which
+brought in atelier-1n49 (CI's filters and clippy) with no conflict, and by
+this Report. `merge` asks for a fresh review because the tree changed. On
+the merged tree clippy passes and the three crates' 409 tests pass.
 
 ### For the lead to file
 
