@@ -81,7 +81,7 @@ export function ProjectHome({ desk, repo, onClose, openMission, openItem, now: c
                       {lane.missions.map((m) => (
                         <MissionLine key={m.id} desk={desk} repo={repo} mission={m} startOpen={h.startsOpen(lane.name, all)} openMission={openMission} openItem={openItem} />
                       ))}
-                      <LooseItems rows={lane.loose} limit={h.looseShown(lane.name)} openItem={openItem} />
+                      <LooseItems rows={lane.loose} openItem={openItem} />
                     </div>
                   )}
                 </section>
@@ -278,10 +278,10 @@ function ItemLine({ row, holder, stage, priority, openItem }: { row: ItemRow; ho
   );
 }
 
-function LooseItems({ rows, limit, openItem }: { rows: ItemRow[]; limit: number; openItem(id: string): void }) {
+function LooseItems({ rows, openItem }: { rows: ItemRow[]; openItem(id: string): void }) {
   const [all, setAll] = useState(false);
   if (rows.length === 0) return null;
-  const shown = all ? rows : rows.slice(0, limit);
+  const shown = all ? rows : rows.slice(0, h.LOOSE_SHOWN);
   return (
     <div className="flex flex-col pt-1.5 pb-2" data-loose="">
       <div className="px-1.5 py-1 font-semibold text-muted-foreground text-xs">In no mission</div>

@@ -984,8 +984,8 @@ and merged items, the reads it makes, and the layout at 500, 728, 1,100 and
 1,400 pixels, and writes screenshots to `artifacts/mission-*.png`.
 `test-home.mjs` does the same for the project home, from the repositories in
 `check/home-fixtures.ts`: one with a mission in each of Now, Next and Later,
-an item in no mission under each and steps on three days of the week, and one
-with nothing open. It checks the lanes, a mission folding open to its items
+items in no mission under Now and Next and steps on three days of the week,
+and one with nothing open. It checks the lanes, a mission folding open to its items
 and their holders, the week, what each row opens (the proposed plan saying it
 is one, so the layer frames its record page), the reads it makes, a read
 that fails, and the layout at the same widths, and writes screenshots to

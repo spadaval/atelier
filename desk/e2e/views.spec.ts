@@ -86,7 +86,7 @@ for (const width of [1300, 880]) {
     await expect(lane("Now").locator(".rm-title .t")).toHaveText([/Build the Desk/, /Move all five repositories/]);
     await expect(lane("Now").locator(".rm-loose .id")).toHaveText(["atelier-0019"]);
     await expect(lane("Next").locator(".rm-title .t")).toHaveText([/Ship Agent Factory/]);
-    await expect(lane("Next").locator(".rm-loose .id")).toHaveText(["atelier-c1z3", "atelier-7w9s", "atelier-52g7"]);
+    await expect(lane("Next").locator(".rm-loose .id")).toHaveText(["atelier-7w9s", "atelier-c1z3", "atelier-52g7"]);
     await expect(lane("Next").getByText("blocked by atelier-52g7 (open)")).toBeVisible();
     await expect(lane("Next").locator(".tally")).toHaveText("4");
     await expect(lane("Later").locator(".rm-title .t")).toHaveText([/Give the gardener/, /Try a plan whose stop is refused/, /A plan whose pull request will not close/]);

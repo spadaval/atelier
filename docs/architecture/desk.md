@@ -599,9 +599,10 @@ both follow the rules here. The project's name in T3's thread breadcrumb, the
 project's name in its project strip and the "N more missions" row in its
 sidebar open it. It is the project as a roadmap without dates. *Now*
 holds each agreed mission with any item started or done, and started items
-in no mission; *Next*, agreed missions with nothing started, and open
-items in no mission; *Later*, proposed plans
-(`GET /api/roadmap` gives the items in no mission). A mission folds open to
+in no mission; *Next*, agreed missions with nothing started, and every open
+item in no mission as one list, by priority and then ID; *Later*, proposed
+plans (`GET /api/roadmap` gives the items in no mission, in no such order,
+so each page sorts them). A mission folds open to
 its items with their holders, read from its page
 (`GET /api/repos/{repo}/missions/{id}`) as it opens; those under *Now* start
 open, and those under *Next* too when *Now* has no mission and *Next* two at
@@ -1033,7 +1034,7 @@ such as for a pull request it cannot find, `500`.
 ### `GET /api/roadmap?repo=<repo>`
 
 `repo`, and `loose[]`: every item in no mission that is not done or
-dropped, as item rows, for the project home's Now, Next and Later. An
+dropped, as item rows, for the project home's Now and Next. An
 unknown repository is `404`.
 
 ### `GET /api/proposed`

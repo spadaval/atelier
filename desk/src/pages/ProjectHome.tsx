@@ -12,6 +12,7 @@ import { Crumbs } from "../components/Crumbs";
 import { sinceAgo, who } from "../components/Glance";
 import { ErrorBanner, Priority, ScopeBar, Skeleton, StatusGlyph } from "../components/ui";
 import { api, settled, to, useData, useThreads } from "../lib/api";
+import { openByPriority } from "../lib/group";
 import { begun } from "../lib/mission";
 import { statusName } from "../lib/words";
 
@@ -104,9 +105,11 @@ function Lane({ title, hint, count, children }: { title: string; hint: string; c
   );
 }
 
-function LooseItems({ repo, rows, limit = 8 }: { repo: string; rows: ItemRow[]; limit?: number }) {
+const LOOSE_SHOWN = 8;
+
+function LooseItems({ repo, rows }: { repo: string; rows: ItemRow[] }) {
   const [all, setAll] = useState(false);
-  const shown = all ? rows : rows.slice(0, limit);
+  const shown = all ? rows : rows.slice(0, LOOSE_SHOWN);
   if (rows.length === 0) return null;
   return (
     <div className="rm-loose">
@@ -230,7 +233,7 @@ export function ProjectHomePage() {
   const next = rows.filter((m) => m.state === "open" && !begun(m));
   const later = rows.filter((m) => m.state === "proposed");
   const looseNow = loose.filter((i) => STARTED.has(i.status));
-  const looseNext = loose.filter((i) => i.status === "open");
+  const looseNext = openByPriority(loose);
   return (
     <div className="page rm-page">
       <Crumbs trail={[{ label: repo }]} />
