@@ -3,7 +3,7 @@
 //! and the commands of `atelier-cli` print too. Moved from `atelier-cli`'s
 //! `output.rs`, which keeps the rest.
 
-use crate::actions::{row, Action, Condition, Refusal, Role};
+use crate::actions::{row, Action, Condition, Refusal, Role, ROUND_CAP};
 use crate::model::{Settlement, Status, Thread, Verdict};
 use crate::records::Problem;
 use crate::skip::Refused;
@@ -221,7 +221,53 @@ pub fn next(entry: &Entry, dropped: Option<&str>) -> String {
             _ => "Nothing is left to do on it.\n".into(),
         };
     };
-    needs(action, entry.status, id, &entry.unmet)
+    needed(action, entry, &entry.unmet)
+}
+
+/// [`needs`] of `action` on `entry`'s item, except that at the round cap
+/// the lead's ruling stands in for the command that submits it again.
+fn needed(action: Action, entry: &Entry, unmet: &[Condition]) -> String {
+    let (id, status) = (&entry.id, entry.status);
+    match (action, entry.capped) {
+        (Action::Submit, Some(round)) => format!(
+            "{}{}Take it to your mission's lead, or with no mission to the thread that started you, and wait for the ruling.\n{}",
+            lacking(action, status, id, unmet),
+            cap_reached(id, round),
+            cap_rulings(id, round),
+        ),
+        _ => needs(action, status, id, unmet),
+    }
+}
+
+/// That round `round` of item `id` asked for changes at the cap.
+fn cap_reached(id: &str, round: u32) -> String {
+    format!("Automated review of {id} reached its {ROUND_CAP}-round cap: round {round} asked for changes.\n")
+}
+
+/// How item `id`, at the cap since round `round`, is settled.
+fn cap_rulings(id: &str, round: u32) -> String {
+    format!(
+        "The lead rules one of: merge it as it stands with `ATELIER_SKIP=\"<ruling>\" atelier merge` on its branch; adjust its Scope or Done when; drop it with `{}`; or fix it. Once the lead rules to fix it, the implementer fixes and commits, and `atelier submit` opens round {}.\n",
+        command(Action::Drop, id),
+        round + 1
+    )
+}
+
+/// What the lead of item `id`'s mission is told of it at the cap.
+pub fn cap_for_lead(id: &str, round: u32) -> String {
+    format!(
+        "{}Settling it is yours.\n{}",
+        cap_reached(id, round),
+        cap_rulings(id, round)
+    )
+}
+
+/// What ends the review of a change to mission `id`'s plan whose last
+/// `splits` rounds split.
+pub fn plan_split_exit(id: &str, splits: usize) -> String {
+    format!(
+        "Plan review of mission {id} stops: its last {splits} rounds on this change split, one approving and one asking for changes. Bring the open findings to the human to rule. On their ruling, merge it as it stands with `ATELIER_SKIP=\"<ruling>\" atelier merge`; amend it, commit, and open another round with `ATELIER_SKIP=\"<ruling>\" atelier submit`; or drop the change.\n"
+    )
 }
 
 /// How an implementer gets its item reviewed.
@@ -269,8 +315,8 @@ pub fn visiting(id: &str, leads: Option<&str>, offer: &str) -> String {
     }
 }
 
-/// The conditions of `action` that do not hold, then its command.
-pub fn needs(action: Action, status: Status, id: &str, unmet: &[Condition]) -> String {
+/// The conditions of `action` that do not hold, and how to meet them.
+fn lacking(action: Action, status: Status, id: &str, unmet: &[Condition]) -> String {
     let mut text = String::new();
     if !unmet.is_empty() {
         text += &format!("To {}:\n", goal(action, status));
@@ -305,8 +351,16 @@ pub fn needs(action: Action, status: Status, id: &str, unmet: &[Condition]) -> S
         // A stale approval is answered by a fresh review, not by merging.
         if unmet.iter().any(|c| matches!(c, Condition::Stale { .. })) {
             text += "What changed needs a fresh review, so send it back to review.\n";
-            return text + &format!("Then: {}\n", command(Action::Submit, id));
         }
+    }
+    text
+}
+
+/// [`lacking`], then the command of `action`.
+pub fn needs(action: Action, status: Status, id: &str, unmet: &[Condition]) -> String {
+    let mut text = lacking(action, status, id, unmet);
+    if unmet.iter().any(|c| matches!(c, Condition::Stale { .. })) {
+        return text + &format!("Then: {}\n", command(Action::Submit, id));
     }
     let or = match action {
         Action::VerdictApprove | Action::PlanVerdictApprove => {
@@ -391,7 +445,7 @@ pub fn refusal(
         Refusal::Unmet(unmet) => format!(
             "`{}` refused; nothing changed.\n{}",
             command(action, id),
-            needs(action, shown().status, id, unmet)
+            needed(action, shown(), unmet)
         )
         .into(),
         Refusal::Record(problem) => format!("{problem}\n").into(),
@@ -418,6 +472,15 @@ pub fn quoted(word: &str) -> String {
     }
 }
 
+/// `git` as a printed command starts it, with `-C` for the checkout `at`
+/// where paths from the root need it.
+pub fn git_command(at: Option<&Path>) -> String {
+    match at {
+        Some(at) => format!("git -C {}", quoted(&at.display().to_string())),
+        None => "git".into(),
+    }
+}
+
 /// The Git command that commits `paths`, and only them, with `message`
 /// and `trailers`, the [`crate::Skip::trailers`] of the command that wrote
 /// them: the commit is the one place `log` reads a skip from. `at` is the
@@ -429,10 +492,7 @@ pub fn commit_line(
     message: &str,
     trailers: &[String],
 ) -> String {
-    let git = match at {
-        Some(at) => format!("git -C {}", quoted(&at.display().to_string())),
-        None => "git".into(),
-    };
+    let git = git_command(at);
     let paths: Vec<String> = paths.iter().map(|path| quoted(path)).collect();
     let paths = paths.join(" ");
     let trailers: String = (trailers.iter())

@@ -9,6 +9,7 @@
 
 use crate::skip::{Skip, VARIABLE};
 use anyhow::{bail, Context, Result};
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
@@ -386,6 +387,26 @@ pub fn changed(repo: &Path, from: &str, to: &str) -> Result<Vec<String>> {
     Ok(names(&listed))
 }
 
+/// The paths the commit `head` changes against the commit `base`: since
+/// the two parted, as a pull request shows them.
+pub fn changed_from_base(repo: &Path, base: &str, head: &str) -> Result<Vec<String>> {
+    let range = format!("{base}...{head}");
+    let args = ["diff", "--name-only", "-z", "--no-renames", &range, "--"];
+    Ok(names(&listing(repo, &args)?))
+}
+
+/// The paths that differ between the commits `from` and `to` and that
+/// their branch itself changes against `base` at either of them. A merge
+/// of `base` between the two brings none; an edit the branch made by
+/// `from` and took back by `to` is one, as is the reverse.
+pub fn changed_on_branch(repo: &Path, base: &str, (from, to): (&str, &str)) -> Result<Vec<String>> {
+    let mut own: HashSet<String> = changed_from_base(repo, base, from)?.into_iter().collect();
+    own.extend(changed_from_base(repo, base, to)?);
+    let mut paths = changed(repo, from, to)?;
+    paths.retain(|path| own.contains(path));
+    Ok(paths)
+}
+
 /// The checkout that has the local branch `branch` checked out, if one has.
 pub fn checkout_of(repo: &Path, branch: &str) -> Result<Option<PathBuf>> {
     let listed = listing(repo, &["worktree", "list", "--porcelain", "-z"])?;
@@ -452,7 +473,7 @@ pub fn refs(repo: &Path, remote: Option<&str>, base: &str) -> Result<Vec<Ref>> {
             .map(|(name, tip)| (name.to_string(), tip.to_string()))
             .collect())
     };
-    let merged: std::collections::HashSet<String> = list(Some(base))?
+    let merged: HashSet<String> = list(Some(base))?
         .into_iter()
         .map(|(name, _)| name)
         .collect();

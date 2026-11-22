@@ -188,7 +188,7 @@ enum Command {
         #[arg(long, value_name = "SLUG")]
         backlog: Option<String>,
     },
-    /// Send this branch's item to review, once its Done when lines are ticked and its Report is written, committing its directory and pushing the branch where a forge is configured. On a backlog or mission branch, refused while a record change is uncommitted; else it pushes the branch and opens its pull request.
+    /// Send this branch's item to review, once its Done when lines are ticked and its Report is written, committing its directory and pushing the branch where a forge is configured. On a backlog or mission branch, refused while a record change is uncommitted, or once 2 rounds of plan review in a row split on its plan change; else it pushes the branch and opens its pull request.
     Submit,
     /// Open this round's review file of an item in review, or of a mission's plan, or take it over, and print the brief. It commits nothing.
     Review { id: String },

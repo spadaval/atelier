@@ -405,8 +405,8 @@ will check.
 | `start --mission` | Planner | none | `draft`, which atelier-2vdq makes `open` | none; the mission is created on its new branch, which `start` pushes where a remote is configured; atelier-2vdq adds the caller to `planners` |
 | `start --backlog` | Any | none | none | no branch `backlog/<slug>` exists, local or on the remote; the remote can be reached |
 | `submit` | Implementer | `building`, `changes_requested`, `approved` | `in_review` | Done when ticked; Report written; each open fix-now finding has a line in Responses. After its commit, where a forge is configured, it pushes the branch and opens its pull request; a failure of either is a warning, and `merge` does it |
-| `submit` (mission) | Planner | proposed | unchanged | in a checkout on the mission's branch; no record the branch changes is uncommitted; then it pushes the branch and opens its pull request where a forge is configured. From atelier-2vdq: the mission is not dropped, and a caller not in `planners` is added to it, in a commit of `mission.md` alone, and takes the plan over |
-| `submit` (backlog) | Any | none | none | in a checkout on the backlog branch; no record the branch changes is uncommitted; then it pushes the branch and opens its pull request where a forge is configured. Not an implementer's action on an item. From atelier-2vdq: where the branch changes an agreed mission's plan, a caller not in that mission's `planners` is added to it the same way, and opens the next plan round |
+| `submit` (mission) | Planner | proposed | unchanged | in a checkout on the mission's branch; no record the branch changes is uncommitted, and the plan has not split in its last two rounds of review; then it pushes the branch and opens its pull request where a forge is configured. From atelier-2vdq: the mission is not dropped, and a caller not in `planners` is added to it, in a commit of `mission.md` alone, and takes the plan over |
+| `submit` (backlog) | Any | none | none | in a checkout on the backlog branch; no record the branch changes is uncommitted, and no plan it changes has split in its last two rounds of review; then it pushes the branch and opens its pull request where a forge is configured. Not an implementer's action on an item. From atelier-2vdq: where the branch changes an agreed mission's plan, a caller not in that mission's `planners` is added to it the same way, and opens the next plan round |
 | `review` | Reviewer | `in_review` | unchanged | the caller is not in the item's `implementers` |
 | `verdict changes` | Reviewer | `in_review` | `changes_requested` | the file validates; it has an open fix-now finding; no finding of it has a `Decided:` line or carries a finding a decision settled |
 | `verdict approve` | Reviewer | `in_review` | `approved` | the file validates; no fix-now finding of the item is open, the file's or one it does not carry; no finding of it has a `Decided:` line or carries a finding a decision settled |
@@ -558,7 +558,22 @@ not enforce, and leaves to the skill: that a rebuttal goes to a fresh
 reviewer, and that it gets one try. `status` shows the second: an open
 finding whose rebuttal a reviewer kept says the rebuttal has had its one
 try, and the implementer is shown the round. Nothing stops one thread
-reviewing every round, and nothing counts rounds against a limit.
+reviewing every round.
+
+Rounds have two limits (atelier-h6ij). An item whose round 3 or later asked
+for changes (`actions::ROUND_CAP`, `Entry::capped`) is the lead's to rule
+on: the implementer's `status` gives the rulings in place of `Then: atelier
+submit`, and so does the lead's, on the branch and away from it. It is
+guidance alone, since the lead may rule to fix and then `submit` opens the
+next round. A plan change whose last two rounds split (`plan::SPLITS`,
+`Approvals::stopped`) is the human's to rule on: `submit` refuses another
+round, a rule a skip passes, and `status` and `merge`'s refusal give the
+same exit. A round splits when it is completed, with an approval and a
+request for changes; one that is not over, or did not split, ends the row.
+The change's rounds are the review files at its head that the base's tip
+lacks, matched by name and not by round, since an amendment continues the
+mission's numbering and one made beside it may merge the same number. So an
+amendment of a plan that merged after two splits starts at none.
 
 A disagreement is found, not enforced (`atelier_core::disputes`). Each
 finding whose line in Responses is `rebutted` is one, with what each review
@@ -570,7 +585,8 @@ from the missions on the base. `list --disputed` lists them across every
 item, open or done, read as `status` reads it, and leaves out a dropped
 item's; `--mission <id>` narrows it to one mission's items and plan. `show
 <mission>` lists the mission's under Disputed, and a lead's `status` under
-each mission it leads. Nothing refuses or warns on any of them. A finding
+each mission it leads. Nothing refuses on a rebuttal or on one split
+round; two split rounds in a row stop a plan's review, as above. A finding
 not built is listed with them, and is the one `merge` holds. The review brief carries no merge check results, since nothing
 records them. Where the base's config names a forge it names the branch's
 open pull request, where CI's result can be read, looked up with the code
@@ -584,8 +600,33 @@ have reviewed the whole change before it, and that this round checks the
 earlier findings and what changed since the last round's review, with that
 diff first and the whole change's diff after it. It says a new finding in
 code that did not change since then blocks only if the work would come out
-wrong without it, and is otherwise recorded as `defer`. Both diffs are
-always given, so nothing in the change is kept from a later reviewer.
+wrong without it, and is otherwise recorded as `defer`. The whole change's
+diff is always given, so nothing in the change is kept from a later
+reviewer.
+
+The diff since the last round is given only where it can be read
+(atelier-h6ij). Where that round's commit is missing or not an ancestor of
+the commit under review, as after a rebase, the brief says so and asks for
+a review of the whole change. Where the base was merged in between, as when
+the merge base of the commit under review is not in the last round's
+history, it names only the paths that differ and that the branch changes
+against the base at either commit (`git::changed_on_branch`): `git diff
+<base>...<prev>` union `git diff <base>...<commit>`, so an edit taken back
+since stays in it.
+
+A plan's later round works the same way (`plan::plan_delta`). Its last
+round is the latest completed one before it; where that round's reviews
+name more than one commit, or one not in the history, the brief is round
+1's. Otherwise the brief opens with the diff of the plan's own paths, or
+says the plan is unchanged, never a diff with no paths, and asks the
+reviewer to judge that and the carried findings, and to block on an
+unchanged part only for a serious defect missed. The paths are the
+mission's directory but its reviews and `notes.md`, and its items' but
+their reviews, for an item of the mission at either commit. Once the
+mission is agreed, an item's paths count only where the amendment changes
+them by the same union, which leaves out the Reports and reviews the base
+merged between rounds. `plan_changed_at`, which the Desk reads, keeps both
+and is not used for this.
 
 ## Threads and roles
 
@@ -673,7 +714,10 @@ or that none does yet, and tells the implementer of a building item whose
 Goal or Done when lines are empty, as after `start --new`, to write them
 first. That line is orientation, not a condition of `submit`. An open
 finding whose rebuttal a reviewer kept says that a rebuttal has had its one
-try, so the exits left are a fix or the mission's lead. An approved item says
+try, so the exits left are a fix or the mission's lead. At the round cap it
+gives the lead's rulings in place of the submit, and on a branch that
+proposes or changes a plan it gives where that plan's review stands
+([rounds' two limits](#status)). An approved item says
 since when, in the implementer's and the lead's `status` and in `show`:
 the time of the commit on its branch that set the approving review's
 verdict, which `git log -S` finds; nothing stores it. Away from the item's
@@ -1620,6 +1664,11 @@ What is still to come:
   clones of one remote starting one item at once; a started item dropped on
   its branch from another clone, then refused at merge, in both orders; a
   record-only branch merged on `check`, and one carrying code refused.
+- Rounds (`crates/atelier-cli/tests/rounds.rs`): a plan's and an item's
+  diff since the last round, with a merge of the base, a lost commit and an
+  edit taken back; two split rounds stopping a proposed plan and an
+  amendment at `submit`, `status` and `merge`; and the lead's ruling at
+  round 3.
 - Disagreements (`crates/atelier-cli/tests/disputes.rs`): a rebuttal
   withdrawn and one kept, then lowered, each as `list --disputed` shows it
   before and after its next round; a mission's rebuttal and split plan
@@ -1809,7 +1858,7 @@ carried here when the ADRs were deleted on 2026-11-11; Git keeps the ADR.
 | Items keep `draft` and `ready` (2026-11-13) | They record intent: agreed to exist, or agreed to start now. Readying a mission never readied its items, so a lead can hold later work until earlier work has shown what it shows |
 | `lead` stays a field on the mission, as attribution (2026-11-13) | The Desk shows who leads. It reaches the base by the record-only path once per mission. It is not a lock, and a second lead loses at merge |
 | `escalate` and `decide` are removed (2026-11-13, atelier-xbog) | They served two jobs. Advice needs no record: the implementer asks the thread that started it, as Claude's advisor tool lets a working model ask a stronger one and carry on. A disputed finding already has a path: a rebuttal in Responses, settled by a fresh reviewer. Nothing has used either command since the cutover |
-| A disagreement is found, not enforced (2026-11-13) | The records hold it already: a `rebutted` Response with the next round's `Now: kept` or `Now: withdrawn`, and a plan-review round whose reviewers differ. `list --disputed` prints them, `show <mission>` gives a lead its mission's, and the gardener reads them first. Nothing blocks on them. Until 2026-11-18 a lead stepped in only by moving the disputed work out of the item's Scope into an item of its own; since then it settles a dispute either way, under "A lead is in charge of its mission" |
+| A disagreement is found, not enforced (2026-11-13) | The records hold it already: a `rebutted` Response with the next round's `Now: kept` or `Now: withdrawn`, and a plan-review round whose reviewers differ. `list --disputed` prints them, `show <mission>` gives a lead its mission's, and the gardener reads them first. Nothing blocks on them. Until 2026-11-18 a lead stepped in only by moving the disputed work out of the item's Scope into an item of its own; since then it settles a dispute either way, under "A lead is in charge of its mission" Since atelier-h6ij two split plan rounds in a row do stop the next round, for the human to rule |
 | A lead's notes are ordinary record changes (2026-11-13) | Two or three per mission, in `notes.md`, through the record-only path |
 | Record-only changes take about a minute (2026-11-13) | A tracker in Git cannot be instant, and does not need to be. Each repository's CI must give records a fast path, which is a line of the readiness checklist |
 | With a forge, a merge finishes as the forge's merge of the pull request (2026-11-13) | So it works on a protected base and with human reviewers, where `merge` stops with status 3 until they approve. With no forge, `merge` moves the base locally |
@@ -1821,6 +1870,7 @@ carried here when the ADRs were deleted on 2026-11-11; Git keeps the ADR.
 | The T3 Code extension lives in this repository, under `t3-extension/`, outside the `atelier` release, as the Desk is (ADR 0032). `atelier` still has no Node step in its build or release (2026-11-16, atelier-n4g7) | It talks to the Desk over the Desk's host contract, and every change to it so far also changed the Desk, so one item and one review should cover both sides |
 | The T3 Code extension is released on its own tags, `t3-extension-v<version>`, as a bundle of its files and installer with a checksum. The release builds no Rust and runs no test: it publishes only when CI passed, with the extension's job, on the last merge at or before the tag that changed what that job tests. It is never the repository's latest release, and `dist` runs `atelier`'s release only for `v*` tags (`tag-namespace`, so its workflow is `v-release.yml`) (2026-11-16, atelier-451s) | The extension changes more often than `atelier`, and a device should download five script files without a clone of a Rust project. CI already tested the commit, so the release trusts that run instead of repeating it |
 | A later round's brief says what the round is for: how many rounds have reviewed the whole change, that this round checks the earlier findings and what changed since, with that diff before the whole change's, and that a new finding in code that did not change blocks only if the work would come out wrong without it (2026-11-19, atelier-d73k, mission atelier-8az0) | Until then round 4's brief repeated round 1's instruction word for word. In a survey of 143 Sol reviews on 2026-11-18, the share of findings that were critical or important fell from 75% in round 1 to 39% from round 3 on, and 18 findings were another case of a gap already reported on the item; atelier-v958 took eight rounds. The whole change's diff stays, since seven of the 18 findings from round 3 on were still important. Two round-2 cases ran with the brief before and after, 80 Sol reviews ([results](../evals/agent-factory/results/2026-11-19-later-round-brief.md)): a cosmetic flaw in unchanged code blocked in none with either brief, and a defect there blocked in all with both, so the planted flaws showed no narrowing and no hiding. With the new brief no review reported a crash in the last week of year 9999 in changed code, which 12 of 40 had reported with the old one |
+| Reviews end in a person's ruling: the lead's once round 3 or later asks an item for changes, which `status` says and nothing enforces, and the human's after two split rounds in a row of one plan change, which `submit` enforces as a rule a skip passes. A later plan round is briefed on its diff, and a later round's diff holds only what its branch changed (2026-11-22, atelier-h6ij, mission atelier-ww7w, approved by Sumeet; changing either number is the human's) | atelier-to83 took seven plan rounds and atelier-kw8u four and a skip, most of them one approval and one request for changes, each re-read from scratch by fresh reviewers. A plan has no lead above its planner, so the human rules; an item's lead can rule to fix, so its cap is guidance |
 | A lead is in charge of its mission (2026-11-18, atelier-mtzj). The process is its default: it does itself what needs no review, sends the rest to an implementer, and has each change reviewed by a thread that did not write it. It may depart from any of that, a review included, by giving its reason with `ATELIER_SKIP`, and never silently. It settles a dispute between an implementer and a reviewer either way and records the ruling, and it may drop an item or the mission when the work turns out much harder than planned, saying in the Result what was not done. It may not do more or other than the plan asks. An implementer passes no rule on its own work, and takes a kept finding it cannot fix to the lead | The human said on 2026-11-18 that a lead is responsible for finishing its mission and may do more or less anything to get there. Atelier is the one with the clipboard: it notes everything down and complains about process, and it is not in charge. Three things keep a lead in check: the process its instructions give it, a stated reason for every departure, and knowing the record will be read. That reaches as far as merging a change nobody reviewed, said out loud. They chose to try this and restrict it later if leads push bad code through. The skill had said the opposite, "You write no code" and a disputed finding "is not yours to settle", and sent a kept finding back to be fixed even where the fix broke a Done when line, which left an item that could never merge |
 | An implementer may answer a fix-now finding `not built: <reason>`, which takes it straight to the mission's lead, and `merge` holds the item until the lead rules (2026-11-19, atelier-hlsw). A wrong finding is still rebutted, and one that does not block may be left with a basic reason. No command comes back: the lead's ruling to merge without it is the reason that passes `merge`'s rule, and to have it built the lead tells the implementer | The human's design of 2026-11-18, first tried with `escalate` and `decide` (f684caa15, 2026-11-08), which were removed as unused. The new evidence that design asked for: a survey of every Sol review since the cutover found 27 of 117 fix-now findings useful or nit, all 27 built and none rebutted. In atelier-zwh1's case run on 2026-11-19, ten runs a cell from two commits that differ in this change alone (`7a73e7b4b`, `af618c727`), Opus implementers in `house` built the finding not worth building in 6 of 10 runs before and 0 of 10 after. Sol built it in none either way, but before it rebutted it with a fact that did not refute it, and the next reviewer deferred it, so the lead was never asked; after, all twenty runs in both setups answered it `not built` and stopped for the lead. The real defect was fixed in all 40 ([results](../evals/agent-factory/results/2026-11-19-say-no.md)) |
 

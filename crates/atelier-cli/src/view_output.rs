@@ -3,8 +3,8 @@
 
 use crate::history::{one_line, passed_by};
 use crate::output::{
-    condition, handoff, holder, mission_status_name, priority_name, settled, status_name,
-    verdict_name,
+    cap_for_lead, condition, handoff, holder, mission_status_name, priority_name, settled,
+    status_name, verdict_name,
 };
 use atelier_core::actions::{Condition, PLANNED, STARTED};
 use atelier_core::model::{
@@ -668,6 +668,11 @@ pub fn led(led: &[(MissionDir, Vec<Entry>, Disputes)]) -> String {
                 ..disputed.clone()
             };
             text += &disputes(&rest);
+        }
+        for entry in &items {
+            if let Some(round) = entry.capped {
+                text += &cap_for_lead(&entry.id, round);
+            }
         }
         text += &start_threads(&items);
     }

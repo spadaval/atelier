@@ -1,0 +1,62 @@
+The binary built from f97733f2b, driven in a scratch clone of this repository with no remote, on its own history.
+Each case moves the clone's master to where the base stood for that case.
+
+== atelier review atelier-ww7w at the commit each of rounds 2 to 5 reviewed
+-- at 6d1acd1be4acbc25b122df56286a329ebb504031: exit 0
+You are a reviewer of the plan of mission atelier-ww7w (thread reviewer), round 2.
+What changed in the plan since round 1 reviewed it at commit 6a2c26e:
+  git diff 6a2c26e15cf9af28189be303b5b48914fa521720 6d1acd1be4acbc25b122df56286a329ebb504031 -- .atelier/items/atelier-7637/item.md .atelier/items/atelier-gqtw/item.md .atelier/items/atelier-h6ij/item.md .atelier/items/atelier-js4a/item.md .atelier/items/atelier-zc9b/item.md .atelier/missions/atelier-ww7w/design.md .atelier/missions/atelier-ww7w/mission.md
+This round checks those changes and judges each open finding carried from earlier rounds, below. A new finding in a part of the plan that did not change blocks only if it is a serious defect the earlier rounds missed: record that one as `fix now`, and any other as `defer`.
+The plan as commit 6d1acd1 holds it follows, for reference. Another reviewer may review the same plan blind, in a checkout of its own.
+
+-- at f89b57b9447f3d65e7ce3df06c763a99f02dad76: exit 0
+You are a reviewer of the plan of mission atelier-ww7w (thread reviewer), round 3.
+What changed in the plan since round 2 reviewed it at commit 6d1acd1:
+  git diff 6d1acd1be4acbc25b122df56286a329ebb504031 f89b57b9447f3d65e7ce3df06c763a99f02dad76 -- .atelier/items/atelier-7637/item.md .atelier/items/atelier-gqtw/item.md .atelier/items/atelier-h6ij/item.md .atelier/items/atelier-js4a/item.md .atelier/items/atelier-zc9b/item.md .atelier/missions/atelier-ww7w/design.md .atelier/missions/atelier-ww7w/mission.md
+This round checks those changes and judges each open finding carried from earlier rounds, below. A new finding in a part of the plan that did not change blocks only if it is a serious defect the earlier rounds missed: record that one as `fix now`, and any other as `defer`.
+The plan as commit f89b57b holds it follows, for reference. Another reviewer may review the same plan blind, in a checkout of its own.
+
+-- at 96227cc29de0a2d40e3dd14769bf58cc012595bc: exit 0
+You are a reviewer of the plan of mission atelier-ww7w (thread reviewer), round 4.
+What changed in the plan since round 3 reviewed it at commit f89b57b:
+  git diff f89b57b9447f3d65e7ce3df06c763a99f02dad76 96227cc29de0a2d40e3dd14769bf58cc012595bc -- .atelier/items/atelier-7637/item.md .atelier/items/atelier-gqtw/item.md .atelier/items/atelier-h6ij/item.md .atelier/items/atelier-js4a/item.md .atelier/items/atelier-zc9b/item.md .atelier/missions/atelier-ww7w/design.md .atelier/missions/atelier-ww7w/mission.md
+This round checks those changes and judges each open finding carried from earlier rounds, below. A new finding in a part of the plan that did not change blocks only if it is a serious defect the earlier rounds missed: record that one as `fix now`, and any other as `defer`.
+The plan as commit 96227cc holds it follows, for reference. Another reviewer may review the same plan blind, in a checkout of its own.
+
+-- at 250b429f2e2b31698e5f7431f9b9dff00849a7da: exit 0
+You are a reviewer of the plan of mission atelier-ww7w (thread reviewer), round 5.
+What changed in the plan since round 4 reviewed it at commit 96227cc:
+  git diff 96227cc29de0a2d40e3dd14769bf58cc012595bc 250b429f2e2b31698e5f7431f9b9dff00849a7da -- .atelier/items/atelier-7637/item.md .atelier/items/atelier-h6ij/item.md .atelier/missions/atelier-ww7w/design.md .atelier/missions/atelier-ww7w/mission.md
+This round checks those changes and judges each open finding carried from earlier rounds, below. A new finding in a part of the plan that did not change blocks only if it is a serious defect the earlier rounds missed: record that one as `fix now`, and any other as `defer`.
+The plan as commit 250b429 holds it follows, for reference. Another reviewer may review the same plan blind, in a checkout of its own.
+
+
+== atelier-kw8u on its own branch once rounds 3 and 4 had both split
+-- status
+Plan review of mission atelier-kw8u, round 4: 1 of 2 approvals count.
+Plan review of mission atelier-kw8u stops: its last 2 rounds on this change split, one approving and one asking for changes. Bring the open findings to the human to rule. On their ruling, merge it as it stands with `ATELIER_SKIP="<ruling>" atelier merge`; amend it, commit, and open another round with `ATELIER_SKIP="<ruling>" atelier submit`; or drop the change.
+-- submit
+`atelier submit` refused; nothing changed.
+Plan review of mission atelier-kw8u stops: its last 2 rounds on this change split, one approving and one asking for changes. Bring the open findings to the human to rule. On their ruling, merge it as it stands with `ATELIER_SKIP="<ruling>" atelier merge`; amend it, commit, and open another round with `ATELIER_SKIP="<ruling>" atelier submit`; or drop the change.
+If the rule is wrong for this case, go past it on purpose: run the same command again with ATELIER_SKIP="<why>" in front of it.
+exit 1
+-- merge, as its planner
+`atelier merge` refused; nothing changed.
+A new mission or a changed plan merges once 2 plan reviews of its current round, by threads that are not its planners, approve the plan the branch's head holds, and atelier-kw8u has fewer:
+  Mission atelier-kw8u: atelier-kw8u adds the mission.
+    Round 4, review 4-2c40 by thread:delegated-task:command%3Amcp%3A899a046c-fc07-4a9b-a0a8-05ac7d8b429d%3Adelegate-task%3A05efa01a-ec32-4808-b639-5a2f82083628: approves, and counts.
+    Round 4, review 4-z65e by 01a1f092-e8b3-7592-a471-2bc62c2f1091: asks for changes.
+    1 of 2 count.
+Plan review of mission atelier-kw8u stops: its last 2 rounds on this change split, one approving and one asking for changes. Bring the open findings to the human to rule. On their ruling, merge it as it stands with `ATELIER_SKIP="<ruling>" atelier merge`; amend it, commit, and open another round with `ATELIER_SKIP="<ruling>" atelier submit`; or drop the change. Reviewers push their files to atelier-kw8u; fetch them with `git pull origin atelier-kw8u` first if they are there.
+If the rule is wrong for this case, go past it on purpose: run the same command again with ATELIER_SKIP="<why>" in front of it.
+exit 1
+
+== A new amendment of a plan that merged after split rounds, on master 40ffeea81
+-- atelier-kw8u
+Plan review of mission atelier-kw8u: no review of this change here yet.
+Submitted the plan of mission atelier-kw8u on backlog/amend-atelier-kw8u, at commit eed6962, for round 5 of plan review. You are one of its planners, so you do not review it.
+exit 0
+-- atelier-to83
+Plan review of mission atelier-to83: no review of this change here yet.
+Submitted the plan of mission atelier-to83 on backlog/amend-atelier-to83, at commit b2442f5, for round 8 of plan review. You are one of its planners, so you do not review it.
+exit 0

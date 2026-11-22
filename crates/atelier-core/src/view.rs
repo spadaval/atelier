@@ -1,6 +1,8 @@
 //! Where an item's record is read from, and what `status` shows.
 
-use crate::actions::{mission_of, next, unmet, Action, Condition, Facts, PLANNED, STARTED};
+use crate::actions::{
+    mission_of, next, unmet, Action, Condition, Facts, PLANNED, ROUND_CAP, STARTED,
+};
 use crate::disputed::{disputes, Disputes};
 use crate::model::{MissionStatus, Priority, ReviewName, Status, Thread, Verdict};
 use crate::records::{ItemDir, MissionDir, Problem};
@@ -240,6 +242,10 @@ pub struct Entry {
     /// requested: the round under review, or the round that asked for
     /// the changes.
     pub round: Option<u32>,
+    /// Whoever asks: the round that asked for changes, when it reached
+    /// [`crate::actions::ROUND_CAP`], so the mission's lead rules before
+    /// another round.
+    pub capped: Option<u32>,
     /// The last review the caller held, with its verdict, when it is not
     /// this round's reviewer.
     pub reviewed: Option<(ReviewName, Option<Verdict>)>,
@@ -275,11 +281,14 @@ pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
     let undefined =
         (facts.holds() && item.status == Status::Building && unwritten != (false, false))
             .then_some(unwritten);
+    let asked = match item.status {
+        Status::ChangesRequested => facts.item.reviews.iter().map(|r| r.name.round).max(),
+        _ => None,
+    };
     let round = match item.status {
         _ if !facts.holds() => None,
         Status::InReview => Some(facts.round().number),
-        Status::ChangesRequested => facts.item.reviews.iter().map(|r| r.name.round).max(),
-        _ => None,
+        _ => asked,
     };
     Ok(Entry {
         id: item.id.clone(),
@@ -294,6 +303,7 @@ pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
         undefined,
         review: facts.reviewing().map(|file| file.name.clone()),
         round,
+        capped: asked.filter(|round| *round >= ROUND_CAP),
         reviewer: match facts.status() {
             Status::InReview => facts
                 .round()
