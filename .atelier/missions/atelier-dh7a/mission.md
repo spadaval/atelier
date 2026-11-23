@@ -3,7 +3,7 @@ schema: atelier.mission
 schema_version: 3
 id: atelier-dh7a
 title: 'Make a filed item simply open: no draft or ready, filed on the branch you are on, and agents told to file what they find'
-status: open
+status: done
 labels: []
 lead: mcp:launch:d9ce201b02acc943fe31a743127b2bc6eadad19a1d9e5ad882baa055012ff415
 planners:
@@ -159,3 +159,109 @@ binary's line count says why in its Report. atelier-kw8u's items change
 fixture merges the base in before it submits.
 
 ## Result
+
+Done on 2026-11-23. All four items merged, and `master` is at `1260e5f46`.
+Seven of the eight success criteria hold as written. The eighth,
+told-to-file, was decided the other way round from what the Outcome hoped:
+the eval showed no gain from telling agents to file, so the skill does not
+say it.
+
+**What `master` has now**
+
+- **Open items** (`atelier-v06d`, `3f97eaae8`): `atelier new` writes
+  `status: open`, `start` takes any open item on the base whose blockers
+  are done, and `atelier ready` only refuses, with "Items need no
+  go-ahead". An old record's `draft` or `ready` reads as `open` and is not
+  rewritten; an old mission's `draft` still reads as proposed. `list
+  --startable` replaces `list --ready`. Non-test Rust under `crates/` fell
+  from 24,409 to 24,333 lines.
+- **Filing where you are** (`atelier-u6oy`, `405282844`): `atelier new`
+  runs on any branch `start` made, a started item's included, for its
+  implementer, its reviewer or anyone else. The item reaches the base with
+  that branch's merge and makes no approval stale. `merge` refuses while a
+  filed item is uncommitted, and `drop` names each item the dropped branch
+  filed and prints the commands that carry it. Non-test Rust grew to
+  24,507 lines; the item's Report splits the 174 by what needs them.
+- **The Desk and the extension** (`atelier-rme3`, `1d815029a`): loose open
+  items are one list by priority and then ID, a mission's page says of
+  each unstarted item that it can start or what it waits on, and a
+  proposed mission is drawn by its own state.
+- **The skill** (`atelier-8phx`, `1260e5f46`): `roles/lead.md` and
+  `procedures/garden.md` file on the branch they hold. The eval case
+  `outside-problem` stays, as a guard that an implementer files on its
+  item's branch and still merges.
+
+**The success criteria**
+
+- no-gate, file-where-you-are, none-lost, approval-holds: each has a test
+  in `crates/atelier-cli/tests/filing.rs`, `planning.rs` or `branches.rs`, CI passed on
+  `405282844`, and the ten eval runs of `atelier-8phx` each filed on an
+  item's branch and merged with the installed binary. `drop` names what
+  was filed and carries none; `docs/design.md` says so.
+- one-word: on `405282844` the lead searched `crates/`, `desk/src`,
+  `t3-extension/src`, `skills/`, `docs/product.md` and `AGENTS.md`. What is
+  left names an old record's `ready` mark, an old mission's `draft`, a
+  `readied` event in history, or T3's composer drafts. One thing is left
+  on purpose: the Desk's `/api/launch` and `/api/motion` keep fields named
+  `ready`, which hold open items that can start, so no reader of them
+  breaks.
+- old-records-read: with the installed binary, `atelier list` and `atelier
+  check` exit 0 in astromech, life-on-rails, cosplay-studio and demiurge
+  (`worldcrafter` is a symlink to demiurge, so the plan's five
+  repositories are four and its nine draft missions are eight). `check`
+  printed the same bytes as the binary from before. All eight draft
+  missions show as proposed, `start` of an item of each is refused for
+  that reason, and a readied item still prints "Made ready by".
+- told-to-file: `outside-problem` in `house`, five runs an arm. 5 of 5
+  filed the planted problem and merged without the line, and 5 of 5 with
+  it, so `161da1c50` removed the line
+  (`evals/agent-factory/results/2026-11-23-told-to-file.md`). Without it
+  each Opus implementer chose to file and found how from `atelier new
+  --help`. The case is at its ceiling for that model, and was not run in
+  `sol`, the work host's setup.
+- decision-recorded: `docs/design.md` reverses "Items keep `draft` and
+  `ready`" and "`new` belongs on a backlog or mission branch", its action
+  table has no `ready` row, and `new` is on any branch `start` made.
+
+**What the plan missed, and what was done about it**
+
+- A program from before cannot read `status: open`, and three programs
+  read records, not one. The lead reinstalled `atelier` and the Desk
+  (`atelier-desk.service`) from `3f97eaae8`, `1d815029a` and `405282844`,
+  moved `~/projects/atelier-skill` forward each time, and released the
+  extension as `t3-extension-v0.2.1` and `t3-extension-v0.3.0`. The human
+  installs a release with `t3-custom update`.
+- astromech's CI pins an Atelier that fails on the first open record
+  there. Nothing was written in astromech; `atelier-pv58` waits on the
+  human.
+- With no ready mark, `status` would have listed every open item at each
+  session start (166 in astromech). The lead ruled a cap: the ten most
+  urgent, then a count and `atelier list --startable` (`a89f1fc9a`).
+
+**Rulings and departures**
+
+- `atelier-8phx`'s first Done when line required the skill to carry the
+  instruction. Once the eval showed no gain it could not hold beside the
+  last line, so the lead changed it on the item's branch (`ccd8f39b7`) to
+  ask that the instruction was written and tried.
+- `atelier-v06d`, `atelier-rme3` and `atelier-u6oy` were reviewed by
+  Gemini 4 Neon alone, since Codex and Grok were out on 2026-11-22;
+  `atelier-8phx` by GPT-6.1 Sol. No second opinion was taken on
+  `atelier-v06d`.
+- `atelier-k55o` was dropped as moot.
+
+**Not proven by use yet**
+
+- The extension's releases ran in CI and in headless Chromium, not inside
+  T3 Code.
+- A reviewer filing from an item's brief, and `drop` naming filed items,
+  have run only in tests and a scratch repository.
+- `atelier lead` of an old draft mission was checked by its test and by
+  the reviewer, not by the lead.
+
+**Filed from what the work found:** `atelier-pv58` (needs-human),
+`atelier-1sqp`, `atelier-5c08`, `atelier-jr1b` (from the one deferred
+finding), `atelier-ngzf`, `atelier-h7e9`, `atelier-fuzq`, `atelier-5q9j`,
+`atelier-s2ho` and `atelier-jk0s`, all open. Not filed: the Desk's This
+thread page draws a mentioned proposed mission as running, and
+`atelier-yy4j` removes that page.
