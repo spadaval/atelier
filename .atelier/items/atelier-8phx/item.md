@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-8phx
 title: Tell every role to file what it finds outside its work, and show with an eval case that the line changes what agents do
-status: building
+status: in_review
 mission: atelier-dh7a
 labels: []
 priority: medium
