@@ -30,7 +30,7 @@ on a gain.
 
 ## Done when
 
-- [ ] The instruction is written and tried: one commit adds to the skill,
+- [x] The instruction is written and tried: one commit adds to the skill,
   where every role reads it, that a problem found outside the work in hand
   is filed with `atelier new` on the branch you are on, with what was seen
   and where, and the work carries on, and that a reviewer's finding on the
@@ -69,9 +69,13 @@ implementers filed the planted problem and merged their item in 5 of 5 runs
 without the line and in 5 of 5 with it. Without it, each one chose to file
 by itself, after `atelier new --help` showed that `new` works on its branch
 since atelier-u6oy. As this item and the mission's Authority say, the line
-is removed: 161da1c50 reverts a8ae546b6. The first Done when line cannot
-hold now, so it is not ticked, and the lead has said it will amend that
-line.
+is removed: 161da1c50 reverts a8ae546b6.
+
+The lead changed the first Done when line on 2026-11-23 (ccd8f39b7). As
+first written it asked the skill to hold the line, which cannot stand
+beside the last line once the runs showed no gain. It now asks that the
+line was written and tried in one commit, which a8ae546b6 did: it added
+Problems Outside Your Work to `SKILL.md`, which every role reads.
 
 The runs did show one other effect. Without the line, each Codex reviewer
 also wrote the bug up as a deferred finding, so it was recorded twice. With
