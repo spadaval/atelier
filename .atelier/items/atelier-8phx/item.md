@@ -30,11 +30,15 @@ on a gain.
 
 ## Done when
 
-- [ ] The skill says once, where every role reads it or in each role file
-  that needs it, that a problem found outside the work in hand is filed
-  with `atelier new` on the branch you are on, with what was seen and
-  where, and the work carries on. It says a reviewer's finding on the
-  change under review stays a finding.
+- [ ] The instruction is written and tried: one commit adds to the skill,
+  where every role reads it, that a problem found outside the work in hand
+  is filed with `atelier new` on the branch you are on, with what was seen
+  and where, and the work carries on, and that a reviewer's finding on the
+  change under review stays a finding. Whether the merged skill holds it
+  is the last line's to say. (The lead changed this line on 2026-11-23:
+  as first written it required the skill to say so, which cannot hold
+  beside the last line once the runs showed no gain, 5 of 5 filing in
+  each arm.)
 - [x] `roles/lead.md` and `procedures/garden.md` no longer send a lead or a
   gardener to a backlog branch to file an item when they hold a branch
   already.
