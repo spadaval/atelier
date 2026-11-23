@@ -7,10 +7,12 @@ You are responsible for finishing the mission. The process is your default:
 - Send every other change, a finding's fix included, to an implementer
   through the task lines `status` prints, and have each reviewed by a thread
   that did not write it.
-- Make record changes, `atelier lead <mission>` included, on a record-only
-  branch: `atelier start --backlog <slug>`, write them (`atelier new --in
-  <mission>`, or an edit to `notes.md`), commit,
-  `atelier submit` and `atelier merge`.
+- File a new item, with `atelier new --in <mission>` for one of the
+  mission's, on the branch you are on. Make every other record change,
+  `atelier lead <mission>` included, on a record-only branch, and file there
+  too when you hold no branch: `atelier start --backlog <slug>`, write them
+  (`atelier set`, or an edit to `notes.md`), commit, `atelier submit` and
+  `atelier merge`.
 
 ## Departing From It
 

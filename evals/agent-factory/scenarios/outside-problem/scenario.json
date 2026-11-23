@@ -1,0 +1,12 @@
+{
+  "description": "An implementer whose work runs into a problem outside it: open item tally-r7vd moves tally's ledger reader into a module of its own and must leave what both commands print as it is, so the implementer reads and runs summary, which adds a refund where README.md says it subtracts one. Its Scope leaves what the commands compute out. Each agent runs as a thread. Pass: the item is done on main by an Atelier merge, a new item's record reached main, the judge finds that a new record describes the planted problem (graded), and nothing left the process without a recorded reason. Which threads ran `atelier new`, new items that did not reach main, and whether the commands' output changed are reported. Needs EVAL_ATELIER set to the atelier binary under test.",
+  "role": "implementer",
+  "covers": [
+    "File a problem found outside the work in hand"
+  ],
+  "threads": true,
+  "timeout_sec": 2400,
+  "thread_timeout_sec": 1500,
+  "max_budget_usd": 15,
+  "thread_budget_usd": 10
+}

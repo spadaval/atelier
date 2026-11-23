@@ -46,7 +46,7 @@ Scope steps 1 to 7 up to the merge, and these Done when lines:
 - [ ] At most three new proposals, each one cause with its evidence counted; one that adds a rule or check names one considered for removal.
 - [ ] Every change on the branch is upkeep or a sign: none adds or removes a rule, check, gate, interface or default.
 - [ ] Each finding `atelier list --deferred` showed is settled.
-- [ ] What the last merged run left unfiled is carried, and each bug found is under Bugs to file.
+- [ ] What the last merged run left unfiled is carried, and each bug is filed on the branch and under Bugs filed.
 - [ ] The page follows garden.md's template in at most 60 lines.
 ```
 
@@ -130,8 +130,10 @@ and what the change would make easier. One that adds a rule or check names
 one you considered removing. One that only restates a line of
 `readiness.md` goes in the page's Checklist line, and takes a place only
 when a thread or a number shows what the gap cost. Leave out a trip that
-fits no cause and happened once. Something broken today you list under the
-page's Bugs to file, with the item or commit that caused it, and leave.
+fits no cause and happened once. Something broken today that no item covers
+you file on the run's branch and leave: `atelier new "<what is broken>"`,
+the evidence in its Goal, and the commit it prints. List it under the page's
+Bugs filed, with the item or commit that caused it.
 
 **What earlier runs left.** Run `git fetch --prune origin` where there is a
 remote. The last merged run is the done, not dropped, earlier run whose
@@ -151,8 +153,10 @@ new: an unanswered proposal stays open in its item until the human answers.
 Each proposal or bug that the last merged run's Report lists and none of them
 covers was left by a run that stopped after its merge: carry it onto this
 page, marked with the run and date it came from and outside the limit of
-three, and step 7 files it. Do the same with an item that Report lists as
-waiting for labels, if it still has none.
+three. File a carried bug on the run's branch as above; step 7 files a
+carried proposal. An item that Report names under Bugs filed or as waiting
+for labels covers what it was filed for, labelled or not: where it still has
+no labels, carry the item itself for step 7 to label, and file nothing.
 
 ## 5. Fix What the Run May Fix
 
@@ -167,8 +171,9 @@ the product does is a proposal.
 Settle each finding `atelier list --deferred` shows, on the branch, with
 `atelier new "<title>" --from <finding>` or `atelier drop <finding> --reason
 "<why>"` (`"fixed in <commit>"` for one the run fixed). An item taken this
-way gets its labels and `--caused-by` in step 7, after the run merges, on
-`backlog/garden-proposals`, where the bugs to file are filed too. A
+way, like a bug filed here, gets its labels and `--caused-by` in step 7,
+after the run merges, on `backlog/garden-proposals`, since `set` is refused
+on the run's branch. A
 fix or a settled finding already on an earlier run's unmerged branch is not
 made again: the page names that run instead.
 
@@ -203,8 +208,8 @@ Moves: <the number>. Change: <what to do; for structure, which files>. Considere
 
 Carried: <run> P<n>, <date>: <the change>.
 
-### Bugs to file
-- <what is broken>. Caused by: <item or commit>. Evidence: <in a phrase>. <Carried from <run>, <date>.>
+### Bugs filed
+- <item>: <what is broken>. Caused by: <item or commit>. Evidence: <in a phrase>. <Carried from <run>, <date>.>
 
 ### Fixed and Settled
 - <commit>: <upkeep or sign>. <finding>: taken into <item>, or dropped: <why>. Waiting for the merge to get labels and a cause: <items>.
@@ -215,10 +220,10 @@ Carried: <run> P<n>, <date>: <the change>.
 ## 7. Submit, Merge and Hand Over
 
 Run `atelier submit` and start the reviewer it prints. Once it approves, run
-`atelier merge` at once: that lands the upkeep and the settled findings, and
-waits on no human.
+`atelier merge` at once: that lands the upkeep, the settled findings and
+the filed bugs, and waits on no human.
 
-The run ends there if it has nothing to file or label and
+The run ends there if it has no proposal to file and nothing to label, and
 `backlog/garden-proposals` holds nothing unmerged. Otherwise, straight after
 the merge, get onto that branch as below, and on it:
 
@@ -232,10 +237,8 @@ the merge, get onto that branch as below, and on it:
   every unanswered proposal, and add the page's new and carried ones, each
   as `- <run> P<n>, <date>: <the change>. <its cause>. See that run's
   Report.` Only the human's answer takes one off that list.
-- **Bugs.** For each bug to file that no item covers, run `atelier new
-  "<what is broken>"`, which files it as an open item, and `atelier set
-  <id> --labels bug,needs-human --caused-by <item or commit>`, and put the
-  evidence in its Goal.
+- **Bugs.** For each bug the page lists, run `atelier set <id> --labels
+  bug,needs-human --caused-by <item or commit>`.
 - **Settled findings.** Give each item waiting for the merge its labels and
   cause.
 
