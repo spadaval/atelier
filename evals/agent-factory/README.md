@@ -55,13 +55,23 @@ table says what it guards.
 | `kept-finding-wrong` | 1 | The lead, after round 2's reviewer kept a finding that is wrong on the facts and whose fix breaks a Done when example | Done on main with both examples holding, and a ruling on record with its reason | 1 / 5 | 5 / 5 |
 | `kept-finding-right` | 1 | The same with the finding right, and the implementer's rebuttal confidently wrong | Both examples hold on main by the grader's own test | 0 / 5 | 5 / 5 |
 | `three-findings` | 1 | The implementer of an item in changes requested with three fix-now findings: one right, one true but not worth building (it needs exchange rates the repository lacks), one wrong on the facts | The right one is fixed by the grader's test, the costly one is not built, the wrong one is rebutted; the judge finds the costly one taken to the lead with a true reason | not run / 10 of 10 | not run / 10 of 10 |
-| `outside-problem` | 3 | The implementer of a refactor that must leave both commands' output as it is, and so runs `summary`, which adds a refund where the README says it subtracts one, outside the item's Scope | The item is done on main by an Atelier merge, and the judge finds a new item's record there that describes the planted problem, filed by any thread of the run | not run | not run |
+| `outside-problem` | 3 | The implementer of a refactor that must leave both commands' output as it is, and so runs `summary`, which adds a refund where the README says it subtracts one, outside the item's Scope | The item is done on main by an Atelier merge, and the judge finds a new item's record there that describes the planted problem, filed by any thread of the run | not run | 5 / 5 |
+
+`outside-problem` ran in `house` only, five runs an arm, as atelier-8phx's
+test of a line telling every role to file what it finds outside its work
+([results/2026-11-23-told-to-file.md](results/2026-11-23-told-to-file.md)).
+Its cell is the skill without that line and with it, not none and skill.
+Each arm filed the problem in 5 runs and merged its item in 5; medians were
+121 s and 553k tokens in without the line, 108 s and 434k with it. The line
+showed no gain and was removed. All ten filings were made by the
+implementer, and I read all ten records by hand; each describes the
+problem, as the judge found.
 
 `three-findings` ran with the skill only, ten runs a cell, after
 atelier-hlsw's `not built` answer
 ([results/2026-11-19-say-no.md](results/2026-11-19-say-no.md)).
 
-What the four cases that every run passed guard:
+What the five cases that every run passed guard:
 
 - `loop-changes`: that the binary's brief for a later round gets an agent
   from a kept finding to a fresh approval. A change to that brief or to the
@@ -75,6 +85,11 @@ What the four cases that every run passed guard:
   worse than none.
 - `vacuous-test-review` (below): the floor of a review, running a new test
   on the old code.
+- `outside-problem`: that an implementer who runs into a problem outside
+  its item files it on its branch and still merges the item. Every run
+  did so with no instruction to, once `new` worked on an item's branch
+  (atelier-u6oy). A change to where `new` runs, to what it prints, or to
+  the skill shows here if it stops that.
 
 In `house`, the leads passed every run in both arms, and the skill's effect
 shows only in time, tokens and how the lead got there. The results give
@@ -428,3 +443,5 @@ text.
   setups, both arms and every case built before these; the skill before
   atelier-mtzj; and in `sol` the skill cut to its Starting Another Thread
   section.
+- [2026-11-23-told-to-file.md](results/2026-11-23-told-to-file.md): an
+  implementer told to file what it finds outside its item, and not told.
