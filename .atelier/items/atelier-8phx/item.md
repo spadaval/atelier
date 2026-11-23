@@ -30,7 +30,7 @@ on a gain.
 
 ## Done when
 
-- [x] The skill says once, where every role reads it or in each role file
+- [ ] The skill says once, where every role reads it or in each role file
   that needs it, that a problem found outside the work in hand is filed
   with `atelier new` on the branch you are on, with what was seen and
   where, and the work carries on. It says a reviewer's finding on the
@@ -43,10 +43,10 @@ on a gain.
   whether the item merged and whether a new item's record reached main;
   the judge reads whether that record describes the planted problem. The
   case sets up and grades under `test.sh` with no model.
-- [ ] The case is run with the line and without it, at least five runs per
+- [x] The case is run with the line and without it, at least five runs per
   arm in the `house` setup. The README gives for each arm the runs that
   filed the problem, the runs that merged their item, and time and tokens.
-- [ ] If more runs file with the line, it stays. If not, the line is
+- [x] If more runs file with the line, it stays. If not, the line is
   removed, the Report says so, and the case stays only if the README says
   what it guards.
 
@@ -60,56 +60,50 @@ atelier-kw8u's Authority says. At most two eval agents alive at once.
 
 ## Report
 
-Not ready for review: the instruction and the eval case are committed, and
-the runs that decide whether the instruction stays have not been made. The
-`house` setup reviews and judges with Codex `gpt-6.1-sol`, whose weekly
-allowance is spent until 2026-11-23 00:04 New York time. No model was run
-for this item so far.
+The line made no difference to filing, so it is gone. In `house`, Opus
+implementers filed the planted problem and merged their item in 5 of 5 runs
+without the line and in 5 of 5 with it. Without it, each one chose to file
+by itself, after `atelier new --help` showed that `new` works on its branch
+since atelier-u6oy. As this item and the mission's Authority say, the line
+is removed: 161da1c50 reverts a8ae546b6. The first Done when line cannot
+hold now, so it is not ticked, and the lead has said it will amend that
+line.
 
-What changed:
+The runs did show one other effect. Without the line, each Codex reviewer
+also wrote the bug up as a deferred finding, so it was recorded twice. With
+the line, which says a finding is for the change under review, none did.
+That is less to settle later, but filing was the measure, and filing did
+not move.
 
-- `SKILL.md` has Problems Outside Your Work, which every role reads: file
-  with `atelier new` on the branch you are on, say what you saw and where,
-  and carry on. It keeps the two exceptions the binary's briefs make: a
-  thread with no branch uses a backlog branch, and a plan's reviewer files
-  only once its verdict is pushed. It is a commit of its own (a8ae546b6),
-  so reverting that commit removes the line and nothing else.
-- `roles/lead.md` files on the branch the lead is on. `procedures/garden.md`
-  files bugs on the run's branch. Their labels and cause still wait for
-  `backlog/garden-proposals`, because `set` is refused on an item's branch
-  (atelier-fuzq). Until then such a bug is open with no `needs-human`.
-- `outside-problem` is the new case. The item moves a ledger reader and must
-  leave both commands' output as it is, so the implementer runs `summary`,
-  which adds a refund where the README says it subtracts one. Scope leaves
-  what the commands compute out. Nothing in the fixture mentions filing.
+What stays:
 
-How the runs are read, fixed before any was made:
+- `outside-problem`, the case. The item moves a ledger reader and must leave
+  both commands' output as it is, so the implementer runs `summary`, which
+  adds a refund where README.md says it subtracts one. Every run passed,
+  and the README says what it guards: that an implementer files on its
+  branch and still merges, which a change to `new` or to the skill would
+  show.
+- `roles/lead.md` and `procedures/garden.md` file on the branch the lead
+  or gardener holds (162946875). A gardener's bugs get their labels after
+  its run merges, because `set` is refused on an item's branch
+  (atelier-fuzq), so until then they are open with no `needs-human`.
 
-- A run filed the problem when the judge passes `problem-filed`: a record on
-  main describes it, whichever thread filed it. A reviewer reads the line
-  too, and its brief already allows filing, so `new_called_by` says who
-  filed.
-- The arms are the skill at 162946875 (without the line) and at a8ae546b6
-  (with it). The lead's and gardener's wording is in both.
-- The one judge of `problem-filed` is the implementer's, Codex. A record
-  that the Codex reviewer filed is therefore judged by its own lab, so I
-  read each such record by hand.
+### Results
 
-### Runs left
+[results/2026-11-23-told-to-file.md](../../../evals/agent-factory/results/2026-11-23-told-to-file.md),
+five runs an arm, one at a time, none graded null or made again:
 
-`bash ~/.cache/atelier-8phx-runs/runs.sh` on this host runs, one run at a
-time, for each ref above:
+| Arm | Filed | Merged | Median s | Median tokens in / out |
+| --- | --- | --- | --- | --- |
+| without the line (162946875) | 5 | 5 | 121 | 553k / 8.4k |
+| with the line (a8ae546b6) | 5 | 5 | 108 | 434k / 7.0k |
 
-    EVAL_ATELIER=/var/tmp/af-evals/bin/atelier-a8ae546b6 \
-      python3 evals/agent-factory/harness/run.py outside-problem --setup house \
-      --arms skill --ref <ref> --runs 5 --jobs 1 --keep --out <a directory for that arm>
-
-The two arms need a directory each, since `table.py` counts a setup, case
-and arm as one cell.
-
-After the runs: write the results file and the README's row, then keep the
-line if more runs file with it. If not, revert a8ae546b6, untick the first
-Done when line and take that line to the lead, since it cannot hold then.
+The implementer filed in all ten runs, and no reviewer did, so no record
+went to a judge of its author's lab. I read all ten records and final
+replies by hand: each describes the problem, where it is and how it shows,
+as the judge found. No transcript read the case's files. The runs' work
+directories are kept under `/var/tmp/af-evals/` and their records under
+`~/.cache/atelier-8phx-runs/`; no run built anything.
 
 ### Validation, with no model
 
