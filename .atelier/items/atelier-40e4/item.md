@@ -51,4 +51,3 @@ What a reader should know:
 - The guard fails open, as Codex's hook does, so the two arms of the comparison behave alike. A guard that did not answer is written to the session as an `atelier-guard-error` entry.
 - No CI job runs `test.mjs`. That is deliberate while the extension is an experiment, and is the first thing to add if the comparison keeps it.
 - The council review of the plan (2026-11-26) cut thread caps and replacement of Pi's compaction summary from this version, and moved role limits from `setActiveTools` to `tool_call`, because T3's own Pi extension manages the active tool list.
-

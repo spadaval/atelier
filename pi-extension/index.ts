@@ -61,7 +61,9 @@ export default function (pi: ExtensionAPI) {
     if (!block) return;
     pi.sendMessage(
       { customType: "atelier-ground-truth", content: `${why}\n\n${block}`, display: true },
-      { deliverAs: "steer" },
+      // Appended, never queued as work: a reminder must not make the model answer again
+      // after it has finished, or the thread would never stop.
+      { triggerTurn: false },
     );
   }
 

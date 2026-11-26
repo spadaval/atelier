@@ -24,7 +24,8 @@ background-command tools.
   an item's reviewer, `edit` and `write` are blocked. This is a nudge, not a
   wall: `bash` can still write files.
 - **Repeats the records.** Every 25 turns, and after each compaction, the
-  goal and what is left are sent again at the tail of the conversation. Pi's
+  goal and what is left are appended at the tail of the conversation, without
+  asking the model for another answer. Pi's
   own summary is kept; the records follow it and win where they disagree. The
   system prompt is never changed, so the cached prefix holds.
 - **Runs long commands.** `background_start`, `background_read` and

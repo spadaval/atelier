@@ -76,6 +76,9 @@ export function roleFromStatus(status: string): Role {
 
 /** The mission `atelier status` says this thread leads, if any. */
 export function ledMissionFromStatus(status: string, threadId: string | undefined): string | null {
+  // What status says to the lead itself. It prints this whether or not an item of the mission is started.
+  const own = /^You lead mission (\S+?):/m.exec(status);
+  if (own) return own[1];
   if (!threadId) return null;
   for (const line of status.split("\n")) {
     const match = /^\s*(?:Mission\s+)?(\S+) \([^)]*\bled by ([^)\s]+)\)/.exec(line);

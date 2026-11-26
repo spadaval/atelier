@@ -131,6 +131,8 @@ test("role and led mission are read from atelier status as it prints them", () =
   assert.equal(ledMissionFromStatus(status, "t3"), null);
   assert.equal(ledMissionFromStatus("Mission demo-m (in progress, led by t1): Edit home", "t1"), "demo-m");
   assert.equal(ledMissionFromStatus(status, undefined), null);
+  // A lead with no item started yet is told so directly, with no thread id on the line.
+  assert.equal(ledMissionFromStatus("You lead mission demo-m: Lead test\nNothing is started.", undefined), "demo-m");
 });
 
 test("a record's section ends at the next heading, and only unticked lines are left", () => {
@@ -227,7 +229,7 @@ test("the records are sent again every 25 turns and after a compaction", async (
   assert.equal(pi.sent.length, 0);
   await pi.fire("turn_end", {}, ctx);
   assert.equal(pi.sent.length, 1);
-  assert.equal(pi.sent[0].options.deliverAs, "steer");
+  assert.deepEqual(pi.sent[0].options, { triggerTurn: false });
   assert.match(pi.sent[0].message.content, /The line prints for the first item/);
   await pi.fire("session_compact", { reason: "threshold" }, ctx);
   assert.equal(pi.sent.length, 2);
