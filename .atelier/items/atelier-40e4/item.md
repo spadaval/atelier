@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-40e4
 title: Run Sol in Pi with atelier's role, guard and Done-when reminders, to compare against Codex
-status: changes_requested
+status: in_review
 mission: null
 labels: []
 priority: medium
@@ -51,3 +51,9 @@ What a reader should know:
 - The guard fails open, as Codex's hook does, so the two arms of the comparison behave alike. A guard that did not answer is written to the session as an `atelier-guard-error` entry.
 - No CI job runs `test.mjs`. That is deliberate while the extension is an experiment, and is the first thing to add if the comparison keeps it.
 - The council review of the plan (2026-11-26) cut thread caps and replacement of Pi's compaction summary from this version, and moved role limits from `setActiveTools` to `tool_call`, because T3's own Pi extension manages the active tool list.
+
+### Responses
+
+- 1-tmm3.1: fixed in 3e47fac73
+- 1-tmm3.2: fixed in 3e47fac73
+- 1-tmm3.3: fixed in 3e47fac73
