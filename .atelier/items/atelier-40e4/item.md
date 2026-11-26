@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-40e4
 title: Run Sol in Pi with atelier's role, guard and Done-when reminders, to compare against Codex
-status: building
+status: in_review
 mission: null
 labels: []
 priority: medium
