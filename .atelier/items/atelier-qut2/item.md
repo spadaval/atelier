@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-qut2
 title: Rewrite the skill for plans as outcomes and lighter later rounds, from what this mission's own plan review showed
-status: changes_requested
+status: in_review
 mission: atelier-oqsz
 labels: []
 priority: medium
@@ -198,3 +198,7 @@ was reviewed again.
 `tests/planning.rs` cover the plan brief's text and the Outcome and
 `Shrink:` lines in an item's round-1 and round-2 briefs. `tests/scenarios.rs` covers
 the new later-round text.
+
+### Responses
+
+- 1-h4nq.1: fixed in 49b34d662
