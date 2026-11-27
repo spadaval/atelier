@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-fbte
 title: Set the version to 0.8.0 and tell a host what changes when it updates
-status: in_review
+status: approved
 mission: atelier-oqsz
 labels: []
 priority: medium
