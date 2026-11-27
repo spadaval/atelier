@@ -20,6 +20,7 @@ the Hub lead's side chat, most about mechanisms.
 | Round | Verdicts | New findings: outcome | New findings: mechanism |
 | --- | --- | --- | --- |
 | 1 | Sol approved, Grok asked for changes | 4 | 0 |
+| 2 | Sol approved, Grok approved | 0 | 0 |
 
 **Reviewers.** `gpt-6.1-sol` at `xhigh` and `grok-4.6` at `high`, each
 given only the task line `submit` prints. `atelier-ww7w`'s were
@@ -46,3 +47,31 @@ both verdicts were pushed by 07:32: 11 minutes.
 No finding asked how `status`, `merge` or `log` should behave in a case
 the plan does not state. All four were fixed in `4e34916`, `2c24ed6` and
 `1c19859`, the two deferred ones included, because each took a sentence.
+
+**Round 2**, of `427a0be`, a plan of 840 words. Submitted 07:33 UTC, and
+both verdicts were pushed by 07:38: 5 minutes. Both reviewers were fresh
+threads on the same two models. Each marked the carried findings fixed and
+raised nothing new. The plan merged at 07:40 as `4ba0285`.
+
+**The result.** Two rounds, 17 minutes from the first submit to the last
+verdict, four findings, all about outcomes. `atelier-ww7w`: five rounds,
+80 minutes, 45 findings.
+
+**What it does and does not show**
+
+- A plan written as outcomes drew no finding about how a mechanism would
+  behave, under the old reviewer text. That points at the level a plan is
+  written at.
+- The two findings that blocked were both in `atelier-qut2`, the one item
+  that named a procedure: a plan to review again, and a file not to
+  change. Where the plan was specific it drew findings.
+- It is one review. This plan is a third the size of `atelier-ww7w`'s, on
+  another subject, and Sol stood where Opus did. `atelier-qut2`'s second
+  review of `atelier-ww7w`'s plan holds the plan and the models fixed and
+  changes the reviewer's text, which this review could not do.
+- The marking is the planner's, of a plan the planner wrote.
+
+**Filed from the planning, outside the mission:** `atelier-9f1j`
+(`submit` orders its runner to start a reviewer), `atelier-nc7t` (a branch
+with two merge bases is refused for reasons that name something else) and
+`atelier-jahm` (`merge` says a plan merges with no review).
