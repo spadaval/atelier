@@ -62,8 +62,9 @@ measurement (`notes.md`).
   away. Everything in this repository that reads `log` passes its tests.
 - skill-measured: `notes.md` holds each round of this plan's review: the
   verdicts, and each new finding marked outcome or mechanism. The skill
-  change cites it, and one plan reviewed under the old text is reviewed
-  again under the new by fresh reviewers and counted the same way.
+  change cites it, and `atelier-ww7w`'s plan as its round 1 read it
+  (`6a2c26e`, 20 findings) is reviewed again under the new text by the same
+  two models, fresh, and counted the same way.
 - hosts: no record changes form, the new binary reports a new version, and
   the Result names each host and what it must do.
 

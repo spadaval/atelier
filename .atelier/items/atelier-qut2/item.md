@@ -50,10 +50,12 @@ missing stop are.
   says why the evidence does not support that.
 - [ ] `roles/lead.md` has the lead give the human the pace numbers when it
   reports on a mission.
-- [ ] One plan that was reviewed under the old text is reviewed again
-  under the new by two fresh reviewers, and the Report gives the verdicts
-  and the outcome and mechanism findings of both reviews side by side. No
-  eval matrix is run for this item.
+- [ ] `atelier-ww7w`'s plan as its round 1 read it, commit `6a2c26e`, is
+  reviewed again under the new text by two fresh reviewers on the models
+  of that round, `claude-opus-5-5` and `grok-4.6`. The Report gives the
+  verdicts and the outcome and mechanism findings beside those of the two
+  round-1 reviews there (`1-48x6`, `1-i2iw`: 20 findings). No eval matrix
+  is run for this item.
 - [ ] `evals/agent-factory/test.sh` passes.
 
 ## Scope
