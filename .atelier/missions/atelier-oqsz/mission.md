@@ -77,8 +77,10 @@ Items, in priority order: `atelier-f0sn` (`status`), `atelier-7ci6`
   plan diff, two-split stop and three-round cap stay: they limit how a
   spiral ends, and `atelier-qut2` is about why one starts.
 - `atelier-oiwy` is testing `roles/reviewer.md` and four parts of
-  `SKILL.md`. While it is open `atelier-qut2` changes neither, and files
-  what can only go there as an item blocked by it.
+  `SKILL.md`. While it is open `atelier-qut2` changes neither. What a
+  plan's reviewer is told goes in the brief `atelier review <mission>`
+  prints, which that test does not read, and what can only go in those
+  two files is filed as an item blocked by it.
 - `atelier-5asm`, `atelier-3sym`, `atelier-tuln` and `atelier-itqc` fix
   wrong lines in `status` and `log` and stay separate. `atelier-b0vb`
   stays the human's.

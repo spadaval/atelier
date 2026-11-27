@@ -60,10 +60,14 @@ missing stop are.
 
 ## Scope
 
-`skills/agent-factory/` and the documents that repeat it. While
+`skills/agent-factory/`, the documents that repeat it, and the brief
+`atelier review <mission>` prints, in `crates/` and its tests. While
 `atelier-oiwy` is open, change neither `roles/reviewer.md` nor the parts
-of `SKILL.md` before Starting Another Thread, which that item is testing;
-put text for a plan's reviewer where a plan's reviewer will read it
-without them, and file what can only go in those two files as an item
-blocked by `atelier-oiwy`. `atelier-b0vb`, the per-part question on
-plans, waits on the human: read it and leave it. No new role.
+of `SKILL.md` before Starting Another Thread, which that item is testing.
+A plan's reviewer reads the brief whatever those two files say, so what
+it is told goes there, and the second review of `atelier-ww7w`'s plan
+runs on a binary built from this item's branch. The brief for an item's
+review is not changed. File what can only go in those two files, the
+lighter later code round among it, as an item blocked by `atelier-oiwy`.
+`atelier-b0vb`, the per-part question on plans, waits on the human: read
+it and leave it. No new role.
