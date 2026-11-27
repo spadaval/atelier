@@ -3,12 +3,13 @@ schema: atelier.item
 schema_version: 3
 id: atelier-cpfd
 title: Show what a later review round cost in the pace line, from one verdict to the next, not only the reviewer's time
-status: open
+status: building
 mission: atelier-oqsz
 labels: []
 priority: medium
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3Aad94841c-cb71-4522-99ce-e39e71555f54%3Adelegate-task%3Aoqsz-impl-cpfd
 ready: null
 trivial: null
 caused_by: null
