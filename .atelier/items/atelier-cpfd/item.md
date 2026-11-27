@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-cpfd
 title: Show what a later review round cost in the pace line, from one verdict to the next, not only the reviewer's time
-status: building
+status: in_review
 mission: atelier-oqsz
 labels: []
 priority: medium
