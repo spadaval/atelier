@@ -74,7 +74,7 @@ enum Command {
     Show { id: String },
     /// The history of actions, read from Git, one line each, the 30 newest first, or with --all every one oldest first: of everything, of one item, or of one mission with its plan reviews and its items.
     ///
-    /// With no --all it ends by saying how many older actions it left out and the command that prints them, and a line over 300 characters is cut to 300 and ends with the command that prints it whole. With --all each line is whole, in the order a script can rely on.
+    /// With no --all it ends by saying how many older actions it left out, and a line over 300 characters is cut to 300 and says to add --all to read it whole. With --all each line is whole, in the order a script can rely on.
     ///
     /// Each line is the commit's time in UTC, the commit, the item or mission, the action, the thread that acted or `-` where no record holds one, then what changed, and last each rule its commit skipped as `skip <rule>: <reason> (by <thread>)`, or `(thread not recorded)` in a commit from before the thread was. Where a commit that passed a rule names the thread that ran the command, its action's line shows that thread. The first five hold no space; what changed and the skips are parts separated by `; `.
     ///

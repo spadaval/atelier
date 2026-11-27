@@ -1343,12 +1343,13 @@ command only formats it (`crates/atelier-cli/src/history.rs`).
 
 `atelier log` prints the 30 newest actions, newest first, so a reader
 with a cut view sees the last hour and not the first day. It ends by saying
-how many older actions it left out and the command that prints them, and
-cuts a line over 300 characters to at most 300, ending it with
-`[cut; <command> prints it whole]`, since a skip's reason is quoted in full
-and has run to 2,456 characters. On the Hub's history of 695 actions on
-2026-11-27, 174 KB whole, it printed 6 KB; 30 lines of 300 characters are at
-most 9 KB. `--all` prints every action, oldest first, each line whole: the
+how many older actions it left out and to add `--all` to see them, and cuts
+a line over 300 characters to at most 300, ending it with `[cut; add --all
+to print it whole]`, since a skip's reason is quoted in full and has run to
+2,456 characters. Neither names the command run, so no ID, however long,
+takes a line past 300. On the Hub's history of 695 actions on 2026-11-27,
+174 KB whole, it printed 6,160 bytes; the actions are at most 9,000
+characters, which is 9 KB when they are ASCII. `--all` prints every action, oldest first, each line whole: the
 order and form a script relies on, and what `log` printed before the limit.
 The scorecard's `freeze.py` and the garden procedure's counter read it.
 

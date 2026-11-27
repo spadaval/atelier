@@ -166,19 +166,12 @@ fn with_no_option_log_prints_the_newest_thirty_and_says_how_to_see_the_older_one
     assert_eq!(lines[..30], newest[..]);
     assert_eq!(
         lines[30],
-        "2 older actions not shown. `atelier log --all` prints every action, oldest first, each line whole."
+        "2 older actions not shown. Add --all to print every action, oldest first, each line whole."
     );
 
-    // `--since` narrows both, and the command it names keeps it.
-    let since = "2000-01-01";
-    let run = atelier(&root, "t9", &["log", "--since", since]);
-    assert!(
-        run.stdout.ends_with(
-            "\n2 older actions not shown. `atelier log --since 2000-01-01T00:00:00Z --all` prints every action, oldest first, each line whole.\n"
-        ),
-        "{}",
-        run.stdout
-    );
+    // With `--since`, the limit applies to what it keeps.
+    let run = atelier(&root, "t9", &["log", "--since", "2000-01-01"]);
+    assert_eq!(run.stdout, atelier(&root, "t9", &["log"]).stdout);
 }
 
 #[test]
@@ -197,17 +190,19 @@ fn a_line_over_300_characters_is_cut_and_says_where_it_is_whole() {
         "{}",
         whole[0]
     );
-    for (args, command) in [
-        (&["log"][..], "atelier log --all"),
-        (&["log", ID], &*format!("atelier log {ID} --all")),
+    for args in [
+        &["log"][..],
+        &["log", ID],
+        &["log", ID, "--since", "2000-01-01"],
     ] {
         let run = atelier(&root, "t9", args);
         assert_eq!(run.code, 0, "{}", run.stderr);
         let line = run.stdout.lines().next().unwrap();
         assert_eq!(run.stdout.lines().count(), 1, "{}", run.stdout);
         assert!(line.chars().count() <= 300, "{line}");
-        let tail = format!(" [cut; `{command}` prints it whole]");
-        let kept = line.strip_suffix(&tail).unwrap_or_else(|| panic!("{line}"));
+        let kept = line
+            .strip_suffix(" [cut; add --all to print it whole]")
+            .unwrap_or_else(|| panic!("{line}"));
         assert!(whole[0].starts_with(kept), "{line}");
     }
 }
