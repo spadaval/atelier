@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-hota
 title: Print atelier log newest first with a default limit
-status: changes_requested
+status: in_review
 mission: atelier-oqsz
 labels: []
 priority: low
@@ -52,19 +52,19 @@ to those items.
 
 With no option, `atelier log`, `atelier log <item>` and `atelier log
 <mission>` now print the 30 newest actions, newest first, and end with
-`<n> older actions not shown. `atelier log [<id>] [--since <time>] --all`
-prints every action, oldest first, each line whole.` A line over 300
-characters is cut and ends with `[cut; `<that command>` prints it whole]`.
-`--all` prints exactly what `log` printed before. The change is in
-`crates/atelier-cli/src/history.rs` and the help in `main.rs`; nothing in
-`atelier_core::log` changed.
+`<n> older actions not shown. Add --all to print every action, oldest
+first, each line whole.` A line over 300 characters is cut and ends with
+`[cut; add --all to print it whole]`. Neither names the command run, so no
+ID takes a line past 300 (round 2). `--all` prints exactly what `log`
+printed before. The change is in `crates/atelier-cli/src/history.rs` and
+the help in `main.rs`; nothing in `atelier_core::log` changed.
 
 - **Size on the Hub.** In `~/.t3/worktrees/industrial-experience-hub/v2`
-  on 2026-11-27, `atelier log` printed 6,168 bytes in 31 lines, against
+  on 2026-11-27, `atelier log` printed 6,160 bytes in 31 lines, against
   174,415 bytes in 695 lines whole. Its longest line was 271 characters;
   `atelier log hub-v2-524p` cut its 1,000-character merge line to 300.
   The largest mission log there, `hub-v2-j0ms`, printed 6,713 bytes.
-  30 lines of 300 characters bound it at 9 KB.
+  The actions are at most 9,000 characters, 9 KB when ASCII.
 - **Same answers for readers.** `atelier log --all` from this build is
   byte for byte the installed 0.7.0's `atelier log`, on this repository
   and on the Hub (whole and for `hub-v2-524p`). The garden counter's awk,
@@ -76,17 +76,23 @@ characters is cut and ends with `[cut; `<that command>` prints it whole]`.
   read order or a whole skip line pass `--all`. New: the plain path and
   the mission test check the default is the `--all` lines reversed; one
   test makes 32 actions and checks the 30 newest and the footer, with
-  `--since` kept in the command it names; one checks a 500-character skip
-  line is cut to at most 300 and names `atelier log [<id>] --all`.
-  `cargo nextest run --workspace`: 475 passed. `cargo fmt`, `cargo clippy
+  `--since`; one checks a 500-character skip line is cut to at most 300,
+  with and without `--since`; a unit test in `history.rs` checks that a
+  cut of a line with a 250-character ID, and the closing line for any
+  count, stay within 300. `cargo nextest run -p atelier-cli`: 283 passed. `cargo fmt`, `cargo clippy
   --all-targets -- -D warnings` and `git diff --check` are clean.
 - **Docs.** `docs/design.md`, The log, says the order, the limit, the cut
   and `--all`, with the Hub's numbers; `--since` applies before the limit.
 
-A cut can in principle reach into the thread field when a thread's ID is
-over about 220 characters; none in either repository is. Scripts should
+A cut can in principle reach into the thread field when an ID and a
+thread together pass about 250 characters; none in either repository do. Scripts should
 read `--all`, where nothing is cut.
 
 The limit is a fixed 30, with no `--limit`; `--all | tail -n <n>` covers
 the rest. Installed copies keep printing the old way until they are
 rebuilt from this tree.
+
+### Responses
+
+1-ja9k.1: fixed in 4972586d7
+1-ja9k.2: fixed in 4972586d7
