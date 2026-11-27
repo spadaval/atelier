@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-7ci6
 title: Refuse a merge whose merge check failed unless the reason was given for that failure, and say plainly when one is passed
-status: building
+status: in_review
 mission: atelier-oqsz
 labels: []
 priority: medium
