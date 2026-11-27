@@ -106,7 +106,7 @@ fn a_skipped_rule_is_printed_and_trailed_in_the_commit_of_start_submit_verdict_a
         "{}",
         message(&root, "HEAD")
     );
-    let log = atelier(&root, "t9", &["log", ID]).stdout;
+    let log = atelier(&root, "t9", &["log", "--all", ID]).stdout;
     let line = format!(" changes; in_review -> changes_requested; skip {none}: {REASON} (by t2)");
     assert!(log.lines().last().unwrap().ends_with(&line), "{log}");
 

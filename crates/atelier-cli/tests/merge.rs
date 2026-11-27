@@ -2306,7 +2306,7 @@ fn a_reason_that_names_a_failing_merge_check_merges_past_it_and_says_so_last() {
     assert_eq!(parsed.lines().next(), Some(ID), "{parsed}");
     assert_eq!(parsed.lines().count(), 4, "{parsed}");
     // `atelier log` shows the failed check as it shows every rule passed.
-    let log = atelier(&root, "t1", &["log"]);
+    let log = atelier(&root, "t1", &["log", "--all"]);
     assert!(
         log.stdout
             .contains(&format!("skip {}: {said_reason} (by t1)", rules[1])),

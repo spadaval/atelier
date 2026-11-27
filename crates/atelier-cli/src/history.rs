@@ -1,6 +1,7 @@
 //! `log`: the history of actions that `atelier-core` returns, one line each
-//! (docs/design.md, The log). The line's layout lives here; the words for
-//! what changed are the core's, which the Desk shows too.
+//! (docs/design.md, The log). The line's layout lives here, and the order
+//! and limit a reader gets; the words for what changed are the core's, which
+//! the Desk shows too.
 
 use crate::commands::Outcome;
 use crate::view_output;
@@ -9,7 +10,18 @@ use atelier_core::model::Thread;
 use atelier_core::{history, Logged, Repo};
 use chrono::{DateTime, Utc};
 
-pub fn log(repo: &mut Repo, id: Option<&str>, since: Option<DateTime<Utc>>) -> Result<Outcome> {
+/// How many actions `log` prints with no `--all`, newest first: at most
+/// 9,000 characters of actions at [`WIDTH`] a line, and one line more.
+pub const LIMIT: usize = 30;
+/// The most characters a line holds with no `--all`.
+pub const WIDTH: usize = 300;
+
+pub fn log(
+    repo: &mut Repo,
+    id: Option<&str>,
+    since: Option<DateTime<Utc>>,
+    all: bool,
+) -> Result<Outcome> {
     let Some(history) = history(repo, id, since)? else {
         let id = id.expect("only an ID can name no record");
         return Ok(Outcome::Refused(view_output::unknown(id, &repo.base)));
@@ -22,7 +34,38 @@ pub fn log(repo: &mut Repo, id: Option<&str>, since: Option<DateTime<Utc>>) -> R
             one_line(&passed.problem)
         );
     }
-    Ok(Outcome::Done(history.actions.iter().map(line).collect()))
+    if all {
+        return Ok(Outcome::Done(history.actions.iter().map(line).collect()));
+    }
+    let mut out: String = history
+        .actions
+        .iter()
+        .rev()
+        .take(LIMIT)
+        .map(|logged| cut(line(logged)))
+        .collect();
+    let older = history.actions.len().saturating_sub(LIMIT);
+    if older > 0 {
+        let actions = if older == 1 { "action" } else { "actions" };
+        out += &format!("{older} older {actions} not shown. {WHOLE}\n");
+    }
+    Ok(Outcome::Done(out))
+}
+
+/// What a reader adds to see everything whole. It names no ID, so no line
+/// that says it outgrows [`WIDTH`].
+const WHOLE: &str = "Add --all to print every action, oldest first, each line whole.";
+
+/// `line`, a printed line ending in a line break, held to [`WIDTH`]
+/// characters: one longer is cut and ends saying where it is whole.
+fn cut(line: String) -> String {
+    let text = line.trim_end_matches('\n');
+    if text.chars().count() <= WIDTH {
+        return line;
+    }
+    let tail = " [cut; add --all to print it whole]";
+    let kept: String = text.chars().take(WIDTH - tail.chars().count()).collect();
+    format!("{}{tail}\n", kept.trim_end())
 }
 
 /// `<time> <commit> <id> <action> <thread>`, then what changed, then each
@@ -68,4 +111,21 @@ pub fn passed_by(thread: Option<&Thread>) -> String {
 /// `text` with its whitespace made single spaces, so a line stays one.
 pub fn one_line(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// No ID or thread, however long, takes a printed line past the width:
+    /// the cut's ending and the closing line name none.
+    #[test]
+    fn a_cut_line_and_the_closing_line_stay_within_the_width() {
+        let long = format!("{} {}\n", "a".repeat(250), "b".repeat(5000));
+        let cut = cut(long);
+        assert!(cut.trim_end().chars().count() <= WIDTH, "{cut}");
+        assert!(cut.ends_with(" [cut; add --all to print it whole]\n"));
+        let closing = format!("{} older actions not shown. {WHOLE}", usize::MAX);
+        assert!(closing.chars().count() <= WIDTH, "{closing}");
+    }
 }
