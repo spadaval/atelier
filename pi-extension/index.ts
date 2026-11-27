@@ -109,7 +109,11 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.on("turn_end", async (_event, ctx) => {
-    log(ctx, "turn", { context: ctx.getContextUsage?.() ?? null });
+    try {
+      log(ctx, "turn", { context: ctx.getContextUsage?.() ?? null });
+    } catch {
+      // Logging never disturbs the run.
+    }
   });
 
   pi.on("session_compact", async (event, ctx) => {
@@ -129,12 +133,14 @@ export default function (pi: ExtensionAPI) {
     if (message?.role !== "assistant" || !Array.isArray(message.diagnostics) || message.diagnostics.length === 0) return;
     const bytes = size(message.diagnostics);
     // The session file keeps every diagnostic in full; the log keeps them when they are small.
-    log(ctx, "diagnostics", { count: message.diagnostics.length, bytes, diagnostics: bytes <= 20_000 ? message.diagnostics : null });
+    log(ctx, "diagnostics", { count: message.diagnostics.length, bytes, diagnostics: bytes >= 0 && bytes <= 20_000 ? message.diagnostics : null });
   });
 
   // Each time the agent stops: what it holds and where that stands. Counting the
   // stops with an item still building says whether a completion gate is worth building.
   pi.on("agent_settled", async (event, ctx) => {
+    // The session can be replaced while git runs, and a stale ctx throws: stay silent then too.
+    try {
     const branch = (await run("git", ["branch", "--show-current"], { cwd: ctx.cwd, timeoutMs: 5000 })).stdout.trim();
     log(ctx, "settled", {
       aborted: (event as { aborted?: boolean }).aborted === true,
@@ -145,6 +151,9 @@ export default function (pi: ExtensionAPI) {
       pendingMessages: ctx.hasPendingMessages?.() ?? null,
       context: ctx.getContextUsage?.() ?? null,
     });
+    } catch {
+      // Logging never disturbs the run.
+    }
   });
 
   // Codex and Claude Code run `atelier status` from a session-start hook. Pi

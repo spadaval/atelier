@@ -18,6 +18,10 @@ import {
   unticked,
 } from "./lib.ts";
 
+// Every test logs somewhere disposable, never to the real ~/.local/state/atelier-pi.
+const SCRATCH_LOGS = mkdtempSync(join(tmpdir(), "pi-ext-logs-"));
+process.env.ATELIER_PI_LOG_DIR = SCRATCH_LOGS;
+
 const ITEM = `---
 id: demo-1
 title: Print the merge line
@@ -240,6 +244,7 @@ test("the session log records tools, context, compaction, diagnostics and stops,
   const dir = checkout("demo-1");
   const logs = mkdtempSync(join(tmpdir(), "pi-ext-log-"));
   process.env.ATELIER_PI_LOG_DIR = logs;
+  try {
   const bin = fakeBin({ status: "You are the implementer of demo-1 (thread t1).", guard: "{}" });
   process.env.PATH = `${bin}:${process.env.PATH}`;
   const pi = await load();
@@ -294,7 +299,19 @@ test("the session log records tools, context, compaction, diagnostics and stops,
   process.env.ATELIER_PI_LOG_DIR = join(logs, "a-file", "logs");
   await pi.fire("turn_end", {}, ctx);
   await pi.fire("agent_settled", { aborted: true }, ctx);
-  delete process.env.ATELIER_PI_LOG_DIR;
+  // Diagnostics that cannot be serialized still leave a row, without their content.
+  process.env.ATELIER_PI_LOG_DIR = logs;
+  const loop = {}; loop.self = loop;
+  await pi.fire("message_end", { message: { role: "assistant", diagnostics: [loop] } }, ctx);
+  const last = JSON.parse(readFileSync(join(logs, "2026_abc.jsonl"), "utf8").trim().split("\n").at(-1));
+  assert.deepEqual({ event: last.event, count: last.count, bytes: last.bytes, diagnostics: last.diagnostics }, { event: "diagnostics", count: 1, bytes: -1, diagnostics: null });
+  // A context that throws once the session is gone does not surface an error.
+  const stale = { ...ctx, getContextUsage: () => { throw new Error("stale"); }, hasPendingMessages: () => { throw new Error("stale"); } };
+  await pi.fire("turn_end", {}, stale);
+  await pi.fire("agent_settled", { aborted: false }, stale);
+  } finally {
+    process.env.ATELIER_PI_LOG_DIR = SCRATCH_LOGS;
+  }
 });
 
 test("a background command can be started, read and stopped", async () => {
