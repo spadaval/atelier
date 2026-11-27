@@ -92,3 +92,30 @@ may change `roles/reviewer.md` and all of `SKILL.md` itself, and the item
 its Scope would have filed for them is not needed. If `atelier-oiwy` is
 still open when the three other items are merged, `atelier-qut2` starts
 with its Scope as written.
+
+## 2026-11-27: the human steers atelier-qut2, and one criterion is set aside
+
+Sumeet, in thread `cf983ef7-3317-404a-9c82-373f732b9e07`, answered "Okay.
+Do it." to a proposal that steers `atelier-qut2`. The lead read that
+thread before acting and rewrote the item's Goal, Done when and Scope on
+`backlog/steer-qut2`:
+
+- **Added:** a planner does not write later items' checklists up front,
+  and a lead may reshape an item's Done when as earlier items land, inside
+  the Outcome and Authority.
+- **Added:** an item's reviewer raises `Shrink:` against a Done when line
+  that asks for more than the Outcome needs.
+- **Added:** `roles/reviewer.md` and `SKILL.md` do not grow.
+- **Removed:** the second review of `atelier-ww7w`'s plan. The proposal
+  offered this as something to consider, to save tokens, and the thread
+  that relayed it gave it as decided; the lead took it as decided.
+
+The plan's skill-measured criterion still names that second review. It
+will not be met in that part, by the human's direction, and the Result
+will say so. What is lost: this plan's own review tested how a plan is
+written, and nothing now tests what a plan's reviewer is told. The pace
+line on the next real missions is the test in its place.
+
+The same direction: no new Atelier feature, Desk or eval mission after
+this one closes, and `atelier-oiwy` closes before `atelier-qut2` starts,
+so that item's freeze on the two files no longer applies.
