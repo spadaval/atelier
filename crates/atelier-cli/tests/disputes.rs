@@ -354,13 +354,12 @@ fn a_missions_disputes_are_listed_for_it_shown_with_it_and_told_to_its_lead() {
         shown.contains(&format!("\nDisputed:\n{rebuttal}{split}")),
         "{shown}"
     );
-    // The lead's status counts them and names the command that lists them.
     let status = atelier(&base, "lead1", &["status"]).stdout;
     assert!(
-        status.contains(
-            "  Disputed, which nothing waits on and you settle, either way, recording your \
-             ruling: 2; each with: atelier list --disputed --mission demo-m1ss\n"
-        ),
+        status.contains(&format!(
+            "Disputed in this mission (nothing waits on these; you settle each, either way, and \
+             record your ruling):\n{rebuttal}{split}"
+        )),
         "{status}"
     );
     // The implementer's own status is not changed by it.

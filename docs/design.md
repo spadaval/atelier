@@ -747,8 +747,9 @@ now; or one line saying nothing there waits on it. Then each mission it
 leads (`view_output::led`): one line of review pace, one line for each item
 not done, giving its status, an open item's priority, an item in review
 with no reviewer, its blocker when it has one and how many when more, whether it can start
-now, and an approval gone stale, and one line counting the done ones and
-one counting what is disputed, naming `list --disputed --mission <id>`. It
+now, and an approval gone stale, one line counting the done ones, and
+each rebuttal and split plan round in it, two lines each, as `list
+--disputed` gives them. It
 leaves out each holder's thread ID, each blocker's status and the
 conditions a holder's `status` lists as unmet, which made a lead's `status`
 of three missions 17,870 bytes on the Hub, of which a harness showed the

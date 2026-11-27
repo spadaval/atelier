@@ -690,7 +690,7 @@ pub fn lead_waits(led: &[(MissionDir, Vec<Entry>, Disputes)]) -> String {
 
 /// Each mission `status`'s caller leads, after what waits on it: the
 /// mission's review pace, from `paces` in the same order, its items not
-/// done, one line each, and how many are done. `atelier show <item>` has
+/// done, one line each, how many are done, and what is disputed in it. `atelier show <item>` has
 /// the rest of each, and the first line names it.
 pub fn led(led: &[(MissionDir, Vec<Entry>, Disputes)], paces: &[Pace]) -> String {
     if led.is_empty() {
@@ -718,12 +718,13 @@ pub fn led(led: &[(MissionDir, Vec<Entry>, Disputes)], paces: &[Pace]) -> String
             (true, n) => text += &format!("  All {n} done.\n"),
             (false, n) => text += &format!("  And {n} done.\n"),
         }
-        let disputed = disputed.rebuttals.len() + disputed.plans.len();
-        if disputed > 0 {
-            text += &format!(
-                "  Disputed, which nothing waits on and you settle, either way, recording your ruling: {disputed}; each with: atelier list --disputed --mission {}\n",
-                dir.mission.id
-            );
+        if !disputed.rebuttals.is_empty() || !disputed.plans.is_empty() {
+            text += "Disputed in this mission (nothing waits on these; you settle each, either way, and record your ruling):\n";
+            let rest = Disputes {
+                not_built: Vec::new(),
+                ..disputed.clone()
+            };
+            text += &disputes(&rest);
         }
     }
     text
