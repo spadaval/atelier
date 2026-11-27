@@ -161,3 +161,33 @@ The lead cut the `house` run of a kept passage from atelier-oiwy, to spare
 the allowance: the reviewer there is the same model at a higher effort.
 The item stays open, and a scheduled task restarts its implementer at
 00:30 on 2026-11-23.
+
+## 2026-11-27: the human closes atelier-oiwy on what it has, and the lead rules on the scale
+
+The scheduled restart of 2026-11-23 did not run. The lead disabled it on
+2026-11-19, after the human asked how 1,754 eval runs could be justified,
+and deleted it on 2026-11-22. atelier-oiwy sat open for eight days.
+
+On 2026-11-27 the human ruled, in the thread that plans mission
+atelier-oqsz: "Yeah, close it." The recommendation he accepted was to close
+the item on the evidence it has, with no more runs, the lead ruling on the
+scale. The lead read his words there before acting.
+
+The lead's rulings:
+
+- No more eval runs. The replays no review has ever found stay at the runs
+  made, and nothing runs in `house`.
+- "What to judge" is left out, by the item's rule.
+- The human's scale is merged into `roles/reviewer.md`, by this ruling and
+  not by the item's rule, which the unrun cases leave unmet. On the 14
+  review cases whose runs finished in both matrices, reviews with the skill
+  raised 9 fix-now findings the judge rated useful or nit, and reviews with
+  the scale none; the known defects found were 9 against 10 and 10 against
+  10. The passage is the human's own design, it answers a measured cost (27
+  of 117 blocking findings in real reviews were useful or nit, and all were
+  built), and one revert undoes it. Unmeasured: its effect on the cases
+  that hold most fix-now findings, and on Sol at `xhigh`. The next survey
+  of real reviews is where it shows.
+
+The lead of atelier-oqsz holds its item atelier-qut2 off `roles/reviewer.md`
+until atelier-oiwy merges, and is told when it does.
