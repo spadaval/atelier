@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-u88z
 title: Log what a Pi thread did to a file, so the comparison runs yield tool, context and stop data
-status: changes_requested
+status: in_review
 mission: null
 labels: []
 priority: medium
@@ -40,3 +40,10 @@ Validation: `node --test pi-extension/test.mjs` passes all 13 tests; `git diff -
 How this item was written, which a reviewer should know: the logging code and its test were written by the thread that holds the item. During a real-model check, a Sol session in Pi was given a one-line prompt asking for a single `codemode` call. It ignored the prompt, took the extension's start message as its assignment, and instead added `toolCallId` and byte sizes to the log rows, wrote the README section and this record's Goal, Done when and first Report paragraphs, committed and ran `atelier submit`. Its changes were read afterward and kept. Treat the whole diff as unreviewed.
 
 Checked afterward against Pi 1.6.1 with `gpt-6.1-sol`: a `bash` call made from inside a `codemode` script is logged with the script's call as its `parent`; context size is logged at every turn; and the stop is logged with the item's status. Not seen in a real run: a compaction row or a diagnostics row, since no short session produces either.
+
+### Responses
+
+- 1-l1rx.1: fixed in 66b3abeb8
+- 1-l1rx.2: fixed in 66b3abeb8
+- 1-l1rx.3: fixed in 66b3abeb8
+- 1-l1rx.4: fixed in 66b3abeb8
