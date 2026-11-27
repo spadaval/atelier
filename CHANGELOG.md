@@ -4,6 +4,129 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.8.0] - 2026-11-27
+
+An item now needs no go-ahead: it is open from the moment it is filed, and
+`atelier start` takes it once its blockers are done. `status` puts what
+waits on the reader first and gives a lead a line of review pace, `log`
+prints the 30 newest actions, and a failed merge check is passed only by a
+reason that names it. An implementer can answer a finding `not built`,
+which goes to the mission's lead, and can file an item on the branch it
+works on.
+
+0.8.0 reads a 0.7.0 repository's records, configuration and hooks as they
+are. No record changes form: `draft` and `ready` read as `open`, and no
+migration and no new `atelier setup` are needed. It does write two
+spellings a 0.7.0 binary refuses: `status: open` on a new or changed item,
+and the Response `<finding>: not built: <reason>`.
+
+### Updating a host
+- Install the tracker as before: `cargo install --path crates/atelier-cli
+  --locked` from this tree, or the release's archive. `atelier --version`
+  then says 0.8.0.
+- Update every reader of a repository before any repository holds an open
+  item: this host's `atelier`, the Desk (`desk/service/install.sh`) and the
+  T3 Code extension (`t3-extension-v0.3.0` or later), and any CI that pins
+  `ATELIER_REV` to v0.7.0. A 0.7.0 binary exits 2 from `status` and `list`
+  for the whole repository, and its `check` fails, on one open item.
+- A script that reads plain `atelier log` must pass `--all`. Plain `log`
+  now prints the 30 newest actions, newest first, cuts a line at 300
+  characters and ends with how many older actions it left out. `--all`
+  prints exactly what 0.7.0's `log` printed. This tree's garden procedure,
+  freeze script and scorecard already pass `--all`.
+- A repository that keeps its own copy of the Agent Factory skill, such as
+  under `.agents/skills/agent-factory`, refreshes it from this tree's
+  `skills/agent-factory` when it installs the binary. An old copy's garden
+  procedure counts merges from plain `log` and would see only the 30
+  newest actions.
+- A lead who passed a failed merge check with any `ATELIER_SKIP` reason
+  must now name the check: `ATELIER_SKIP="<check>: <why it may fail>"
+  atelier merge`, with the check's command as `config.toml` gives it. The
+  refusal prints that line ready to copy.
+
+### For agents using `atelier`
+- Items need no go-ahead. `new` writes `status: open`, `start` takes any
+  open item on the base whose blockers are done, and `atelier ready` is
+  refused with "Items need no go-ahead". `list --startable` replaces `list
+  --ready`.
+- `status` puts what waits on the reader first, one line per item. A lead
+  sees, in order, what it holds, what waits on its ruling, each mission it
+  leads with a review pace line and its items, and then the backlog. The
+  pace line gives rounds per item, the reviewer's time a round, the time
+  from one verdict to the next, and the new findings after round 1. With
+  nothing held, `status` lists the 10 most urgent items that can start and
+  how many more `list --startable` shows. In the base's checkout it ends
+  with the `cd` or `git worktree add` that reaches the held branch.
+- `log`, `log <item>` and `log <mission>` print the 30 newest actions,
+  newest first; `--all` prints every one, oldest first, each line whole.
+  `log` also prints `plan` when a mission's plan is written and
+  `plan-merge` when it merges, where a plan merged past a rule printed
+  `merge`.
+- A failed merge check stops `merge` unless the `ATELIER_SKIP` reason
+  names it. In 0.7.0 a reason given for another rule carried the merge
+  past it, and the merge commit listed the check as passed. A merge that
+  goes past one now ends with a line saying so, and its commit lists the
+  check under the checks that failed.
+- An implementer may answer a finding `<finding>: not built: <reason>`.
+  `submit` counts it as the answer, the lead's `status`, `show <mission>`
+  and `list --disputed` list it, the next round's reviewer is told not to
+  judge it again, and `merge` refuses until the lead passes it with
+  `ATELIER_SKIP="<ruling>" atelier merge`.
+- `new` files an item on any started item's branch, as implementer or
+  reviewer, and the new record makes no approval stale. `merge` refuses
+  while a filed item is uncommitted, and `drop` names what the dropped
+  branch filed.
+- `merge` deletes the branch it merged, on the remote and locally, and
+  leaves the checkout detached at the merged commit. `drop` on a
+  `backlog/*` branch ends a started item. `status` counts merged branches
+  and detached worktrees when they pile up. Planning commands refuse a
+  detached HEAD.
+- Review rounds end in a ruling. A later plan round gets the diff of the
+  plan since the last round. Two split plan rounds stop `submit`, which
+  sends the plan to the human. From round 3 of a code review, changes
+  requested go to the mission's lead. A later code round reviews the
+  commits since the last round, not the whole change again. An item's
+  brief prints its mission's Outcome and asks for a `Shrink:` finding
+  against a Done when line that asks for more than it needs.
+- A commit that passes a rule records who passed it, as `Atelier-Skip-By:
+  <thread>`. `log` shows that thread, and `show <mission>` lists every
+  rule the mission's commits passed, with its reason and thread.
+- The handoffs name a step that works: `submit` tells the reviewer `In
+  <path>, run atelier review <id>`, the pre-push hook prints the one
+  `atelier start --new` line that moves refused commits to a branch, and a
+  Response that does not read is refused with the three forms quoted.
+
+### The skill
+- The lead is in charge of its mission: the process is its default, and
+  any departure is made with its reason. It settles a dispute either way,
+  and may split, shrink or rewrite an item's Done when within the Outcome.
+- A plan is written as outcomes, and a plan reviewer defers findings about
+  how an item is built.
+- The reviewer's role holds the severity scale for findings.
+- An approved garden run merges at once; its proposals and bugs follow on
+  `backlog/garden-proposals`. A lead or gardener files what it finds on
+  the branch it holds.
+
+### The Desk
+- No page shows `draft` or `ready`. Loose open items are one list, most
+  urgent first, and each unstarted item says whether it can start or what
+  it waits on.
+- `GET /api/repos/{repo}/missions/{id}/history` serves a mission's
+  timeline: its plan, its plan's merge and its items' actions.
+- The item page shows a `not built` Response. `/api/thread` carries how
+  many requests, such as an approval, wait on a thread, so the extension's
+  mission page lists that thread under Needs you.
+
+### Changed
+- The T3 Code extension is released on its own `t3-extension-v*` tags and
+  updates itself from them (`t3-custom update`); see
+  `t3-extension/README.md`. It draws the panel, the mission page and the
+  project home natively in T3 Code.
+- `pi-extension/` is an experiment: it runs a Pi thread with Atelier's
+  role, guard and Done when reminders, for comparison with Codex. No CI
+  job runs it.
+- A release build of `atelier` prints no warning.
+
 ## [0.7.0] - 2026-11-16
 
 The Desk can now be shown inside T3 Code: in its panel beside a thread, and
