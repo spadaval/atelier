@@ -3,12 +3,13 @@ schema: atelier.item
 schema_version: 3
 id: atelier-fbte
 title: Set the version to 0.8.0 and tell a host what changes when it updates
-status: open
+status: building
 mission: atelier-oqsz
 labels: []
 priority: medium
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A9a9dbac4-2254-4e6f-a69b-b8075e32a1ff%3Adelegate-task%3Aoqsz-impl-fbte
 ready: null
 trivial: null
 caused_by: null
