@@ -36,3 +36,8 @@ Pi extension logging and its tests and documentation; no completion gate or chan
 Implemented in 47567edc1. Added best-effort per-session JSONL logging with tool IDs and parent IDs, UTF-8 sizes, execution and wall timing, context snapshots, compaction outcomes, bounded provider diagnostics and settled Atelier state. Documented location, fields and privacy considerations in pi-extension/README.md.
 
 Validation: `node --test pi-extension/test.mjs` passes all 13 tests; `git diff --check` passes. Tests use a stand-in Pi emitter rather than a live provider. Coverage includes nested calls, compaction success/failure, diagnostics, passive handler returns and an unwritable destination.
+
+How this item was written, which a reviewer should know: the logging code and its test were written by the thread that holds the item. During a real-model check, a Sol session in Pi was given a one-line prompt asking for a single `codemode` call. It ignored the prompt, took the extension's start message as its assignment, and instead added `toolCallId` and byte sizes to the log rows, wrote the README section and this record's Goal, Done when and first Report paragraphs, committed and ran `atelier submit`. Its changes were read afterward and kept. Treat the whole diff as unreviewed.
+
+Checked afterward against Pi 1.6.1 with `gpt-6.1-sol`: a `bash` call made from inside a `codemode` script is logged with the script's call as its `parent`; context size is logged at every turn; and the stop is logged with the item's status. Not seen in a real run: a compaction row or a diagnostics row, since no short session produces either.
+
