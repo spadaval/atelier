@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-3km9
 title: Let mission lead merge approved items, make architecture/decisions living docs, and update role skills
-status: in_review
+status: changes_requested
 mission: null
 labels: []
 priority: medium
