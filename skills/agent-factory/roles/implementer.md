@@ -8,13 +8,20 @@ If a Done when line turns out much harder or bigger than the Goal justifies,
 or no longer fits what landed earlier, ask your mission's lead (or the thread
 that started you) to shrink or rewrite the item before building it.
 
+If you hit a non-trivial blocking bug in shared test fixtures, harnesses, or
+platform code, ask the lead to split it into a separate `enabler` item rather
+than burying unrelated infrastructure rewrites inside a feature diff; if it is
+large and tangential, file it as a new item and move on.
+
 ## Findings
 
 You pass no rule on your own work. A fix-now finding blocks the merge, and
 you do not ignore it. Answer it with one line under `### Responses`, by one
 of three exits:
 
-1. Fix it: `<finding>: fixed in <commit>`.
+1. Fix it: `<finding>: fixed in <commit>`. On round 2 or later, fix the
+   underlying invariant and check sibling code paths — do not point-patch only
+   the single cited repro case.
 2. Where it is wrong, rebut it once, with a fact or a test:
    `<finding>: rebutted: <fact>`. A fresh reviewer judges the rebuttal, and
    keeps the finding or withdraws it.

@@ -77,7 +77,7 @@ Each word has one meaning in the CLI, its help, the docs and the skill.
 | Word | Meaning |
 | --- | --- |
 | Mission | A batch of related work the human hands to agents to run unattended. It has an outcome, limits on what agents may decide, and an end. A theme with no end is a label. |
-| Plan | What a mission's two plan reviews approve: the Why, Outcome, Success criteria, Scope and Authority sections of `mission.md`, the documents beside it other than `notes.md` and its reviews, and, until the plan has merged, the mission's items. Nothing called a plan is stored. |
+| Plan | What a mission's two plan reviews approve: the Why, Outcome, Success criteria, Scope and Authority sections of `mission.md`, the documents beside it other than `notes.md`, `architecture.md`, `decisions.md` and its reviews, and, until the plan has merged, the mission's items. Nothing called a plan is stored. |
 | Proposed | A mission whose record says `open` and is read from a branch that has not merged. It is shown, never stored. |
 | Agreed | A mission whose record is on the base. Its plan merged after two approving plan reviews. |
 | Branch | Where a thread's changes live until they merge. There are three kinds, named by convention: an item's ID, a mission's ID, and `backlog/<slug>` for record changes tied to neither. |
@@ -321,7 +321,7 @@ matter; `set` and the status commands write it.
 | --- | --- |
 | `start <id>` | On an open item on the base whose blockers are done: creates branch `<id>` from the base, sets `building`, binds this thread as implementer, and pushes the branch where a remote is configured, which is the claim. On a started item: switches to its branch and takes it over. For either, where a remote is configured, it first fetches the base and refuses an item done or dropped there, and after its push looks again. `start --new "<title>"` creates an item on a new branch already `building`, for work the human asked for directly. In the checkout that has the base out, `start` makes the branch without switching and prints the Git command that adds a worktree for it. |
 | `submit` | Where a remote is configured, fetches the base and refuses an item done or dropped there. Checks every Done when line is ticked, the Report is written, and each open fix-now finding has a response; sets `in_review` and commits the item's directory; opens a new round; prints the reviewer's handoff line. On a branch that proposes or changes a plan, it opens a round of plan review, and refuses to once the change's last two rounds split. Where a forge is configured it then pushes the branch and opens its pull request, so CI runs while the review does; a push or pull request that fails is a warning, and `merge` does it later. |
-| `merge` | Runs the checks below and merges the branch. With a forge, the forge merges the pull request, as a merge commit; without one, `merge` makes the merge commit and moves the base locally. If CI has not finished it waits for it, up to 9 minutes, then says "not yet" and is run again later. Once merged, it deletes the branch, on the forge's remote and here. Its only flag is `--trivial "<why>"`, which skips review for a change whose correctness is evident from the diff and records the claim. |
+| `merge` | Runs the checks below and merges the branch. On an approved item of a mission, the mission's lead may also run `merge` without holding the item or passing `ATELIER_SKIP`; `--trivial` and `submit` remain implementer-only. With a forge, the forge merges the pull request, as a merge commit; without one, `merge` makes the merge commit and moves the base locally. If CI has not finished it waits for it, up to 9 minutes, then says "not yet" and is run again later. Once merged, it deletes the branch, on the forge's remote and here. Its only flag is `--trivial "<why>"`, which skips review for a change whose correctness is evident from the diff and records the claim. |
 
 ### Reviewer
 
@@ -392,7 +392,8 @@ one. A lead's
 
 On an item's branch, a thread that holds nothing on the item is offered the
 take-over, and a reviewer whose review is done is told to stop. The lead of
-the item's mission is told it leads the mission and is offered no take-over. In
+the item's mission is told it leads the mission, is offered `atelier merge`
+once the item is approved, and is offered no take-over. In
 a Git checkout with no `.atelier/`, `status` says this is not an Atelier
 repository and exits 2.
 
@@ -437,6 +438,8 @@ with the harness's own tool, using a line the tool prints:
   missions/<id>/
     mission.md
     design.md             optional
+    architecture.md       optional; living technical map, not part of the plan
+    decisions.md          optional; living DACI tradeoffs and decisions, not part of the plan
     notes.md              optional; the lead's notes, not part of the plan
     <other documents>     spikes, comparisons, mockups
     reviews/1-k3fa.md     plan reviews
@@ -450,7 +453,7 @@ with the harness's own tool, using a line the tool prints:
 | --- | --- | --- | --- |
 | `mission.md` | status (`open`, `done` or `dropped`), labels, lead thread, planner threads | Why, Outcome, Success criteria (optional), Scope, Authority, Result | The human's direction, recorded by the planner, whose Why says whose direction it is; the lead writes Result |
 | `design.md` and other documents | none required | Shape, Design, Sizing, Derisking, Risks and unknowns | Agents |
-| `notes.md` | none | Free text | The lead |
+| `notes.md`, `architecture.md`, `decisions.md` | none | Free text (notes, living contracts, DACI decisions) | Agents / the lead |
 | `item.md` | status, mission, labels, priority, blocked-by, caused-by, implementer threads, trivial, and in an old record who made it ready | Goal, Done when, Scope, Report (with Validation and Responses) | The planner writes the definition; the implementer writes the Report |
 | `reviews/<round>-<suffix>.md` | round, commit reviewed, reviewer threads and model, verdict | Summary and limits, then one heading per finding with its recommendation | The reviewer |
 
@@ -467,8 +470,9 @@ Rules:
   needs two approving plan reviews again before it merges. The other
   documents in a mission's directory are the agents', and they may change
   them during the run inside the limits Authority sets; a change to one of
-  them is a change to the plan, except to `notes.md`. The Result, the lead,
-  the notes and the status are records, not plan.
+  them is a change to the plan, except to `notes.md`, `architecture.md` and
+  `decisions.md`. The Result, the lead, the living documents and the status
+  are records, not plan.
 - When a mission was created is read from the commit that created it, which
   `log` already reads; a mission's record stores no time.
 - A small mission may put a short Design section in `mission.md` and have no
@@ -620,7 +624,9 @@ record is committed on the base.
 once the branch has what its contents need (see [Branches](#branches)). A
 mission's or a backlog branch needs its two plan approvals or its passing
 `atelier check`, and a mission dropped on its branch is refused. On an
-item's branch, `merge` runs only on an approved item, or with `--trivial`.
+item's branch, `merge` runs only on an approved item (by its implementer, or
+by its mission's lead without taking it over or using `ATELIER_SKIP`), or
+with `--trivial` (by its implementer only).
 It checks:
 
 1. The latest round has an approve verdict that still covers the head: since

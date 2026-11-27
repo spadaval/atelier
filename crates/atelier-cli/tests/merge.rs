@@ -2666,3 +2666,39 @@ fn with_no_forge_the_brief_says_nothing_of_a_pull_request() {
         run.stdout
     );
 }
+
+#[test]
+fn mission_lead_merges_approved_item_without_holding_it_or_skipping() {
+    let scratch = approved_in_mission("\n# lead merge test\n");
+    let root = scratch.root();
+
+    // Assign lead1 as the mission's lead on the base.
+    let mission_file = format!(".atelier/missions/{MISSION}/mission.md");
+    let text = read(&root, &mission_file).replace("lead: null", "lead: lead1");
+    git(&root, &["switch", "-q", "main"]);
+    fs::write(root.join(&mission_file), text).unwrap();
+    git(&root, &["add", "-A"]);
+    git(&root, &["commit", "-qm", "Lead the mission"]);
+    git(&root, &["switch", "-q", ID]);
+
+    // An unrelated thread is still refused.
+    let refused = atelier(&root, "t9", &["merge"]);
+    assert_ne!(refused.code, 0);
+    assert!(
+        refused.stderr.contains("do not hold"),
+        "expected NotHolder refusal, got: {}",
+        refused.stderr
+    );
+
+    // The mission's lead sees `atelier merge` as next in status and merges cleanly without ATELIER_SKIP.
+    let status = atelier(&root, "lead1", &["status"]);
+    assert_eq!(status.code, 0, "{}", status.stderr);
+    assert!(
+        status.stdout.contains("atelier merge"),
+        "expected lead status to offer merge, got:\n{}",
+        status.stdout
+    );
+    let merged = atelier(&root, "lead1", &["merge"]);
+    assert_eq!(merged.code, 0, "{}{}", merged.stdout, merged.stderr);
+    assert!(merged.stdout.contains("Merged"), "{}", merged.stdout);
+}

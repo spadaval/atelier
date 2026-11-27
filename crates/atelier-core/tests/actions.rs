@@ -113,6 +113,7 @@ fn facts<'a>(item: &'a ItemDir, caller: &'a Thread) -> Facts<'a> {
         branch: true,
         blockers: &[],
         mission: None,
+        lead: None,
         caller,
         checkout: None,
         worktree: None,
@@ -257,6 +258,7 @@ fn every_action_in_the_table_from_every_status_sets_the_specified_status_or_is_r
                 branch: !matches!(action, Action::Start | Action::Close),
                 blockers: &[],
                 mission: None,
+                lead: None,
                 caller: &caller,
                 checkout: None,
                 worktree: None,
@@ -708,6 +710,7 @@ fn status_lists_the_conditions_the_command_reports() {
                     branch,
                     blockers,
                     mission: None,
+                    lead: None,
                     caller: &caller,
                     checkout: None,
                     worktree: None,
@@ -757,6 +760,7 @@ fn the_next_action_follows_the_status_and_who_is_asking() {
             branch: true,
             blockers: &[],
             mission: None,
+            lead: None,
             caller: &caller,
             checkout: None,
             worktree: None,
@@ -788,6 +792,7 @@ fn only_the_holder_submits() {
             branch: true,
             blockers: &[],
             mission: None,
+            lead: None,
             caller: &caller,
             checkout: None,
             worktree: None,
@@ -809,6 +814,7 @@ fn only_the_holder_submits() {
         branch: true,
         blockers: &[],
         mission: None,
+        lead: None,
         caller: &caller,
         checkout: None,
         worktree: None,
@@ -817,6 +823,61 @@ fn only_the_holder_submits() {
         check(Action::Submit, &facts),
         Err(Refusal::NotHolder { holder: None, .. })
     ));
+}
+
+#[test]
+fn mission_lead_may_merge_an_approved_item_without_holding_it() {
+    let lead = thread("lead-1");
+    let other = thread("t9");
+    let approved = with_reviews(
+        record(Status::Approved, &["t1"], DONE),
+        &[review("1-aaaa", &["r1"], "approve", "")],
+    );
+    let lead_facts = Facts {
+        mission: Some(("demo-m1ss".into(), Some(MissionStatus::Open))),
+        lead: Some(&lead),
+        ..facts(&approved, &lead)
+    };
+    assert!(matches!(
+        check(Action::Merge, &lead_facts),
+        Ok(Some(Status::Done))
+    ));
+    assert_eq!(next(&lead_facts).unwrap(), Some(Action::Merge));
+
+    // A non-lead, non-holder still cannot merge.
+    let other_facts = Facts {
+        mission: Some(("demo-m1ss".into(), Some(MissionStatus::Open))),
+        lead: Some(&lead),
+        ..facts(&approved, &other)
+    };
+    assert!(matches!(
+        check(Action::Merge, &other_facts),
+        Err(Refusal::NotHolder {
+            role: Role::Implementer,
+            ..
+        })
+    ));
+    assert_eq!(next(&other_facts).unwrap(), Some(Action::TakeOver));
+
+    // The lead still cannot submit or merge --trivial another thread's building item.
+    let building = record(Status::Building, &["t1"], DONE);
+    let building_lead_facts = Facts {
+        mission: Some(("demo-m1ss".into(), Some(MissionStatus::Open))),
+        lead: Some(&lead),
+        ..facts(&building, &lead)
+    };
+    for action in [Action::Submit, Action::MergeTrivial] {
+        assert!(
+            matches!(
+                check(action, &building_lead_facts),
+                Err(Refusal::NotHolder {
+                    role: Role::Implementer,
+                    ..
+                })
+            ),
+            "{action:?}"
+        );
+    }
 }
 
 #[test]
@@ -841,6 +902,7 @@ fn submit_needs_each_open_finding_answered_and_no_question_waits_on_it() {
             branch: true,
             blockers: &[],
             mission: None,
+            lead: None,
             caller: &caller,
             checkout: None,
             worktree: None,

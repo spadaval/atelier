@@ -2241,25 +2241,46 @@ fn a_proposed_plan_merges_on_two_approvals_of_its_head_and_any_change_to_it_afte
         );
     }
 
-    // A note, the Result, the lead and a review file are not the plan: it
-    // merges with the approvals it has.
+    // Notes, architecture.md, decisions.md, the Result, the lead and a review
+    // file are not the plan: it merges with the approvals it has.
     let scratch = Scratch::new(&[]);
     let root = scratch.root();
     approved_plan(&scratch);
-    fs::write(
-        root.join(format!(".atelier/missions/{MISSION}/notes.md")),
-        "A note.\n",
-    )
-    .unwrap();
+    for doc in ["notes.md", "architecture.md", "decisions.md"] {
+        fs::write(
+            root.join(format!(".atelier/missions/{MISSION}/{doc}")),
+            format!("Living doc: {doc}.\n"),
+        )
+        .unwrap();
+    }
     let path = root.join(mission_path(MISSION));
     let text = fs::read_to_string(&path).unwrap();
     fs::write(&path, text + "\nNot yet.\n").unwrap();
-    commit_all(&root, "Note it");
+    commit_all(&root, "Update living docs");
     let run = atelier(&root, "p1", &["merge"]);
     assert_eq!(run.code, 0, "{}{}", run.stdout, run.stderr);
     assert!(run.stdout.contains("Merged"), "{}", run.stdout);
     let merged = git(&root, &["show", &format!("main:{}", mission_path(MISSION))]);
     assert_eq!(front(&merged, "status"), "open");
+
+    // On an agreed mission, editing architecture.md and decisions.md on a
+    // backlog branch merges as a record-only change without plan reviews.
+    let start = atelier(&root, "l1", &["start", "--backlog", "update-arch"]);
+    assert_eq!(start.code, 0, "{}{}", start.stdout, start.stderr);
+    fs::write(
+        root.join(format!(".atelier/missions/{MISSION}/architecture.md")),
+        "Updated architecture.\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join(format!(".atelier/missions/{MISSION}/decisions.md")),
+        "Updated DACI decisions.\n",
+    )
+    .unwrap();
+    commit_all(&root, "Update living architecture and decisions");
+    let merge = atelier(&root, "l1", &["merge"]);
+    assert_eq!(merge.code, 0, "{}{}", merge.stdout, merge.stderr);
+    assert!(merge.stdout.contains("Merged"), "{}", merge.stdout);
 }
 
 #[test]

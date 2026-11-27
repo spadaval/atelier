@@ -393,7 +393,6 @@ fn a_lead_rules_for_the_implementer_by_merging_past_a_kept_finding_with_its_reas
     let stdout = String::from_utf8(output.stdout.clone()).unwrap();
     assert!(output.status.success(), "{stdout}{output:?}");
     let rules = [
-        format!("You hold {ID} as its implementer (t1 does)"),
         format!("{ID} is approved (it is changes requested)"),
         "A review of the latest round approves it (none does)".to_string(),
     ];

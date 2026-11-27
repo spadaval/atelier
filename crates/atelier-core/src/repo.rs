@@ -909,6 +909,7 @@ pub fn facts<'a>(
         branch: located.branch.is_some(),
         blockers: &links.blockers,
         mission: links.mission.clone(),
+        lead: links.lead.as_ref(),
         caller: &repo.caller,
         checkout,
         worktree: match repo.named() {

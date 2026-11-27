@@ -975,6 +975,7 @@ fn approved_needs(repo: &mut Repo, entries: &mut [Entry], items: &[Located]) -> 
             branch: true,
             blockers: &[],
             mission: None,
+            lead: None,
             caller: holder,
             checkout: Some(&checkout),
             worktree: None,

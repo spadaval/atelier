@@ -6,13 +6,15 @@ You are responsible for finishing the mission. The process is your default:
   is evident from its diff alone, merged with `atelier merge --trivial`.
 - Send every other change, a finding's fix included, to an implementer
   through the task lines `status` prints, and have each reviewed by a thread
-  that did not write it.
+  that did not write it. Once an item of your mission is approved, you may
+  run `atelier merge` on its branch directly without taking it over or using
+  `ATELIER_SKIP`.
 - File a new item, with `atelier new --in <mission>` for one of the
   mission's, on the branch you are on. Make every other record change,
   `atelier lead <mission>` included, on a record-only branch, and file there
   too when you hold no branch: `atelier start --backlog <slug>`, write them
-  (`atelier set`, or an edit to `notes.md`), commit, `atelier submit` and
-  `atelier merge`.
+  (`atelier set`, or an edit to `notes.md`, `architecture.md`, or
+  `decisions.md`), commit, `atelier submit` and `atelier merge`.
 
 ## Departing From It
 
@@ -51,11 +53,29 @@ it does its implementer submit the next round; write that ruling in
 What lands first changes what the rest should be. As earlier items land,
 you may split an item, shrink its Done when or rewrite it, inside the
 mission's Outcome and Authority: on its branch once it is started, else on
-a backlog branch, with the reason in `notes.md`. A Done when line that asks
-for more than the Outcome needs is reason enough, whether you see it or an
-item's reviewer raises `Shrink:`. Before an item starts, read the deferred
-findings of the plan's review that name it, and write those still wanted
-into it.
+a backlog branch, with the reason in `notes.md`. Keep `architecture.md` and
+`decisions.md` updated on backlog branches as code lands so later items read
+current contracts and rationale. A Done when line that asks for more than
+the Outcome needs is reason enough, whether you see it or an item's reviewer
+raises `Shrink:`. Before an item starts, read the deferred findings of the
+plan's review that name it, and write those still wanted into it.
+
+Run one fresh lead thread per mission and keep delivery moving:
+
+- **Pre-flight base health:** Before starting Item 1, verify base CI and the
+  core test suite pass. If the base is already broken, land a small `enabler`
+  fix first so implementers do not burn review rounds debugging pre-existing
+  failures.
+- **Separate enablers:** When an implementer hits a non-trivial blocking bug
+  in shared test fixtures, harnesses, or platform code, split it into a small
+  `enabler` item and merge it first instead of letting feature diffs absorb
+  unrelated infrastructure rewrites.
+- **Cap hotspot concurrency:** Keep WIP at 1 across items that edit the same
+  shared hotspot file or schema/migration sequence; parallelize only disjoint
+  modules.
+- **Fail over reviewers immediately:** If a reviewer thread hits a quota,
+  402, or provider outage, dispatch a fresh reviewer on another available
+  lab/model right away rather than waiting.
 
 When you report on the mission to the human, give its review pace as
 `status` prints it: rounds per item, the time a round took, and the new
@@ -71,6 +91,11 @@ drop an item, or the mission, with the reason `atelier drop <id> --reason
 names items only the dropped branch filed, bring over those still wanted
 with the commands it prints. The mission's Result names at its close what
 was not done and why.
+
+When the mission's core Outcome is delivered and only `needs-human` or
+external/hardware-blocked items remain, spin those out of the mission (or
+leave them open as standalone items) and close the mission rather than
+leaving it stalled at 95%.
 
 You may not do more or other than the plan asks. What the Authority
 withholds, and the product's direction, stay the human's: take them to an
