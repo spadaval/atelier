@@ -901,10 +901,13 @@ fn a_later_rounds_brief_says_what_the_round_is_for_and_puts_the_new_diff_first()
     let new_finding = "A new finding in code that did not change since the last round's review \
                        blocks only if the work would come out wrong without it: record that one \
                        as `fix now`, and any other as `defer`, for later work.\n";
-    let purpose = "reviewed the whole change before this one. This round checks the earlier \
-                   findings and what changed since the last round's review: judge each open \
-                   finding below, and check that the commits since then are correct, that the \
-                   change still meets each Done when line, and that the Report's claims hold.";
+    let purpose = "reviewed the whole change before this one, so this round does not review it \
+                   again. It checks the earlier findings and what changed since the last round's \
+                   review: judge each open finding below, read the commits since then, run what \
+                   proves them, and write down each problem you find. Leave the change's size, \
+                   and each Done when line and Report claim those commits did not touch, as the \
+                   earlier rounds judged them. The author's reasoning is left out on purpose; \
+                   judge what is there.";
 
     // Round 1: the brief as it has always been.
     let round_1 = git(&root, &["rev-parse", "HEAD"]);
@@ -957,10 +960,8 @@ fn a_later_rounds_brief_says_what_the_round_is_for_and_puts_the_new_diff_first()
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert!(
         run.stdout.starts_with(&format!(
-            "You are the reviewer of {ID} (thread t3), round 2.\nOne round has {purpose} Read the \
-             code, run what proves it, and write down each problem you find. The author's \
-             reasoning is left out on purpose; judge what is there.\n{new_finding}\nItem {ID}: \
-             Say hello\n"
+            "You are the reviewer of {ID} (thread t3), round 2.\nOne round has {purpose}\n\
+             {new_finding}\nItem {ID}: Say hello\n"
         )),
         "{}",
         run.stdout

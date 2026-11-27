@@ -1593,7 +1593,8 @@ fn a_mission_goes_from_its_branch_through_two_plan_reviews_and_its_items_to_clos
     let text = fs::read_to_string(&why).unwrap();
     fs::write(
         &why,
-        text.replace("## Why\n", "## Why\n\nAda asked, in conversation.\n"),
+        text.replace("## Why\n", "## Why\n\nAda asked, in conversation.\n")
+            .replace("## Outcome\n", "## Outcome\n\nEveryone is greeted.\n"),
     )
     .unwrap();
     commit_all(&root, "Define it");
@@ -1668,6 +1669,20 @@ fn a_mission_goes_from_its_branch_through_two_plan_reviews_and_its_items_to_clos
         );
         let run = atelier(&at, thread, &["review", &mission]);
         assert_eq!(run.code, 0, "{}", run.stderr);
+        // It says what a plan review is for, and when it stops.
+        assert!(
+            run.stdout.contains(
+                "A plan review is for what the mission will make true: whether it is what the \
+                 human asked for, whether each criterion can be checked, and whether the items, \
+                 their order and what is out reach the Outcome. How an item is built is for its \
+                 implementer and its reviewer: record a finding about a mechanism, or about a \
+                 case the plan does not state, as `defer` and name the item it concerns, unless \
+                 the plan cannot reach its Outcome without it. The plan's review stops once both \
+                 reviewers of a round approve, and a deferred finding does not hold that up."
+            ),
+            "{}",
+            run.stdout
+        );
         after.push(at);
     }
     let landed: Vec<bool> = after
@@ -1704,7 +1719,18 @@ fn a_mission_goes_from_its_branch_through_two_plan_reviews_and_its_items_to_clos
     git(&work, &["add", "-A"]);
     git(&work, &["commit", "-qm", "Say hello"]);
     assert_eq!(atelier(&work, "t1", &["submit"]).code, 0);
-    assert_eq!(atelier(&work, "t2", &["review", &a]).code, 0);
+    // Its reviewer weighs its Done when against the mission's Outcome.
+    let review = atelier(&work, "t2", &["review", &a]);
+    assert_eq!(review.code, 0, "{}", review.stderr);
+    assert!(
+        review.stdout.contains(&format!(
+            "\nThe Outcome of mission {mission}, which this item serves:\nEveryone is greeted.\n\
+             A Done when line that asks for more than that Outcome needs is not a box to tick: \
+             record a `Shrink:` finding against the item that names the line.\n"
+        )),
+        "{}",
+        review.stdout
+    );
     assert_eq!(verdict(&work, "t2", &["verdict", "approve"]).code, 0);
     let merged = atelier(&work, "t1", &["merge"]);
     assert_eq!(merged.code, 0, "{}", merged.stderr);
@@ -2472,4 +2498,66 @@ fn an_old_draft_on_the_base_is_agreed_only_by_two_plan_reviews() {
     assert_eq!(run.code, 0, "{}{}", run.stdout, run.stderr);
     let merged = git(&root, &["show", &format!("main:{}", mission_path(MISSION))]);
     assert_eq!(front(&merged, "status"), "open");
+}
+
+#[test]
+fn an_items_reviewer_weighs_its_done_when_against_the_missions_outcome_in_every_round() {
+    let scratch = Scratch::new(&[(ID, "open")]);
+    let root = scratch.root();
+    write_mission(&root, MISSION, "open");
+    join_mission(&root, ID, MISSION);
+    commit_all(&root, "Plan");
+    assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
+    fs::write(root.join("hello.txt"), "hello\n").unwrap();
+    git(&root, &["add", "hello.txt"]);
+    git(&root, &["commit", "-qm", "Say hello"]);
+    finish_and_submit(&root, "t1");
+    let outcome =
+        format!("\nThe Outcome of mission {MISSION}, which this item serves:\nGreetings.\n");
+    let tail = "that asks for more than that Outcome needs is not a box to tick: record a \
+                `Shrink:` finding against the item that names the line.\n";
+
+    // Round 1 weighs every line.
+    let run = atelier(&root, "t2", &["review", ID]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(
+        run.stdout
+            .contains(&format!("{outcome}A Done when line {tail}")),
+        "{}",
+        run.stdout
+    );
+    let (first, path) = review_of(&root, 1);
+    append(
+        &root,
+        &path,
+        "\n## Finding 1: No period\nRecommendation: fix now\nIt lacks one.\n",
+    );
+    assert_eq!(verdict(&root, "t2", &["verdict", "changes"]).code, 0);
+
+    // A later round weighs the lines its commits add or change.
+    fs::write(root.join("hello.txt"), "hello.\n").unwrap();
+    git(&root, &["commit", "-qam", "Add the period"]);
+    let fix = git(&root, &["rev-parse", "--short", "HEAD"]);
+    let item = item_path(ID);
+    let text = read(&root, &item).replace(
+        "## Scope",
+        "- [x] `hello.txt` ends with a period.\n\n## Scope",
+    );
+    fs::write(root.join(&item), text).unwrap();
+    append(
+        &root,
+        &item,
+        &format!("\n### Responses\n\n- {first}.1: fixed in {fix}\n"),
+    );
+    assert_eq!(atelier(&root, "t1", &["submit"]).code, 0);
+    let run = atelier(&root, "t3", &["review", ID]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(
+        run.stdout.contains(&format!(
+            "{outcome}A Done when line that the commits since the last round's review add or \
+             change, and {tail}"
+        )),
+        "{}",
+        run.stdout
+    );
 }

@@ -29,6 +29,21 @@ find, submit again for a new round, and run `atelier merge` once both
 reviewers of a round approve. The merge is the agreement; nobody says go
 after it.
 
+## The Level of a Plan
+
+Write a plan as outcomes: what will be true when the mission closes, how
+each criterion is checked, the items in their order, what is out, and what
+the human withholds. How a thing is built belongs to the item that builds
+it; a plan that names a procedure draws findings about the procedure.
+
+Give the items that start first Done when lines that can be checked. Give a
+later item, one that builds on work not yet landed, its Goal and what it
+owes the Outcome, and do not write the checklist of how it is built: what
+lands first changes that, and the lead writes it then
+([roles/lead.md](lead.md)).
+
+## Plan Review Rounds
+
 From round 2 on, reviewers check what changed and the findings carried, so
 commit each fix and keep other rewriting out of it.
 

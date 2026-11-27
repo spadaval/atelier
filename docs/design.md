@@ -644,7 +644,14 @@ diff first and the whole change's diff after it. It says a new finding in
 code that did not change since then blocks only if the work would come out
 wrong without it, and is otherwise recorded as `defer`. The whole change's
 diff is always given, so nothing in the change is kept from a later
-reviewer.
+reviewer. Since atelier-qut2 a later round does not review the whole change
+again: it reads the commits since the last round and runs what proves
+them, and leaves the change's size, and the Done when lines and Report
+claims those commits did not touch, as the earlier rounds judged them.
+Every round's brief, for an item of a mission, prints that mission's
+Outcome and says a Done when line asking for more than it needs is a
+`Shrink:` finding against the item; from round 2 on, a line the new
+commits add or change.
 
 The diff since the last round is given only where it can be read
 (atelier-h6ij). Where that round's commit is missing or not an ancestor of
@@ -662,7 +669,12 @@ name more than one commit, or one not in the history, the brief is round
 1's. Otherwise the brief opens with the diff of the plan's own paths, or
 says the plan is unchanged, never a diff with no paths, and asks the
 reviewer to judge that and the carried findings, and to block on an
-unchanged part only for a serious defect missed. The paths are the
+unchanged part only for a serious defect missed. Every round's brief says
+what a plan review is for (what the mission will make true, whether its
+criteria can be checked, and whether its items, order and what is out reach
+the Outcome), that a finding about a mechanism or an unstated case is
+`defer` and names its item unless the plan cannot reach its Outcome without
+it, and that the review stops once both reviewers of a round approve. The paths are the
 mission's directory but its reviews and `notes.md`, and its items' but
 their reviews, for an item of the mission at either commit. Once the
 mission is agreed, an item's paths count only where the amendment changes
@@ -2110,6 +2122,7 @@ carried here when the ADRs were deleted on 2026-11-11; Git keeps the ADR.
 | Reviews end in a person's ruling: the lead's once round 3 or later asks an item for changes, which `status` says and nothing enforces, and the human's after two split rounds in a row of one plan change, which `submit` enforces as a rule a skip passes. A later plan round is briefed on its diff, and a later round's diff holds only what its branch changed (2026-11-22, atelier-h6ij, mission atelier-ww7w, approved by Sumeet; changing either number is the human's) | atelier-to83 took seven plan rounds and atelier-kw8u four and a skip, most of them one approval and one request for changes, each re-read from scratch by fresh reviewers. A plan has no lead above its planner, so the human rules; an item's lead can rule to fix, so its cap is guidance |
 | A lead is in charge of its mission (2026-11-18, atelier-mtzj). The process is its default: it does itself what needs no review, sends the rest to an implementer, and has each change reviewed by a thread that did not write it. It may depart from any of that, a review included, by giving its reason with `ATELIER_SKIP`, and never silently. It settles a dispute between an implementer and a reviewer either way and records the ruling, and it may drop an item or the mission when the work turns out much harder than planned, saying in the Result what was not done. It may not do more or other than the plan asks. An implementer passes no rule on its own work, and takes a kept finding it cannot fix to the lead | The human said on 2026-11-18 that a lead is responsible for finishing its mission and may do more or less anything to get there. Atelier is the one with the clipboard: it notes everything down and complains about process, and it is not in charge. Three things keep a lead in check: the process its instructions give it, a stated reason for every departure, and knowing the record will be read. That reaches as far as merging a change nobody reviewed, said out loud. They chose to try this and restrict it later if leads push bad code through. The skill had said the opposite, "You write no code" and a disputed finding "is not yours to settle", and sent a kept finding back to be fixed even where the fix broke a Done when line, which left an item that could never merge |
 | An implementer may answer a fix-now finding `not built: <reason>`, which takes it straight to the mission's lead, and `merge` holds the item until the lead rules (2026-11-19, atelier-hlsw). A wrong finding is still rebutted, and one that does not block may be left with a basic reason. No command comes back: the lead's ruling to merge without it is the reason that passes `merge`'s rule, and to have it built the lead tells the implementer | The human's design of 2026-11-18, first tried with `escalate` and `decide` (f684caa15, 2026-11-08), which were removed as unused. The new evidence that design asked for: a survey of every Sol review since the cutover found 27 of 117 fix-now findings useful or nit, all 27 built and none rebutted. In atelier-zwh1's case run on 2026-11-19, ten runs a cell from two commits that differ in this change alone (`7a73e7b4b`, `af618c727`), Opus implementers in `house` built the finding not worth building in 6 of 10 runs before and 0 of 10 after. Sol built it in none either way, but before it rebutted it with a fact that did not refute it, and the next reviewer deferred it, so the lead was never asked; after, all twenty runs in both setups answered it `not built` and stopped for the lead. The real defect was fixed in all 40 ([results](../evals/agent-factory/results/2026-11-19-say-no.md)) |
+| A later code-review round checks the commits since the last round and the carried findings, not the whole change again; a plan's brief says a plan review is about outcomes and defers findings about mechanisms; an item's brief carries its mission's Outcome for `Shrink:` (2026-11-27, atelier-qut2, mission atelier-oqsz) | In `hub-v2-bg14`'s records round 1 of 11 items took a median 15 minutes and found 27 new fix-now findings; round 2 of 10 took the same median 15 minutes and found 6 new findings, none fix now. This mission's own plan, written as outcomes, drew 4 findings in two rounds, all about outcomes, where `atelier-ww7w`'s plan drew 45 in five, most about mechanisms (`missions/atelier-oqsz/notes.md`). The whole change's diff stays in a later brief, since the 2026-11-19 survey found 7 of 18 findings from round 3 on still important and a planted defect in unchanged code blocked in every run; no eval has run the new later-round text |
 
 Three points of the design went beyond what they had confirmed when it was
 written, and were put to them with it:
