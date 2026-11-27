@@ -3,7 +3,7 @@ schema: atelier.mission
 schema_version: 3
 id: atelier-oqsz
 title: Show a lead what waits on it and what its reviews cost, in a status under 2 KB, and write plans as outcomes
-status: open
+status: done
 labels: []
 lead: mcp:5e35d5af-d02e-4108-865d-84da8e4d0e82
 planners:
@@ -104,3 +104,87 @@ binary under a mission in progress. Where an item finds a criterion here
 loose or wrong, the lead rules and writes it in `notes.md`.
 
 ## Result
+
+Done on 2026-11-27, the day it was asked for. Six items merged, and
+`master` at `cc97add1f` calls itself 0.8.0. Nothing is installed on any
+host yet.
+
+**What `master` has now**
+
+- **`status`** (`atelier-f0sn`, `atelier-cpfd`): what waits on the reader
+  prints first, then each mission led, then the backlog. Each mission led
+  has one line of review pace. An item's holder, blockers and Done when
+  lines moved to `atelier show <item>`.
+- **`merge`** (`atelier-7ci6`): a failed merge check stops the merge unless
+  the reason names that check. A merge past one says so on its last line,
+  and its commit lists the check as failed.
+- **`log`** (`atelier-hota`): the 30 newest actions, newest first, lines
+  cut at 300 characters. `--all` prints the whole history as before.
+- **The skill and the review briefs** (`atelier-qut2`): a plan is written
+  as outcomes; a lead may reshape an item's Done when as earlier items
+  land; a plan review is about what the mission makes true; an item's
+  reviewer raises `Shrink:` against a Done when line the Outcome does not
+  need; a later round checks the carried findings and the new commits.
+- **The version** (`atelier-fbte`): 0.8.0, with a changelog entry that
+  tells a host what to do.
+
+**Against the criteria**
+
+- status-fits: met. A twelve-item mission is 1,981 bytes and the Hub's
+  largest state 3,826, down from 18,146 (`tests/status_size.rs`).
+- pace-shown: met. On `hub-v2-bg14`: 22 rounds for 11 items, a reviewer
+  took 15m a round at the median, one verdict to the next took 55m at the
+  median and 1h 22m at most, and later rounds found 6 new findings, none
+  to fix now. Two hand counts agree.
+- skip-honest: met, by a test that replays the Hub's two merges.
+- log-short: met. On the Hub's history 6,160 bytes and no line over 271
+  characters, down from 174 KB. The garden counter and the scorecard's
+  `freeze.py` pass `--all` and give the same answers.
+- skill-measured: met in part. `notes.md` holds this plan's review: two
+  rounds, 17 minutes, four findings, all about outcomes. The second review
+  of `atelier-ww7w`'s plan was not done, by the human's direction of
+  2026-11-27, so nothing has tested what a plan's reviewer is now told.
+- hosts: met, with one claim corrected. No change here alters a record's
+  form. But the plan's "a 0.7.0 binary and a new one work on one
+  repository" is false for a binary built at the `v0.7.0` tag: since that
+  tag the tree writes `status: open` and a `not built:` Response, which it
+  refuses. The binary installed on this host was built on 2026-11-22,
+  after both, under the same version number.
+
+**Each host, and what it must do**
+
+- **This host:** `cargo install --path crates/atelier-cli --locked` from
+  `master`, and move `~/projects/atelier-skill` to `master` at the same
+  time, once `hub-v2-bg14` has closed. At this close it has one item
+  building, so neither is done. The lead of this mission does both when it
+  closes.
+- **A repository with its own copy of the skill**, the Hub's
+  `.agents/skills/agent-factory` among them: refresh it with the binary,
+  by an item in that repository's tracker. Its garden counter reads plain
+  `atelier log` and must pass `--all`.
+- **astromech's CI and the work host:** the human's, in `atelier-pv58` and
+  `atelier-7w9s`. `CHANGELOG.md` says what each needs.
+- No `v0.8.0` tag is pushed. A tag starts the release build, and nobody
+  asked for a release.
+
+**Not proven by use**
+
+- No reviewer has yet worked from the new plan-review or item-review
+  brief on a real mission, and no lead has reshaped an item under the new
+  line in `roles/lead.md`.
+- The pace line has been read by one lead, of this mission, where every
+  round was short.
+
+**This mission's own pace:** 10 rounds for 6 items. Round one found seven
+findings on four items; later rounds found none new. A reviewer took 2
+minutes a round at the median, and one verdict to the next took 4.
+
+**Where the lead left the plan,** each with its reason in `notes.md`:
+`atelier-qut2` was rewritten on the human's direction; the pace line's
+time was ruled to be a later round's whole cost; and the version bump
+became a reviewed item because it carries a changelog.
+
+**Filed from what the work found,** all outside the mission:
+`atelier-9f1j`, `atelier-nc7t`, `atelier-jahm` and `atelier-hlvq`. They
+wait: the human froze Atelier's work on itself from this close, until a
+mission in a product repository meets a concrete fault.
