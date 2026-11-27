@@ -32,16 +32,18 @@ review each.
 
 This mission's plan was written as outcomes and reviewed under the old
 text, and `notes.md` holds what that review showed. Change the skill by
-what it showed. If the review converged in one or two rounds on outcome
-findings, the level a plan is written at was the cause. If it still drew
-mechanism findings or ran long, the reviewer's instructions and the
-missing stop are.
+what it showed. A review that converged in one or two rounds on outcome
+findings points at the level a plan is written at. One that still drew
+mechanism findings or ran long points at the reviewer's instructions and
+the missing stop. It is one review, and this plan differs from
+`atelier-ww7w`'s in subject, size and reviewers, so it is evidence and
+not proof.
 
 ## Done when
 
-- [ ] The Report says which of the two the plan review showed, from
-  `notes.md`, and each change to the skill names the number it follows
-  from.
+- [ ] The Report says what the plan review's counts in `notes.md` suggest
+  and what they leave open, a mixed result included, and each change to
+  the skill names the number it follows from.
 - [ ] The skill says what level a plan is written at and what belongs in
   an item instead.
 - [ ] A plan's reviewer is told what a plan review is for, where a finding
