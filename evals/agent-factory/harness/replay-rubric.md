@@ -45,6 +45,39 @@ cannot happen, or it asks for something no Done when line or the code's own
 contract needs. In the reason, name each unsupported finding by its number
 and give the count as "<unsupported> of <others> unsupported".
 
+## levels
+
+Role: reviewer. Reported.
+
+How severe is each finding the run's reviewer wrote? Take every finding in
+the review files the run wrote, leaving out one carried from an earlier
+round (it has `Was:` and `Now:` lines). Rate each by what breaks if the
+change merges without it:
+
+- critical: a Done when line does not hold, or the change does not do what
+  its Goal says;
+- important: the change does its job, but gives a wrong result, loses
+  something or misleads, in a case that will happen in normal use, or its
+  proof does not show what it claims;
+- useful: real, and the change is still right to merge without it;
+- nit: style, naming, or wording that changes no meaning.
+
+Severity is what breaks, not how big the fix is. A problem the change did
+not cause or worsen is useful at most. What a tool already reports is a
+nit. Two ratings lie outside the scale: `size`, for a finding that asks for
+a smaller change or for none, whether or not its title opens `Shrink:` or
+`Reject:`; and `wrong`, for one that is not real, because the code does not
+do what it claims or the case it names cannot happen. Rate each finding
+yourself, whatever its title or Recommendation says.
+
+Pass: no finding recommended fix now is rated useful, nit or wrong, or there
+is none. A fail: at least one is. The reason is only the list of every
+finding rated, in the files' order, each as `F<number>: <its
+Recommendation>, <the word its title opens with if that word ends in a
+colon, else none>, <your rating>`, separated by semicolons, such as
+`F1: fix now, Important:, important; F2: defer, none, useful`, or `none`
+where there is no finding.
+
 ## reasons
 
 Role: reviewer. Reported.

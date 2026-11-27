@@ -25,6 +25,27 @@ that change. If the cost outweighs the value, record one that opens
 `Reject:` and names the outcome and why. Report every other finding you can
 support as well, whatever your verdict.
 
+## Severity
+
+Rate each finding by what breaks:
+
+- **Critical:** a Done when line does not hold, or the change does not do
+  what its Goal says. The finding names the line.
+- **Important:** the change does its job, but gives a wrong result, loses
+  something or misleads, in a case that will happen in normal use, or its
+  proof does not show what it claims. The finding names the case.
+- **Useful:** real, and the change is still right to merge without it.
+- **Nit:** style, naming, or wording that changes no meaning. Do not file
+  it.
+
+Severity is what breaks, not how big the fix is. A problem the change did
+not cause or worsen is useful at most. What a tool already reports is not a
+finding.
+
+A finding's title opens `Critical:`, `Important:` or `Useful:`. Critical and
+important are `fix now`, and useful is `defer`. A `Shrink:` or `Reject:`
+finding stays `fix now`, outside the scale.
+
 ## Rebuttals
 
 A rebuttal is judged by a fresh reviewer. If you reviewed an earlier round of

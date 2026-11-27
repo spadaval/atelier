@@ -109,7 +109,8 @@ class ReplayCase(unittest.TestCase):
     def graded(self, found, others, reasons="pass"):
         """The harness's grade, with the judge's answers given as recorded."""
         rubric = judging.read_rubric(self.case)
-        answers = {"found": found, "others-supported": others, "reasons": reasons}
+        answers = {"found": found, "others-supported": others, "levels": "pass",
+                   "reasons": reasons}
         self.assertEqual(sorted(answers), sorted(q["id"] for q in rubric["questions"]))
         recorded = [{"id": q["id"], "role": q["role"], "kind": q["kind"],
                      "answer": answers[q["id"]], "line": "(recorded)", "reason": "recorded"}
