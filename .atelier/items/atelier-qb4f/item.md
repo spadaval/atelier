@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-qb4f
 title: 'Garden atelier: structure, 2026-11-13'
-status: ready
+status: dropped
 mission: null
 labels:
 - garden
@@ -36,3 +36,7 @@ Garden atelier with structure and design drift as the focus, because Sumeet name
 In: `skills/agent-factory/procedures/garden.md` steps 1 to 7 up to the approval, for atelier only.
 
 Out: the session and what it settles, the run's merge, any new or removed rule, check, gate, interface or default, a run of `scripts/scorecard/`, and other items' branches.
+
+## Report
+
+Dropped: Stale Nov 13 garden run conflicts with master and touches deleted crates atelier-app/atelier-records
