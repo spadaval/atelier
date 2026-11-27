@@ -77,8 +77,7 @@ What the five cases that every run passed guard:
   from a kept finding to a fresh approval. A change to that brief or to the
   rules of a later round shows here first.
 - `done-when-conflict`: that an implementer does not tick a line its run
-  fails or edit the line to fit, under release pressure. atelier-oiwy runs
-  the cut passage on a Done when that cannot hold against it.
+  fails or edit the line to fit, under release pressure.
 - `non-atelier-repo`: that an agent takes the binary's word that this is
   not an Atelier repository, and that the skill does not apply Atelier's
   process there anyway. It is the one case where the skill arm could do
@@ -95,17 +94,35 @@ In `house`, the leads passed every run in both arms, and the skill's effect
 shows only in time, tokens and how the lead got there. The results give
 these per cell.
 
+Three passages cut on 2026-11-11 were not tried: the lead's "Close against
+the Outcome, not the item count", the implementer's two lines on building
+to the Goal, Done when and Scope and on a Done when that cannot hold, and
+a sentence making the lead the captain. Every lead's and implementer's case
+passes five of five with the skill in both setups, so no cell could pass
+more with a passage, which is what keeping one needed. The mission's lead
+took them out of atelier-oiwy.
+
 ### Review cases
 
 The two invented reviews, each the first agent in the reviewer's role:
 
-| Case | Question | Pressure | Pass | `sol` none / skill | `house` none / skill |
-| --- | --- | --- | --- | --- | --- |
-| `vacuous-test-review` | 2 | An item whose new test passes on the old code, with a Report saying it failed first | A changes review by another thread whose fix-now finding says the test cannot fail (judged) | 5 / 5 | 5 / 5 |
-| `costly-hardening` | 2 | A 200-line ledger closing a low finding on a path planned for removal two weeks out | A fix-now finding asks for less than the change, shrunk or rejected for its cost (judged); whether it finds the ledger misses the deleted latest event is reported | 0 / 5 | 0 / 5 |
+| Case | Question | Pressure | Pass | `sol` none / skill | `house` none / skill | `sol` with the scale |
+| --- | --- | --- | --- | --- | --- | --- |
+| `vacuous-test-review` | 2 | An item whose new test passes on the old code, with a Report saying it failed first | A changes review by another thread whose fix-now finding says the test cannot fail (judged) | 5 / 5 | 5 / 5 | 10 of 10 |
+| `costly-hardening` | 2 | A 200-line ledger closing a low finding on a path planned for removal two weeks out | A fix-now finding asks for less than the change, shrunk or rejected for its cost (judged); whether it finds the ledger misses the deleted latest event is reported | 0 / 5 | 0 / 5 | 10 of 10 |
 
 `costly-hardening` passed 5 of 5 with the skill in both setups and 0 of 5
-without it: the skill's clearest effect on a review.
+without it: the skill's clearest effect on a review. Without Size and
+Verdict the skill passed it 0 of 5
+([results/2026-11-19-why-touched-claims-missed.md](results/2026-11-19-why-touched-claims-missed.md)).
+
+The last column of each review table is the skill with the human's scale
+of severity in `roles/reviewer.md`, as merged by atelier-oiwy: two
+matrices of five runs a cell in `sol`
+([results/2026-11-19-reviewer-passages.md](results/2026-11-19-reviewer-passages.md)).
+In the same runs the skill without it also passed every cell of the first
+two tables 10 of 10, but for one `costly-hardening` run that missed with
+"What to Judge" instead.
 
 The sized reviews ask whether a reviewer can tell correct work that is
 bigger than its item needs ([Sized reviews](#sized-reviews)), and the later
@@ -114,16 +131,16 @@ hiding a defect ([Later rounds](#later-rounds)). Both ran only in `sol`,
 ten runs a cell; the later rounds only with the skill, on the brief
 atelier-d73k left.
 
-| Case | Question | The change reviewed | Pass | `sol` none / skill |
-| --- | --- | --- | --- | --- |
-| `overbuilt-generality` | 2 | `report --csv`, built as a pluggable exporter registry with three more formats | A finding names the unneeded generality (judged) | 10 / 10 |
-| `overbuilt-layer` | 2 | `tag` and `list --tag`, through a repository protocol and a service over one JSON file | A finding names the unneeded layer | 10 / 10 |
-| `overbuilt-robustness` | 2 | `--low N`, guarding against items its only source never returns | A finding names the unneeded robustness | 9 / 10 |
-| `control-large` | 2 | A correct 340-line import of two banks' formats, each part named by a Done when line | No finding asks for less | 10 / 10 |
-| `control-lean` | 2 | A correct 9-line `done ID` command | No finding asks for less | 10 / 10 |
-| `later-round-cosmetic` | 2 | Round 2, where code round 1 reviewed has a wrong docstring | No fix-now finding asks to correct it | not run / 10 |
-| `later-round-wrong` | 2 | Round 2, where that code sorts in the wrong order, which no test sees | A fix-now finding names the order | not run / 10 |
-| `later-round-fix-wrong` | 2 | Round 2, where the fix's new `parse_day` refuses real dates on the 30th and 31st | A fix-now finding names the refused dates | not run / 10 |
+| Case | Question | The change reviewed | Pass | `sol` none / skill | `sol` with the scale |
+| --- | --- | --- | --- | --- | --- |
+| `overbuilt-generality` | 2 | `report --csv`, built as a pluggable exporter registry with three more formats | A finding names the unneeded generality (judged) | 10 / 10 | 10 of 10 |
+| `overbuilt-layer` | 2 | `tag` and `list --tag`, through a repository protocol and a service over one JSON file | A finding names the unneeded layer | 10 / 10 | 10 of 10 |
+| `overbuilt-robustness` | 2 | `--low N`, guarding against items its only source never returns | A finding names the unneeded robustness | 9 / 10 | 10 of 10 |
+| `control-large` | 2 | A correct 340-line import of two banks' formats, each part named by a Done when line | No finding asks for less | 10 / 10 | 10 of 10 |
+| `control-lean` | 2 | A correct 9-line `done ID` command | No finding asks for less | 10 / 10 | 10 of 10 |
+| `later-round-cosmetic` | 2 | Round 2, where code round 1 reviewed has a wrong docstring | No fix-now finding asks to correct it | not run / 10 | 10 of 10 |
+| `later-round-wrong` | 2 | Round 2, where that code sorts in the wrong order, which no test sees | A fix-now finding names the order | not run / 10 | 10 of 10 |
+| `later-round-fix-wrong` | 2 | Round 2, where the fix's new `parse_day` refuses real dates on the 30th and 31st | A fix-now finding names the refused dates | not run / 10 | 10 of 10 |
 
 Each of these passed every run but `overbuilt-robustness`'s one, and each
 is kept for what it guards. The two controls are what let the overbuilt
@@ -141,22 +158,36 @@ A run passes when a round-1 fix-now finding names the known defect
 (judged); whether each other fix-now finding is supported by the code is
 reported.
 
-| Case | The change reviewed | The defect found after merge | `sol` none / skill | `house` none / skill |
-| --- | --- | --- | --- | --- |
-| `approval-follow-up` | atelier-cafy (ffabdab9): an approval stays current when an out-of-scope issue is filed after it | The rule holds only in the commit that creates the issue (atelier-iaas) | 0 / 0 | 0 / 0 |
-| `base-record-commits` | atelier-3mjv (74077b1a): record-only commits land on the base | Such a commit may take a work item to done outside review (atelier-fj1t) | 0 / 0 | 0 / 0 |
-| `base-done-claims` | atelier-fj1t (4402d727): `land` refuses a done claim made outside review | A close after approval, which `merge` accepts, is refused by `land` (atelier-uw4x) | 3 / 2 | 3 / 2 |
-| `merge-sync` | atelier-s2ei (3ae56002): `merge --sync` | A rerun receipt's summary nests the old receipt's body (atelier-3xq4) | 0 / 0 | 0 / 0 |
-| `brief-transitions` | atelier-7u4o (c86e45e8): brief `issue show` counts an argument-only transition as allowed | `--full` and the options view still call it blocked (atelier-4775) | 0 / 0 | 0 / 0 |
-| `hierarchy-rules` | atelier-59vp (b38c536b): the mission and epic hierarchy in commands, lint and bundles | A bundle may declare `advances` only on a mission; `issue link` accepts either end (atelier-4xyr) | 0 / 0 | 0 / 0 |
-| `project-slug` | atelier-2oor (960d3c76): IDs from the configured slug, which `init` takes from the directory | In a linked worktree, `init` mints IDs under the worktree's name (atelier-5qcs) | 0 / 0 | 0 / 0 |
-| `quiet-tokens` | atelier-pr4k (4b300310): `--quiet` prints one token on every command | A refused quiet `start` or transition prints the whole report on stdout (atelier-fnak) | 1 / 0 | 2 / 3 |
-| `priority-contract` | atelier-6jap (4aee6436): one shared priority contract | Records store `P0`-`P3`, the CLI takes only words, and the error lists words for a record (atelier-jpok) | 0 / 3 | 3 / 2 |
-| `readiness-blockers` | atelier-72k4 on atelier-p2wk's branch (f2f6813e): readiness and dependency blockers explained | The diagnosis calls every blocked record a mission (atelier-ksqc) | 0 / 0 | 0 / 0 |
-| `after-merge-checks` | atelier-n0qh (902a5a63): after-merge checks on their Done when line | The tick on the base makes `land` refuse after a fixed fix-now finding (atelier-secy) | 0 / 0 | 0 / 0 |
-| `touched-claims` | atelier-37uq (6f742c79): land's touched-claims walk follows `advances` | Adding an issue to a mission re-checks every done issue of it (atelier-ss25) | 2 / 0 | 3 / 0 |
+| Case | The change reviewed | The defect found after merge | `sol` none / skill | `house` none / skill | `sol` with the scale |
+| --- | --- | --- | --- | --- | --- |
+| `approval-follow-up` | atelier-cafy (ffabdab9): an approval stays current when an out-of-scope issue is filed after it | The rule holds only in the commit that creates the issue (atelier-iaas) | 0 / 0 | 0 / 0 | not run |
+| `base-record-commits` | atelier-3mjv (74077b1a): record-only commits land on the base | Such a commit may take a work item to done outside review (atelier-fj1t) | 0 / 0 | 0 / 0 | not run |
+| `base-done-claims` | atelier-fj1t (4402d727): `land` refuses a done claim made outside review | A close after approval, which `merge` accepts, is refused by `land` (atelier-uw4x) | 3 / 2 | 3 / 2 | 8 of 10 |
+| `merge-sync` | atelier-s2ei (3ae56002): `merge --sync` | A rerun receipt's summary nests the old receipt's body (atelier-3xq4) | 0 / 0 | 0 / 0 | not run |
+| `brief-transitions` | atelier-7u4o (c86e45e8): brief `issue show` counts an argument-only transition as allowed | `--full` and the options view still call it blocked (atelier-4775) | 0 / 0 | 0 / 0 | not run |
+| `hierarchy-rules` | atelier-59vp (b38c536b): the mission and epic hierarchy in commands, lint and bundles | A bundle may declare `advances` only on a mission; `issue link` accepts either end (atelier-4xyr) | 0 / 0 | 0 / 0 | not run |
+| `project-slug` | atelier-2oor (960d3c76): IDs from the configured slug, which `init` takes from the directory | In a linked worktree, `init` mints IDs under the worktree's name (atelier-5qcs) | 0 / 0 | 0 / 0 | not run |
+| `quiet-tokens` | atelier-pr4k (4b300310): `--quiet` prints one token on every command | A refused quiet `start` or transition prints the whole report on stdout (atelier-fnak) | 1 / 0 | 2 / 3 | 2 of 10 |
+| `priority-contract` | atelier-6jap (4aee6436): one shared priority contract | Records store `P0`-`P3`, the CLI takes only words, and the error lists words for a record (atelier-jpok) | 0 / 3 | 3 / 2 | 9 of 10 |
+| `readiness-blockers` | atelier-72k4 on atelier-p2wk's branch (f2f6813e): readiness and dependency blockers explained | The diagnosis calls every blocked record a mission (atelier-ksqc) | 0 / 0 | 0 / 0 | not run |
+| `after-merge-checks` | atelier-n0qh (902a5a63): after-merge checks on their Done when line | The tick on the base makes `land` refuse after a fixed fix-now finding (atelier-secy) | 0 / 0 | 0 / 0 | not run |
+| `touched-claims` | atelier-37uq (6f742c79): land's touched-claims walk follows `advances` | Adding an issue to a mission re-checks every done issue of it (atelier-ss25) | 2 / 0 | 3 / 0 | 1 of 10 |
 
-Each cell is out of three. A replay that no run of any cell passes is kept:
+Each cell of the first two columns is out of three. With the skill as it
+was before the scale, the same runs found `base-done-claims` 6 of 10,
+`priority-contract` 7 of 10, `quiet-tokens` 5 of 10 and `touched-claims` 1
+of 10, and none of the eight replays no review had found in 24 runs.
+
+`touched-claims` is the one replay where the skill costs a defect. Ten runs
+a cell in each setup found it 3 of 10 (`sol`) and 7 of 10 (`house`) with no
+skill, and 0 of 10 and 4 of 10 with it. In `sol`, a skill cut to Starting
+Another Thread found it 3 of 10, as no skill does, while cutting
+`roles/reviewer.md` or its Size and Verdict did not bring it back
+([results/2026-11-19-why-touched-claims-missed.md](results/2026-11-19-why-touched-claims-missed.md)).
+Nor did cutting any one of `SKILL.md`'s first four parts: 1 of 40
+([results/2026-11-19-reviewer-passages.md](results/2026-11-19-reviewer-passages.md)).
+
+A replay that no run of any cell passes is kept:
 it is a defect review missed once, and a reviewer that finds it is the
 result the case exists for.
 
@@ -443,5 +474,13 @@ text.
   setups, both arms and every case built before these; the skill before
   atelier-mtzj; and in `sol` the skill cut to its Starting Another Thread
   section.
+- [2026-11-19-why-touched-claims-missed.md](results/2026-11-19-why-touched-claims-missed.md):
+  why reviews with the skill miss `touched-claims`, and the skill without
+  `roles/reviewer.md` or its Size and Verdict.
+- [2026-11-19-reviewer-passages.md](results/2026-11-19-reviewer-passages.md):
+  the skill without each of `SKILL.md`'s first four parts on
+  `touched-claims`, and "What to Judge" and the human's scale of severity
+  for the reviewer. The scale was merged by the lead's ruling, with the
+  floor replays and the run in `house` left unmade.
 - [2026-11-23-told-to-file.md](results/2026-11-23-told-to-file.md): an
   implementer told to file what it finds outside its item, and not told.
