@@ -2,7 +2,7 @@
 // `node --test test.mjs` (Node 22.18 or later, which runs TypeScript directly).
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -17,6 +17,10 @@ import {
   sessionName,
   unticked,
 } from "./lib.ts";
+
+// Every test logs somewhere disposable, never to the real ~/.local/state/atelier-pi.
+const SCRATCH_LOGS = mkdtempSync(join(tmpdir(), "pi-ext-logs-"));
+process.env.ATELIER_PI_LOG_DIR = SCRATCH_LOGS;
 
 const ITEM = `---
 id: demo-1
@@ -234,6 +238,80 @@ test("the records are sent again every 25 turns and after a compaction", async (
   await pi.fire("session_compact", { reason: "threshold" }, ctx);
   assert.equal(pi.sent.length, 2);
   assert.match(pi.sent[1].message.content, /the records are right/);
+});
+
+test("the session log records tools, context, compaction, diagnostics and stops, and sends nothing", async () => {
+  const dir = checkout("demo-1");
+  const logs = mkdtempSync(join(tmpdir(), "pi-ext-log-"));
+  process.env.ATELIER_PI_LOG_DIR = logs;
+  try {
+  const bin = fakeBin({ status: "You are the implementer of demo-1 (thread t1).", guard: "{}" });
+  process.env.PATH = `${bin}:${process.env.PATH}`;
+  const pi = await load();
+  const ctx = {
+    cwd: dir,
+    sessionManager: { getSessionFile: () => "/x/sessions/2026_abc.jsonl" },
+    getContextUsage: () => ({ tokens: 1234, contextWindow: 272000 }),
+    hasPendingMessages: () => false,
+  };
+  const returned = [];
+  const fire = async (name, event) => returned.push(await pi.fire(name, event, ctx));
+  await fire("session_start", { reason: "startup" });
+  await fire("tool_execution_start", { toolCallId: "a", toolName: "bash", args: { command: "ls" } });
+  await fire("tool_execution_end", { toolCallId: "a", toolName: "bash", result: { content: [] }, isError: false, durationMs: 7 });
+  await fire("tool_execution_start", { toolCallId: "b", toolName: "read", args: { path: "x" }, parentToolCallId: "a" });
+  await fire("tool_execution_end", { toolCallId: "b", toolName: "read", result: {}, isError: true, parentToolCallId: "a" });
+  await fire("turn_end", {});
+  await fire("message_end", { message: { role: "assistant", diagnostics: [{ type: "openai_reasoning_dropped", details: { reason: "prefix_mismatch" } }] } });
+  await fire("message_end", { message: { role: "assistant" } });
+  await fire("session_compact_failed", { reason: "overflow", errorMessage: "boom" });
+  await fire("agent_settled", { aborted: false });
+  const sentBeforeCompact = pi.sent.length;
+  const rows = readFileSync(join(logs, "2026_abc.jsonl"), "utf8").trim().split("\n").map((line) => JSON.parse(line));
+  assert.deepEqual(rows.map((row) => row.event), ["session_start", "tool", "tool", "turn", "diagnostics", "compact_failed", "settled"]);
+  assert.deepEqual(
+    { tool: rows[1].tool, parent: rows[1].parent, argBytes: rows[1].argBytes, durationMs: rows[1].durationMs, isError: rows[1].isError },
+    { tool: "bash", parent: null, argBytes: 16, durationMs: 7, isError: false },
+  );
+  assert.deepEqual({ parent: rows[2].parent, isError: rows[2].isError, durationMs: rows[2].durationMs }, { parent: "a", isError: true, durationMs: null });
+  assert.equal(rows[3].context.tokens, 1234);
+  assert.equal(rows[4].diagnostics[0].details.reason, "prefix_mismatch");
+  assert.deepEqual(
+    { branch: rows[6].branch, itemStatus: rows[6].itemStatus, role: rows[6].role, pendingMessages: rows[6].pendingMessages },
+    { branch: "demo-1", itemStatus: "building", role: null, pendingMessages: false },
+  );
+  // The logging handlers return nothing and send nothing: a log cannot steer the run.
+  assert.ok(returned.every((value) => value === undefined));
+  assert.equal(sentBeforeCompact, 0);
+  await pi.fire("session_compact", { reason: "threshold", fromExtension: false, willRetry: false }, ctx);
+  const compact = JSON.parse(readFileSync(join(logs, "2026_abc.jsonl"), "utf8").trim().split("\n").at(-1));
+  assert.equal(compact.event, "compact");
+  assert.equal(compact.reason, "threshold");
+  assert.equal(rows[1].toolCallId, "a");
+  assert.equal(rows[2].toolCallId, "b");
+  assert.ok(rows[1].wallMs >= 0);
+  assert.equal(rows[1].resultBytes, Buffer.byteLength(JSON.stringify({ content: [] })));
+  assert.ok(!("args" in rows[1]) && !("result" in rows[1]));
+  const { size } = await import("./log.ts");
+  assert.equal(size("é"), 4);
+  // A log directory that cannot be written loses the lines and nothing else.
+  writeFileSync(join(logs, "a-file"), "");
+  process.env.ATELIER_PI_LOG_DIR = join(logs, "a-file", "logs");
+  await pi.fire("turn_end", {}, ctx);
+  await pi.fire("agent_settled", { aborted: true }, ctx);
+  // Diagnostics that cannot be serialized still leave a row, without their content.
+  process.env.ATELIER_PI_LOG_DIR = logs;
+  const loop = {}; loop.self = loop;
+  await pi.fire("message_end", { message: { role: "assistant", diagnostics: [loop] } }, ctx);
+  const last = JSON.parse(readFileSync(join(logs, "2026_abc.jsonl"), "utf8").trim().split("\n").at(-1));
+  assert.deepEqual({ event: last.event, count: last.count, bytes: last.bytes, diagnostics: last.diagnostics }, { event: "diagnostics", count: 1, bytes: -1, diagnostics: null });
+  // A context that throws once the session is gone does not surface an error.
+  const stale = { ...ctx, getContextUsage: () => { throw new Error("stale"); }, hasPendingMessages: () => { throw new Error("stale"); } };
+  await pi.fire("turn_end", {}, stale);
+  await pi.fire("agent_settled", { aborted: false }, stale);
+  } finally {
+    process.env.ATELIER_PI_LOG_DIR = SCRATCH_LOGS;
+  }
 });
 
 test("a background command can be started, read and stopped", async () => {
