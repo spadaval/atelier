@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-5vql
 title: Drop whitespace check and trim redundant CI steps
-status: in_review
+status: approved
 mission: null
 labels: []
 priority: medium
