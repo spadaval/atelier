@@ -71,6 +71,11 @@ test("mission control shows the active item, the items, the log and the threads"
   await page.locator(".mcx-row", { hasText: "atelier-1ie1" }).click();
   await expect(active.locator(".ptitle")).toHaveText("Active Item atelier-1ie1");
   await expect(active.getByText("merged")).toBeVisible();
+  // An open item's stage is whether it can start, and the active one lists what it waits for.
+  await expect(page.locator(".mcx-row", { hasText: "atelier-e05n" }).locator(".st")).toHaveText("can start");
+  await page.locator(".mcx-row", { hasText: "atelier-qxmr" }).click();
+  await expect(page.locator(".mcx-row", { hasText: "atelier-qxmr" }).locator(".st")).toHaveText("waits");
+  await expect(active.locator("h4", { hasText: "Cannot start until" }).locator("+ ul")).toHaveText("origin/backlog/desk-cutover merges");
 });
 
 test("mission control for a mission the Desk cannot find says so", async ({ page }) => {
@@ -86,10 +91,13 @@ for (const width of [1300, 880]) {
     await expect(lane("Now").locator(".rm-title .t")).toHaveText([/Build the Desk/, /Move all five repositories/]);
     await expect(lane("Now").locator(".rm-loose .id")).toHaveText(["atelier-0019"]);
     await expect(lane("Next").locator(".rm-title .t")).toHaveText([/Ship Agent Factory/]);
-    await expect(lane("Next").locator(".rm-loose .id")).toHaveText(["atelier-c1z3", "atelier-7w9s"]);
-    await expect(lane("Next").getByText("blocked by atelier-52g7 (draft)")).toBeVisible();
+    await expect(lane("Next").locator(".rm-loose .id")).toHaveText(["atelier-7w9s", "atelier-c1z3", "atelier-52g7"]);
+    await expect(lane("Next").getByText("blocked by atelier-52g7 (open)")).toBeVisible();
+    await expect(lane("Next").locator(".tally")).toHaveText("4");
     await expect(lane("Later").locator(".rm-title .t")).toHaveText([/Give the gardener/, /Try a plan whose stop is refused/, /A plan whose pull request will not close/]);
-    await expect(lane("Later").locator(".rm-loose .id")).toHaveText(["atelier-52g7"]);
+    await expect(lane("Later").locator(".rm-loose .id")).toHaveCount(0);
+    // A mission folds open to its items, the open ones counted and shown.
+    await expect(lane("Now").locator(".rm-items").first()).toContainText("atelier-94pv");
     // A mission's title opens its mission control.
     await expect(lane("Now").getByRole("link", { name: /Build the Desk/ })).toHaveAttribute("href", "/embed/mission/atelier/atelier-z4cr");
     const week = page.locator(".rm-week");

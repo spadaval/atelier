@@ -45,31 +45,32 @@ fn trailers(thread: &str, rules: &[&str]) -> String {
 
 #[test]
 fn a_skipped_rule_is_printed_and_trailed_in_the_commit_of_start_submit_verdict_and_merge() {
-    let scratch = Scratch::new(&[(ID, "draft")]);
+    let scratch = Scratch::new(&[("demo-b10c", "open")]);
     let root = scratch.root();
+    write_item(&root, ID, "open", &[], &["demo-b10c"], "");
+    on_base(&root, "Plan a blocked item");
     // Refused: the way out first, the skip second.
     let run = atelier(&root, "t1", &["start", ID]);
     assert_eq!(run.code, 1);
     assert!(
-        run.stderr.ends_with(&format!(
-            "A planner makes it ready with: atelier ready {ID} --by <name>\n{SKIP}"
-        )),
+        run.stderr
+            .ends_with(&format!("Then: atelier start {ID}\n{SKIP}")),
         "{}",
         run.stderr
     );
-    // A draft started: its whitespace made one line, the reason is kept.
-    let draft = format!("{ID} is ready (it is draft)");
+    // A blocked item started: its whitespace made one line, the reason is kept.
+    let blocked = "demo-b10c is done (it is open)".to_string();
     let run = skipping(&root, "t1", "  Ada\n said   to ", &["start", ID]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert!(
-        run.stdout.starts_with(&skipped(&[&draft])),
+        run.stdout.starts_with(&skipped(&[&blocked])),
         "{}",
         run.stdout
     );
     assert_eq!(field(&root, ID, "status"), "building");
     assert_eq!(
         message(&root, ID),
-        format!("Start {ID}\n\n{}", trailers("t1", &[&draft]))
+        format!("Start {ID}\n\n{}", trailers("t1", &[&blocked]))
     );
 
     // Submitted with nothing ticked and no Report.
@@ -121,8 +122,9 @@ fn a_skipped_rule_is_printed_and_trailed_in_the_commit_of_start_submit_verdict_a
         skipped(&[&status, approval])
             + &format!(
                 "main's config.toml names no merge check, so none ran.\n\
-                 Merged {ID} into main with merge commit {}; it is done.\n",
-                git(&root, &["rev-parse", "--short=7", "main"])
+                 Merged {ID} into main with merge commit {}; it is done.\n{}",
+                git(&root, &["rev-parse", "--short=7", "main"]),
+                deleted(ID, &git(&root, &["rev-parse", "main^2"]))
             )
     );
     // Merged in a started status, which on the base reads as done.
@@ -137,32 +139,32 @@ fn a_skipped_rule_is_printed_and_trailed_in_the_commit_of_start_submit_verdict_a
 
 #[test]
 fn set_with_a_skip_changes_a_started_items_base_record() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     let run = skipping(&root, "p1", REASON, &["set", ID, "--priority", "low"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
-    let rule = format!("{ID} is draft or ready (it is building)");
+    let rule = format!("{ID} is open (it is building)");
     assert!(run.stdout.starts_with(&skipped(&[&rule])), "{}", run.stdout);
-    // The base's record, not the branch's: it is still ready there.
+    // The base's record, not the branch's: it is still open there.
     let text = read(&root, &item_path(ID));
     assert_eq!(
         (front(&text, "status"), front(&text, "priority")),
-        ("ready".into(), "low".into())
+        ("open".into(), "low".into())
     );
 }
 
 #[test]
-fn ready_on_a_record_that_is_not_a_draft_passes_with_a_skip_in_the_commit_it_prints() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+fn set_on_a_record_that_is_not_open_passes_with_a_skip_in_the_commit_it_prints() {
+    let scratch = Scratch::new(&[(ID, "done")]);
     let root = scratch.root();
-    let rule = format!("{ID} is draft (it is ready)");
-    let run = planned(&root, "p1", &["ready", ID, "--by", "s"]);
+    let rule = format!("{ID} is open (it is done)");
+    let run = planned(&root, "p1", &["set", ID, "--priority", "low"]);
     assert_eq!(run.code, 1);
     assert!(run.stderr.ends_with(SKIP), "{}", run.stderr);
     let head = git(&root, &["rev-parse", "HEAD"]);
-    let run = skipping(&root, "p1", REASON, &["ready", ID, "--by", "ada"]);
+    let run = skipping(&root, "p1", REASON, &["set", ID, "--priority", "low"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert!(run.stdout.starts_with(&skipped(&[&rule])), "{}", run.stdout);
     // It makes no commit, and the commit it prints carries its skip.
@@ -178,7 +180,7 @@ fn ready_on_a_record_that_is_not_a_draft_passes_with_a_skip_in_the_commit_it_pri
 
 #[test]
 fn a_command_with_nothing_to_skip_runs_as_without_the_variable() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     let plain = atelier(&root, "t1", &["status"]);
     let run = skipping(&root, "t1", REASON, &["status"]);
@@ -191,7 +193,7 @@ fn a_command_with_nothing_to_skip_runs_as_without_the_variable() {
 
 #[test]
 fn a_blank_skip_is_refused_by_every_command() {
-    let scratch = Scratch::new(&[(ID, "draft")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     let blank =
         "ATELIER_SKIP is set and blank, and a skip needs a reason: ATELIER_SKIP=\"<why>\". \
@@ -201,7 +203,7 @@ fn a_blank_skip_is_refused_by_every_command() {
             &["status"][..],
             &["check"][..],
             &["start", ID][..],
-            &["ready", ID, "--by", "s"][..],
+            &["ready", ID][..],
             &["merge"][..],
             &["check", "--hook", "pre-commit"][..],
         ] {
@@ -216,7 +218,7 @@ fn a_blank_skip_is_refused_by_every_command() {
 
 #[test]
 fn what_is_not_a_rule_is_refused_with_the_variable_set_and_says_so() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     let refused = |args: &[&str], code: i32, says: &str| {
         let plain = atelier(&root, "t1", args);
@@ -251,7 +253,7 @@ fn what_is_not_a_rule_is_refused_with_the_variable_set_and_says_so() {
     refused(&["submit"], 1, "runs on an item's branch");
     // A record that does not parse, and one that does and is not valid.
     fs::write(root.join(item_path(ID)), "no front matter\n").unwrap();
-    write_item(&root, "demo-cd34", "ready", &[], &["demo-zz99"], "");
+    write_item(&root, "demo-cd34", "open", &[], &["demo-zz99"], "");
     refused(&["check"], 1, "These do not read as records");
     fs::remove_dir_all(root.join(".atelier/items/demo-cd34")).unwrap();
     git(&root, &["checkout", "-q", "--", "."]);
@@ -259,7 +261,7 @@ fn what_is_not_a_rule_is_refused_with_the_variable_set_and_says_so() {
     // has it.
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
     let other = scratch.worktree("other");
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     git(&other, &["switch", "-q", ID]);
     let run = skipping(&root, "t2", REASON, &["start", ID]);
     assert_eq!(run.code, 1, "{}", run.stderr);

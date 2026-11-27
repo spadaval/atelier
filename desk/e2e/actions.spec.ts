@@ -54,7 +54,7 @@ test("when T3 Code cannot be reached a mission's and an item's pages render and 
   }
 });
 
-test("an item's page shows its agents, and a ready item with none says no thread has started it", async ({ page }) => {
+test("an item's page shows its agents, and an open item with none says no thread has started it", async ({ page }) => {
   await load(page, "/r/atelier/item/atelier-uwxy");
   const card = agents(page, "Item details");
   await expect(card.getByRole("link", { name: live.uwxy.title })).toHaveAttribute("href", live.uwxy.link);

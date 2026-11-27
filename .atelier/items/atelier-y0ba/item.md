@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-y0ba
 title: Have status say that an approved gardener run's merge waits for its session with Sumeet
-status: draft
+status: dropped
 mission: null
 labels: []
 priority: medium
@@ -35,3 +35,7 @@ Out: a command reserved for the gardener; any check in `merge`; the Desk, where 
 ## Context
 
 `docs/product.md` says a gardener is the implementer of an item labelled `garden` and no command is reserved for it. This keeps that: the label and the empty section change one line of what `status` prints.
+
+## Report
+
+Dropped: Mooted by atelier-7637 in mission atelier-ww7w: garden runs merge on approval (agreed with Sumeet on 2026-11-22)

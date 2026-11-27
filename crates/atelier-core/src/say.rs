@@ -3,8 +3,8 @@
 //! and the commands of `atelier-cli` print too. Moved from `atelier-cli`'s
 //! `output.rs`, which keeps the rest.
 
-use crate::actions::{row, Action, Condition, Refusal, Role};
-use crate::model::{Settlement, Status, Thread, Verdict};
+use crate::actions::{on_mission, row, Action, Condition, Refusal, Role, ROUND_CAP};
+use crate::model::{MissionStatus, Settlement, Status, Thread, Verdict};
 use crate::records::Problem;
 use crate::skip::Refused;
 use crate::Entry;
@@ -12,8 +12,7 @@ use std::path::Path;
 
 pub fn status_name(status: Status) -> &'static str {
     match status {
-        Status::Draft => "draft",
-        Status::Ready => "ready",
+        Status::Open => "open",
         Status::Building => "building",
         Status::InReview => "in review",
         Status::ChangesRequested => "changes requested",
@@ -28,7 +27,6 @@ pub fn command(action: Action, id: &str) -> String {
         Action::Start | Action::TakeOver | Action::Review => {
             format!("atelier {} {id}", row(action).command)
         }
-        Action::Ready => format!("atelier ready {id} --by <name>"),
         Action::StartNew => "atelier start --new \"<title>\"".into(),
         Action::StartMission => "atelier start --mission \"<title>\"".into(),
         Action::StartBacklog => "atelier start --backlog <slug>".into(),
@@ -42,7 +40,6 @@ pub fn command(action: Action, id: &str) -> String {
 
 pub fn goal(action: Action, status: Status) -> &'static str {
     match action {
-        Action::Ready => "make it ready",
         Action::Start | Action::StartNew | Action::StartMission | Action::StartBacklog => {
             "start it"
         }
@@ -77,14 +74,14 @@ pub fn condition_text(id: &str, condition: &Condition) -> String {
         Condition::Blocked { id: blocker, status: None } => {
             format!("{blocker} is done (no item {blocker} is found)")
         }
-        Condition::MissionNotOpen { id: mission, status: Some(Status::Draft) } => format!(
+        Condition::MissionNotOpen { id: mission, status: Some(MissionStatus::Draft) } => format!(
             "Mission {mission} is agreed (its record on the base is an old `draft`, which is proposed: its plan merges once two plan reviews approve it)"
         ),
-        Condition::MissionNotOpen { id: mission, status: Some(Status::Dropped) } => format!(
+        Condition::MissionNotOpen { id: mission, status: Some(MissionStatus::Dropped) } => format!(
             "Mission {mission} is not dropped (it was stopped, so none of its items starts or merges)"
         ),
         Condition::MissionNotOpen { id: mission, status: Some(status) } => {
-            format!("Mission {mission} is not dropped (it is {})", status_name(*status))
+            format!("Mission {mission} is not dropped (it is {})", status.name())
         }
         Condition::MissionNotOpen { id: mission, status: None } => format!(
             "Mission {mission} is agreed (no mission {mission} is in the base's last commit: it is on the base once its plan merges)"
@@ -114,7 +111,7 @@ pub fn condition_text(id: &str, condition: &Condition) -> String {
         ),
         Condition::NoApproval => "A review of the latest round approves it (none does)".into(),
         Condition::Stale { round, commit, changed } => format!(
-            "The approval still covers the head: since {}, which round {round} reviewed, nothing changed outside this item's directory, nor its Goal, Done when or Scope (changed: {})",
+            "The approval still covers the head: since {}, which round {round} reviewed, nothing but new items changed outside this item's directory, nor its Goal, Done when or Scope (changed: {})",
             short(commit),
             some(changed)
         ),
@@ -142,7 +139,7 @@ pub fn condition_text(id: &str, condition: &Condition) -> String {
             "Finding {id}/{finding} is not settled yet (it was {})",
             settled(settlement)
         ),
-        Condition::Invalid(problem) => valid(problem),
+        Condition::Invalid(problem) | Condition::MalformedResponse(problem) => valid(problem),
     }
 }
 
@@ -171,6 +168,9 @@ pub fn rules(action: Action, id: &str, refusal: &Refusal) -> Vec<String> {
             role_name(*role)
         ),
         Refusal::From { action, status } => rule_from(id, row(*action).from, *status),
+        Refusal::FromMission { action, status } => {
+            rule_mission_from(id, on_mission(*action).1, *status)
+        }
         Refusal::NotHolder { role, holder } => format!(
             "You hold {id} as its {} ({} does)",
             role_name(*role),
@@ -186,11 +186,17 @@ pub fn rules(action: Action, id: &str, refusal: &Refusal) -> Vec<String> {
 /// The rule that `id` is one of `from`, which it is not.
 pub fn rule_from(id: &str, from: &[Status], status: Status) -> String {
     let from: Vec<&str> = from.iter().map(|s| status_name(*s)).collect();
-    format!(
-        "{id} is {} (it is {})",
-        from.join(" or "),
-        status_name(status)
-    )
+    one_of(id, &from, status_name(status))
+}
+
+/// [`rule_from`], of a mission's status.
+pub fn rule_mission_from(id: &str, from: &[MissionStatus], status: MissionStatus) -> String {
+    let from: Vec<&str> = from.iter().map(|s| s.name()).collect();
+    one_of(id, &from, status.name())
+}
+
+fn one_of(id: &str, from: &[&str], is: &str) -> String {
+    format!("{id} is {} (it is {is})", from.join(" or "))
 }
 
 /// The rule that planning, or with `settle` the settling of a finding,
@@ -209,11 +215,11 @@ pub fn next(entry: &Entry, dropped: Option<&str>) -> String {
                 Some(reviewer) => format!(
                     "Thread {reviewer} holds this round's review. Wait for its verdict, then run `atelier status`.\n"
                 ),
-                None => format!("No reviewer has opened this round's review yet.\n{}", start_reviewer(id)),
+                None => format!(
+                    "No reviewer has opened this round's review yet.\n{}",
+                    start_reviewer(id, entry.worktree.as_deref())
+                ),
             },
-            Status::Draft => format!(
-                "It is a draft. A planner makes it ready with: atelier ready {id} --by <name>\n"
-            ),
             Status::Dropped => match dropped {
                 Some(why) => format!("It was dropped: {why}\nNothing is left to do on it.\n"),
                 None => "It was dropped; nothing is left to do on it.\n".into(),
@@ -221,12 +227,64 @@ pub fn next(entry: &Entry, dropped: Option<&str>) -> String {
             _ => "Nothing is left to do on it.\n".into(),
         };
     };
-    needs(action, entry.status, id, &entry.unmet)
+    needed(action, entry, &entry.unmet)
 }
 
-/// How an implementer gets its item reviewed.
-pub fn start_reviewer(id: &str) -> String {
-    let task = format!("Run atelier review {id} and follow what it prints.");
+/// [`needs`] of `action` on `entry`'s item, except that at the round cap
+/// the lead's ruling stands in for the command that submits it again.
+fn needed(action: Action, entry: &Entry, unmet: &[Condition]) -> String {
+    let (id, status) = (&entry.id, entry.status);
+    match (action, entry.capped) {
+        (Action::Submit, Some(round)) => format!(
+            "{}{}Take it to your mission's lead, or with no mission to the thread that started you, and wait for the ruling.\n{}",
+            lacking(action, status, id, unmet),
+            cap_reached(id, round),
+            cap_rulings(id, round),
+        ),
+        _ => needs(action, status, id, unmet),
+    }
+}
+
+/// That round `round` of item `id` asked for changes at the cap.
+fn cap_reached(id: &str, round: u32) -> String {
+    format!("Automated review of {id} reached its {ROUND_CAP}-round cap: round {round} asked for changes.\n")
+}
+
+/// How item `id`, at the cap since round `round`, is settled.
+fn cap_rulings(id: &str, round: u32) -> String {
+    format!(
+        "The lead rules one of: merge it as it stands with `ATELIER_SKIP=\"<ruling>\" atelier merge` on its branch; adjust its Scope or Done when; drop it with `{}`; or fix it. Once the lead rules to fix it, the implementer fixes and commits, and `atelier submit` opens round {}.\n",
+        command(Action::Drop, id),
+        round + 1
+    )
+}
+
+/// What the lead of item `id`'s mission is told of it at the cap.
+pub fn cap_for_lead(id: &str, round: u32) -> String {
+    format!(
+        "{}Settling it is yours.\n{}",
+        cap_reached(id, round),
+        cap_rulings(id, round)
+    )
+}
+
+/// What ends the review of a change to mission `id`'s plan whose last
+/// `splits` rounds split.
+pub fn plan_split_exit(id: &str, splits: usize) -> String {
+    format!(
+        "Plan review of mission {id} stops: its last {splits} rounds on this change split, one approving and one asking for changes. Bring the open findings to the human to rule. On their ruling, merge it as it stands with `ATELIER_SKIP=\"<ruling>\" atelier merge`; amend it, commit, and open another round with `ATELIER_SKIP=\"<ruling>\" atelier submit`; or drop the change.\n"
+    )
+}
+
+/// How an implementer gets its item reviewed. The task names `checkout`,
+/// the one on the item's branch: a new thread often starts in the main
+/// checkout, where `review` is refused.
+pub fn start_reviewer(id: &str, checkout: Option<&Path>) -> String {
+    let at = match checkout {
+        Some(path) => quoted(&path.display().to_string()),
+        None => format!("a checkout of {id}'s branch"),
+    };
+    let task = format!("In {at}, run atelier review {id} and follow what it prints.");
     handoff(
         "A reviewer",
         &[task],
@@ -269,8 +327,8 @@ pub fn visiting(id: &str, leads: Option<&str>, offer: &str) -> String {
     }
 }
 
-/// The conditions of `action` that do not hold, then its command.
-pub fn needs(action: Action, status: Status, id: &str, unmet: &[Condition]) -> String {
+/// The conditions of `action` that do not hold, and how to meet them.
+fn lacking(action: Action, status: Status, id: &str, unmet: &[Condition]) -> String {
     let mut text = String::new();
     if !unmet.is_empty() {
         text += &format!("To {}:\n", goal(action, status));
@@ -278,9 +336,14 @@ pub fn needs(action: Action, status: Status, id: &str, unmet: &[Condition]) -> S
             text += &condition(id, unmet);
             text += "\n";
         }
+        if unmet
+            .iter()
+            .any(|c| matches!(c, Condition::MalformedResponse(_)))
+        {
+            text += MALFORMED;
+        }
         // A concrete line: agents copied "Finding <name>" from the list
-        // above, or wrote prose under the line, and every command then
-        // failed to read the item.
+        // above, or wrote prose under the line.
         if let Some(finding) = unmet.iter().find_map(|c| match c {
             Condition::NoResponse { finding, .. } => Some(finding),
             _ => None,
@@ -305,8 +368,34 @@ pub fn needs(action: Action, status: Status, id: &str, unmet: &[Condition]) -> S
         // A stale approval is answered by a fresh review, not by merging.
         if unmet.iter().any(|c| matches!(c, Condition::Stale { .. })) {
             text += "What changed needs a fresh review, so send it back to review.\n";
-            return text + &format!("Then: {}\n", command(Action::Submit, id));
         }
+    }
+    text
+}
+
+/// Whose a malformed response is to fix.
+const MALFORMED: &str = "The item's implementer fixes each malformed line under `### Responses`: it holds one line per finding, in one of those forms, and nothing else.\n";
+
+/// The malformed responses of `entry`'s item, where what it needs next does
+/// not list them already, as while it waits for its review.
+pub fn malformed(entry: &Entry) -> String {
+    let listed = |c: &Condition| matches!(c, Condition::MalformedResponse(_));
+    if entry.malformed.is_empty() || entry.unmet.iter().any(listed) {
+        return String::new();
+    }
+    let mut text = "Not valid:\n".to_string();
+    for problem in &entry.malformed {
+        text += &condition(&entry.id, problem);
+        text += "\n";
+    }
+    text + MALFORMED
+}
+
+/// [`lacking`], then the command of `action`.
+pub fn needs(action: Action, status: Status, id: &str, unmet: &[Condition]) -> String {
+    let mut text = lacking(action, status, id, unmet);
+    if unmet.iter().any(|c| matches!(c, Condition::Stale { .. })) {
+        return text + &format!("Then: {}\n", command(Action::Submit, id));
     }
     let or = match action {
         Action::VerdictApprove | Action::PlanVerdictApprove => {
@@ -364,6 +453,9 @@ pub fn refusal(
                 next(shown(), dropped),
             )
         }
+        Refusal::FromMission { .. } => {
+            unreachable!("an item's action is never refused for a mission's status")
+        }
         Refusal::NotHolder {
             role: Role::Reviewer,
             holder: Some(holder),
@@ -391,7 +483,7 @@ pub fn refusal(
         Refusal::Unmet(unmet) => format!(
             "`{}` refused; nothing changed.\n{}",
             command(action, id),
-            needs(action, shown().status, id, unmet)
+            needed(action, shown(), unmet)
         )
         .into(),
         Refusal::Record(problem) => format!("{problem}\n").into(),
@@ -418,6 +510,15 @@ pub fn quoted(word: &str) -> String {
     }
 }
 
+/// `git` as a printed command starts it, with `-C` for the checkout `at`
+/// where paths from the root need it.
+pub fn git_command(at: Option<&Path>) -> String {
+    match at {
+        Some(at) => format!("git -C {}", quoted(&at.display().to_string())),
+        None => "git".into(),
+    }
+}
+
 /// The Git command that commits `paths`, and only them, with `message`
 /// and `trailers`, the [`crate::Skip::trailers`] of the command that wrote
 /// them: the commit is the one place `log` reads a skip from. `at` is the
@@ -429,10 +530,7 @@ pub fn commit_line(
     message: &str,
     trailers: &[String],
 ) -> String {
-    let git = match at {
-        Some(at) => format!("git -C {}", quoted(&at.display().to_string())),
-        None => "git".into(),
-    };
+    let git = git_command(at);
     let paths: Vec<String> = paths.iter().map(|path| quoted(path)).collect();
     let paths = paths.join(" ");
     let trailers: String = (trailers.iter())
@@ -461,6 +559,9 @@ pub fn planned(
         Guidance::Settle(id) => format!(
             "Once committed, it reaches the base when {id} merges. It is outside {id}'s directory, so a review of {id} must see it: an approval from before it is stale, and `atelier merge` will say to run `atelier submit`.\n"
         ),
+        Guidance::Filed(id) => format!(
+            "Write it, then commit it: it reaches the base when {id} merges, and filing it makes no approval of {id} stale.\n"
+        ),
         Guidance::Own => String::new(),
     };
     text + &format!("Then: {}\n", commit_line(at, paths, message, trailers))
@@ -473,6 +574,8 @@ pub enum Guidance {
     /// In the merge of item `0`, whose branch it is on, outside its
     /// directory.
     Settle(String),
+    /// In the merge of item `0`, on whose branch a new item was filed.
+    Filed(String),
     /// It is the item's own, on its branch: what the command said already
     /// says what follows.
     Own,
@@ -507,6 +610,19 @@ pub fn rule_on_base(base: &str) -> String {
     format!("Nothing is written in the checkout of the base branch {base}")
 }
 
+pub fn on_detached_head(command: &str, base: &str) -> Refused {
+    Refused::then(
+        format!(
+            "`atelier {command}` refused; nothing written.\nThis checkout is on a detached HEAD, and a commit made there is on no branch, so it would never reach {base}.\n"
+        ),
+        "Make the branch the change belongs on, and run this there: `atelier start --backlog <slug>` for a record change tied to no item or mission, or `atelier start <id>` for an item's own work.".to_string(),
+    )
+}
+
+pub fn rule_on_detached_head(command: &str) -> String {
+    format!("`atelier {command}` writes on a branch, not on a detached HEAD")
+}
+
 /// A record change that belongs on a backlog branch, run on the branch of
 /// item `id`.
 pub fn belongs_on_backlog(command: &str, id: &str, branch: &str) -> Refused {
@@ -522,8 +638,24 @@ pub fn rule_belongs_on_backlog(command: &str, branch: &str) -> String {
     format!("`atelier {command}` writes on a backlog or mission branch, not on the item branch {branch}")
 }
 
-/// A drop of started item `id`, run anywhere but a checkout of its branch
-/// `branch`, which `checkout`, if any, has out.
+/// A new item filed on `branch`, of item `id`, which at `status` will not
+/// merge.
+pub fn files_on_unmerging(command: &str, id: &str, branch: &str, status: Status) -> Refused {
+    Refused::then(
+        format!(
+            "`atelier {command}` refused; nothing written.\nThis checkout is on {branch}, the branch of item {id}, which is {}: only a started item's branch merges, so an item filed here would not reach the base.\n",
+            status_name(status)
+        ),
+        "Run it on a backlog branch, made with `atelier start --backlog <slug>`.".to_string(),
+    )
+}
+
+pub fn rule_files_on_unmerging(command: &str, branch: &str) -> String {
+    format!("`atelier {command}` writes on a branch that will merge, and {branch} will not")
+}
+
+/// A drop of started item `id`, run on neither a backlog branch nor its
+/// branch `branch`, which `checkout`, if any, has out.
 pub fn drop_off_branch(
     id: &str,
     branch: &str,
@@ -531,25 +663,20 @@ pub fn drop_off_branch(
     checkout: Option<&Path>,
 ) -> Refused {
     let there = match checkout {
-        Some(path) => format!(
-            "Run it in {}, which has {branch} checked out.",
-            path.display()
-        ),
-        None => format!(
-            "Run it in a checkout of {branch}, as after `git worktree add ../{id} {branch}`."
-        ),
+        Some(path) => format!("in {}, which has {branch} checked out", path.display()),
+        None => format!("in a checkout of {branch}"),
     };
     Refused::then(
         format!(
-            "`atelier drop {id}` refused; nothing written.\n{id} is started, and a started item's record changes only on its branch {branch}; this checkout is on {}.\n",
+            "`atelier drop {id}` refused; nothing written.\n{id} is started, so it is dropped on a backlog branch or on its own branch {branch}; this checkout is on {}.\n",
             place(here)
         ),
-        there,
+        format!("Run it on a backlog branch, made with `atelier start --backlog drop-{id}`, or {there}."),
     )
 }
 
 pub fn rule_drop_off_branch(id: &str, branch: &str) -> String {
-    format!("A started item {id} is dropped in a checkout of its branch {branch}")
+    format!("A started item {id} is dropped on a backlog branch or its own branch {branch}")
 }
 
 /// How a finding was settled, after "it was".
@@ -601,44 +728,6 @@ pub fn unknown(id: &str) -> String {
     format!("  {id}: no item or mission has this ID in this checkout or on a branch\n")
 }
 
-pub fn ready_refused(
-    unknown_ids: &[&str],
-    refused: &[(&str, Status)],
-    missions: &[&str],
-) -> Refused {
-    let mut text = "`atelier ready` refused; nothing changed.\n".to_string();
-    for id in unknown_ids {
-        text += &unknown(id);
-    }
-    for id in missions {
-        text += &format!(
-            "  {id}: it is a mission, and a mission needs no go-ahead: its plan reaches the base once two plan reviews approve it, and its items are made ready one by one\n"
-        );
-    }
-    for (id, status) in refused {
-        text += &format!(
-            "  {id}: it is {}, and `atelier ready` readies a draft\n",
-            status_name(*status)
-        );
-    }
-    Refused::then(
-        text,
-        "Run it again with only the drafts to make ready.".into(),
-    )
-}
-
-/// `ready` given no ID, which only a program calling it can do.
-pub fn ready_nothing() -> Refused {
-    Refused::then(
-        "`atelier ready` names no item to make ready; nothing changed.\n".into(),
-        "Then: atelier ready <id>... --by <name>".into(),
-    )
-}
-
-pub fn readied(ids: &[&str], by: &str) -> String {
-    format!("Made ready, as {by} said: {}.\n", ids.join(", "))
-}
-
 pub fn place(branch: Option<&str>) -> String {
     branch.map_or("a detached HEAD".to_string(), |b| format!("branch {b}"))
 }
@@ -669,31 +758,21 @@ pub fn elsewhere(
     )
 }
 
-/// A mission's status, written in the action table as an item's, by the name
-/// its record stores.
-pub fn mission_status_name(status: Status) -> &'static str {
-    crate::model::MissionStatus::of(status).map_or(status_name(status), |s| s.name())
-}
-
 /// A mission's action refused for `refusal`.
 pub fn mission_refused(action: Action, id: &str, refusal: &Refusal) -> String {
     match refusal {
-        Refusal::From { status, .. } => {
-            let from: Vec<&str> = row(action)
-                .from
-                .iter()
-                .filter(|s| crate::model::MissionStatus::of(**s).is_some())
-                .map(|s| mission_status_name(*s))
-                .collect();
+        Refusal::FromMission { status, .. } => {
+            let (_, from, _) = on_mission(action);
+            let from: Vec<&str> = from.iter().map(|s| s.name()).collect();
             let then = match status {
-                Status::Draft if action == Action::MergeMission => "Its record is an old `draft`: run `atelier submit` here, which writes it open, and start its two plan reviews.\n".to_string(),
-                Status::Draft => "Its record is an old `draft`, which is proposed: its plan reaches the base once two plan reviews approve it and its branch merges.\n".to_string(),
-                Status::Dropped if matches!(action, Action::SubmitMission | Action::MergeMission) => "A plan dropped on its branch is not merged: push the branch and close its pull request, if it has one.\n".to_string(),
+                MissionStatus::Draft if action == Action::MergeMission => "Its record is an old `draft`: run `atelier submit` here, which writes it open, and start its two plan reviews.\n".to_string(),
+                MissionStatus::Draft => "Its record is an old `draft`, which is proposed: its plan reaches the base once two plan reviews approve it and its branch merges.\n".to_string(),
+                MissionStatus::Dropped if matches!(action, Action::SubmitMission | Action::MergeMission) => "A plan dropped on its branch is not merged: push the branch and close its pull request, if it has one.\n".to_string(),
                 _ => "Nothing is left to do on it.\n".into(),
             };
             format!(
                 "Mission {id} is {}, and `atelier {}` runs on a mission that is {}. Nothing changed.\n{then}",
-                mission_status_name(*status),
+                status.name(),
                 row(action).command,
                 from.join(" or ")
             )
@@ -710,9 +789,10 @@ pub fn mission_refused(action: Action, id: &str, refusal: &Refusal) -> String {
         Refusal::Unmet(unmet) => format!(
             "`{}` refused; nothing changed.\n{}",
             command(action, id),
-            needs(action, Status::Ready, id, unmet)
+            // No mission action words its goal by an item's status.
+            needs(action, Status::Open, id, unmet)
         ),
-        Refusal::Role(_) | Refusal::Record(_) => {
+        Refusal::Role(_) | Refusal::From { .. } | Refusal::Record(_) => {
             unreachable!("a mission's action is refused only for its status, planner or conditions")
         }
     }
@@ -765,6 +845,25 @@ pub fn dropped_plan(id: &str, branch: &str, reason: &str, remote: Option<&str>) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_reviewers_task_names_the_checkout_as_one_shell_word() {
+        let task = |at| {
+            start_reviewer("demo-ab12", at)
+                .lines()
+                .nth(1)
+                .unwrap()
+                .to_string()
+        };
+        assert_eq!(
+            task(Some(Path::new("/src/my repo"))),
+            "  In '/src/my repo', run atelier review demo-ab12 and follow what it prints."
+        );
+        assert_eq!(
+            task(None),
+            "  In a checkout of demo-ab12's branch, run atelier review demo-ab12 and follow what it prints."
+        );
+    }
 
     #[test]
     fn a_handoff_says_to_start_the_thread_unasked_and_holds_no_backtick() {

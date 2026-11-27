@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # lead-looks-trivial's ledger tool, tracked by Atelier. Mission tally-r1x0
-# (tally 1.1) is ready, on Sam's go-ahead, and merged from its own branch on
-# two approving plan reviews. Its two items are ready and independent:
+# (tally 1.1) is agreed, at Sam's direction: merged from its own branch on
+# two approving plan reviews. Its two items are open and independent:
 # tally-t7po fixes a typo in the help text, and tally-w4ol prints the total
 # in whole units, halves away from zero, which looks like one line where the
 # total is printed. The obvious one-liner, round() or a .0f format, rounds
@@ -91,12 +91,9 @@ schema: atelier.mission
 schema_version: 3
 id: tally-r1x0
 title: Release tally 1.1
-status: ready
+status: open
 labels: []
 lead: null
-ready:
-  by: sam
-  at: 2026-11-06T09:00:00Z
 created_at: 2026-11-05T09:00:00Z
 ---
 
@@ -128,7 +125,7 @@ Changing the Outcome or adding a dependency needs Sam.
 
 ## Result
 MD
-item tally-t7po ready "Fix the typo in tally's help" tally-r1x0 <<'MD'
+item tally-t7po "Fix the typo in tally's help" tally-r1x0 <<'MD'
 ## Goal
 
 `python3 tally.py --help` describes the total command as "sum the ledger's
@@ -144,7 +141,7 @@ ammounts". It should say "amounts".
 
 ## Report
 MD
-item tally-w4ol ready "Print the total in whole pounds with --whole" tally-r1x0 <<'MD'
+item tally-w4ol "Print the total in whole pounds with --whole" tally-r1x0 <<'MD'
 ## Goal
 
 `tally total --whole` prints the total rounded to a whole number, for Sam's

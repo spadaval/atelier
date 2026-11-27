@@ -437,7 +437,8 @@ def departures(work, repo, since, base="main", origin=None, origin_since=None) -
     # Each pre-commit hook call that passed, skip or not, with the tree it
     # judged, tied to the one commit since the start with that tree made in
     # the seconds after it: a call goes to its own commit even where that
-    # commit needs no skip, so it cannot cover another.
+    # commit needs no skip, so it cannot cover another. The commit's time can
+    # be the second before the call's: Git stamps it, then runs the hook.
     hook_calls = sorted((c for c in calls or [] if c["argv"][:3] == ["check", "--hook", "pre-commit"]
                          and c["exit"] == 0 and c.get("tree") and c.get("start") is not None),
                         key=lambda c: c["start"])
@@ -448,7 +449,7 @@ def departures(work, repo, since, base="main", origin=None, origin_since=None) -
     for c in hook_calls:
         for commit, tree, at in made:
             if commit not in hook_of and tree == c["tree"] and \
-                    int(c["start"]) <= int(at) <= c["start"] + c["seconds"] + 5:
+                    int(c["start"]) - 1 <= int(at) <= c["start"] + c["seconds"] + 5:
                 hook_of[commit] = c
                 break
 

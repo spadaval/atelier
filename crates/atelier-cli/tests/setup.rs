@@ -10,14 +10,6 @@ use std::os::unix::fs::{symlink, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-/// `PATH` with the new binary's directory first, as the hook scripts run
-/// `atelier` from `PATH`.
-fn path() -> String {
-    let binary = Path::new(env!("CARGO_BIN_EXE_atelier"));
-    let rest = std::env::var("PATH").unwrap_or_default();
-    format!("{}:{rest}", binary.parent().unwrap().display())
-}
-
 fn ran(command: &mut Command) -> Run {
     let output = command.stdin(Stdio::null()).output().unwrap();
     Run {
@@ -30,14 +22,12 @@ fn ran(command: &mut Command) -> Run {
 /// Git run as thread t1, with the hooks finding the new binary.
 fn git_hooked(at: &Path, args: &[&str]) -> Run {
     let mut command = Command::new("git");
-    command.current_dir(at).args(args).env("PATH", path());
+    command.current_dir(at).args(args);
     command.env("T3CODE_THREAD_ID", "t1");
     ran(identity(&mut command))
 }
 
-/// [`git_hooked`] that must succeed. Once `setup` has run, every Git
-/// command that runs a hook goes through it, or the hook would run the
-/// `atelier` installed on the host.
+/// [`git_hooked`] that must succeed.
 fn passes(at: &Path, args: &[&str]) {
     let run = git_hooked(at, args);
     assert_eq!(run.code, 0, "git {args:?}: {}", run.stderr);
@@ -46,10 +36,7 @@ fn passes(at: &Path, args: &[&str]) {
 /// A line printed for an agent to paste, run as written by a shell.
 fn shell(at: &Path, line: &str) -> Run {
     let mut command = Command::new("sh");
-    command
-        .current_dir(at)
-        .args(["-c", line])
-        .env("PATH", path());
+    command.current_dir(at).args(["-c", line]);
     command.env("T3CODE_THREAD_ID", "t1");
     ran(identity(&mut command))
 }
@@ -97,7 +84,7 @@ fn stage_broken_record(checkout: &Path) {
 
 #[test]
 fn setup_installs_three_hooks_once_for_every_worktree_and_status_says_when_there_are_none() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     let second = scratch.worktree("second");
     fs::remove_dir_all(hooks_dir(&root)).unwrap();
@@ -177,7 +164,7 @@ fn setup_installs_three_hooks_once_for_every_worktree_and_status_says_when_there
 
 #[test]
 fn a_kept_pre_push_hook_gets_gits_arguments_and_input_and_can_still_refuse_after_atelier_passes() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     let remote = scratch.dir.path().join("remote.git");
     git(
@@ -258,7 +245,7 @@ fn a_kept_pre_push_hook_gets_gits_arguments_and_input_and_can_still_refuse_after
 
 #[test]
 fn a_hook_beside_a_local_one_is_left_byte_for_byte_and_the_way_out_works() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     let dir = hooks_dir(&root);
     write_hook(&dir.join("pre-commit"), "#!/bin/sh\necho mine\n", 0o755);
@@ -321,7 +308,7 @@ fn a_hook_beside_a_local_one_is_left_byte_for_byte_and_the_way_out_works() {
 
 #[test]
 fn a_symbolic_link_or_a_hook_that_is_not_executable_is_kept_as_it_was_and_runs_only_as_git_would() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     let dir = hooks_dir(&root);
     // A hook linked to a tracked script, by a path relative to the hooks
@@ -380,7 +367,7 @@ fn a_symbolic_link_or_a_hook_that_is_not_executable_is_kept_as_it_was_and_runs_o
 
 #[test]
 fn a_kept_hook_with_no_interpreter_line_runs_through_the_shell_as_git_ran_it() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     let dir = hooks_dir(&root);
     write_hook(
@@ -415,7 +402,7 @@ fn a_kept_hook_with_no_interpreter_line_runs_through_the_shell_as_git_ran_it() {
 
 #[test]
 fn a_kept_post_checkout_hook_that_fails_does_not_fail_the_checkout() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     let dir = hooks_dir(&root);
     let seen = scratch.dir.path().join("seen");
@@ -451,7 +438,7 @@ fn a_kept_post_checkout_hook_that_fails_does_not_fail_the_checkout() {
 
 #[test]
 fn setup_stopped_after_moving_a_hook_finishes_when_run_again() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     let dir = hooks_dir(&root);
     // What a run stopped between the move and the write leaves.
@@ -475,7 +462,7 @@ fn setup_stopped_after_moving_a_hook_finishes_when_run_again() {
 
 #[test]
 fn a_hooks_path_outside_the_shared_git_directory_is_refused_and_the_way_out_works() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     // A directory of each worktree's own, as husky sets it.
     git(&root, &["config", "core.hooksPath", ".githooks"]);
@@ -523,7 +510,7 @@ fn json(root: &Path, file: &str) -> serde_json::Value {
 
 #[test]
 fn setup_claude_merges_its_hooks_into_the_settings_keeping_others_and_changes_nothing_again() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     // Another tool's hooks, and the old Atelier's, in the settings already.
     let before = r#"{
@@ -593,7 +580,7 @@ fn setup_claude_merges_its_hooks_into_the_settings_keeping_others_and_changes_no
 
 #[test]
 fn setup_claude_refuses_settings_it_cannot_read_and_writes_a_new_file_where_there_is_none() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     fs::create_dir_all(root.join(".claude")).unwrap();
     fs::write(root.join(SETTINGS), "{\"hooks\": {,}\n").unwrap();
@@ -651,7 +638,7 @@ fn setup_claude_refuses_settings_it_cannot_read_and_writes_a_new_file_where_ther
 
 #[test]
 fn setup_codex_starts_a_session_with_status_and_changes_nothing_again() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     let run = atelier(&root, "t1", &["setup", "codex"]);
     assert_eq!(run.code, 0, "{}", run.stderr);

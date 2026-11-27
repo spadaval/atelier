@@ -15,11 +15,13 @@ use atelier_core::plan::plan_changed_at;
 use atelier_core::records::{CommitReader, ItemDir, MissionDir, ReadError, ReviewFile};
 use atelier_core::say::condition_text;
 use atelier_core::{
-    annotate, disputes, entries, git, in_progress, item_view, items_of, list, mission_view, Entry,
-    Filter, Judged, Located, Record, Repo, Skip, LIFECYCLE,
+    annotate, disputes, entries, git, history_until, in_progress, item_view, items_of, list,
+    mission_view, Entry, Filter, Judged, Located, Record, Repo, Skip, LIFECYCLE,
 };
+use chrono::{DateTime, SecondsFormat, Utc};
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::time::Instant;
 
 /// Opens the repository at `dir` for reading from commits, for `caller`,
 /// from the checkout that has its base branch out where one does, since
@@ -378,6 +380,51 @@ pub fn mission(repo: &mut Repo, id: &str) -> Result<Option<MissionPage>> {
     }))
 }
 
+/// The actions on mission `id` and its items, as `atelier log <id>` finds
+/// them, or an error once `deadline` has passed; `None` where `id` is no
+/// mission, an item's ID included.
+pub fn mission_history(
+    repo: &mut Repo,
+    id: &str,
+    deadline: Instant,
+) -> Result<Option<MissionHistoryResponse>> {
+    // The log takes an item's ID too, and this route does not.
+    if repo.find_mission(id)?.record().is_none() {
+        return Ok(None);
+    }
+    let Some(found) = history_until(repo, Some(id), None, Some(deadline))? else {
+        return Ok(None);
+    };
+    let timestamp = |at: &DateTime<Utc>| at.to_rfc3339_opts(SecondsFormat::Secs, true);
+    let actions = (found.actions.into_iter())
+        .map(|logged| MissionAction {
+            timestamp: timestamp(&logged.time),
+            detail: logged.action.changed(),
+            action: logged.action.name().to_string(),
+            commit: logged.commit,
+            id: logged.id,
+            thread: logged.thread.map(|thread| thread.0),
+            skips: logged.skips,
+            skipped_by: logged.skipped_by.map(|thread| thread.0),
+        })
+        .collect();
+    let passed_over = (found.passed_over.into_iter())
+        .map(|passed| PassedOverVersion {
+            timestamp: timestamp(&passed.time),
+            commit: passed.commit,
+            id: passed.id,
+            path: passed.path,
+            problem: passed.problem,
+        })
+        .collect();
+    Ok(Some(MissionHistoryResponse {
+        commit: repo.base_tip.clone(),
+        actions,
+        passed_over,
+        fetched: FetchMark::default(),
+    }))
+}
+
 /// The commands that stop agreed mission `id` by the record-only path,
 /// run in a checkout of the repository.
 fn stop_commands(id: &str) -> Vec<String> {
@@ -705,7 +752,7 @@ fn item_row(entry: &Entry, located: &[Located]) -> Result<ItemRow> {
         holder: entry.holder.as_ref().map(Thread::to_string),
         reviewer: entry.reviewer.as_ref().map(Thread::to_string),
         cannot_start: match entry.status {
-            atelier_core::model::Status::Ready => conditions(&entry.unmet),
+            atelier_core::model::Status::Open => conditions(&entry.unmet),
             _ => Vec::new(),
         },
         needs: conditions(&entry.needs),
@@ -787,7 +834,7 @@ pub fn item(repo: &mut Repo, id: &str) -> Result<Option<ItemPage>> {
     let section = |heading| record.section(heading).map(|s| s.trim().to_string());
     let reviews = record.reviews.iter();
     let responses = record
-        .responses()?
+        .responses()
         .into_iter()
         .map(|response| match response {
             atelier_core::model::Response::Fixed { finding, commit } => ResponseLine::Fixed {
@@ -1071,10 +1118,8 @@ pub fn motion(repo: &mut Repo, name: &str) -> Result<Option<MotionRepo>> {
         }
     }
     missions.sort_by(|a, b| a.mission.id.cmp(&b.mission.id));
-    // The ready items that can start now, highest priority first.
-    let mut startable: Vec<&Entry> = (records.entries.iter())
-        .filter(|e| e.status == atelier_core::model::Status::Ready && e.startable())
-        .collect();
+    // The open items that can start now, highest priority first.
+    let mut startable: Vec<&Entry> = (records.entries.iter()).filter(|e| e.startable()).collect();
     startable.sort_by(|a, b| a.priority.cmp(&b.priority).then(a.id.cmp(&b.id)));
     let mut ready = Vec::new();
     for entry in startable.into_iter().take(5) {

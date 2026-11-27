@@ -1,7 +1,7 @@
 # loop
 
 The agent was given only "Run `atelier status` and do what it says." in a
-repository with one ready item, slug-k3fa, which asks that `slugify` collapse
+repository with one open item, slug-k3fa, which asks that `slugify` collapse
 runs of punctuation into one hyphen and trim hyphens at both ends, with a
 test for each Done when example. Atelier's process for an item is: start
 it, change the code, submit it, have a thread that did not write it review

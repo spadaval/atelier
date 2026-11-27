@@ -1,4 +1,4 @@
-//! The planner's commands besides `ready` (`atelier_core::ready`): `new`,
+//! The planner's commands: `new`,
 //! `set`, `drop` and `close`. Each reads and writes records in the checkout
 //! it runs in, on the branch the change belongs on, validates what it
 //! writes (`atelier_core::plan`), commits nothing, and ends with the Git
@@ -8,31 +8,37 @@ use crate::commands::Outcome;
 use crate::output;
 use anyhow::{anyhow, Result};
 use atelier_core::actions::{
-    check, settle_refusals, Action, MissionFacts, Refusal, PLANNED, STARTED,
+    check, settle_refusals, Action, MissionFacts, Refusal, STARTED, UNFINISHED,
 };
 use atelier_core::model::{
-    Finding, FindingName, Item, ItemSchema, Mission, MissionSchema, MissionStatus, Priority,
+    Finding, FindingName, Item, ItemSchema, Mission, MissionSchema, MissionStatus, Named, Priority,
     SchemaVersion, Settlement, Status, Thread, Threads,
 };
 use atelier_core::plan::{
-    agreed, drop_mission, is_mission, misplaced, planned_facts, save, save_with, Belongs,
+    agreed, drop_mission, is_mission, misplaced, planned_facts, save, save_new, save_with, Belongs,
 };
 use atelier_core::records::{put_first, validate_id, ReviewFile};
-use atelier_core::repo::{item_dir, mission_path};
+use atelier_core::repo::{item_dir, item_of_record, item_path, mission_path, on_base};
 use atelier_core::{refused as refused_action, Located, Refused, Repo};
+use std::collections::BTreeMap;
 
 const ITEM_BODY: &str = "\n## Goal\n\n## Done when\n\n## Scope\n";
 const MISSION_BODY: &str =
     "\n## Why\n\n## Outcome\n\n## Success criteria\n\n## Scope\n\n## Authority\n\n## Result\n";
 
-/// A new draft item with empty Goal, Done when and Scope sections.
-pub fn draft_item(id: &str, title: &str, mission: Option<String>) -> Item {
+/// The commit message of the new item `id`, as `new` and `drop` print it.
+fn filing(id: &str) -> String {
+    format!("Plan {id}")
+}
+
+/// A new open item with empty Goal, Done when and Scope sections.
+pub fn open_item(id: &str, title: &str, mission: Option<String>) -> Item {
     Item {
         schema: ItemSchema::Item,
         schema_version: SchemaVersion,
         id: id.to_string(),
         title: title.to_string(),
-        status: Status::Draft,
+        status: Status::Open,
         mission,
         labels: Vec::new(),
         priority: Priority::Medium,
@@ -58,7 +64,7 @@ pub fn new(
     }
     let belongs = match from {
         Some(_) => Belongs::Settle,
-        None => Belongs::Backlog,
+        None => Belongs::New,
     };
     let command = match from {
         Some(_) => "new --from",
@@ -77,10 +83,9 @@ pub fn new(
         let take = Settle::Take { id, title, into };
         return settle(repo, "new --from", name, take);
     }
-    let item = draft_item(&id, title, into);
+    let item = open_item(&id, title, into);
     let said = output::created_item(&id);
-    let message = format!("Plan {id}");
-    Ok(save(repo, "new", vec![item], Vec::new(), &said, &message)?.into())
+    Ok(save_new(repo, "new", item, &said, &filing(&id))?.into())
 }
 
 /// A new mission `id` titled `title`, open, planned by `planner`, with its
@@ -150,9 +155,13 @@ pub fn set(repo: &mut Repo, id: &str, fields: Fields) -> Result<Outcome> {
             return Ok(Outcome::Refused(output::item_only(id, &item_only)));
         }
         let mut mission = repo.store().mission(id)?.mission;
-        let status = mission.status.status();
-        if let Some(refused) = unplanned(repo, id, status, output::not_planned(id, status)) {
-            return Ok(refused.into());
+        let status = mission.status;
+        if !UNFINISHED.contains(&status) {
+            let text = output::not_planned(id, status.name());
+            let rule = output::rule_mission_from(id, UNFINISHED, status);
+            if let Some(refused) = repo.skip.refuse([rule], text) {
+                return Ok(refused.into());
+            }
         }
         if let Some(title) = fields.title {
             mission.title = title;
@@ -169,12 +178,15 @@ pub fn set(repo: &mut Repo, id: &str, fields: Fields) -> Result<Outcome> {
         return Ok(Outcome::Refused(output::set_unknown(id)));
     };
     let status = record.item.status;
-    let text = match STARTED.contains(&status) {
-        true => output::set_started(id, status),
-        false => output::not_planned(id, status),
-    };
-    if let Some(refused) = unplanned(repo, id, status, text) {
-        return Ok(refused.into());
+    if status != Status::Open {
+        let text = match STARTED.contains(&status) {
+            true => output::set_started(id, status),
+            false => output::not_planned(id, output::status_name(status)),
+        };
+        let rule = output::rule_from(id, &[Status::Open], status);
+        if let Some(refused) = repo.skip.refuse([rule], text) {
+            return Ok(refused.into());
+        }
     }
     // Planning is the base's record, whatever a branch holds.
     let mut item = located.base.as_ref().unwrap_or(record).item.clone();
@@ -205,20 +217,10 @@ pub fn set(repo: &mut Repo, id: &str, fields: Fields) -> Result<Outcome> {
     Ok(save(repo, "set", vec![item], Vec::new(), &said, &message)?.into())
 }
 
-/// `set` on a record that is `status`, refused unless it is a draft or
-/// ready, with `text`.
-fn unplanned(repo: &Repo, id: &str, status: Status, text: String) -> Option<Refused> {
-    match PLANNED.contains(&status) {
-        true => None,
-        false => repo
-            .skip
-            .refuse([output::rule_from(id, PLANNED, status)], text),
-    }
-}
-
 /// `drop`: ends an item or a mission that will not be done, with the
 /// reason as the first line of its Report or Result, in this checkout. A
-/// started item is dropped on its own branch; the base's copy of it, and
+/// started item is dropped on a backlog branch, which is all it takes, or
+/// on its own branch, with the base's copy of it then on a backlog branch;
 /// an item not started or a mission, on a backlog branch.
 pub fn drop(repo: &mut Repo, id: &str, reason: Option<&str>) -> Result<Outcome> {
     let finding = id.contains('/');
@@ -251,14 +253,24 @@ pub fn drop(repo: &mut Repo, id: &str, reason: Option<&str>) -> Result<Outcome> 
             return Ok(Outcome::Refused(output::drop_merged(id)));
         }
     }
+    // Merged and its branch deleted, which this checkout's copy, from
+    // before that merge, cannot say.
+    if !matches!(record.item.status, Status::Done | Status::Dropped) {
+        let tip = repo.base_tip.clone();
+        let there = repo.item_at(&tip, id)?.map(|dir| on_base(dir).item.status);
+        if there == Some(Status::Done) {
+            return Ok(Outcome::Refused(output::drop_done(id, &repo.base)));
+        }
+    }
     let on_branch = branch.filter(|b| !b.merged).and_then(|b| b.record.as_ref());
     match on_branch.map(|r| r.item.status) {
         // Dropped on its branch: what is left is the base's copy, which
         // this checkout holds unless the item is only on its branch.
         Some(Status::Dropped) => carry_drop(repo, id, &located, reason),
-        Some(status) if STARTED.contains(&status) => {
-            drop_started(repo, id, &located, &line, reason)
-        }
+        Some(status) if STARTED.contains(&status) => match repo.named() {
+            Some(Named::Backlog(_)) => drop_on_backlog(repo, id, &located, reason),
+            _ => drop_started(repo, id, &located, &line, reason),
+        },
         _ => {
             if let Some(refused) = misplaced(repo, "drop", Belongs::Backlog)? {
                 return Ok(refused.into());
@@ -298,27 +310,55 @@ fn drop_started(
     item.status = Status::Dropped;
     item.body = put_first(&item.body, "Report", line);
     let message = format!("Drop {id}");
-    let said = output::dropped_started(id, &repo.branch_of(id), reason, repo.remote());
+    let said = output::dropped_started(id, &repo.branch_of(id), reason, repo.remote())
+        + &added_there(repo, id)?;
+    Ok(save(repo, "drop", vec![item], Vec::new(), &said, &message)?.into())
+}
+
+/// `drop` of a started item on a backlog branch: the base's copy is
+/// dropped, and once that merges the base's record wins over the item's
+/// branch, which is left as it is.
+fn drop_on_backlog(repo: &mut Repo, id: &str, located: &Located, reason: &str) -> Result<Outcome> {
+    let record = located.record().expect("a started item has a record");
+    let facts = planned_facts(repo, located, record);
+    if let Some(refused) = repo.skip.refusal(Action::Drop, &facts)? {
+        return Ok(refused.into());
+    }
+    let item = dropped_copy(located, reason);
+    let said = output::dropped_on_backlog(id, &repo.branch_of(id), reason, repo.remote())
+        + &added_there(repo, id)?;
+    let message = format!("Drop {id}");
     Ok(save(repo, "drop", vec![item], Vec::new(), &said, &message)?.into())
 }
 
 /// `drop` of an item dropped on its branch: writes the base's copy, as
 /// this checkout holds it, dropped, for a backlog branch to carry to the
-/// base. An item only on its branch, as after `start --new`, gets its
-/// branch's front matter and its Goal, Done when and Scope; its Report,
-/// any Decisions and its reviews stay on the branch, so nothing on the
-/// base names a review the base lacks.
+/// base.
 fn carry_drop(repo: &mut Repo, id: &str, located: &Located, reason: &str) -> Result<Outcome> {
     if let Some(refused) = misplaced(repo, "drop", Belongs::Backlog)? {
         return Ok(refused.into());
     }
     let branch = located.record().expect("a dropped item has a record");
+    if (located.base.as_ref()).is_some_and(|base| base.item.status == Status::Dropped) {
+        return Ok(Outcome::Refused(output::drop_reached_base(id)));
+    }
+    let why = branch.dropped().unwrap_or(reason).to_string();
+    let item = dropped_copy(located, &why);
+    let said = output::dropped(id, "item", &why) + &added_there(repo, id)?;
+    let message = format!("Drop {id}");
+    Ok(save(repo, "drop", vec![item], Vec::new(), &said, &message)?.into())
+}
+
+/// The base's copy of a started item, as this checkout holds it, dropped
+/// for `why`. An item only on its branch, as after `start --new`, gets its
+/// branch's front matter and its Goal, Done when and Scope; its Report,
+/// any Decisions and its reviews stay on the branch, so nothing on the
+/// base names a review the base lacks.
+fn dropped_copy(located: &Located, why: &str) -> Item {
     let mut item = match &located.base {
-        Some(base) if base.item.status == Status::Dropped => {
-            return Ok(Outcome::Refused(output::drop_reached_base(id)));
-        }
         Some(base) => base.item.clone(),
         None => {
+            let branch = located.record().expect("a started item has a record");
             let mut item = branch.item.clone();
             let definition = ["Goal", "Done when", "Scope"].into_iter();
             let section = |h| match branch.section(h)?.trim() {
@@ -329,16 +369,92 @@ fn carry_drop(repo: &mut Repo, id: &str, located: &Located, reason: &str) -> Res
             item
         }
     };
-    let why = branch.dropped().unwrap_or(reason).to_string();
     item.status = Status::Dropped;
     item.body = put_first(&item.body, "Report", &format!("Dropped: {why}"));
-    let said = output::dropped(id, "item", &why);
-    let message = format!("Drop {id}");
-    Ok(save(repo, "drop", vec![item], Vec::new(), &said, &message)?.into())
+    item
+}
+
+/// Names each other item that the branch of `id`, here or on the remote as
+/// fetched, added and the base does not hold, since dropping `id` leaves
+/// them on that branch, with one the branch's checkout holds and has not
+/// committed. One on both is named from the copy the reader
+/// reads: the remote's where it is strictly ahead, else the local one.
+fn added_there(repo: &mut Repo, id: &str) -> Result<String> {
+    let (root, base_tip) = (repo.root.clone(), repo.base_tip.clone());
+    let branch = repo.branch_of(id);
+    let mut tips = Vec::new();
+    if let Some(tip) = crate::git::branch_tip(&root, &branch)? {
+        tips.push((branch.clone(), tip));
+    }
+    if let Some(remote) = repo.remote() {
+        if let Some(tip) = atelier_core::git::remote_tip(&root, remote, &branch)? {
+            let ahead = match tips.first() {
+                Some((_, local)) => *local != tip && crate::git::is_ancestor(&root, local, &tip)?,
+                None => false,
+            };
+            let at = if ahead { 0 } else { tips.len() };
+            tips.insert(at, (format!("{remote}/{branch}"), tip));
+        }
+    }
+    let mut added = BTreeMap::new();
+    for (name, tip) in &tips {
+        for path in atelier_core::git::changed_records(&root, &base_tip, tip)? {
+            let Some(other) = item_of_record(&path).filter(|other| *other != id) else {
+                continue;
+            };
+            if !matches!(repo.item_at(&base_tip, other), Ok(None)) {
+                continue;
+            }
+            // One that does not read is still named.
+            let title = match repo.item_at(tip, other) {
+                Ok(None) => continue,
+                Ok(Some(dir)) => dir.item.title,
+                Err(_) => "its record does not read".to_string(),
+            };
+            added
+                .entry(other.to_string())
+                .or_insert(output::LeftBehind {
+                    id: other.to_string(),
+                    title,
+                    on: name.clone(),
+                    commit_first: None,
+                });
+        }
+    }
+    // `new` commits nothing, so the branch's checkout can hold one more,
+    // or a newer copy of one it committed.
+    if let Some(at) = crate::git::checkout_of(&root, &branch)?.filter(|at| at.exists()) {
+        for path in atelier_core::repo::planning(&at)? {
+            let Some(other) = item_of_record(&path).filter(|other| *other != id) else {
+                continue;
+            };
+            if !at.join(item_path(other)).exists()
+                || !matches!(repo.item_at(&base_tip, other), Ok(None))
+            {
+                continue;
+            }
+            let store = atelier_core::records::Store::new(at.join(".atelier"));
+            let title = match store.item(other) {
+                Ok(dir) => dir.item.title,
+                Err(_) => "its record does not read".to_string(),
+            };
+            let commit =
+                output::commit_line(Some(&at), std::slice::from_ref(&path), &filing(other), &[]);
+            let found = output::LeftBehind {
+                id: other.to_string(),
+                title,
+                on: branch.clone(),
+                commit_first: Some(commit),
+            };
+            added.insert(other.to_string(), found);
+        }
+    }
+    let added: Vec<_> = added.into_values().collect();
+    Ok(output::dropped_adds(id, &branch, &repo.base, &added))
 }
 
 /// `close`: ends an agreed mission whose items are all done or dropped and
-/// whose Result is written, or, with its result, a draft or ready item that
+/// whose Result is written, or, with its result, an open item that
 /// has no branch.
 pub fn close(repo: &mut Repo, id: &str, result: Option<&str>) -> Result<Outcome> {
     if let Some(refused) = misplaced(repo, "close", Belongs::Backlog)? {
@@ -415,7 +531,7 @@ pub fn not_agreed(repo: &mut Repo, command: &str, id: &str) -> Result<Option<Ref
 
 /// How `new --from` or `drop` settles a deferred finding.
 enum Settle<'a> {
-    /// Into a new draft item with this ID and title, in this mission if
+    /// Into a new open item with this ID and title, in this mission if
     /// any.
     Take {
         id: String,
@@ -477,7 +593,7 @@ fn settle(repo: &mut Repo, command: &str, name: &str, how: Settle) -> Result<Out
             title,
             into,
         } => {
-            let mut item = draft_item(&new, title, into);
+            let mut item = open_item(&new, title, into);
             item.body = taken_body(name, &review, &found);
             let said = output::finding_taken(name, &new);
             let message = format!("Take finding {name} into {new}");
@@ -495,7 +611,7 @@ fn settle(repo: &mut Repo, command: &str, name: &str, how: Settle) -> Result<Out
         vec![review],
         &said,
         &message,
-        false,
+        None,
     )?;
     Ok(saved.into())
 }

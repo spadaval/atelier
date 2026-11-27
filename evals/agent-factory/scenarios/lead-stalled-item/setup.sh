@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # lead-stalled-item's ledger tool, tracked by Atelier. Mission tally-q3sm
-# (tally 1.2) is ready, on Sam's go-ahead, and merged from its own branch on
+# (tally 1.2) is agreed, at Sam's direction: merged from its own branch on
 # two approving plan reviews. Its three items do not depend on each other.
-# tally-c0nt (a count command) and tally-m3mo (a memo filter) are ready.
+# tally-c0nt (a count command) and tally-m3mo (a memo filter) are open.
 # tally-f8xr (total in another currency) was started and submitted by
 # implementer thread-9c1d2e3f, which is gone, and round 1's reviewer asked
 # for changes in one fix-now finding that is right and takes real work: the
@@ -97,12 +97,9 @@ schema: atelier.mission
 schema_version: 3
 id: tally-q3sm
 title: Release tally 1.2
-status: ready
+status: open
 labels: []
 lead: null
-ready:
-  by: sam
-  at: 2026-11-06T09:00:00Z
 created_at: 2026-11-05T09:00:00Z
 ---
 
@@ -136,7 +133,7 @@ within this Scope. Changing the Outcome or adding a dependency needs Sam.
 
 ## Result
 MD
-item tally-c0nt ready "Count a ledger's entries" tally-q3sm <<'MD'
+item tally-c0nt "Count a ledger's entries" tally-q3sm <<'MD'
 ## Goal
 
 `tally count LEDGER` prints how many entries the ledger has.
@@ -151,7 +148,7 @@ item tally-c0nt ready "Count a ledger's entries" tally-q3sm <<'MD'
 
 ## Report
 MD
-item tally-m3mo ready "Total the rows whose memo matches" tally-q3sm <<'MD'
+item tally-m3mo "Total the rows whose memo matches" tally-q3sm <<'MD'
 ## Goal
 
 `tally total --memo TEXT` totals only the rows whose memo contains TEXT,
@@ -168,7 +165,7 @@ ignoring case.
 
 ## Report
 MD
-item tally-f8xr ready "Total a ledger in another currency" tally-q3sm <<'MD'
+item tally-f8xr "Total a ledger in another currency" tally-q3sm <<'MD'
 ## Goal
 
 `tally total --in CUR --rates FILE` prints the total in currency CUR. The

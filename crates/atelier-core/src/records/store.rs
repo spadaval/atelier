@@ -103,10 +103,18 @@ impl Store {
         Ok(ids)
     }
 
+    /// Writes `item`, leaving a file that already reads as it untouched, so
+    /// a command that changes nothing never respells an old status.
     pub fn write_item(&self, item: &Item) -> io::Result<()> {
         let dir = self.item_dir(&item.id);
+        let path = dir.join("item.md");
+        let written = fs::read_to_string(&path).ok();
+        let read = written.and_then(|text| parse_item(&path, &text).ok());
+        if read.as_ref() == Some(item) {
+            return Ok(());
+        }
         fs::create_dir_all(&dir)?;
-        fs::write(dir.join("item.md"), render_item(item))
+        fs::write(path, render_item(item))
     }
 
     pub fn write_mission(&self, mission: &Mission) -> io::Result<()> {
@@ -212,8 +220,20 @@ impl ItemDir {
         body::decisions(&self.path, &self.item.body)
     }
 
-    pub fn responses(&self) -> Result<Vec<Response>, Problem> {
-        body::responses(&self.path, &self.item.body)
+    /// The lines of `### Responses` that read; [`ItemDir::malformed_responses`]
+    /// has the others.
+    pub fn responses(&self) -> Vec<Response> {
+        let lines = body::responses(&self.item.body);
+        lines.into_iter().filter_map(Result::ok).collect()
+    }
+
+    /// A problem for each line of `### Responses` that is no response.
+    pub fn malformed_responses(&self) -> Vec<Problem> {
+        body::responses(&self.item.body)
+            .into_iter()
+            .filter_map(Result::err)
+            .map(|message| Problem::new(&self.path, "Responses", message))
+            .collect()
     }
 
     /// The fix-now findings no later round or decision has closed.
@@ -305,6 +325,15 @@ pub fn parse_item(path: &Path, text: &str) -> Result<Item, Problem> {
     let (mut item, body): (Item, _) = parse_front(path, text)?;
     item.body = body.to_string();
     Ok(item)
+}
+
+/// `draft` or `ready`, where that is how the item record `text` spells
+/// `open`, as records from before 2026-11-22 do. Only `log` asks.
+pub(crate) fn old_status(text: &str) -> Option<&'static str> {
+    let (front_matter, _) = document::split(text)?;
+    let front: serde_yaml::Value = serde_yaml::from_str(front_matter).ok()?;
+    let status = front.get("status")?.as_str()?;
+    ["draft", "ready"].into_iter().find(|old| *old == status)
 }
 
 pub fn render_item(item: &Item) -> String {

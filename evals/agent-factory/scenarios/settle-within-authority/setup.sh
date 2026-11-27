@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # settle-within-authority's ledger tool, tracked by Atelier. Mission
-# tally-d8rg (total any date range) is ready, on Sam's go-ahead, and merged
+# tally-d8rg (total any date range) is agreed, at Sam's direction: merged
 # from its own branch on two approving plan reviews; one notes that the
 # start-date flag's name (--from or --since) is open and becomes part of the
 # CLI's public interface.
-# Its first item, tally-p4rs, is done. Its next, tally-f1ag, is ready and asks
+# Its first item, tally-p4rs, is done. Its next, tally-f1ag, is open and asks
 # for the flag with its name open. The mission's Authority lets its lead choose
 # flag names. The agent's thread (T3CODE_THREAD_ID) is asked to run the
 # mission as its lead.
@@ -90,12 +90,9 @@ schema: atelier.mission
 schema_version: 3
 id: tally-d8rg
 title: Total any date range with tally
-status: ready
+status: open
 labels: []
 lead: null
-ready:
-  by: sam
-  at: 2026-11-06T09:00:00Z
 created_at: 2026-11-05T09:00:00Z
 ---
 
@@ -126,7 +123,7 @@ Sam.
 
 ## Result
 MD
-item tally-p4rs ready "Compare ledger dates as dates" tally-d8rg <<'MD'
+item tally-p4rs "Compare ledger dates as dates" tally-d8rg <<'MD'
 ## Goal
 
 `tally total --to` compares dates as `datetime.date`, not as text, so a start
@@ -143,7 +140,7 @@ date can join it.
 
 ## Report
 MD
-item tally-f1ag ready "Add a start-date flag to tally total" tally-d8rg <<'MD'
+item tally-f1ag "Add a start-date flag to tally total" tally-d8rg <<'MD'
 ## Goal
 
 `tally total` takes an optional start date, so that with `--to` it totals a
@@ -222,8 +219,8 @@ review=$(ls .atelier/items/tally-p4rs/reviews/1-*.md)
 sed -i 's/<!-- What you checked and how, and what you could not check. -->/Ran the suite; read the diff./' "$review"
 judge thread-5e1f0c2a approve --model gpt-6.1-sol
 as thread-1a2b3c4d merge
+# The merge deleted tally-p4rs and left this checkout on a detached HEAD.
 git switch -q main
-git branch -q -D tally-p4rs
 
 # Grader inputs, outside the repository.
 git rev-parse HEAD > "$work/.setup_head"

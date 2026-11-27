@@ -8,7 +8,7 @@ import type { Status } from "../api/Status";
 import type { StatusCount } from "../api/StatusCount";
 
 /** Every status, in the order of the lifecycle, as `atelier show` groups items. */
-export const LIFECYCLE: Status[] = ["draft", "ready", "building", "in_review", "changes_requested", "approved", "done", "dropped"];
+export const LIFECYCLE: Status[] = ["open", "building", "in_review", "changes_requested", "approved", "done", "dropped"];
 
 /** A status as the CLI names it: `in review`, not `in_review`. */
 export function statusName(status: Status | MissionStatus): string {
@@ -21,7 +21,7 @@ export function statusTitle(status: Status | MissionStatus): string {
   return name[0].toUpperCase() + name.slice(1);
 }
 
-/** `5 draft, 2 ready`: a mission's items per status, as one line. */
+/** `5 open, 1 building`: a mission's items per status, as one line. */
 export function countsLine(counts: StatusCount[]): string {
   if (counts.length === 0) return "No items";
   return counts.map((c) => `${c.count} ${statusName(c.status)}`).join(", ");
@@ -35,10 +35,9 @@ export function finished(counts: StatusCount[]): number {
   return counts.filter((c) => c.status === "done" || c.status === "dropped").reduce((sum, c) => sum + c.count, 0);
 }
 
-/** Where a mission stands, for its glyph: work under way shows as running. */
-export function missionState(mission: Pick<MissionRow, "state" | "in_progress">): string {
-  if (mission.in_progress) return "building";
-  return { proposed: "draft", open: "ready", stop_pending: "changes_requested", stopped: "dropped", done: "done" }[mission.state];
+/** Where a mission stands, for its glyph: its own state, or work under way, which shows as running. */
+export function missionState(mission: Pick<MissionRow, "state" | "in_progress">): MissionState | "building" {
+  return mission.in_progress ? "building" : mission.state;
 }
 
 /** A mission's state in words, for its pill. */

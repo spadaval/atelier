@@ -9,11 +9,11 @@
 # runs. Every change still gets a pull request, review and a CI run; a run
 # whose jobs are skipped concludes success.
 #
-# rust (the workspace's build and tests, and `atelier check` on the records)
-# reads everything except tracker records under .atelier/issues, reviews,
-# evidence and runtime, Markdown outside crates/, the Desk's app desk/, the
-# T3 Code extension t3-extension/, and the evals in evals/, which no Rust
-# reads.
+# rust (the workspace's lints, build and tests, and `atelier check` on the
+# records) reads everything except .atelier/items, missions and runtime (the
+# records and their artifacts), Markdown outside crates/, the Desk's app
+# desk/, the T3 Code extension t3-extension/, and the evals in evals/, which
+# no Rust reads.
 # It does read desk/src/api/, the app's types generated from atelier-desk's,
 # which a test there compares.
 #
@@ -23,8 +23,9 @@
 # desk/src/api/.
 #
 # extension (the T3 Code extension's tests in t3-extension/, against an
-# atelier-desk and its app built from the same commit) runs when a change
-# touches t3-extension/, desk/, crates/atelier-desk/, the workspace's
+# atelier-desk and its app built from the same commit, and the test of its
+# release script) runs when a change touches t3-extension/,
+# scripts/t3-extension-release*, desk/, crates/atelier-desk/, the workspace's
 # Cargo.toml, Cargo.lock or rust-toolchain.toml, the CI workflow or this
 # script. Not for crates/atelier-core alone: the fields the extension reads
 # are defined in atelier-desk, and the rust job tests the core.
@@ -42,7 +43,7 @@ head=${2:-HEAD}
 
 needs_extension() {
   case $1 in
-    t3-extension/* | desk/* | crates/atelier-desk/* | Cargo.toml | Cargo.lock | rust-toolchain.toml | .github/workflows/ci.yml | scripts/ci-jobs.sh) return 0 ;;
+    t3-extension/* | scripts/t3-extension-release* | desk/* | crates/atelier-desk/* | Cargo.toml | Cargo.lock | rust-toolchain.toml | .github/workflows/ci.yml | scripts/ci-jobs.sh) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -57,7 +58,7 @@ needs_evals() {
 needs_rust() {
   case $1 in
     desk/src/api/*) return 0 ;;
-    .atelier/issues/* | .atelier/reviews/* | .atelier/evidence/* | .atelier/runtime/* | desk/* | t3-extension/* | evals/*) return 1 ;;
+    .atelier/items/* | .atelier/missions/* | .atelier/runtime/* | desk/* | t3-extension/* | evals/*) return 1 ;;
     crates/*) return 0 ;;
     *.md) return 1 ;;
     *) return 0 ;;

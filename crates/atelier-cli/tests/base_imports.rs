@@ -26,7 +26,7 @@ fn merging() -> Scratch {
 }
 
 fn merging_record(status: &str, blockers: &[&str]) -> Scratch {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     fs::write(root.join("conflict"), "base\n").unwrap();
     on_base(&root, "Common ancestor");
@@ -34,7 +34,7 @@ fn merging_record(status: &str, blockers: &[&str]) -> Scratch {
     fs::write(root.join("conflict"), "topic\n").unwrap();
     git(&root, &["add", "."]);
     git(&root, &["commit", "-qm", "Topic"]);
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     write_item(
         &root,
         ID,
@@ -154,7 +154,7 @@ fn unverified_or_edited_imports_still_refuse_through_hook() {
 #[test]
 fn configured_remote_base_is_trusted_but_an_unconfigured_remote_is_not() {
     for trusted in [false, true] {
-        let scratch = Scratch::new(&[(ID, "ready")]);
+        let scratch = Scratch::new(&[(ID, "open")]);
         let root = scratch.root();
         if trusted {
             append(&root, ".atelier/config.toml", "\n[forge]\nprovider = \"github\"\nremote = \"upstream\"\nci_workflow = \"ci.yml\"\n");
@@ -165,7 +165,7 @@ fn configured_remote_base_is_trusted_but_an_unconfigured_remote_is_not() {
         fs::write(root.join("topic"), "topic").unwrap();
         git(&root, &["add", "."]);
         git(&root, &["commit", "-qm", "Topic"]);
-        git(&root, &["checkout", "-q", "--detach", "main"]);
+        off_base(&root);
         write_item(&root, ID, "approved", &["t1"], &[], "Already reviewed");
         git(&root, &["add", "."]);
         git(&root, &["commit", "-qm", "Remote base"]);

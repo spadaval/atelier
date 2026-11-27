@@ -354,8 +354,9 @@ Running, it says in one sentence how the mission stands, lists under *Needs
 you* each item labelled needs-human and each thread waiting on a person
 (T3 says `waiting`, or the thread has a request such as an approval pending)
 or quiet for 30 minutes, with a button that opens it, lists the other live
-threads under *At work* with their latest line, and folds *Not started*,
-*Merged* and *Outcome and success criteria* to a line each. Done, it shows
+threads under *At work* with their latest line, and folds *Not started*
+(each item saying it can start or what it waits on), *Merged* and *Outcome
+and success criteria* to a line each. Done, it shows
 the Result as written, a lane per item over time and the merged items, most
 review rounds first, each opening its pull request, or its Desk page where
 the Desk knows none. `L` opens the lead's thread, `Enter` the focused row,
@@ -383,7 +384,7 @@ when the window is shown again. Fields the Desk does not send count as empty.
 - **In motion**, with the count: up to three items, each with its ID, title,
   stage and how long, and the holder's thread title under it. A click opens the
   holder's thread when T3 knows it, else the item in the layer.
-- **Next up**, with the count: up to three ready items. A click puts "Start
+- **Next up**, with the count: up to three open items that can start. A click puts "Start
   <id>: run `atelier start <id>` in a fresh checkout and follow what it prints."
   in the composer, never sending it. The prompt is made only from an ID of
   Atelier's form (lowercase letters and digits in dash-separated parts); a row
@@ -984,8 +985,8 @@ and merged items, the reads it makes, and the layout at 500, 728, 1,100 and
 1,400 pixels, and writes screenshots to `artifacts/mission-*.png`.
 `test-home.mjs` does the same for the project home, from the repositories in
 `check/home-fixtures.ts`: one with a mission in each of Now, Next and Later,
-an item in no mission under each and steps on three days of the week, and one
-with nothing open. It checks the lanes, a mission folding open to its items
+items in no mission under Now and Next and steps on three days of the week,
+and one with nothing open. It checks the lanes, a mission folding open to its items
 and their holders, the week, what each row opens (the proposed plan saying it
 is one, so the layer frames its record page), the reads it makes, a read
 that fails, and the layout at the same widths, and writes screenshots to

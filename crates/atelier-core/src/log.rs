@@ -3,25 +3,28 @@
 //! the base's tip and the tips of started items' branches, with each
 //! record's old and new version; the repository's one `git cat-file`
 //! process reads those versions; and an action is found by comparing a
-//! record's two versions across one commit.
+//! record's two versions across one commit. A plan's merge is found by a
+//! second listing, of the base's first-parent merges that changed a mission.
 
 use crate::actions::STARTED;
 use crate::model::{
-    Finding, FindingName, Item, Mission, MissionStatus, Review, ReviewName, Settlement, Status,
-    Thread, Threads, Verdict,
+    Finding, FindingName, Item, MissionStatus, Review, ReviewName, Settlement, Status, Thread,
+    Threads, Verdict,
 };
+use crate::plan::{changed_sections, is_plan_file};
 use crate::records::{
-    parse_item, parse_mission, parse_review, validate_id, ItemDir, MissionDir, ReadError,
-    ReviewFile,
+    old_status, parse_item, parse_mission, parse_review, validate_id, ItemDir, MissionDir,
+    ReadError, ReviewFile,
 };
-use crate::repo::item_path;
+use crate::repo::{item_path, mission_path};
 use crate::skip::{BY_TRAILER, TRAILER};
 use crate::{git, Repo, Walked};
 use anyhow::{bail, Context, Result};
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, NaiveDate, TimeDelta, Utc};
 use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
 use std::rc::Rc;
+use std::time::Instant;
 
 /// One action, found in one commit.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,16 +47,39 @@ pub struct Logged {
     pub skipped_by: Option<Thread>,
 }
 
-/// A status a record moved from and to in one commit; `from` is `None`
-/// when the commit added the record.
+/// A status a record moved from and to in one commit, each as that record
+/// spells it, so an old item's `draft` and `ready` show as history has
+/// them; `from` is `None` when the commit added the record.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Move {
-    pub from: Option<Status>,
-    pub to: Status,
-    /// A mission's move, whose statuses the action table writes as an item's
-    /// ([`crate::model::MissionStatus::status`]).
-    pub mission: bool,
+    pub from: Option<&'static str>,
+    pub to: &'static str,
 }
+
+impl Move {
+    /// `<from> -> <to>`; `new` for a record the commit added.
+    fn shown(&self) -> String {
+        format!("{} -> {}", self.from.unwrap_or("new"), self.to)
+    }
+}
+
+/// How the item record `text`, whose status reads as `status`, spells it.
+fn spelled(status: Status, text: &str) -> &'static str {
+    match status {
+        Status::Open => old_status(text).unwrap_or("open"),
+        Status::Building => "building",
+        Status::InReview => "in_review",
+        Status::ChangesRequested => "changes_requested",
+        Status::Approved => "approved",
+        Status::Done => "done",
+        Status::Dropped => "dropped",
+    }
+}
+
+/// How much older than the commit that adds it a new plan's `created_at` may
+/// be. An older record was made elsewhere and only written here then, as
+/// the cutover's conversion wrote missions planned days before.
+const NEW_PLAN: TimeDelta = TimeDelta::hours(24);
 
 /// What happened, with what changed.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -99,7 +125,17 @@ pub enum Happened {
     Lead {
         from: Option<Thread>,
     },
-    /// Made ready, by the name given with `--by`.
+    /// The mission's record first appeared, as a new plan.
+    Plan {
+        status: Move,
+    },
+    /// A merge on the base's first-parent line agreed the mission's plan or,
+    /// where `amends`, changed an agreed one.
+    PlanMerge {
+        amends: bool,
+    },
+    /// A go-ahead, by the name recorded with it, which only history from
+    /// before items and missions were open holds.
     Ready {
         by: Option<String>,
         status: Move,
@@ -112,8 +148,8 @@ pub enum Happened {
         status: Move,
     },
     /// A record changed in a commit that passed a rule, with no action above
-    /// found on it, such as the merge of a plan or a `set` of a started
-    /// item: shown so that no passed rule goes unseen. `merge` when the
+    /// found on it, such as a `set` of a started item or the merge
+    /// of one: shown so that no passed rule goes unseen. `merge` when the
     /// commit is an Atelier merge.
     Passed {
         merge: bool,
@@ -132,6 +168,9 @@ impl Happened {
             Happened::Merge { .. } => "merge",
             Happened::Settle { .. } => "settle",
             Happened::Lead { .. } => "lead",
+            Happened::Plan { .. } => "plan",
+            // Not `merge`, by which the gardener counts merged items.
+            Happened::PlanMerge { .. } => "plan-merge",
             Happened::Ready { .. } => "ready",
             Happened::Drop { .. } => "drop",
             Happened::Close { .. } => "close",
@@ -140,19 +179,74 @@ impl Happened {
         }
     }
 
+    /// What changed, in the parts its line shows (docs/design.md, A line).
+    pub fn changed(&self) -> Vec<String> {
+        let moved = |status: &Option<Move>| status.iter().map(Move::shown).collect::<Vec<_>>();
+        match self {
+            Happened::Start { status } => moved(status),
+            Happened::TakeOver { from, status } => {
+                [vec![format!("from {from}")], moved(status)].concat()
+            }
+            Happened::Submit { status }
+            | Happened::Close { status }
+            | Happened::Plan { status } => vec![status.shown()],
+            Happened::PlanMerge { amends } => amends
+                .then(|| "amendment".to_string())
+                .into_iter()
+                .collect(),
+            Happened::Review { review } => vec![review.to_string()],
+            Happened::ReviewTakeOver { review, from } => {
+                vec![review.to_string(), format!("from {from}")]
+            }
+            Happened::Verdict {
+                review,
+                verdict,
+                status,
+            } => {
+                let verdict = match verdict {
+                    Verdict::Approve => "approve",
+                    Verdict::Changes => "changes",
+                };
+                [vec![format!("{review} {verdict}")], moved(status)].concat()
+            }
+            Happened::Merge { status, trivial } => {
+                let trivial = trivial.iter().map(|why| format!("trivial: {why}"));
+                [status.shown()].into_iter().chain(trivial).collect()
+            }
+            Happened::Settle {
+                finding,
+                settlement,
+            } => vec![match settlement {
+                Settlement::Taken { item, .. } => format!("{finding} taken into {item}"),
+                Settlement::Dropped { reason, .. } => format!("{finding} dropped: {reason}"),
+            }],
+            Happened::Lead { from } => from.iter().map(|from| format!("from {from}")).collect(),
+            Happened::Ready { by, status } => {
+                let by = by.iter().map(|by| format!("by {by}"));
+                [status.shown()].into_iter().chain(by).collect()
+            }
+            Happened::Drop { status, reason } => {
+                [status.shown()].into_iter().chain(reason.clone()).collect()
+            }
+            Happened::Passed { .. } => Vec::new(),
+        }
+    }
+
     /// Its row in the log's table, which orders the actions of one commit.
     fn row(&self) -> u8 {
         match self {
-            Happened::Start { .. } | Happened::TakeOver { .. } => 0,
-            Happened::Submit { .. } => 1,
-            Happened::Review { .. } | Happened::ReviewTakeOver { .. } => 2,
-            Happened::Verdict { .. } => 3,
-            Happened::Merge { .. } => 4,
-            Happened::Settle { .. } => 5,
-            Happened::Lead { .. } => 6,
-            Happened::Ready { .. } => 7,
-            Happened::Drop { .. } | Happened::Close { .. } => 8,
-            Happened::Passed { .. } => 9,
+            Happened::Plan { .. } => 0,
+            Happened::Start { .. } | Happened::TakeOver { .. } => 1,
+            Happened::Submit { .. } => 2,
+            Happened::Review { .. } | Happened::ReviewTakeOver { .. } => 3,
+            Happened::Verdict { .. } => 4,
+            Happened::Merge { .. } => 5,
+            Happened::PlanMerge { .. } => 6,
+            Happened::Settle { .. } => 7,
+            Happened::Lead { .. } => 8,
+            Happened::Ready { .. } => 9,
+            Happened::Drop { .. } | Happened::Close { .. } => 10,
+            Happened::Passed { .. } => 11,
         }
     }
 
@@ -166,6 +260,8 @@ impl Happened {
                 | Happened::Submit { .. }
                 | Happened::Verdict { .. }
                 | Happened::Merge { .. }
+                | Happened::Plan { .. }
+                | Happened::PlanMerge { .. }
                 | Happened::Ready { .. }
                 | Happened::Drop { .. }
                 | Happened::Close { .. }
@@ -218,6 +314,18 @@ pub fn history(
     of: Option<&str>,
     since: Option<DateTime<Utc>>,
 ) -> Result<Option<History>> {
+    history_until(repo, of, since, None)
+}
+
+/// [`history`], given up with an error once `deadline` has passed: its Git
+/// listings are killed then, and no further commit or record is read.
+pub fn history_until(
+    repo: &mut Repo,
+    of: Option<&str>,
+    since: Option<DateTime<Utc>>,
+    deadline: Option<Instant>,
+) -> Result<Option<History>> {
+    in_time(deadline)?;
     // Every branch the convention names, local and remote-tracking, as
     // `show` reads them: a mission's lookup by name reads the tip `show`
     // reads, and the walk takes every tip, a backlog branch's included.
@@ -257,15 +365,20 @@ pub fn history(
             revisions.push(tip.clone());
         }
     }
-    let commits = walk(&repo.root, &revisions)?;
+    let commits = walk(&repo.root, &revisions, deadline)?;
+    let merges = mission_merges(&repo.root, &base_tip, deadline)?;
     let mut walker = Walker {
         repo,
+        deadline,
+        merges,
+        appeared: BTreeSet::new(),
         versions: HashMap::new(),
         pending: HashMap::new(),
         said: BTreeSet::new(),
         history: History::default(),
     };
     for commit in &commits {
+        in_time(deadline)?;
         walker.commit(commit)?;
     }
     let mut history = walker.history;
@@ -284,6 +397,7 @@ pub fn history(
                 .collect();
             let mut members = BTreeSet::new();
             for item in ids {
+                in_time(deadline)?;
                 if in_mission(repo, &base_tip, &walked, &item, mission)? {
                     members.insert(item);
                 }
@@ -299,6 +413,13 @@ pub fn history(
         .passed_over
         .retain(|passed| keep(&passed.id) && recent(&passed.time));
     Ok(Some(history))
+}
+
+fn in_time(deadline: Option<Instant>) -> Result<()> {
+    if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+        bail!("the history was not read by its deadline");
+    }
+    Ok(())
 }
 
 /// Whether the item `id`'s record names `mission`: on the base's tip,
@@ -352,7 +473,7 @@ struct Change {
 /// parents before children. `--full-history` follows both sides of every
 /// merge: without it Git follows only the side a merge matches on the
 /// record paths, and the other side's actions are lost.
-fn walk(root: &Path, revisions: &[String]) -> Result<Vec<Commit>> {
+fn walk(root: &Path, revisions: &[String], deadline: Option<Instant>) -> Result<Vec<Commit>> {
     let trailer = |key: &str| format!("%(trailers:key={key},valueonly,separator=%x1f)");
     let format = format!(
         "--format=%x01%H%x02%h%x02%P%x02%ct%x02{}%x02{}%x02{}%x03",
@@ -378,8 +499,43 @@ fn walk(root: &Path, revisions: &[String]) -> Result<Vec<Commit>> {
     ];
     args.extend(revisions.iter().map(String::as_str));
     args.extend(["--", ".atelier/items", ".atelier/missions"]);
-    let listed = git::listing(root, &args)?;
+    let listed = git::listing_until(root, &args, deadline)?;
     listed.split('\x01').skip(1).map(commit).collect()
+}
+
+/// Each merge on `base_tip`'s first-parent line that changed a mission's
+/// files against its first parent, with those files. [`walk`] cannot say:
+/// it lists no files for a merge, and the parents it gives are the nearest
+/// listed commits, which drop a base that had no record yet.
+fn mission_merges(
+    root: &Path,
+    base_tip: &str,
+    deadline: Option<Instant>,
+) -> Result<HashMap<String, Vec<String>>> {
+    let args = [
+        "log",
+        "-z",
+        "--no-color",
+        "--no-show-signature",
+        "--first-parent",
+        "--merges",
+        "-m",
+        "--no-renames",
+        "--name-only",
+        "--format=%x01%H%x03",
+        base_tip,
+        "--",
+        ".atelier/missions",
+    ];
+    let listed = git::listing_until(root, &args, deadline)?;
+    let merge = |entry: &str| {
+        let (hash, files) = entry
+            .split_once('\x03')
+            .with_context(|| format!("git log printed a merge this tool cannot read: {entry:?}"))?;
+        let files = git::names(files.trim_start_matches(['\0', '\n']));
+        Ok((hash.to_string(), files))
+    };
+    listed.split('\x01').skip(1).map(merge).collect()
 }
 
 /// One commit as [`walk`]'s `git log` prints it: its fields, each ended by
@@ -473,12 +629,11 @@ impl Record {
 enum Version {
     Item {
         item: Item,
+        /// Its status as the record spells it.
+        stored: &'static str,
         dropped: Option<String>,
     },
-    Mission {
-        mission: Mission,
-        dropped: Option<String>,
-    },
+    Mission(MissionDir),
     Review {
         name: ReviewName,
         review: Review,
@@ -492,6 +647,7 @@ type Pending = HashMap<String, (String, Option<Rc<Version>>)>;
 
 struct Walker<'r, 's> {
     repo: &'r mut Repo<'s>,
+    deadline: Option<Instant>,
     /// Each version read, or what is wrong with it, by its path and blob.
     versions: HashMap<(String, String), Result<Rc<Version>, String>>,
     /// After each commit that has one, the records whose version there does
@@ -500,6 +656,11 @@ struct Walker<'r, 's> {
     pending: HashMap<String, Pending>,
     /// Each version passed over and said so, by its path and blob.
     said: BTreeSet<(String, String)>,
+    /// The base's merges that changed a mission's files, by [`mission_merges`].
+    merges: HashMap<String, Vec<String>>,
+    /// The missions a version of which has been read, so that only a
+    /// record's first appearance is a plan.
+    appeared: BTreeSet<String>,
     history: History,
 }
 
@@ -578,7 +739,13 @@ impl Walker<'_, '_> {
             for (record, old, new) in &others {
                 let id = record.id().to_string();
                 let actions = match record {
-                    Record::Mission(_) => mission_actions(old.as_deref(), new),
+                    Record::Mission(_) => {
+                        let mut actions = mission_actions(old.as_deref(), new);
+                        if self.appeared.insert(id.clone()) && old.is_none() {
+                            actions.extend(planned(new, commit.time));
+                        }
+                        actions
+                    }
                     _ => review_actions(old.as_deref(), new),
                 };
                 found.extend(
@@ -588,6 +755,7 @@ impl Walker<'_, '_> {
                 );
             }
         }
+        found.extend(self.plan_merges(commit)?);
         // Each goes to its item's last verdict, of the latest round, as
         // review files come in path order.
         for (id, moved) in verdicts {
@@ -606,8 +774,8 @@ impl Walker<'_, '_> {
             self.pending.insert(commit.hash.clone(), pending);
         }
         // A record the commit changed with no action of its own, beside one
-        // that has, still shows the rules the commit passed: a `ready` of
-        // two items, one of which was ready already.
+        // that has, still shows the rules the commit passed: a `set` of a
+        // started item beside a `drop` of another.
         if !commit.skips.is_empty() {
             let merge = commit.parents.len() > 1;
             for id in self.records_of(commit)? {
@@ -659,27 +827,28 @@ impl Walker<'_, '_> {
         id: &str,
     ) -> Result<Option<(String, Option<Thread>, Happened)>> {
         let path = item_path(id);
-        let at = |repo: &mut Repo, commit: &str| -> Result<Option<Item>> {
-            let text = repo.reader().blob(&format!("{commit}:{path}"))?;
-            Ok(text.and_then(|text| parse_item(Path::new(&path), &text).ok()))
+        let at = |repo: &mut Repo, commit: &str| -> Result<Option<(Item, &'static str)>> {
+            let Some(text) = repo.reader().blob(&format!("{commit}:{path}"))? else {
+                return Ok(None);
+            };
+            let item = parse_item(Path::new(&path), &text).ok();
+            Ok(item.map(|item| {
+                let stored = spelled(item.status, &text);
+                (item, stored)
+            }))
         };
-        let Some(new) = at(self.repo, &commit.hash)? else {
+        let Some((new, _)) = at(self.repo, &commit.hash)? else {
             return Ok(None);
         };
-        let old = at(self.repo, &commit.parents[1])?;
-        let from = old.map(|old| old.status);
+        let from = at(self.repo, &commit.parents[1])?.map(|(_, stored)| stored);
         // The merge of its own branch brings a started item to the base,
         // where it reads as done; a merge before that wrote `done`.
         let merged = new.status == Status::Done || STARTED.contains(&new.status);
-        if !merged || from == Some(Status::Done) {
+        if !merged || from == Some("done") {
             return Ok(None);
         }
         let action = Happened::Merge {
-            status: Move {
-                from,
-                to: Status::Done,
-                mission: false,
-            },
+            status: Move { from, to: "done" },
             trivial: new.trivial.clone(),
         };
         Ok(Some((
@@ -687,6 +856,61 @@ impl Walker<'_, '_> {
             new.implementers.holder().cloned(),
             action,
         )))
+    }
+
+    /// The plan merges of `commit`, where it is a merge on the base's
+    /// first-parent line: each mission it brought to the base open, and each
+    /// agreed one whose plan it changed, compared with its first parent as
+    /// `merge` judges a plan change.
+    fn plan_merges(&mut self, commit: &Commit) -> Result<Vec<(String, Option<Thread>, Happened)>> {
+        let Some(files) = self.merges.remove(&commit.hash) else {
+            return Ok(Vec::new());
+        };
+        let ids: BTreeSet<&str> = (files.iter())
+            .filter_map(|file| file.strip_prefix(".atelier/missions/")?.split('/').next())
+            .collect();
+        let mut merged = Vec::new();
+        for id in ids {
+            let Some(Some(new)) = self.mission_at(&commit.hash, id)? else {
+                continue;
+            };
+            let before = self.mission_at(&format!("{}^", commit.hash), id)?;
+            let proposed = match &before {
+                None => true,
+                Some(old) => {
+                    (old.as_ref()).is_some_and(|old| old.mission.status == MissionStatus::Draft)
+                }
+            };
+            let happened = match proposed {
+                true => new.mission.status == MissionStatus::Open,
+                // An earlier version that does not read has only its files
+                // to compare.
+                false => {
+                    files.iter().any(|file| is_plan_file(id, file))
+                        || (before.flatten())
+                            .is_some_and(|old| !changed_sections(&old, &new).is_empty())
+                }
+            };
+            if happened {
+                let action = Happened::PlanMerge { amends: !proposed };
+                let planner = new.mission.planners.holder().cloned();
+                merged.push((id.to_string(), planner, action));
+            }
+        }
+        Ok(merged)
+    }
+
+    /// The mission `id` as `commit` holds it: `None` when it has none, and
+    /// `Some(None)` when its version there does not read.
+    fn mission_at(&mut self, commit: &str, id: &str) -> Result<Option<Option<MissionDir>>> {
+        let path = mission_path(id);
+        let text = match self.repo.reader().blob(&format!("{commit}:{path}")) {
+            Ok(Some(text)) => text,
+            Ok(None) => return Ok(None),
+            Err(ReadError::Record(_)) => return Ok(Some(None)),
+            Err(error) => return Err(error.into()),
+        };
+        Ok(Some(mission_dir(&path, &text).ok()))
     }
 
     /// The IDs of the records `commit` changed, each once: for an Atelier
@@ -698,7 +922,7 @@ impl Walker<'_, '_> {
                 if let Some(id) = commit.merged.as_ref().filter(|id| validate_id(id).is_ok()) {
                     return Ok(vec![id.clone()]);
                 }
-                let listed = git::listing(
+                let listed = git::listing_until(
                     &self.repo.root,
                     &[
                         "diff",
@@ -711,6 +935,7 @@ impl Walker<'_, '_> {
                         ".atelier/items",
                         ".atelier/missions",
                     ],
+                    self.deadline,
                 )?;
                 git::names(&listed)
             }
@@ -781,23 +1006,12 @@ fn version(path: &str, text: &str) -> Result<Version, String> {
             };
             let dropped = dir.dropped().map(str::to_string);
             Ok(Version::Item {
+                stored: spelled(dir.item.status, text),
                 item: dir.item,
                 dropped,
             })
         }
-        Record::Mission(_) => {
-            let mission = parse_mission(file, text).map_err(|p| p.to_string())?;
-            let dir = MissionDir {
-                path: file.to_path_buf(),
-                mission,
-                reviews: Vec::new(),
-            };
-            let dropped = dir.dropped().map(str::to_string);
-            Ok(Version::Mission {
-                mission: dir.mission,
-                dropped,
-            })
-        }
+        Record::Mission(_) => mission_dir(path, text).map(Version::Mission),
         Record::Review { stem, .. } => {
             let name: ReviewName = stem.parse()?;
             let review = parse_review(file, text).map_err(|p| p.to_string())?;
@@ -814,6 +1028,16 @@ fn version(path: &str, text: &str) -> Result<Version, String> {
             })
         }
     }
+}
+
+/// The mission record at `path` read from `text`, without its reviews.
+fn mission_dir(path: &str, text: &str) -> Result<MissionDir, String> {
+    let file = Path::new(path);
+    Ok(MissionDir {
+        path: file.to_path_buf(),
+        mission: parse_mission(file, text).map_err(|p| p.to_string())?,
+        reviews: Vec::new(),
+    })
 }
 
 type Actions = Vec<(Option<Thread>, Happened)>;
@@ -834,22 +1058,23 @@ fn gained<'a>(old: Option<&Threads>, new: &'a Threads) -> Vec<(Option<&'a Thread
 /// The actions across an item's versions `old` and `new`, and the status move
 /// they leave to a verdict in the same commit.
 fn item_actions(old: Option<&Version>, new: &Version) -> (Actions, Option<Move>) {
-    let Version::Item { item: new, dropped } = new else {
+    let Version::Item {
+        item: new,
+        stored: to,
+        dropped,
+    } = new
+    else {
         return (Vec::new(), None);
     };
-    let old = match old {
-        Some(Version::Item { item, .. }) => Some(item),
-        _ => None,
+    let (old, from) = match old {
+        Some(Version::Item { item, stored, .. }) => (Some(item), Some(*stored)),
+        _ => (None, None),
     };
-    let from = old.map(|old| old.status);
-    let moved = (from != Some(new.status)).then_some(Move {
-        from,
-        to: new.status,
-        mission: false,
-    });
+    let to = *to;
+    let moved = (from != Some(to)).then_some(Move { from, to });
     let holder = new.implementers.holder().cloned();
     let mut actions = Vec::new();
-    let mut building = moved.filter(|status| status.to == Status::Building);
+    let mut building = moved.filter(|_| new.status == Status::Building);
     for (before, thread) in gained(old.map(|old| &old.implementers), &new.implementers) {
         let status = building.take();
         let action = match before {
@@ -863,9 +1088,9 @@ fn item_actions(old: Option<&Version>, new: &Version) -> (Actions, Option<Move>)
     }
     let mut verdict = None;
     if let Some(status) = moved {
-        match status.to {
+        match new.status {
             Status::InReview => actions.push((holder.clone(), Happened::Submit { status })),
-            Status::Ready => {
+            Status::Open if to == "ready" => {
                 let by = new.ready.as_ref().map(|ready| ready.by.clone());
                 actions.push((None, Happened::Ready { by, status }));
             }
@@ -875,7 +1100,7 @@ fn item_actions(old: Option<&Version>, new: &Version) -> (Actions, Option<Move>)
             }
             Status::Done => actions.push((None, Happened::Close { status })),
             Status::Approved | Status::ChangesRequested => verdict = Some(status),
-            Status::Draft | Status::Building => {}
+            Status::Open | Status::Building => {}
         }
     }
     (actions, verdict)
@@ -883,15 +1108,12 @@ fn item_actions(old: Option<&Version>, new: &Version) -> (Actions, Option<Move>)
 
 /// The actions across a mission's versions `old` and `new`.
 fn mission_actions(old: Option<&Version>, new: &Version) -> Actions {
-    let Version::Mission {
-        mission: new,
-        dropped,
-    } = new
-    else {
+    let Version::Mission(dir) = new else {
         return Vec::new();
     };
+    let new = &dir.mission;
     let old = match old {
-        Some(Version::Mission { mission, .. }) => Some(mission),
+        Some(Version::Mission(old)) => Some(&old.mission),
         _ => None,
     };
     let mut actions = Vec::new();
@@ -899,14 +1121,10 @@ fn mission_actions(old: Option<&Version>, new: &Version) -> Actions {
     if new.lead.is_some() && new.lead != before {
         actions.push((new.lead.clone(), Happened::Lead { from: before }));
     }
-    let from = old.map(|old| old.status.status());
-    let to = new.status.status();
+    let from = old.map(|old| old.status.name());
+    let to = new.status.name();
     if from != Some(to) {
-        let status = Move {
-            from,
-            to,
-            mission: true,
-        };
+        let status = Move { from, to };
         match new.status {
             // Made ready, in a record from when a mission had a go-ahead;
             // an old draft written open by `submit` is no action of its own.
@@ -917,7 +1135,7 @@ fn mission_actions(old: Option<&Version>, new: &Version) -> Actions {
                 }
             }
             MissionStatus::Dropped => {
-                let reason = dropped.clone();
+                let reason = dir.dropped().map(str::to_string);
                 actions.push((None, Happened::Drop { status, reason }));
             }
             MissionStatus::Done => actions.push((None, Happened::Close { status })),
@@ -925,6 +1143,30 @@ fn mission_actions(old: Option<&Version>, new: &Version) -> Actions {
         }
     }
     actions
+}
+
+/// The plan that `new`, the first version of a mission's record, committed
+/// at `time`, is: open, with no lead or Result, and created no more than
+/// [`NEW_PLAN`] before. A record converted from before the cutover is none.
+fn planned(new: &Version, time: DateTime<Utc>) -> Option<(Option<Thread>, Happened)> {
+    let Version::Mission(dir) = new else {
+        return None;
+    };
+    let mission = &dir.mission;
+    let is_new = mission.status == MissionStatus::Open
+        && mission.lead.is_none()
+        && !dir.result_written()
+        && time - mission.created_at.with_timezone(&Utc) <= NEW_PLAN;
+    let status = Move {
+        from: None,
+        to: mission.status.name(),
+    };
+    is_new.then(|| {
+        (
+            mission.planners.0.first().cloned(),
+            Happened::Plan { status },
+        )
+    })
 }
 
 /// The actions across a review's versions `old` and `new`. A verdict's status

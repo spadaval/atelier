@@ -19,7 +19,7 @@ import { Crumbs } from "../components/Crumbs";
 import { since, sinceAgo as ago, who } from "../components/Glance";
 import { api, to, useAll, useData, useThreads } from "../lib/api";
 import { openThread } from "../lib/host";
-import { logEntries, span, stage, stageAt } from "../lib/mission";
+import { cannotStartUntil, logEntries, span, stage, stageAt } from "../lib/mission";
 import { roleWords } from "../lib/words";
 
 const STALE_MS = 30 * 60 * 1000;
@@ -46,7 +46,9 @@ function ActiveItem({ repo, row, page, events, holder }: { repo: string; row: It
   useEffect(() => setAll(false), [row.id]);
   const pr = page?.pull_request ?? null;
   const checks = useData<ChecksResponse>(pr ? api.checks(repo, pr.number) : null, 60_000);
-  const blockers = row.blockers.filter((b) => b.status !== "done");
+  // An open item's blockers are among what it cannot start until.
+  const until = cannotStartUntil(row);
+  const blockers = row.status === "open" ? [] : row.blockers.filter((b) => b.status !== "done");
   const doneWhen = page?.done_when ?? [];
   const shown = all ? doneWhen : doneWhen.slice(0, 6);
   const ticked = doneWhen.filter((d) => d.ticked).length;
@@ -76,6 +78,16 @@ function ActiveItem({ repo, row, page, events, holder }: { repo: string; row: It
           </>
         ) : null}
       </dl>
+      {until.length > 0 ? (
+        <>
+          <h4>Cannot start until</h4>
+          <ul className="mcx-bullets">
+            {until.map((text) => (
+              <li key={text}>{text}</li>
+            ))}
+          </ul>
+        </>
+      ) : null}
       {blockers.length > 0 ? (
         <>
           <h4>Blocked by</h4>
@@ -203,9 +215,8 @@ export function MissionControlPage() {
   const merged = (i: ItemRow) => events.find((e) => e.id === i.id && e.kind === "merged")?.at ?? "";
   const fallback =
     live[0] ??
-    items.find((i) => i.status === "ready") ??
+    items.find((i) => i.status === "open") ??
     [...items].filter((i) => i.status === "done").sort((a, b) => merged(b).localeCompare(merged(a)))[0] ??
-    items.find((i) => i.status !== "draft") ??
     items[0] ??
     null;
   const selected = items.find((i) => i.id === params.get("item")) ?? fallback;

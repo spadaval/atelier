@@ -20,7 +20,7 @@ export function item(id: string, title: string, status: ItemRow["status"], more:
     priority: "medium",
     labels: [],
     needs_human: false,
-    startable: status === "ready",
+    startable: status === "open",
     blockers: [],
     waiting_on: [],
     holder: null,
@@ -113,9 +113,16 @@ const runningItems = [
   item("atelier-r003", "Read every Desk through the loader's gate", "building", { holder: "thread:busy" }),
   item("atelier-r004", "Fold the merged items to one line", "approved", { holder: "thread:merging" }),
   item("atelier-r005", "Show the Result as written", "done"),
-  item("atelier-r006", "Stack the page below 560 pixels", "ready", { startable: true }),
-  item("atelier-r007", "Name each key on its button", "draft"),
-  item("atelier-r008", "Wait for the decision", "ready", { startable: false, waiting_on: ["atelier-r001"] }),
+  item("atelier-r006", "Stack the page below 560 pixels", "open", { startable: true }),
+  item("atelier-r007", "Name each key on its button", "open"),
+  item("atelier-r008", "Wait for the decision", "open", { startable: false, waiting_on: ["atelier-r001"], cannot_start: ["atelier-r001 is done (it is building)"] }),
+  // An amendment's: not on the base until its branch merges.
+  item("atelier-r009", "Add what the amendment asks", "open", { startable: false, branch: { name: "origin/atelier-rm01", merged: false } }),
+  item("atelier-r010", "Start over on a clean branch", "open", {
+    startable: false,
+    branch: { name: "atelier-r010", merged: false },
+    cannot_start: ["No branch atelier-r010 exists yet (one does; if nothing on it is needed, delete it with `git branch -D atelier-r010`)"],
+  }),
 ];
 
 export const scenarios: Record<string, Scenario> = {
@@ -167,7 +174,7 @@ export const scenarios: Record<string, Scenario> = {
       "atelier-rm03",
       "Keep the sidebar's count",
       "open",
-      [item("atelier-c001", "Count waiting threads", "building", { holder: "thread:calm" }), item("atelier-c002", "Draft the next step", "draft")],
+      [item("atelier-c001", "Count waiting threads", "building", { holder: "thread:calm" }), item("atelier-c002", "Draft the next step", "open")],
       [agent("thread:lead3", "lead", null, false), agent("thread:calm", "implementer", "atelier-c001", true)],
     ),
     [event("atelier-rm03", "merged", 60)],

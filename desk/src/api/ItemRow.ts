@@ -17,7 +17,7 @@ waiting_on: Array<string>, holder: string | null,
  */
 reviewer: string | null,
 /**
- * For a ready item, why it cannot start now.
+ * For an open item, why it cannot start now.
  */
 cannot_start: Array<string>,
 /**

@@ -86,7 +86,7 @@ async function write(root, file, text) {
   await fs.writeFile(path.join(root, file), text);
 }
 
-// The repository at `root`: on master, the mission open with its three items (one ready, one ready
+// The repository at `root`: on master, the mission open with its three items (one open, one open
 // and needs-human, one done), the quiet mission open with one needs-human item, the closed mission
 // with its two done items and their steps, and the reference item; on branch atelier-fi01, its item
 // building, held by the implementer.
@@ -104,11 +104,11 @@ export async function writeFixtureRepository(root, threads = fixture.threads) {
   await write(root, `.atelier/missions/${quietMission.id}/mission.md`, mission(quietMission, 'open'));
   await write(root, `.atelier/missions/${closedMission.id}/mission.md`, mission(closedMission, 'done', null, 'Both items merged. The second needed a second review round for a missing check.'));
   for (const done of Object.values(closedItems)) await write(root, `.atelier/items/${done.id}/item.md`, item(done, { status: 'done', mission: closedMission.id }));
-  await write(root, `.atelier/items/${items.started.id}/item.md`, item(items.started, { status: 'ready', mission: open.id }));
-  await write(root, `.atelier/items/${items.waiting.id}/item.md`, item(items.waiting, { status: 'ready', mission: open.id, labels: '[needs-human]' }));
+  await write(root, `.atelier/items/${items.started.id}/item.md`, item(items.started, { status: 'open', mission: open.id }));
+  await write(root, `.atelier/items/${items.waiting.id}/item.md`, item(items.waiting, { status: 'open', mission: open.id, labels: '[needs-human]' }));
   await write(root, `.atelier/items/${items.done.id}/item.md`, item(items.done, { status: 'done', mission: open.id }));
-  await write(root, `.atelier/items/${items.quiet.id}/item.md`, item(items.quiet, { status: 'ready', mission: quietMission.id, labels: '[needs-human]' }));
-  await write(root, `.atelier/items/${items.reference.id}/item.md`, item(items.reference, { status: 'ready' }));
+  await write(root, `.atelier/items/${items.quiet.id}/item.md`, item(items.quiet, { status: 'open', mission: quietMission.id, labels: '[needs-human]' }));
+  await write(root, `.atelier/items/${items.reference.id}/item.md`, item(items.reference, { status: 'open' }));
   git('add', '-A');
   dated(created, 'commit', '-qm', 'Fixture records');
   for (const [at, subject] of closedSteps(fixture)) dated(at, 'commit', '-q', '--allow-empty', '-m', subject);

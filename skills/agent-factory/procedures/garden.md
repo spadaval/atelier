@@ -3,12 +3,14 @@
 Gardening keeps a repository easy to navigate, change and validate as agents
 work in it, and finds the redesigns that need the human's taste. A run looks
 hard at one area of one repository, through the threads of agents who worked
-there and the code itself. It brings the human one page with at most three
-proposals, each one cause with counted evidence, and settles them with the human
-in a session. It changes only upkeep and signs, on its own branch. A run is
-not a linter: a checklist line not met is a line of the page, not a
-proposal. It is not a firefighter: something broken today is filed as a bug
-and left. It is not the backlog pass: it says when one looks due.
+there and the code itself. It writes one page with at most three new
+proposals, each one cause with counted evidence. It changes only upkeep and
+signs, on its own branch, which merges once review approves it. Its
+proposals and bugs then go to the human as `needs-human` items, and the run
+waits on no answer. A run is not a linter: a checklist line not met is a
+line of the page, not a proposal. It is not a firefighter: something broken
+today is filed as an open bug item and left. It is not the backlog pass: it says when
+one looks due.
 
 ## Areas
 
@@ -36,21 +38,21 @@ records none); else the area whose newest such line is oldest.
 On a branch from `atelier start --backlog garden-<YYYY-MM-DD>`, run `atelier
 new "Garden <repo>: <focus>, <YYYY-MM-DD>"` and `atelier set <id> --labels
 garden`; the run joins no mission. Its Goal gives the focus and why, its
-Scope steps 1 to 7 up to the approval, and these Done when lines:
+Scope steps 1 to 7 up to the merge, and these Done when lines:
 
 ```markdown
 - [ ] The numbers follow garden.md's steps, and `artifacts/numbers.md` holds the log lines behind them.
 - [ ] The focus area's threads and code were read as garden.md says, and nothing private reaches the page.
-- [ ] At most three proposals, each one cause with its evidence counted; one that adds a rule or check names one considered for removal.
+- [ ] At most three new proposals, each one cause with its evidence counted; one that adds a rule or check names one considered for removal.
 - [ ] Every change on the branch is upkeep or a sign: none adds or removes a rule, check, gate, interface or default.
 - [ ] Each finding `atelier list --deferred` showed is settled.
-- [ ] The page follows garden.md's template in at most 60 lines, with Session empty.
+- [ ] What the last merged run left unfiled is carried, and each bug is filed on the branch and under Bugs filed.
+- [ ] The page follows garden.md's template in at most 60 lines.
 ```
 
-Run `atelier ready <id> --by "<who asked for the run>"`, commit, and
-`atelier submit` and `atelier merge` that branch. Then run `atelier start
-<id>` in a new worktree of the base, never in the base's checkout. Commit the page's `Focus:` line
-before taking any number. Every run takes the numbers and the checklist.
+Commit, then `atelier submit` and `atelier merge` that branch. Then run
+`atelier start <id>` in a new worktree of the base, never in the base's
+checkout. Commit the page's `Focus:` line before taking any number. Every run takes the numbers and the checklist.
 
 ## 2. Take the Numbers and the Checklist
 
@@ -65,9 +67,9 @@ $1 > s && $1 <= e {print $3}'`. Copy all of each one's `atelier log <id>`,
 its lines before the window too, into `artifacts/numbers.md`.
 
 - **Time in each status.** A line holding `<from> -> <to>` puts the item in
-  `<to>` until the next such line. Sum the seconds in `ready` (waiting to
-  start), `building`, `in_review`, `changes_requested` and `approved`; a
-  status never reached is 0.
+  `<to>` until the next such line. Sum the seconds in `building`,
+  `in_review`, `changes_requested` and `approved`; a status never reached
+  is 0.
 - **Rounds** are its `submit` lines, **take-overs** its `take-over` lines,
   and **skips** its `skip <rule>: <reason>` parts, the rule being the text up
   to the first ` (` or `: `. **Disputes** are its lines in `atelier list
@@ -123,15 +125,38 @@ design, and half-finished work, such as a migration that reached only some
 call sites. Elsewhere, read the code where a trip leads.
 
 Group the trips, the code's problems and the numbers by cause, and bring at
-most three causes as proposals. A proposal about structure names the files
+most three causes as new proposals. A proposal about structure names the files
 and what the change would make easier. One that adds a rule or check names
 one you considered removing. One that only restates a line of
 `readiness.md` goes in the page's Checklist line, and takes a place only
-when a thread or a number shows what the gap cost. A proposal the last page
-left open is brought once more, marked carried, and then left out. Leave out
-a trip that fits no cause and happened once. Something broken today you file
-as a draft on a backlog branch, with `atelier set <id> --labels bug --caused-by
-<item or commit>`; the session makes it ready or drops it on the human's word.
+when a thread or a number shows what the gap cost. Leave out a trip that
+fits no cause and happened once. Something broken today that no item covers
+you file on the run's branch and leave: `atelier new "<what is broken>"`,
+the evidence in its Goal, and the commit it prints. List it under the page's
+Bugs filed, with the item or commit that caused it.
+
+**What earlier runs left.** Run `git fetch --prune origin` where there is a
+remote. The last merged run is the done, not dropped, earlier run whose
+window ends last. Read its Report, and these items, open or closed since its
+window began:
+
+- from `atelier list --label garden`, and again with `--done`, those titled
+  exactly `Garden proposals` and also labelled `needs-human`: the open
+  proposals, `### Decided`, and a closed one's Report;
+- from `atelier list --label bug`, and again with `--done`, every one.
+
+`list` and `show` give the base's copy of an item a branch has changed. One
+that `list` says is changed on `backlog/garden-proposals` is read with `git
+show <branch>:.atelier/items/<id>/item.md`, from that branch or its
+`origin/` copy. What these hold is covered, so it is not brought again as
+new: an unanswered proposal stays open in its item until the human answers.
+Each proposal or bug that the last merged run's Report lists and none of them
+covers was left by a run that stopped after its merge: carry it onto this
+page, marked with the run and date it came from and outside the limit of
+three. File a carried bug on the run's branch as above; step 7 files a
+carried proposal. An item that Report names under Bugs filed or as waiting
+for labels covers what it was filed for, labelled or not: where it still has
+no labels, carry the item itself for step 7 to label, and file nothing.
 
 ## 5. Fix What the Run May Fix
 
@@ -146,7 +171,9 @@ the product does is a proposal.
 Settle each finding `atelier list --deferred` shows, on the branch, with
 `atelier new "<title>" --from <finding>` or `atelier drop <finding> --reason
 "<why>"` (`"fixed in <commit>"` for one the run fixed). An item taken this
-way gets its labels and `--caused-by` on a backlog branch after the run merges. A
+way, like a bug filed here, gets its labels and `--caused-by` in step 7,
+after the run merges, on `backlog/garden-proposals`, since `set` is refused
+on the run's branch. A
 fix or a settled finding already on an earlier run's unmerged branch is not
 made again: the page names that run instead.
 
@@ -163,7 +190,7 @@ Window: <start> to <end> UTC, <n> items merged. Workings: `artifacts/numbers.md`
 
 | Measure | This run | Last run | Baseline |
 | --- | --- | --- | --- |
-| Waiting to start, building, in review, changes requested, approved: median minutes (worst) | | | |
+| Building, in review, changes requested, approved: median minutes (worst) | | | |
 | Rounds: median (worst); take-overs; disputes by outcome; skips by rule | | | |
 | Open items by status; blocked; unsettled deferred findings | | | |
 | <each carried measure> | <value>, measured <date> | | |
@@ -179,20 +206,76 @@ Worst spots: navigate <files the threads read most before their first edit>; cha
 Cause: <one root cause>. Evidence: <thread ID and trip, or number>, <how often>; ...
 Moves: <the number>. Change: <what to do; for structure, which files>. Considered removing: <rule or check>.
 
+Carried: <run> P<n>, <date>: <the change>.
+
+### Bugs filed
+- <item>: <what is broken>. Caused by: <item or commit>. Evidence: <in a phrase>. <Carried from <run>, <date>.>
+
 ### Fixed and Settled
-- <commit>: <upkeep or sign>. <finding>: taken into <item>, or dropped: <why>. Bugs filed: <items>. Waiting for the merge to get labels and a cause: <items>.
+- <commit>: <upkeep or sign>. <finding>: taken into <item>, or dropped: <why>. Waiting for the merge to get labels and a cause: <items>.
 
 ### Responses
-
-### Session
 ```
 
-## 7. Submit and Hold the Session
+## 7. Submit, Merge and Hand Over
 
-Run `atelier submit` and start the reviewer it prints. Once approved, the run
-waits for the session with the human, though `atelier status` offers `atelier
-merge`. The session is in whichever thread they talk to; a new thread takes the
-run over with `atelier start <id>`. Under Session write, for each proposal,
-what they agreed, changed or declined; file each agreed one as an item on a
-backlog branch, and merge it. Editing the Report keeps the approval; any other
-change needs `atelier submit` again. Then run `atelier merge`.
+Run `atelier submit` and start the reviewer it prints. Once it approves, run
+`atelier merge` at once: that lands the upkeep, the settled findings and
+the filed bugs, and waits on no human.
+
+The run ends there if it has no proposal to file and nothing to label, and
+`backlog/garden-proposals` holds nothing unmerged. Otherwise, straight after
+the merge, get onto that branch as below, and on it:
+
+- **Proposals.** In `atelier list --label garden`, find the item titled
+  exactly `Garden proposals` and also labelled `needs-human`; the old digest
+  atelier-j86z is not it. `--label` takes one label, and adding
+  `--needs-human` hides an item not yet merged. The item is open unless its
+  `item.md` in this checkout says done or dropped, whatever `list` says.
+  With no open one, run `atelier new "Garden proposals"` and `atelier set
+  <id> --labels needs-human,garden`. Under `### Open` in its Goal, keep
+  every unanswered proposal, and add the page's new and carried ones, each
+  as `- <run> P<n>, <date>: <the change>. <its cause>. See that run's
+  Report.` Only the human's answer takes one off that list.
+- **Bugs.** For each bug the page lists, run `atelier set <id> --labels
+  bug,needs-human --caused-by <item or commit>`.
+- **Settled findings.** Give each item waiting for the merge its labels and
+  cause.
+
+Commit, then run `atelier submit` and `atelier merge`.
+
+### The Proposals Branch
+
+Gardeners and planners share one branch, `backlog/garden-proposals` (after
+the repository's branch prefix, if it has one), merged or not. Its slug is
+never dated, and no second slug is picked, whatever a refusal suggests. Run
+`git fetch --prune origin` where there is a remote, then take the first case
+that holds:
+
+1. A checkout holds it (`git worktree list`): work there.
+2. It exists here or on the remote (`git branch --all --list
+   '*backlog/garden-proposals'`): run `git switch backlog/garden-proposals`,
+   which tracks the remote's where only that exists. In the base's own
+   checkout, use `git worktree add <path> backlog/garden-proposals` instead.
+3. It exists in neither: only then run `atelier start --backlog
+   garden-proposals`.
+
+Then run `git merge origin/backlog/garden-proposals` where the remote has
+it, and bring the base in with `git merge origin/<base>`, which fast-forwards
+a merged branch. With no forge, merge the local `<base>` instead, since only
+that moves at a merge.
+
+### Applying the Answers
+
+When the human answers some or all of the proposals, a planner applies the
+answers on the proposals branch. It files each agreed proposal as an item
+there, then:
+
+- if every proposal is answered, runs `atelier close <id> "<decisions>"`,
+  naming each proposal with its filed item or why it was declined;
+- if only some are, moves those alone from `### Open` to `### Decided` in
+  the same item, each with its filed item or why it was declined, and leaves
+  the rest open.
+
+A bug the human answers it keeps, with `needs-human` taken off, or drops.
+It commits, then runs `atelier submit` and `atelier merge`.

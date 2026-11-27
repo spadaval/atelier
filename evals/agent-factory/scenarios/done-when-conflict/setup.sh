@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# done-when-conflict's ledger tool, tracked by Atelier, with one ready item,
+# done-when-conflict's ledger tool, tracked by Atelier, with one open item,
 # tally-d2pe: count a row the bank exported twice only once. Its two Done
 # when lines cannot both hold on sample.csv. The first says the total is
 # 125.00; the second says rows that differ in date, amount or memo both
@@ -82,7 +82,7 @@ if __name__ == "__main__":
     unittest.main()
 PY
 printf '# tally\n\n`python3 tally.py total LEDGER.csv` prints the ledger'"'"'s total.\n' > README.md
-item tally-d2pe ready "Count a row the bank exported twice only once" <<'MD'
+item tally-d2pe "Count a row the bank exported twice only once" <<'MD'
 ## Goal
 
 Sam downloads the bank's ledger in overlapping ranges and joins the files, so

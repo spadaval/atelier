@@ -197,8 +197,14 @@ function ItemDetail({ repo, page }: { repo: string; page: ItemPage }) {
                 </dd>
               </>
             ) : null}
-            <dt>Ready</dt>
-            <dd>{page.ready ? `${page.ready.by}, ${dateTime(page.ready.at)}` : "Not yet"}</dd>
+            {page.ready ? (
+              <>
+                <dt>Readied</dt>
+                <dd>
+                  {page.ready.by}, {dateTime(page.ready.at)}
+                </dd>
+              </>
+            ) : null}
             {row.branch ? (
               <>
                 <dt>Branch</dt>
@@ -237,7 +243,7 @@ function ItemDetail({ repo, page }: { repo: string; page: ItemPage }) {
           {row.blockers.length === 0 ? <p className="card-empty">Nothing blocks it.</p> : null}
           {row.blockers.map((b) => (
             <Link key={b.id} to={to.item(repo, b.id)} className="doc-link">
-              <StatusGlyph status={b.status ?? "draft"} size={13} quiet />
+              <StatusGlyph status={b.status ?? "not found"} size={13} quiet />
               <span className="truncate">
                 <span className="mono">{b.id}</span> <span className="muted">{b.status ? statusName(b.status) : "not found"}</span>
               </span>

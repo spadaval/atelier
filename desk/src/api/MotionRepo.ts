@@ -14,6 +14,6 @@ items: Array<MotionItem>,
  */
 missions: Array<MotionMission>,
 /**
- * Up to five ready items that can start now, highest priority first.
+ * Up to five open items that can start now, highest priority first.
  */
 ready: Array<ItemRow>, };

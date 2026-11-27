@@ -61,10 +61,11 @@ fn put(root: &Path, (path, text): (String, String)) {
     write(root, &path, &text);
 }
 
-/// A repository on `main` whose mission ALPHA is ready, with items draft,
-/// ready (needs-human), building on its own branch with a question, and
-/// done; mission BETA is a draft with one ready item; and one item, which
-/// needs a human, is in no mission. The checkout has `main` out.
+/// A repository on `main` written as before items were open: mission ALPHA,
+/// stored `ready`, has open items stored `draft` and `ready` (needs-human),
+/// one building on its own branch with a question, and one done; mission
+/// BETA is an old draft with one open item; and one item, which needs a
+/// human, is in no mission. The checkout has `main` out.
 fn scratch(root: &Path) {
     fs::create_dir_all(root).unwrap();
     git(root, &["init", "-q", "-b", "main"]);
@@ -196,7 +197,7 @@ async fn each_mission_agrees_with_show_and_the_inbox_with_list() {
     // The started item counts as its branch's record says, building.
     let alpha = ok(&served.app, &format!("/api/repos/demo/missions/{ALPHA}")).await;
     let expected = serde_json::json!([
-        {"status": "draft", "count": 1}, {"status": "ready", "count": 1},
+        {"status": "open", "count": 2},
         {"status": "building", "count": 1}, {"status": "done", "count": 1}
     ]);
     assert_eq!(alpha["mission"]["counts"], expected);
@@ -335,11 +336,6 @@ async fn the_item_and_document_routes() {
         ),
         ("/api/repos/demo/doc?path=missing.md", StatusCode::NOT_FOUND),
         ("/api/repos/nowhere/missions", StatusCode::NOT_FOUND),
-        // Not served by this item.
-        (
-            "/api/repos/demo/missions/demo-aaaa/history",
-            StatusCode::NOT_FOUND,
-        ),
         // Only the app may reach it, by any method.
         ("/api/action", StatusCode::FORBIDDEN),
         // Rejected by axum's extractors.
@@ -367,6 +363,123 @@ async fn the_item_and_document_routes() {
         let body: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);
         assert_eq!(got, status, "{method} {uri}: {body}");
         assert!(body["error"].is_string(), "{method} {uri}: {body}");
+    }
+}
+
+#[tokio::test]
+async fn a_missions_history_is_its_records_actions_kept_until_a_branch_moves() {
+    const GAMMA: &str = "demo-cccc";
+    let served = serve();
+    let root = &served.root;
+    let uri = format!("/api/repos/demo/missions/{GAMMA}/history");
+
+    // Proposed on its own branch, with an item of it and a version of that
+    // item that does not read.
+    git(root, &["switch", "-qc", GAMMA]);
+    let (path, text) = mission(GAMMA, "Gamma", "open");
+    let text = text.replace(
+        "ready: null\ncreated_at: 2026-11-10T09:00:00Z",
+        &format!(
+            "planners: [p1]\ncreated_at: {}",
+            chrono::Utc::now().to_rfc3339()
+        ),
+    );
+    write(root, &path, &text);
+    put(root, item("demo-c101", "ready", GAMMA, "[]", ""));
+    git(root, &["add", "-A"]);
+    git(root, &["commit", "-qm", "Anything at all"]);
+    let planned = git(root, &["rev-parse", "--short", "HEAD"]);
+    let item_path = ".atelier/items/demo-c101/item.md";
+    write(root, item_path, "not a record\n");
+    git(root, &["commit", "-qam", "Break it"]);
+    let broken = git(root, &["rev-parse", "--short", "HEAD"]);
+    put(root, item("demo-c101", "ready", GAMMA, "[]", ""));
+    git(root, &["commit", "-qam", "Mend it"]);
+    git(root, &["switch", "-q", "main"]);
+
+    let history = ok(&served.app, &uri).await;
+    assert_eq!(history["commit"], git(root, &["rev-parse", "main"]));
+    let actions = history["actions"].as_array().unwrap();
+    // The other missions' and items' actions are not its own.
+    assert_eq!(actions.len(), 2, "{history}");
+    let plan = &actions[0];
+    let at = plan["timestamp"].as_str().unwrap();
+    assert!(chrono::DateTime::parse_from_rfc3339(at).is_ok(), "{plan}");
+    assert!(at.ends_with('Z'), "{plan}");
+    assert_eq!(
+        *plan,
+        serde_json::json!({
+            "timestamp": at,
+            "commit": planned,
+            "id": GAMMA,
+            "action": "plan",
+            "thread": "p1",
+            "detail": ["new -> open"],
+            "skips": [],
+            "skipped_by": null,
+        })
+    );
+    assert_eq!(actions[1]["id"], "demo-c101");
+    assert_eq!(actions[1]["action"], "ready");
+    let passed = &history["passed_over"][0];
+    assert_eq!(passed["commit"], broken);
+    assert_eq!(passed["id"], "demo-c101");
+    assert_eq!(passed["path"], item_path);
+    assert!(passed["problem"].is_string(), "{passed}");
+    assert!(history["fetched"].is_object(), "{history}");
+
+    // Kept while no branch moves.
+    let built = served.desk.built.load(Ordering::Relaxed);
+    assert_eq!(ok(&served.app, &uri).await, history);
+    assert_eq!(served.desk.built.load(Ordering::Relaxed), built);
+
+    // Read again once the plan merges.
+    let message = "Merge the plan\n\nAtelier-Merge: demo-cccc\n\
+                   Atelier-Skip: two approvals: Ada agreed it\nAtelier-Skip-By: l1";
+    git(root, &["merge", "-q", "--no-ff", "-m", message, GAMMA]);
+    let history = ok(&served.app, &uri).await;
+    let last = history["actions"].as_array().unwrap().last().unwrap();
+    assert_eq!(last["action"], "plan-merge", "{history}");
+    assert_eq!(last["id"], GAMMA);
+    assert_eq!(last["commit"], git(root, &["rev-parse", "--short", "main"]));
+    assert_eq!(last["thread"], "l1");
+    assert_eq!(last["detail"], serde_json::json!([]));
+    assert_eq!(
+        last["skips"],
+        serde_json::json!(["two approvals: Ada agreed it"])
+    );
+    assert_eq!(last["skipped_by"], "l1");
+
+    for (uri, status) in [
+        (
+            "/api/repos/nowhere/missions/demo-cccc/history",
+            StatusCode::NOT_FOUND,
+        ),
+        (
+            "/api/repos/demo/missions/demo-zzzz/history",
+            StatusCode::NOT_FOUND,
+        ),
+        // An item's, on the base or on its branch, is not a mission's.
+        (
+            "/api/repos/demo/missions/demo-a004/history",
+            StatusCode::NOT_FOUND,
+        ),
+        (
+            "/api/repos/demo/missions/demo-a003/history",
+            StatusCode::NOT_FOUND,
+        ),
+        (
+            "/api/repos/demo/missions/Not-An-Id/history",
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            "/api/repos/demo/missions/..%2Fx/history",
+            StatusCode::BAD_REQUEST,
+        ),
+    ] {
+        let (got, body) = get(&served.app, uri).await;
+        assert_eq!(got, status, "{uri}: {body}");
+        assert!(body["error"].is_string(), "{uri}: {body}");
     }
 }
 
@@ -467,7 +580,7 @@ async fn the_app_is_served_with_its_index_for_its_own_paths() {
         "/api/",
         "/api/nothing",
         "/api//repos",
-        "/api/repos/demo/missions/x/history",
+        "/api/repos/demo/missions/x/nothing",
     ] {
         let (status, body) = get(&with_app, uri).await;
         assert_eq!(status, StatusCode::NOT_FOUND, "{uri}: {body}");
@@ -516,8 +629,8 @@ async fn what_is_proposed_in_motion_and_disputed_is_read_from_the_branches() {
     git(root, &["commit", "-qm", "Plan"]);
     // A backlog branch that adds an item and changes another.
     git(root, &["switch", "-qc", "backlog/more", "main"]);
-    put(root, item("demo-c002", "draft", "null", "[]", ""));
-    put(root, item("demo-a001", "draft", ALPHA, "[urgent]", ""));
+    put(root, item("demo-c002", "open", "null", "[]", ""));
+    put(root, item("demo-a001", "open", ALPHA, "[urgent]", ""));
     git(root, &["add", "-A"]);
     git(root, &["commit", "-qm", "More"]);
     // The started item: held by t1, with a finding it rebutted.

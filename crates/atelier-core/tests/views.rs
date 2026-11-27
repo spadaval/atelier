@@ -2,7 +2,7 @@
 //! opened for reading from commits only, a mission and an item as `show`
 //! shows them, and what changed in a mission's plan between two commits.
 
-use atelier_core::model::{Status, Thread};
+use atelier_core::model::{MissionStatus, Status, Thread};
 use atelier_core::plan::plan_changed_at;
 use atelier_core::{item_view, mission_view, ReadFrom, Repo, Skip};
 use std::fs;
@@ -50,8 +50,8 @@ const PLAN_REVIEW: &str = "---\nschema: atelier.review\nschema_version: 3\nround
                            commit: abc1234\nreviewers:\n- r1\nmodel: m\nverdict: approve\n\
                            created_at: 2026-11-10T09:00:00Z\n---\n## Summary\ns\n";
 
-/// A repository on `main` holding a ready mission with a design, notes
-/// and a plan review, its item `PLANNED` ready with an open question, and
+/// A repository on `main` holding an open mission with a design, notes
+/// and a plan review, its item `PLANNED` open with an open question, and
 /// its item `STARTED`, which the branch named for it holds building. The
 /// checkout has that branch out.
 fn scratch() -> (TempDir, PathBuf) {
@@ -83,12 +83,12 @@ fn scratch() -> (TempDir, PathBuf) {
     write(
         &root,
         &item_path(PLANNED),
-        &item(PLANNED, "Planned", "ready", "[]", question),
+        &item(PLANNED, "Planned", "open", "[]", question),
     );
     write(
         &root,
         &item_path(STARTED),
-        &item(STARTED, "Committed", "ready", "[]", ""),
+        &item(STARTED, "Committed", "open", "[]", ""),
     );
     git(&root, &["add", "-A"]);
     git(&root, &["commit", "-qm", "Plan"]);
@@ -173,7 +173,7 @@ fn the_mission_view_holds_what_show_prints() {
         .collect();
     assert_eq!(
         items,
-        [(PLANNED, Status::Ready), (STARTED, Status::Building)]
+        [(PLANNED, Status::Open), (STARTED, Status::Building)]
     );
     let reviews: Vec<String> = view
         .dir
@@ -198,7 +198,7 @@ fn the_item_view_says_which_record_it_read() {
     assert_eq!(started.entry.status, Status::Building);
     assert_eq!(
         started.links.mission,
-        Some((MISSION.to_string(), Some(Status::Ready)))
+        Some((MISSION.to_string(), Some(MissionStatus::Open)))
     );
 
     let planned = item_view(&mut repo, PLANNED).unwrap().unwrap();
@@ -231,7 +231,7 @@ fn plan_changes_are_read_between_two_commits() {
     write(
         &root,
         &item_path(PLANNED),
-        &item(PLANNED, "Edited", "ready", "[]", ""),
+        &item(PLANNED, "Edited", "open", "[]", ""),
     );
     let skip = Skip::new(None);
     let mut repo = Repo::open_committed(&root, caller(), &skip).unwrap();

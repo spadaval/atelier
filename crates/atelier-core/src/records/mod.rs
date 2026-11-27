@@ -14,6 +14,7 @@ pub use at_commit::{CommitReader, ReadError};
 pub use body::{answer, put_first};
 pub use ids::{allocate_id, validate_id};
 pub use load::{is_record, load, Loaded, CONFIG};
+pub(crate) use store::old_status;
 pub use store::{
     create_review, parse_config, parse_item, parse_mission, parse_review, render_config,
     render_item, render_mission, render_review, ItemDir, MissionDir, ReviewFile, Store,

@@ -5,8 +5,11 @@ use anyhow::{anyhow, Context, Result};
 use atelier_core::actions::{check, row, unmet, Action, Checkout, Facts, MissionFacts, STARTED};
 use atelier_core::forge::Github;
 use atelier_core::model::{validate_slug, Forge, MissionStatus, Named, Status};
-use atelier_core::records::{render_item, render_mission, validate_id};
-use atelier_core::repo::{facts, item_dir, item_path, mission_path, planning, write_and_commit};
+use atelier_core::plan::{approvals, Approvals};
+use atelier_core::records::{render_item, render_mission, validate_id, Problem, ReadError};
+use atelier_core::repo::{
+    facts, item_dir, item_path, mission_path, on_base, planning, write_and_commit,
+};
 use atelier_core::{
     annotate, annotate_all, entry, overview, refused, Done, Entry, Located, Refused, Repo,
 };
@@ -109,7 +112,10 @@ fn orientation(repo: &mut Repo) -> Result<String> {
         }
         _ => None,
     };
+    let reviewing = plan_reviews(repo)?;
     let mut unsaved = unsaved(repo)?;
+    unsaved += &output::unattached(&git::unattached(&repo.root)?);
+    unsaved += &piled_up(repo)?;
     // A stop of a mission this checkout holds dropped, until published.
     for id in repo.store().ids("missions")? {
         let dropped =
@@ -123,16 +129,85 @@ fn orientation(repo: &mut Repo) -> Result<String> {
         let located = repo.find_mission(&id)?;
         unsaved += &crate::views::unpublished_stop(repo, &located)?.unwrap_or_default();
     }
+    let there = match overview.held.first() {
+        Some(held) if repo.branch.as_deref() == Some(repo.base.as_str()) => {
+            Some(way_to(repo, &held.id)?)
+        }
+        _ => None,
+    };
     Ok(output::overview(
         &repo.caller,
         repo.branch.as_deref(),
         &repo.base,
         kind,
         &overview,
+        &reviewing,
         &dropped,
         &unreached,
         &unsaved,
+        there.as_deref(),
     ))
+}
+
+/// From this many merged local branches, or detached worktrees, `status`
+/// says they have piled up.
+const MANY_MERGED: usize = 20;
+const MANY_DETACHED: usize = 10;
+
+/// `status`'s line on merged branches and detached worktrees piling up. It
+/// only counts: a detached worktree may be a reviewer at work.
+fn piled_up(repo: &Repo) -> Result<String> {
+    let merged = git::merged_branches(&repo.root, &repo.base, &repo.base_tip)?;
+    let detached = git::detached_worktrees(&repo.root)?;
+    Ok(match merged >= MANY_MERGED || detached >= MANY_DETACHED {
+        true => output::piled_up(&repo.base, merged, detached),
+        false => String::new(),
+    })
+}
+
+/// How the base's checkout, which `start` never switches, sends the holder
+/// of item `id` to its branch: the checkout that has it, else a new one.
+fn way_to(repo: &Repo, id: &str) -> Result<String> {
+    let branch = repo.branch_of(id);
+    Ok(match git::checkout_of(&repo.root, &branch)? {
+        Some(path) if path.exists() => output::work_in(id, &path),
+        found => {
+            let path = worktree_path(repo, &branch);
+            output::work_in_new(id, &branch, &path, found.is_some())
+        }
+    })
+}
+
+/// [`plans_standing`], or the record a commit holds that does not read:
+/// `status` says it and goes on, since it is where the fix is found.
+fn plan_reviews(repo: &mut Repo) -> Result<Result<Vec<Approvals>, Problem>> {
+    match plans_standing(repo) {
+        Ok(plans) => Ok(Ok(plans)),
+        Err(error) => match error.downcast::<ReadError>() {
+            Ok(ReadError::Record(problem)) => Ok(Err(problem)),
+            Ok(other) => Err(other.into()),
+            Err(error) => Err(error),
+        },
+    }
+}
+
+/// Where the review stands of each plan the checked-out records branch
+/// proposes or changes, as its HEAD holds them; a dropped one has none.
+fn plans_standing(repo: &mut Repo) -> Result<Vec<Approvals>> {
+    if records_branch(repo)?.is_none() {
+        return Ok(Vec::new());
+    }
+    let head = git::head(&repo.root)?;
+    let mut found = Vec::new();
+    for (id, on_base) in plans_here(repo, &head)?.0 {
+        let Some(dir) = repo.mission_at(&head, &id)? else {
+            continue;
+        };
+        if dir.mission.status != MissionStatus::Dropped {
+            found.push(approvals(repo, &id, &head, on_base)?);
+        }
+    }
+    Ok(found)
 }
 
 /// The record changes the checkout has not committed, as `check` lists
@@ -179,6 +254,13 @@ fn unsaved(repo: &Repo) -> Result<String> {
 
 pub fn start(repo: &mut Repo, id: &str) -> Result<Outcome> {
     validate_id(id).map_err(|message| anyhow!(message))?;
+    // A merged branch is deleted, and a drop can be the base's alone, so
+    // only the base as it is now says the item can still be claimed.
+    if let Err(error) = fetch_base(repo) {
+        let remote = repo.remote().unwrap_or("the remote");
+        let text = output::base_unread(id, &repo.base, remote, &error);
+        return Ok(Outcome::Refused(text));
+    }
     let located = repo.locate(id)?;
     let Some(record) = located.record() else {
         return Ok(output::no_item(id, &repo.base).into());
@@ -210,6 +292,7 @@ pub fn start(repo: &mut Repo, id: &str) -> Result<Outcome> {
             branch,
             record: Some((item_path(id), render_item(&item), format!("Start {id}"))),
             item: Some(id),
+            existing: true,
         };
         return begin(repo, claim, output::started(id, &repo.branch_of(id)));
     }
@@ -236,6 +319,9 @@ fn take_over(repo: &mut Repo, id: &str, branch: &str, located: &Located) -> Resu
                 id, branch, &path,
             )));
         }
+    }
+    if let Some(refused) = stranding(repo)? {
+        return Ok(refused);
     }
     let local = git::branch_tip(&root, branch)?;
     // Bring the local branch to the forge's tip where the forge is ahead,
@@ -305,6 +391,18 @@ fn take_over(repo: &mut Repo, id: &str, branch: &str, located: &Located) -> Resu
                     id, branch, &remote, &error,
                 )));
             }
+            if let Err(error) = fetch_base(repo) {
+                let text = output::claim_unconfirmed(id, branch, &repo.base, &remote, &error);
+                return Ok(Outcome::Refused(text));
+            }
+            // A losing take-over deletes nothing: the branch holds the
+            // earlier implementer's work.
+            if let Some(status) = finished(repo, id)? {
+                let here = (!on_base).then_some(branch);
+                let text =
+                    output::take_over_finished(id, branch, &repo.base, &remote, status, here);
+                return Ok(Outcome::Refused(text));
+            }
         }
         output::taken_over(id, before.as_ref())
     };
@@ -323,13 +421,14 @@ fn take_over(repo: &mut Repo, id: &str, branch: &str, located: &Located) -> Resu
 /// on a new branch named for it.
 pub fn start_new(repo: &mut Repo, title: &str) -> Result<Outcome> {
     let id = repo.new_id()?;
-    let mut item = plan::draft_item(&id, title, None);
+    let mut item = plan::open_item(&id, title, None);
     item.status = row(Action::StartNew).to.expect("start --new sets a status");
     item.implementers.take(repo.caller.clone());
     let claim = Claim {
         branch: repo.branch_of(&id),
         record: Some((item_path(&id), render_item(&item), format!("Start {id}"))),
         item: Some(&id),
+        existing: false,
     };
     begin(repo, claim, output::started_new(&id, &repo.branch_of(&id)))
 }
@@ -348,6 +447,7 @@ pub fn start_mission(repo: &mut Repo, title: &str) -> Result<Outcome> {
             format!("Plan mission {id}"),
         )),
         item: None,
+        existing: false,
     };
     begin(repo, claim, output::started_mission(&id, &branch))
 }
@@ -383,6 +483,7 @@ pub fn start_backlog(repo: &mut Repo, slug: &str) -> Result<Outcome> {
         branch: branch.clone(),
         record: None,
         item: None,
+        existing: false,
     };
     begin(repo, claim, output::started_backlog(&branch))
 }
@@ -394,6 +495,9 @@ struct Claim<'a> {
     branch: String,
     record: Option<(String, String, String)>,
     item: Option<&'a str>,
+    /// The item had a record before the claim, which can be ended on the
+    /// base while the claim is made.
+    existing: bool,
 }
 
 /// Makes `claim`: commits its record on the base's tip, then creates its
@@ -402,6 +506,9 @@ struct Claim<'a> {
 /// except in the base's own checkout, where it prints the `git worktree
 /// add` that gives the branch a checkout of its own.
 fn begin(repo: &mut Repo, claim: Claim, said: String) -> Result<Outcome> {
+    if let Some(refused) = stranding(repo)? {
+        return Ok(refused);
+    }
     let root = repo.root.clone();
     let branch = &claim.branch;
     let commit = match &claim.record {
@@ -434,6 +541,19 @@ fn begin(repo: &mut Repo, claim: Claim, said: String) -> Result<Outcome> {
             git::delete_branch(&root, branch, &commit)?;
             return Ok(Outcome::Refused(lost_claim(repo, &claim, &remote, &error)?));
         }
+        if let Some(id) = claim.item.filter(|_| claim.existing) {
+            if let Err(error) = fetch_base(repo) {
+                let text = output::claim_unconfirmed(id, branch, &repo.base, &remote, &error);
+                return Ok(Outcome::Refused(text));
+            }
+            if let Some(status) = finished(repo, id)? {
+                // Only the local branch goes: a remote one is deleted by
+                // `merge` alone, and the base's record wins over this one.
+                git::delete_branch(&root, branch, &commit)?;
+                let text = output::start_finished(id, branch, &repo.base, &remote, status);
+                return Ok(Outcome::Refused(text));
+            }
+        }
     }
     if repo.branch.as_deref() == Some(repo.base.as_str()) {
         let path = worktree_path(repo, branch);
@@ -447,6 +567,35 @@ fn begin(repo: &mut Repo, claim: Claim, said: String) -> Result<Outcome> {
     git::switch(&root, branch).with_context(|| output::not_switched(branch))?;
     let mut repo = crate::open(&repo.dir, repo.skip)?;
     Ok(Outcome::Done(format!("{said}\n{}", status(&mut repo)?)))
+}
+
+/// Fetches the base from the remote, where one is configured, and judges
+/// by it from then on.
+fn fetch_base(repo: &mut Repo) -> Result<()> {
+    let Some(remote) = repo.remote().map(str::to_string) else {
+        return Ok(());
+    };
+    git::fetch_branch(&repo.root, &remote, &repo.base)?;
+    repo.reread_base()
+}
+
+/// The status that ends item `id` on the base, if one does.
+fn finished(repo: &mut Repo, id: &str) -> Result<Option<Status>> {
+    let tip = repo.base_tip.clone();
+    let found = repo.item_at(&tip, id)?.map(|dir| on_base(dir).item.status);
+    Ok(found.filter(|status| matches!(status, Status::Done | Status::Dropped)))
+}
+
+/// `start` refused where switching away from a detached HEAD would leave
+/// commits on no branch. A rule, checked before anything is written.
+fn stranding(repo: &Repo) -> Result<Option<Outcome>> {
+    let commits = git::unattached(&repo.root)?;
+    if commits.is_empty() {
+        return Ok(None);
+    }
+    let text = output::start_strands(&commits);
+    let rule = output::rule_start_strands();
+    Ok(repo.skip.refuse([rule], text).map(Outcome::from))
 }
 
 /// Pushes `commit` to `remote` as the new branch `branch`, which the remote
@@ -540,6 +689,14 @@ pub fn submit(repo: &mut Repo) -> Result<Outcome> {
     if records_branch(repo)?.is_some() {
         return submit_records(repo);
     }
+    let mut unfetched = String::new();
+    if let Some(Named::Record(id)) = repo.named() {
+        // Unreached, the last fetch judges, and `merge` judges again.
+        if let Err(error) = fetch_base(repo) {
+            let remote = repo.remote().unwrap_or("the remote");
+            unfetched = output::submit_base_unread(&id, &repo.base, remote, &error);
+        }
+    }
     let Some(located) = repo.current()? else {
         return Ok(Outcome::Refused(output::not_on_item(
             "submit",
@@ -581,7 +738,12 @@ pub fn submit(repo: &mut Repo) -> Result<Outcome> {
         }
         None => String::new(),
     };
-    Ok(Outcome::Done(output::submitted(&item.id, &left, &shared)))
+    Ok(Outcome::Done(output::submitted(
+        &item.id,
+        &repo.root,
+        &left,
+        &(unfetched + &shared),
+    )))
 }
 
 /// The checked-out branch, when it holds record changes alone by the
@@ -657,31 +819,18 @@ fn submit_records(repo: &mut Repo) -> Result<Outcome> {
 /// The missions whose plan the checked-out records branch proposes or
 /// changes, each with the round of plan review its submit opens, once the
 /// caller is written as a planner of each and that is committed; or the
-/// refusal of a plan dropped on its branch. A proposed plan's old `draft`
-/// is written `open`.
+/// refusal of a plan dropped on its branch, or of one whose review stops at
+/// the split rounds. A proposed plan's old `draft` is written `open`.
 fn planned_here(repo: &mut Repo) -> Result<Result<Vec<(String, u32)>, Outcome>> {
     let head = git::head(&repo.root)?;
-    let fork = git::run(&repo.root, &["merge-base", &repo.base_tip, &head])?;
-    let changed = git::changed_from_base(&repo.root, &repo.base_tip, &head)?;
-    let mut ids: Vec<String> = merge::plans_changed(repo, (&fork, &head), &changed)?
-        .into_iter()
-        .map(|(id, _, _)| id)
-        .collect();
-    // A plan on its own branch is submitted with nothing changed yet, as
-    // after `start --mission`.
-    let own = match repo.named() {
-        Some(Named::Record(id)) if !atelier_core::plan::agreed(repo, &id)? => Some(id),
-        _ => None,
-    };
-    if let Some(id) = own.as_ref().filter(|id| !ids.contains(id)) {
-        ids.insert(0, id.clone());
-    }
+    let (mut ids, own) = plans_here(repo, &head)?;
     let mut plans = Vec::new();
     let mut written = Vec::new();
     let mut messages = Vec::new();
     // A mission the branch removes has no record here to write.
-    ids.retain(|id| repo.root.join(mission_path(id)).exists());
-    for id in ids {
+    ids.retain(|(id, _)| repo.root.join(mission_path(id)).exists());
+    let mut reviewed = Vec::new();
+    for (id, on_base) in ids {
         let dir = repo.store().mission(&id)?;
         if own.as_deref() == Some(id.as_str()) {
             let facts = MissionFacts {
@@ -695,6 +844,7 @@ fn planned_here(repo: &mut Repo) -> Result<Result<Vec<(String, u32)>, Outcome>> 
             }
         }
         plans.push((id.clone(), next_round(&dir)));
+        reviewed.push(approvals(repo, &id, &head, on_base)?);
         let mut mission = dir.mission;
         let mut changed = false;
         if mission.status == MissionStatus::Draft && own.as_deref() == Some(id.as_str()) {
@@ -713,6 +863,14 @@ fn planned_here(repo: &mut Repo) -> Result<Result<Vec<(String, u32)>, Outcome>> 
             written.push((mission_path(&id), render_mission(&mission)));
         }
     }
+    let stopped: Vec<&Approvals> = reviewed.iter().filter(|plan| plan.stopped()).collect();
+    if !stopped.is_empty() {
+        let text = output::plan_split_refused(&reviewed);
+        let rules = stopped.iter().map(|plan| output::rule_plan_split(&plan.id));
+        if let Some(refused) = repo.skip.refuse(rules, text) {
+            return Ok(Err(refused.into()));
+        }
+    }
     if !written.is_empty() {
         let paths: Vec<&str> = written.iter().map(|(path, _)| path.as_str()).collect();
         let message = match messages.as_slice() {
@@ -722,6 +880,34 @@ fn planned_here(repo: &mut Repo) -> Result<Result<Vec<(String, u32)>, Outcome>> 
         write_and_commit(repo, &written, &paths, &message)?;
     }
     Ok(Ok(plans))
+}
+
+/// Missions whose plan a branch proposes or changes, each with whether it
+/// is agreed.
+type Plans = Vec<(String, bool)>;
+
+/// The missions whose plan the checked-out records branch at `head`
+/// proposes or changes, each with whether it is agreed, and the one whose
+/// own branch this is, while proposed.
+fn plans_here(repo: &mut Repo, head: &str) -> Result<(Plans, Option<String>)> {
+    let fork = git::run(&repo.root, &["merge-base", &repo.base_tip, head])?;
+    let changed = git::changed_from_base(&repo.root, &repo.base_tip, head)?;
+    let mut ids: Vec<(String, bool)> = merge::plans_changed(repo, (&fork, head), &changed)?
+        .into_iter()
+        .map(|(id, _, on_base)| (id, on_base))
+        .collect();
+    // A plan on its own branch is submitted with nothing changed yet, as
+    // after `start --mission`.
+    let own = match repo.named() {
+        Some(Named::Record(id)) if !atelier_core::plan::agreed(repo, &id)? => Some(id),
+        _ => None,
+    };
+    if let Some(id) = own.as_ref() {
+        if !ids.iter().any(|(listed, _)| listed == id) {
+            ids.insert(0, (id.clone(), false));
+        }
+    }
+    Ok((ids, own))
 }
 
 /// The round of plan review a submit of `dir`'s plan opens: the latest
@@ -783,6 +969,7 @@ fn approved_needs(repo: &mut Repo, entries: &mut [Entry], items: &[Located]) -> 
             mission: None,
             caller: holder,
             checkout: Some(&checkout),
+            worktree: None,
         };
         entry.needs = unmet(Action::Merge, &facts)?;
     }
@@ -794,6 +981,7 @@ fn approved_needs(repo: &mut Repo, entries: &mut [Entry], items: &[Located]) -> 
 /// `<file>` exists. `start` stops between its commit and its branch
 /// (`ATELIER_TEST_HOLD_BEFORE_BRANCH`), and `merge` after reading what it
 /// checks (`ATELIER_TEST_HOLD_AFTER_READ`). Only debug builds have it.
+#[cfg_attr(not(debug_assertions), allow(unused_variables))]
 pub(crate) fn hold(variable: &str) {
     #[cfg(debug_assertions)]
     if let Some(release) = std::env::var_os(variable) {

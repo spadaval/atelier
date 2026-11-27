@@ -27,5 +27,11 @@ A rebuttal a reviewer keeps has had its one try: fix the finding, or take it
 to the lead with `not built`. Once the item is approved and `status` says its
 merge waits on the lead, say so to the thread that started you, and stop.
 
+When round 3 or later asks for changes, do not submit again by yourself:
+take the open findings to your mission's lead, or with no mission to the
+thread that started you, and wait. The lead merges, adjusts Scope or Done
+when, drops the item, or rules to fix it; only then fix and `atelier submit`
+for the next round.
+
 A finding that does not block, at `defer` or `no action`, needs no line. You
 may leave it with a basic reason in the Report.

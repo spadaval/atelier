@@ -237,7 +237,8 @@ fn load(files: &[(&str, &str)], id: &str) -> ItemDir {
 fn each_record_kind_reads_and_writes_back_the_same_file() {
     let path = Path::new("item.md");
     assert_eq!(render_item(&parse_item(path, ITEM).unwrap()), ITEM);
-    assert_eq!(render_item(&parse_item(path, BLOCKER).unwrap()), BLOCKER);
+    let open = BLOCKER.replace("status: draft", "status: open");
+    assert_eq!(render_item(&parse_item(path, &open).unwrap()), open);
     // A mission as this tool writes it: open, with its planners.
     let mission = MISSION.replace("status: ready", "status: open").replace(
         "ready:\n  by: ada\n  at: 2026-11-09T19:56:00-05:00\n",
@@ -298,7 +299,10 @@ fn an_item_gives_its_sections_and_a_review_each_finding_as_written() {
 #[test]
 fn a_body_keeps_its_leading_and_trailing_newlines() {
     let path = Path::new("item.md");
-    let tight = BLOCKER.replace("---\n## Goal", "---\n\n## Goal") + "\n";
+    let tight = BLOCKER
+        .replace("status: draft", "status: open")
+        .replace("---\n## Goal", "---\n\n## Goal")
+        + "\n";
     let loose = parse_item(path, &tight).unwrap();
     assert!(loose.body.starts_with("\n## Goal") && loose.body.ends_with("d\n\n"));
     assert_ne!(loose.body, parse_item(path, BLOCKER).unwrap().body);
@@ -350,6 +354,32 @@ fn creating_reviews_of_a_round_gives_each_its_own_name() {
 #[test]
 fn the_example_tree_is_valid() {
     assert_eq!(problems_after(&[]), []);
+}
+
+#[test]
+fn an_items_old_draft_and_ready_read_as_open_and_are_not_respelled_unchanged() {
+    let path = Path::new("x");
+    let readied = BLOCKER.replace("status: draft", "status: ready").replace(
+        "ready: null",
+        "ready:\n  by: ada\n  at: 2026-11-09T19:56:00-05:00",
+    );
+    for (old, by) in [(BLOCKER.to_string(), None), (readied, Some("ada"))] {
+        let dir = atelier(&[("items/atelier-b10c/item.md", &old)]);
+        let store = Store::new(dir.path());
+        let mut item = store.item("atelier-b10c").unwrap().item;
+        assert_eq!(item.status, Status::Open);
+        assert_eq!(item.ready.as_ref().map(|ready| ready.by.as_str()), by);
+        // Written unchanged, it keeps the file it had.
+        store.write_item(&item).unwrap();
+        let file = dir.path().join("items/atelier-b10c/item.md");
+        assert_eq!(fs::read_to_string(&file).unwrap(), old);
+        // Changed, it is written open, and keeps who said go.
+        item.title = "Renamed".into();
+        store.write_item(&item).unwrap();
+        let text = fs::read_to_string(&file).unwrap();
+        assert!(text.contains("\nstatus: open\n"), "{text}");
+        assert_eq!(parse_item(path, &text).unwrap(), item);
+    }
 }
 
 #[test]
@@ -664,7 +694,7 @@ fn a_dropped_record_gives_the_reason_on_the_first_line_of_its_report_or_result()
         .section("Report")
         .unwrap()
         .contains("It prints them.\n\n### Responses"));
-    assert_eq!(item.responses().unwrap().len(), 3);
+    assert_eq!(item.responses().len(), 3);
     assert_eq!(
         store.mission("atelier-icv4").unwrap().dropped(),
         Some("no time")
@@ -766,7 +796,7 @@ fn findings_are_named_by_review_stem_and_number() {
     assert_eq!(findings[2].was.as_ref().unwrap().to_string(), "1-k3fa.1");
     assert_eq!(findings[2].now, Some(Now::Kept));
 
-    let responses = dir.responses().unwrap();
+    let responses = dir.responses();
     assert_eq!(responses.len(), 3);
     assert!(matches!(&responses[0], Response::Fixed { finding, commit }
         if finding.to_string() == "2-m2bn.1" && commit == "0123abc"));
@@ -1243,4 +1273,24 @@ fn a_response_line_of_no_form_names_the_three_forms() {
          `<finding>: fixed in <commit>`, `<finding>: rebutted: <fact>` or \
          `<finding>: not built: <reason>`",
     );
+}
+
+#[test]
+fn a_malformed_response_is_a_problem_and_hides_no_other() {
+    let item = "items/atelier-06jc/item.md";
+    let problems = problems_after(&[(item, ": not built: a second", " not built: a second")]);
+    assert_one_problem(
+        &problems,
+        item,
+        "Responses",
+        "`- 2-m2bn.3 not built: a second brief is larger than the change` is not `<finding>: fixed in <commit>`",
+    );
+
+    let mut files = example();
+    let text = &mut files.iter_mut().find(|(path, _)| *path == item).unwrap().1;
+    *text = text.replacen(": not built: a second", " not built: a second", 1);
+    let files: Vec<(&str, &str)> = files.iter().map(|(p, t)| (*p, t.as_str())).collect();
+    let dir = load(&files, "atelier-06jc");
+    assert_eq!(dir.responses().len(), 2);
+    assert_eq!(dir.malformed_responses().len(), 1);
 }

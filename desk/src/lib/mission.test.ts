@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { HistoryEvent } from "../api/HistoryEvent";
 import type { ItemPage } from "../api/ItemPage";
 import type { ItemRow } from "../api/ItemRow";
-import { begun, logEntries, span, stage, stageAt } from "./mission";
+import { begun, cannotStartUntil, logEntries, span, stage, stageAt } from "./mission";
 
 const row = (id: string, status: ItemRow["status"], needs_human = false) => ({ id, status, needs_human }) as ItemRow;
 const event = (at: string, kind: HistoryEvent["kind"], id: string, more: Partial<HistoryEvent> = {}): HistoryEvent => ({
@@ -44,8 +44,31 @@ describe("an item's stage", () => {
   });
 });
 
+describe("an item not started", () => {
+  const open = (more: Partial<ItemRow>) => ({ ...row("a-0001", "open"), cannot_start: [], branch: null, startable: false, ...more }) as ItemRow;
+  const blocked = "a-0002 is done (it is building)";
+
+  it("can start, or names each thing it waits for", () => {
+    expect(stage(open({ startable: true }), [])).toBe("can start");
+    expect(cannotStartUntil(open({ startable: true }))).toEqual([]);
+    expect(stage(open({ cannot_start: [blocked] }), [])).toBe("waits");
+    expect(cannotStartUntil(open({ cannot_start: [blocked] }))).toEqual([blocked]);
+  });
+
+  it("waits for the branch that adds it, beside its blockers, when the base does not hold it yet", () => {
+    const branch = { name: "origin/backlog/filed", merged: false };
+    expect(cannotStartUntil(open({ branch }))).toEqual(["origin/backlog/filed merges"]);
+    expect(cannotStartUntil(open({ branch, cannot_start: [blocked] }))).toEqual([blocked, "origin/backlog/filed merges"]);
+  });
+
+  it("does not wait for its own branch to merge, which start's conditions name", () => {
+    const exists = "No branch a-0001 exists yet (one does)";
+    expect(cannotStartUntil(open({ branch: { name: "origin/a-0001", merged: false }, cannot_start: [exists] }))).toEqual([exists]);
+  });
+});
+
 describe("the progress log", () => {
-  const items = [row("a-0001", "building"), row("a-0002", "ready", true), row("a-0003", "ready")];
+  const items = [row("a-0001", "building"), row("a-0002", "open", true), row("a-0003", "open")];
   const events = [
     event("2026-11-16T10:00:00Z", "started", "a-0001"),
     event("2026-11-16T09:00:00Z", "readied", "a-0001"),
@@ -77,8 +100,8 @@ describe("the progress log", () => {
 describe("a mission under way", () => {
   it("is one with an item started or done", () => {
     const counts = (...list: [ItemRow["status"], number][]) => list.map(([status, count]) => ({ status, count }));
-    expect(begun({ in_progress: true, counts: counts(["ready", 2]) })).toBe(true);
-    expect(begun({ in_progress: false, counts: counts(["ready", 2], ["done", 1]) })).toBe(true);
-    expect(begun({ in_progress: false, counts: counts(["draft", 1], ["ready", 2], ["dropped", 1]) })).toBe(false);
+    expect(begun({ in_progress: true, counts: counts(["open", 2]) })).toBe(true);
+    expect(begun({ in_progress: false, counts: counts(["open", 2], ["done", 1]) })).toBe(true);
+    expect(begun({ in_progress: false, counts: counts(["open", 3], ["dropped", 1]) })).toBe(false);
   });
 });

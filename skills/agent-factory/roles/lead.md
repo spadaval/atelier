@@ -7,10 +7,12 @@ You are responsible for finishing the mission. The process is your default:
 - Send every other change, a finding's fix included, to an implementer
   through the task lines `status` prints, and have each reviewed by a thread
   that did not write it.
-- Make record changes, `atelier lead <mission>` included, on a record-only
-  branch: `atelier start --backlog <slug>`, write them (`atelier new --in
-  <mission>` and `atelier ready`, or an edit to `notes.md`), commit,
-  `atelier submit` and `atelier merge`.
+- File a new item, with `atelier new --in <mission>` for one of the
+  mission's, on the branch you are on. Make every other record change,
+  `atelier lead <mission>` included, on a record-only branch, and file there
+  too when you hold no branch: `atelier start --backlog <slug>`, write them
+  (`atelier set`, or an edit to `notes.md`), commit, `atelier submit` and
+  `atelier merge`.
 
 ## Departing From It
 
@@ -30,16 +32,23 @@ the reviewer, tell the implementer to fix it, and write the ruling in
 may instead change its Scope or Done when on its branch and file the rest
 as an item.
 
+An item whose round 3 or later asked for changes has reached the cap on
+automated review, and waits for your ruling. Read its open findings, then
+rule one of: merge it with `ATELIER_SKIP="<ruling>" atelier merge`, adjust
+its Scope or Done when, drop it, or have it fixed. Only once you rule to fix
+it does its implementer submit the next round; write that ruling in
+`notes.md`.
+
 ## Doing Less
 
 Where the work turns out much harder than the plan took it to be, you may
 drop an item, or the mission, with the reason `atelier drop <id> --reason
-"<why>"` records. A started item is dropped in a checkout of its branch,
-committed and pushed; then its copy on the base, on a backlog branch:
-`atelier start --backlog drop-<id>`, the same `atelier drop`, commit,
-`atelier submit` and `atelier merge`. Anything else is dropped on a backlog
-branch alone. The mission's Result names at its close what was not done and
-why.
+"<why>"` records. One backlog branch is enough, for a started item too:
+`atelier start --backlog drop-<id>`, the drop, commit, `atelier submit` and
+`atelier merge`, which also closes a dropped item's pull request. Where `drop`
+names items only the dropped branch filed, bring over those still wanted
+with the commands it prints. The mission's Result names at its close what
+was not done and why.
 
 You may not do more or other than the plan asks. What the Authority
 withholds, and the product's direction, stay the human's: take them to an

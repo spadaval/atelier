@@ -73,7 +73,7 @@ pub fn waits_on_lead<'a>(
 /// before it: each fix-now finding they leave open. Its own file is not
 /// read, so what it carries does not change as its reviewer writes in it.
 pub fn carried(item: &ItemDir, round: u32) -> Result<Vec<Carried>, Problem> {
-    carry(&item.reviews, &item.responses()?, &item.decisions()?, round)
+    carry(&item.reviews, &item.responses(), &item.decisions()?, round)
 }
 
 /// What round `round` of a mission's plan reviews carries, as [`carried`]

@@ -59,7 +59,7 @@ export function ProjectGlance({ desk, repo, now, actions }: { desk: string; repo
 
   const active = (missionsRead.data?.missions ?? []).filter((mission) => mission.state === "open").sort((a, b) => Number(b.in_progress) - Number(a.in_progress));
   const needs = (waiting?.needs_human ?? []).flatMap((g) => g.items);
-  const ready = (moving?.ready ?? []).filter((r) => !r.needs_human);
+  const startable = (moving?.ready ?? []).filter((r) => !r.needs_human);
   const plans = waiting?.proposed ?? [];
   const threads = waiting?.threads ?? [];
   const waits = needs.length + plans.length + threads.length;
@@ -131,9 +131,9 @@ export function ProjectGlance({ desk, repo, now, actions }: { desk: string; repo
               );
             })}
           </Block>
-          <Block name="ready" title="Next up" count={ready.length}>
-            {ready.length === 0 ? <p className="px-1.5 text-muted-foreground text-xs">Nothing is ready to start.</p> : null}
-            {ready.map((row) => (
+          <Block name="next" title="Next up" count={startable.length}>
+            {startable.length === 0 ? <p className="px-1.5 text-muted-foreground text-xs">Nothing can start now.</p> : null}
+            {startable.map((row) => (
               <Row key={row.id} id={row.id} row={`item:${row.id}`} title={row.title} glyph={<StatusDot status={row.status} />} note={<span>{row.priority}</span>} onClick={() => actions.openItem(repo, row.id)} />
             ))}
           </Block>

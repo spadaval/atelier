@@ -41,8 +41,8 @@ start --backlog <slug>`: commit them there, then `atelier submit` and
 ## Never Without the Human
 
 - An item they asked for or set aside themselves, even with complete proof: its
-  `ready.by` names them, or its body says they asked for it or gives their
-  condition for picking it up.
+  body says they asked for it or gives their condition for picking it up, or
+  an old record's `ready.by` names them.
 - Real work we could do but may not want.
 - A change of priority, or of order between missions.
 - Forming a mission, or dropping one that is not wholly stale.

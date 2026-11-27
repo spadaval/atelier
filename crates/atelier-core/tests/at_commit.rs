@@ -32,7 +32,7 @@ const REVIEW: &str = "---\nschema: atelier.review\nschema_version: 3\nround: 1\n
                       reviewers:\n- r1\nmodel: m\nverdict: null\ncreated_at: 2026-11-10T09:00:00Z\n---\n\
                       ## Summary\ns\n";
 
-/// A repository whose first commit holds the item ready, with a review,
+/// A repository whose first commit holds the item open, with a review,
 /// and whose second holds it building; the working tree then moves on to
 /// in review without a commit.
 fn repository() -> (TempDir, String, String) {
@@ -41,11 +41,11 @@ fn repository() -> (TempDir, String, String) {
     git(repo, &["init", "-q", "-b", "main"]);
     let items = repo.join(".atelier/items/demo-ab12");
     fs::create_dir_all(items.join("reviews")).unwrap();
-    fs::write(items.join("item.md"), item("ready", "[]")).unwrap();
+    fs::write(items.join("item.md"), item("open", "[]")).unwrap();
     fs::write(items.join("reviews/1-aaaa.md"), REVIEW).unwrap();
     fs::write(items.join("reviews/notes.txt"), "not a review").unwrap();
     git(repo, &["add", "-A"]);
-    git(repo, &["commit", "-qm", "ready"]);
+    git(repo, &["commit", "-qm", "open"]);
     let older = git(repo, &["rev-parse", "HEAD"]);
     fs::write(items.join("item.md"), item("building", "[t1]")).unwrap();
     git(repo, &["commit", "-qam", "building"]);
@@ -60,7 +60,7 @@ fn reads_an_item_as_an_older_commit_holds_it_while_the_checkout_moved_on() {
     let mut reader = CommitReader::new(dir.path());
 
     let at_older = reader.item(&older, "demo-ab12").unwrap().unwrap();
-    assert_eq!(at_older.item.status, Status::Ready);
+    assert_eq!(at_older.item.status, Status::Open);
     assert!(at_older.item.implementers.0.is_empty());
     assert_eq!(at_older.reviews.len(), 1);
     assert_eq!(at_older.reviews[0].name.to_string(), "1-aaaa");

@@ -54,19 +54,17 @@ merged() {
     git switch -q main
 }
 
-# item <id> <status> <title> [mission] [labels]: write an item record whose
-# body is read from stdin. Any status but draft records Dana's go-ahead.
+# item <id> <title> [mission] [labels]: write an open item's record whose
+# body is read from stdin.
 item() {
-    local ready="null"
-    [ "$2" = draft ] || ready=$'\n  by: dana\n  at: 2026-11-09T09:00:00Z'
     mkdir -p ".atelier/items/$1"
-    { printf -- '---\nschema: atelier.item\nschema_version: 3\nid: %s\ntitle: %s\nstatus: %s\n' "$1" "$3" "$2"
-      printf 'mission: %s\nlabels: %s\npriority: high\nblocked_by: []\nimplementers: []\n' "${4:-null}" "${5:-[]}"
-      printf 'ready: %s\ntrivial: null\ncaused_by: null\ncreated_at: 2026-11-09T09:00:00Z\n---\n\n' "$ready"
+    { printf -- '---\nschema: atelier.item\nschema_version: 3\nid: %s\ntitle: %s\nstatus: open\n' "$1" "$2"
+      printf 'mission: %s\nlabels: %s\npriority: high\nblocked_by: []\nimplementers: []\n' "${3:-null}" "${4:-[]}"
+      printf 'ready: null\ntrivial: null\ncaused_by: null\ncreated_at: 2026-11-09T09:00:00Z\n---\n\n'
       cat; } > ".atelier/items/$1/item.md"
 }
 
-# planned <message>: commit planning records left uncommitted (`ready`,
+# planned <message>: commit planning records left uncommitted (`new`,
 # `drop`, `close` and `lead` commit nothing), if there are any.
 planned() {
     git add -A .atelier

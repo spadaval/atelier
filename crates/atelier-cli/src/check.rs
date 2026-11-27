@@ -4,15 +4,16 @@
 //! a rule about a push by the push.
 
 use crate::commands::{self, Outcome};
+use crate::output::{BaseCheckout, WayBack};
 use crate::{git, output, setup};
 use anyhow::{bail, Context, Result};
-use atelier_core::actions::changes;
-use atelier_core::model::Status;
+use atelier_core::actions::{changes, changes_mission};
+use atelier_core::model::{Config, MissionStatus, Status};
 use atelier_core::records::{
     is_record, load, parse_config, parse_item, parse_mission, CommitReader, Problem, ReadError,
     Store, CONFIG,
 };
-use atelier_core::repo::planning;
+use atelier_core::repo::{base_tip, planning};
 use atelier_core::Skip;
 use clap::ValueEnum;
 use std::io::{ErrorKind, Read, Write};
@@ -202,8 +203,9 @@ fn pre_commit(root: &Path, skip: &Skip) -> Result<Outcome> {
     let mut actions = Vec::new();
     if git::has_commit(root, "HEAD")? {
         let head = git::head(root)?;
-        let items = loaded.items.iter().map(|dir| (&dir.path, dir.item.status));
-        let missions = (loaded.missions.iter()).map(|dir| (&dir.path, dir.mission.status.status()));
+        let items = (loaded.items.iter()).map(|dir| (&dir.path, Stored::Item(dir.item.status)));
+        let missions =
+            (loaded.missions.iter()).map(|dir| (&dir.path, Stored::Mission(dir.mission.status)));
         for (path, now) in items.chain(missions) {
             if !changed.contains(path) {
                 continue;
@@ -212,8 +214,7 @@ fn pre_commit(root: &Path, skip: &Skip) -> Result<Outcome> {
             let Some(Ok(before)) = status_at(&mut reader, &head, &path)? else {
                 continue;
             };
-            let mission = path.ends_with("/mission.md");
-            if before != now && !changes(mission, before, now) {
+            if before != now && !before.changes_to(now) {
                 // Only the lifecycle comparison is waived. Parsing and full
                 // staged-record validation above still apply.
                 if let Some(base) = &imported_from {
@@ -223,7 +224,7 @@ fn pre_commit(root: &Path, skip: &Skip) -> Result<Outcome> {
                         }
                     }
                 }
-                actions.push((path.into_owned(), before, now));
+                actions.push((path.into_owned(), before.name(), now.name()));
             }
         }
     }
@@ -272,7 +273,7 @@ fn pre_commit(root: &Path, skip: &Skip) -> Result<Outcome> {
         .chain(
             actions
                 .iter()
-                .map(|(path, from, to)| output::rule_status(path, *from, *to)),
+                .map(|(path, from, to)| output::rule_status(path, from, to)),
         )
         .chain((!base_records.is_empty()).then(|| output::rule_record_on_base(&base)));
     Ok(rules(skip, &unread, broken, text).unwrap_or(Outcome::Done(String::new())))
@@ -358,7 +359,7 @@ fn pre_push(root: &Path, input: &str, skip: &Skip) -> Result<Outcome> {
     let base = config.base_branch.clone();
     let target = format!("refs/heads/{base}");
     let forge = config.forge.as_ref().map(|forge| forge.remote.as_str());
-    let mut old = None;
+    let mut pushed = None;
     let mut moves = false;
     let mut plain = Vec::new();
     for line in input.lines() {
@@ -376,7 +377,7 @@ fn pre_push(root: &Path, input: &str, skip: &Skip) -> Result<Outcome> {
             true => None,
             false => Some(remote),
         };
-        old = known;
+        pushed = known.map(|old| (local, old));
         if forge.is_some() {
             moves = true;
             continue;
@@ -387,24 +388,51 @@ fn pre_push(root: &Path, input: &str, skip: &Skip) -> Result<Outcome> {
             }
         }
     }
+    if !moves && plain.is_empty() {
+        return Ok(Outcome::Done(String::new()));
+    }
+    let back = match pushed {
+        Some((local, old)) => way_back(root, &config, local, old)?,
+        None => None,
+    };
     if moves {
-        let text = output::push_moves_base(&base, forge.unwrap_or_default(), old);
+        let text = output::push_moves_base(&base, back.as_ref());
         let rule = output::rule_base_moved(&base);
         return Ok(skip
             .refuse([rule], text)
             .map(Outcome::from)
             .unwrap_or(Outcome::Done(String::new())));
     }
-    if plain.is_empty() {
-        return Ok(Outcome::Done(String::new()));
-    }
-    let text = output::push_refused(&base, old, &plain);
+    let text = output::push_refused(&base, back.as_ref(), &plain);
     let broken =
         (plain.iter()).map(|(commit, subject, _)| output::rule_merge(&base, commit, subject));
     Ok(skip
         .refuse(broken, text)
         .map(Outcome::from)
         .unwrap_or(Outcome::Done(String::new())))
+}
+
+/// How a refused push of `local` over the remote's `old` is undone, where
+/// steps can be printed that lose nothing: the base is at `local`, strictly
+/// ahead of `old`, and is the tip `start` makes a branch at, so that branch
+/// holds every commit the base gives up.
+fn way_back(root: &Path, config: &Config, local: &str, old: &str) -> Result<Option<WayBack>> {
+    let base = &config.base_branch;
+    if git::branch_tip(root, base)?.as_deref() != Some(local)
+        || !git::is_ancestor(root, old, local)?
+        || base_tip(root, config)? != local
+    {
+        return Ok(None);
+    }
+    let base_checkout = if git::current_branch(root)?.as_deref() == Some(base.as_str()) {
+        BaseCheckout::Here
+    } else {
+        git::checkout_of(root, base)?.map_or(BaseCheckout::Nowhere, BaseCheckout::At)
+    };
+    Ok(Some(WayBack {
+        old: old.to_string(),
+        base_checkout,
+    }))
 }
 
 /// On a branch switch, what `status` prints; else nothing. A failure is
@@ -423,6 +451,31 @@ fn post_checkout(args: &[String], skip: &Skip) -> String {
     }
 }
 
+/// A record's status, as its kind has it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Stored {
+    Item(Status),
+    Mission(MissionStatus),
+}
+
+impl Stored {
+    /// Whether an action makes this change on a record of this kind.
+    fn changes_to(self, now: Stored) -> bool {
+        match (self, now) {
+            (Stored::Item(from), Stored::Item(to)) => changes(from, to),
+            (Stored::Mission(from), Stored::Mission(to)) => changes_mission(from, to),
+            _ => unreachable!("a record's path gives its kind"),
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Stored::Item(status) => output::status_name(status),
+            Stored::Mission(status) => status.name(),
+        }
+    }
+}
+
 /// The status of the item or mission record at `path` in `commit`: `None`
 /// when the commit has no file there, and the problem when it does not
 /// parse.
@@ -430,7 +483,7 @@ fn status_at(
     reader: &mut CommitReader,
     commit: &str,
     path: &str,
-) -> Result<Option<Result<Status, Problem>>> {
+) -> Result<Option<Result<Stored, Problem>>> {
     let text = match reader.text(commit, path) {
         Err(ReadError::Missing { .. }) => return Ok(None),
         Err(ReadError::Record(problem)) => return Ok(Some(Err(problem))),
@@ -438,8 +491,8 @@ fn status_at(
     };
     let shown = PathBuf::from(format!("{}:{path}", &commit[..commit.len().min(7)]));
     Ok(Some(match path.ends_with("/mission.md") {
-        true => parse_mission(&shown, &text).map(|mission| mission.status.status()),
-        false => parse_item(&shown, &text).map(|item| item.status),
+        true => parse_mission(&shown, &text).map(|mission| Stored::Mission(mission.status)),
+        false => parse_item(&shown, &text).map(|item| Stored::Item(item.status)),
     }))
 }
 

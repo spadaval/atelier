@@ -100,7 +100,7 @@ fn remote_tip(root: &Path, branch: &str) -> String {
 
 #[test]
 fn check_reports_every_problem_with_its_file_and_field_and_lists_uncommitted_records() {
-    let scratch = Scratch::new(&[(ID, "ready"), (OTHER, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open"), (OTHER, "open")]);
     let root = scratch.root();
     let run = atelier(&root, "t1", &["check"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
@@ -111,12 +111,7 @@ fn check_reports_every_problem_with_its_file_and_field_and_lists_uncommitted_rec
 
     // One record that does not read, one that reads and is not valid, and
     // a config with an unknown key: each is named, with its field.
-    edit(
-        &root,
-        &item_path(OTHER),
-        "status: ready",
-        "status: finished",
-    );
+    edit(&root, &item_path(OTHER), "status: open", "status: finished");
     edit(
         &root,
         &item_path(ID),
@@ -154,12 +149,7 @@ fn check_reports_every_problem_with_its_file_and_field_and_lists_uncommitted_rec
     )));
     // Every record read, what is not valid can be skipped, and is still
     // reported.
-    edit(
-        &root,
-        &item_path(OTHER),
-        "status: finished",
-        "status: ready",
-    );
+    edit(&root, &item_path(OTHER), "status: finished", "status: open");
     git(&root, &["checkout", "--", ".atelier/config.toml"]);
     let run = atelier(&root, "t1", &["check"]);
     assert_eq!(run.code, 1);
@@ -223,7 +213,7 @@ fn check_reports_every_problem_with_its_file_and_field_and_lists_uncommitted_rec
 #[test]
 fn a_commit_of_an_invalid_record_or_of_a_status_no_action_sets_is_refused_and_a_hand_edit_goes_through(
 ) {
-    let scratch = Scratch::new(&[(ID, "ready"), (OTHER, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open"), (OTHER, "open")]);
     let root = scratch.root();
     install_hooks(&root);
     let head = git(&root, &["rev-parse", "HEAD"]);
@@ -282,26 +272,26 @@ fn a_commit_of_an_invalid_record_or_of_a_status_no_action_sets_is_refused_and_a_
     );
     refused("Block it", &[&rule], Some(&valid));
 
-    edit(&root, &item_path(ID), "status: ready", "status: finished");
+    edit(&root, &item_path(ID), "status: open", "status: finished");
     let parse = format!(
         "These do not read as records, so no rule can be checked on them:\n  {}: front matter: status: unknown variant `finished`",
         item_path(ID)
     );
     refused("Finish it", &[&parse], None);
 
-    edit(&root, &item_path(ID), "status: ready", "status: approved");
+    edit(&root, &item_path(ID), "status: open", "status: approved");
     let action = format!(
-        "Rule: a status changes only as an action of the lifecycle changes it. These change it as no action does:\n  {}: status: ready to approved. Put back the status HEAD has; atelier status names the command for what comes next.\n",
+        "Rule: a status changes only as an action of the lifecycle changes it. These change it as no action does:\n  {}: status: open to approved. Put back the status HEAD has; atelier status names the command for what comes next.\n",
         item_path(ID)
     );
     let status = format!(
-        "A status changes only as an action of the lifecycle changes it ({}: ready to approved)",
+        "A status changes only as an action of the lifecycle changes it ({}: open to approved)",
         item_path(ID)
     );
     refused("Approve it", &[&action], Some(&status));
 
     // A record that does not read, beside a rule broken, is not skipped.
-    edit(&root, &item_path(ID), "status: ready", "status: finished");
+    edit(&root, &item_path(ID), "status: open", "status: finished");
     edit(
         &root,
         &item_path(OTHER),
@@ -312,7 +302,7 @@ fn a_commit_of_an_invalid_record_or_of_a_status_no_action_sets_is_refused_and_a_
 
     // A planner's own edit, a status no command would refuse included.
     edit(&root, &item_path(ID), "title: Say hello", "title: Say hi");
-    edit(&root, &item_path(OTHER), "status: ready", "status: dropped");
+    edit(&root, &item_path(OTHER), "status: open", "status: dropped");
     append(&root, &item_path(OTHER), "Dropped: not needed\n");
     let run = commit_all(&root, "Plan");
     assert_eq!(run.code, 0, "{}", run.stderr);
@@ -326,7 +316,7 @@ fn a_commit_of_an_invalid_record_or_of_a_status_no_action_sets_is_refused_and_a_
 
 #[test]
 fn a_rule_a_hook_skips_in_an_atelier_commit_is_printed() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     install_hooks(&root);
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
@@ -366,7 +356,7 @@ fn a_status_change_is_judged_by_the_actions_of_its_records_kind() {
     edit(&root, &path, "status: open", "status: draft");
     assert_eq!(commit_all(&root, "Plan it as before").code, 0);
     install_hooks(&root);
-    // An item's `close` goes from draft to done; no action on a mission does.
+    // An item's `close` ends an open one; no action ends a proposed mission.
     edit(&root, &path, "status: draft", "status: done");
     let run = commit_all(&root, "Close it");
     assert_eq!(run.code, 1, "{}", run.stderr);
@@ -387,7 +377,7 @@ fn a_status_change_is_judged_by_the_actions_of_its_records_kind() {
 
 #[test]
 fn the_pre_commit_hook_reads_records_as_staged_and_passes_over_other_files() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     install_hooks(&root);
 
@@ -414,9 +404,9 @@ fn the_pre_commit_hook_reads_records_as_staged_and_passes_over_other_files() {
     assert_eq!(run.code, 0, "{}", run.stderr);
 
     // Broken as staged, and fixed only in the working tree: refused.
-    edit(&root, &item_path(ID), "status: ready", "status: finished");
+    edit(&root, &item_path(ID), "status: open", "status: finished");
     git(&root, &["add", "-A"]);
-    edit(&root, &item_path(ID), "status: finished", "status: ready");
+    edit(&root, &item_path(ID), "status: finished", "status: open");
     let run = git_as(&root, &["commit", "-qm", "Finish it"]);
     assert_ne!(run.code, 0);
     assert!(
@@ -442,7 +432,7 @@ fn the_pre_commit_hook_reads_records_as_staged_and_passes_over_other_files() {
 
     // A commit in a second worktree is judged by that worktree's index.
     let other = scratch.worktree("other");
-    edit(&other, &item_path(ID), "status: ready", "status: finished");
+    edit(&other, &item_path(ID), "status: open", "status: finished");
     let run = commit_all(&other, "Finish it there");
     assert_ne!(run.code, 0);
     assert!(
@@ -470,7 +460,7 @@ fn the_pre_commit_hook_reads_records_as_staged_and_passes_over_other_files() {
         run.stderr
     );
     git(&root, &["reset", "-q", "--hard"]);
-    edit(&root, &item_path(ID), "status: ready", "status: finished");
+    edit(&root, &item_path(ID), "status: open", "status: finished");
     git(&root, &["commit", "-qam", "Break it", "--no-verify"]);
     let reviewed = format!(".atelier/items/{ID}/reviews/1-abcd.md");
     fs::create_dir_all(root.join(&reviewed).parent().unwrap()).unwrap();
@@ -491,7 +481,7 @@ fn the_pre_commit_hook_reads_records_as_staged_and_passes_over_other_files() {
     git(&root, &["add", "-A"]);
     edit(&root, &item_path(ID), "title: Say hello", "title: Say hi");
     git(&root, &["add", "-A"]);
-    edit(&root, &item_path(ID), "status: ready", "status: finished");
+    edit(&root, &item_path(ID), "status: open", "status: finished");
     let run = git_as(&root, &["commit", "-qm", "Retitle it"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert_eq!(field(&root, "HEAD", "title"), "Say hi");
@@ -520,7 +510,7 @@ fn the_first_commit_of_a_repository_is_checked() {
         .is_some_and(|code| code != 0));
 
     edit(&root, ".atelier/config.toml", "base = 1\n", "");
-    write_item(&root, ID, "draft", &[], &[], "");
+    write_item(&root, ID, "open", &[], &[], "");
     // Valid, and on the base, so the base's rule refuses it; the first
     // commit of a repository is the one place a skip is plainly right.
     let run = commit_all(&root, "Start");
@@ -541,7 +531,7 @@ fn the_first_commit_of_a_repository_is_checked() {
 
 #[test]
 fn a_push_of_the_base_with_a_commit_that_is_no_atelier_merge_is_refused() {
-    let scratch = pushed(&[(ID, "ready")]);
+    let scratch = pushed(&[(ID, "open")]);
     let root = scratch.root();
     let pushed = remote_tip(&root, "main");
 
@@ -563,7 +553,7 @@ fn a_push_of_the_base_with_a_commit_that_is_no_atelier_merge_is_refused() {
         .stderr
         .contains(&format!("  {commit} Say hello: not an Atelier merge\n")));
     assert!(run.stderr.contains(
-        &format!("Move them to a branch: atelier start --new \"<title>\" starts an item that holds code, atelier start --backlog <slug> a branch for record changes. Then git branch -f main {} takes them off main, and atelier merge brings the branch in.\n", &pushed[..7])
+        &format!("Move them to a new item's branch and put main back with:\n  atelier start --new \"<title>\" && git reset --keep {}\n", &pushed[..40])
     ), "{}", run.stderr);
     assert_eq!(remote_tip(&root, "main"), pushed);
 
@@ -576,6 +566,11 @@ fn a_push_of_the_base_with_a_commit_that_is_no_atelier_merge_is_refused() {
     let run = git_as(&root, &["push", "-q", "origin", "feature:main"]);
     assert_ne!(run.code, 0);
     assert!(run.stderr.contains("Say hello: not an Atelier merge"));
+    // The base does not hold what was pushed, so no reset of it is printed.
+    assert!(!run.stderr.contains("reset --keep"), "{}", run.stderr);
+    assert!(run
+        .stderr
+        .contains("Once that branch holds them, move main back"));
 
     // A merge that is not Atelier's is refused, and so is a commit that is
     // no merge but carries the trailer.
@@ -681,7 +676,7 @@ fn a_push_of_the_base_with_a_commit_that_is_no_atelier_merge_is_refused() {
 
 #[test]
 fn a_push_from_a_checkout_whose_config_does_not_read_is_refused_with_the_way_out() {
-    let scratch = pushed(&[(ID, "ready")]);
+    let scratch = pushed(&[(ID, "open")]);
     let root = scratch.root();
     append(&root, ".atelier/config.toml", "base = 1\n");
     let run = git_as(&root, &["push", "-q", "origin", "main"]);
@@ -701,14 +696,14 @@ fn a_push_from_a_checkout_whose_config_does_not_read_is_refused_with_the_way_out
 
 #[test]
 fn a_push_of_several_refs_judges_only_the_base() {
-    let scratch = pushed(&[(ID, "draft")]);
+    let scratch = pushed(&[(ID, "open")]);
     let root = scratch.root();
     // Code on another branch, and the base as the remote has it: the base
     // is judged, and moves nothing.
     git(&root, &["switch", "-q", "-c", "spike"]);
     fs::write(root.join("hello.txt"), "hello\n").unwrap();
     assert_eq!(commit_all(&root, "Try hello").code, 0);
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     edit(&root, &item_path(ID), "title: Say hello", "title: Say hi");
     assert_eq!(commit_all(&root, "Retitle").code, 0);
     let run = git_as(&root, &["push", "-q", "origin", "main", "spike"]);
@@ -735,7 +730,7 @@ fn a_push_of_several_refs_judges_only_the_base() {
 
 #[test]
 fn an_atelier_merge_of_a_branch_with_code_commits_reaches_the_base_and_its_branch_any_time() {
-    let scratch = pushed(&[(ID, "ready")]);
+    let scratch = pushed(&[(ID, "open")]);
     let root = scratch.root();
     // Every commit here goes through the pre-commit hook: the actions' too.
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
@@ -753,7 +748,7 @@ fn an_atelier_merge_of_a_branch_with_code_commits_reaches_the_base_and_its_branc
     assert_eq!(run.code, 0, "{}", run.stderr);
 
     // Planning on either side of the merge, pushed with it.
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     let run = atelier(&root, "t1", &["new", "Say goodbye"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert_eq!(commit_all(&root, "Plan goodbye").code, 0);
@@ -764,12 +759,12 @@ fn an_atelier_merge_of_a_branch_with_code_commits_reaches_the_base_and_its_branc
 
 #[test]
 fn a_plain_commit_of_records_alone_on_the_base_is_refused() {
-    let scratch = pushed(&[(ID, "ready")]);
+    let scratch = pushed(&[(ID, "open")]);
     let root = scratch.root();
     let pushed = remote_tip(&root, "main");
     git(&root, &["switch", "-q", "main"]);
     // On the base the commit needs a skip of the pre-commit hook's rule.
-    edit(&root, &item_path(ID), "status: ready", "status: done");
+    edit(&root, &item_path(ID), "status: open", "status: done");
     git(&root, &["add", "-A"]);
     let run = git_skipping(
         &root,
@@ -795,7 +790,7 @@ fn a_plain_commit_of_records_alone_on_the_base_is_refused() {
 
 #[test]
 fn with_a_forge_any_push_that_moves_the_base_is_refused_and_names_merge() {
-    let scratch = pushed(&[(ID, "ready")]);
+    let scratch = pushed(&[(ID, "open")]);
     let root = scratch.root();
     let pushed = remote_tip(&root, "main");
     git(&root, &["switch", "-q", "main"]);
@@ -830,8 +825,10 @@ fn with_a_forge_any_push_that_moves_the_base_is_refused_and_names_merge() {
         format!(
             "Atelier's pre-push hook refused this push; nothing was pushed.\n\
              Rule: main is moved only by the forge's merge of a pull request. With a forge configured, atelier merge has the forge merge each branch's pull request and never pushes main, so no push may move it.\n\
-             Put the commits on a branch and run atelier merge there; `git branch -f main {}` puts main back.\n{SKIP}",
-            &pushed[..7]
+             Move them to a new item's branch and put main back with:\n  atelier start --new \"<title>\" && git reset --keep {0}\n\
+             If uncommitted changes make the reset refuse, nothing is lost and the new branch already has the commits: save the changes with `git stash push -u`, finish with `git reset --keep {0}`, then run `git stash apply` in the new branch's checkout.\n\
+             For record changes alone, use `atelier start --backlog <slug>` in place of `start --new`. atelier merge then brings the branch in.\n{SKIP}",
+            &pushed[..40]
         )
         + "error: failed to push some refs to '"
         + &format!("{}'\n", scratch.dir.path().join("remote.git").display())
@@ -851,7 +848,7 @@ fn with_a_forge_any_push_that_moves_the_base_is_refused_and_names_merge() {
 
 #[test]
 fn a_first_push_of_a_base_judges_its_whole_line() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     install_hooks(&root);
     let remote = scratch.dir.path().join("remote.git");
@@ -870,7 +867,7 @@ fn a_first_push_of_a_base_judges_its_whole_line() {
     // With no commit of the remote's to name, the way out names none.
     assert!(
         run.stderr
-            .contains("Then moving main back to the remote's commit takes them off main,"),
+            .contains("Once that branch holds them, move main back to the remote's commit,"),
         "{}",
         run.stderr
     );
@@ -878,7 +875,7 @@ fn a_first_push_of_a_base_judges_its_whole_line() {
 
 #[test]
 fn a_branch_switch_prints_status_and_succeeds_whatever_it_finds() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     install_hooks(&root);
     let run = git_as(&root, &["switch", "-c", "spike"]);
@@ -892,7 +889,7 @@ fn a_branch_switch_prints_status_and_succeeds_whatever_it_finds() {
     // A branch named for the item, holding a record that does not read,
     // committed past the hook.
     git(&root, &["switch", "-q", "-c", ID]);
-    edit(&root, &item_path(ID), "status: ready", "status: finished");
+    edit(&root, &item_path(ID), "status: open", "status: finished");
     git(&root, &["commit", "-qam", "Break it", "--no-verify"]);
     let run = git_as(&root, &["switch", "main"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
@@ -949,7 +946,7 @@ fn a_branch_switch_prints_status_and_succeeds_whatever_it_finds() {
 
 #[test]
 fn a_commit_on_the_base_that_changes_a_record_is_refused_and_a_skip_passes_it() {
-    let scratch = Scratch::new(&[(ID, "draft")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     install_hooks(&root);
     git(&root, &["switch", "-q", "main"]);
@@ -960,8 +957,8 @@ fn a_commit_on_the_base_that_changes_a_record_is_refused_and_a_skip_passes_it() 
     let before = git(&root, &["rev-parse", "HEAD"]);
     for change in ["change", "add", "delete"] {
         match change {
-            "change" => edit(&root, &item_path(ID), "status: draft", "status: ready"),
-            "add" => write_item(&root, "demo-n3w1", "draft", &[], &[], ""),
+            "change" => edit(&root, &item_path(ID), "title: Say hello", "title: Say hi"),
+            "add" => write_item(&root, "demo-n3w1", "open", &[], &[], ""),
             _ => fs::remove_dir_all(root.join(".atelier/items").join(ID)).unwrap(),
         }
         let run = commit_all(&root, "Plan on the base");
@@ -981,9 +978,9 @@ fn a_commit_on_the_base_that_changes_a_record_is_refused_and_a_skip_passes_it() 
     }
 
     // A skip passes it, with its reason.
-    edit(&root, &item_path(ID), "status: draft", "status: ready");
+    edit(&root, &item_path(ID), "status: open", "status: dropped");
     git(&root, &["add", "-A"]);
-    let run = git_skipping(&root, Some("the cutover"), &["commit", "-qm", "Ready"]);
+    let run = git_skipping(&root, Some("the cutover"), &["commit", "-qm", "Drop"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert!(
         run.stderr
@@ -994,20 +991,20 @@ fn a_commit_on_the_base_that_changes_a_record_is_refused_and_a_skip_passes_it() 
 
     // Off the base, detached or on a branch, the same change commits.
     git(&root, &["checkout", "-q", "--detach"]);
-    edit(&root, &item_path(ID), "status: ready", "status: draft");
-    let run = commit_all(&root, "Back to draft");
-    assert_ne!(run.code, 0, "ready to draft is no action");
+    edit(&root, &item_path(ID), "status: dropped", "status: open");
+    let run = commit_all(&root, "Back to open");
+    assert_ne!(run.code, 0, "dropped to open is no action");
     git(&root, &["reset", "-q", "--hard"]);
-    write_item(&root, "demo-n3w1", "draft", &[], &[], "");
+    write_item(&root, "demo-n3w1", "open", &[], &[], "");
     assert_eq!(commit_all(&root, "Plan detached").code, 0);
     git(&root, &["switch", "-q", "-c", "backlog/plan"]);
-    write_item(&root, "demo-n3w2", "draft", &[], &[], "");
+    write_item(&root, "demo-n3w2", "open", &[], &[], "");
     assert_eq!(commit_all(&root, "Plan on a branch").code, 0);
 }
 
 #[test]
 fn a_base_commit_is_refused_when_it_deletes_the_config_or_the_config_does_not_read() {
-    let scratch = Scratch::new(&[(ID, "draft")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     install_hooks(&root);
     git(&root, &["switch", "-q", "main"]);
@@ -1024,10 +1021,10 @@ fn a_base_commit_is_refused_when_it_deletes_the_config_or_the_config_does_not_re
     assert_eq!(git(&root, &["rev-parse", "HEAD"]), before);
     git(&root, &["reset", "-q", "--hard"]);
     // And when the checkout's does not read, beside a staged record.
-    edit(&root, &item_path(ID), "status: draft", "status: ready");
+    edit(&root, &item_path(ID), "status: open", "status: dropped");
     git(&root, &["add", "-A"]);
     append(&root, ".atelier/config.toml", "base = 1\n");
-    let run = git_as(&root, &["commit", "-qm", "Ready on base"]);
+    let run = git_as(&root, &["commit", "-qm", "Drop on base"]);
     assert_eq!(run.code, 1, "{}", run.stderr);
     assert!(
         run.stderr
@@ -1040,7 +1037,7 @@ fn a_base_commit_is_refused_when_it_deletes_the_config_or_the_config_does_not_re
 
 #[test]
 fn the_base_a_commit_is_judged_against_is_heads_not_the_checkouts() {
-    let scratch = Scratch::new(&[(ID, "draft")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     install_hooks(&root);
     git(&root, &["switch", "-q", "main"]);
@@ -1062,9 +1059,9 @@ fn the_base_a_commit_is_judged_against_is_heads_not_the_checkouts() {
     );
     // Nor does one left unstaged beside a staged record.
     git(&root, &["reset", "-q"]);
-    edit(&root, &item_path(ID), "status: draft", "status: ready");
+    edit(&root, &item_path(ID), "status: open", "status: dropped");
     git(&root, &["add", &item_path(ID)]);
-    let run = git_as(&root, &["commit", "-qm", "Ready on base"]);
+    let run = git_as(&root, &["commit", "-qm", "Drop on base"]);
     assert_eq!(run.code, 1, "{}", run.stderr);
     assert!(
         run.stderr
@@ -1073,4 +1070,172 @@ fn the_base_a_commit_is_judged_against_is_heads_not_the_checkouts() {
         run.stderr
     );
     assert_eq!(git(&root, &["rev-parse", "HEAD"]), before);
+}
+
+/// A base pushed, then strictly ahead of it by a code commit: the
+/// repository, the commit the remote has and the one to move.
+fn ahead(forge: bool) -> (Scratch, String, String) {
+    let scratch = Scratch::new(&[(ID, "open")]);
+    let root = scratch.root();
+    fs::write(root.join("hello.txt"), "v1\n").unwrap();
+    fs::write(root.join("notes.txt"), "v1\n").unwrap();
+    if forge {
+        let config = "\n[forge]\nprovider = \"github\"\nremote = \"origin\"\n";
+        append(&root, ".atelier/config.toml", config);
+    }
+    on_base(&root, "Files");
+    let remote = scratch.dir.path().join("remote.git");
+    git(
+        scratch.dir.path(),
+        &["init", "-q", "--bare", remote.to_str().unwrap()],
+    );
+    git(
+        &root,
+        &["remote", "add", "origin", remote.to_str().unwrap()],
+    );
+    git(&root, &["push", "-q", "origin", "main"]);
+    git(&root, &["fetch", "-q", "origin"]);
+    install_hooks(&root);
+    git(&root, &["switch", "-q", "main"]);
+    let old = git(&root, &["rev-parse", "main"]);
+    fs::write(root.join("hello.txt"), "v2\n").unwrap();
+    assert_eq!(commit_all(&root, "Say hello").code, 0);
+    let moved = git(&root, &["rev-parse", "main"]);
+    (scratch, old, moved)
+}
+
+/// Pushes main from `at`, and gives the refusal with the one line of steps
+/// it prints.
+fn refused_steps(at: &Path) -> (String, String) {
+    let push = git_as(at, &["push", "origin", "main"]);
+    assert_ne!(push.code, 0);
+    let steps: Vec<String> = (push.stderr.lines())
+        .filter(|line| line.starts_with("  ") && line.contains("atelier start --new"))
+        .map(|line| line.trim().to_string())
+        .collect();
+    assert_eq!(steps.len(), 1, "{}", push.stderr);
+    (push.stderr.clone(), steps[0].clone())
+}
+
+/// The branch `start --new` made, which holds `moved` as its parent: the
+/// commit itself, with no cherry-pick.
+fn moved_to(root: &Path, moved: &str) -> String {
+    let listed = git(root, &["branch", "--format=%(refname:short)"]);
+    let found: Vec<&str> = (listed.lines())
+        .filter(|name| name.starts_with("demo-"))
+        .collect();
+    assert_eq!(found.len(), 1, "{listed}");
+    assert_eq!(git(root, &["rev-parse", &format!("{}^", found[0])]), moved);
+    found[0].to_string()
+}
+
+#[test]
+fn the_printed_steps_move_a_commit_off_a_checked_out_base_and_keep_uncommitted_work() {
+    for forge in [false, true] {
+        let (scratch, old, moved) = ahead(forge);
+        let root = scratch.root();
+        fs::write(root.join("notes.txt"), "mine\n").unwrap();
+        fs::write(root.join("new.txt"), "untracked\n").unwrap();
+        let (_, steps) = refused_steps(&root);
+        let run = sh(&root, "t1", &steps);
+        assert_eq!(run.code, 0, "{forge}: {}", run.stderr);
+
+        let branch = moved_to(&root, &moved);
+        assert_eq!(git(&root, &["symbolic-ref", "--short", "HEAD"]), "main");
+        assert_eq!(git(&root, &["rev-parse", "main"]), old);
+        assert_eq!(read(&root, "hello.txt"), "v1\n");
+        assert_eq!(read(&root, "notes.txt"), "mine\n");
+        assert_eq!(read(&root, "new.txt"), "untracked\n");
+        assert_eq!(git(&root, &["show", &format!("{branch}:hello.txt")]), "v2");
+        let push = git_as(&root, &["push", "-q", "origin", "main"]);
+        assert_eq!(push.code, 0, "{}", push.stderr);
+    }
+}
+
+#[test]
+fn the_printed_steps_refuse_over_overlapping_work_and_say_how_to_finish() {
+    let (scratch, old, moved) = ahead(false);
+    let root = scratch.root();
+    fs::write(root.join("hello.txt"), "v2\nmine\n").unwrap();
+    let (said, steps) = refused_steps(&root);
+    let run = sh(&root, "t1", &steps);
+    assert_ne!(run.code, 0, "{}", run.stdout);
+
+    // Nothing is lost, and the branch has the commit already.
+    let branch = moved_to(&root, &moved);
+    assert_eq!(git(&root, &["rev-parse", "main"]), moved);
+    assert_eq!(read(&root, "hello.txt"), "v2\nmine\n");
+
+    // What it says to do then, as written.
+    let line = said.lines().find(|line| line.starts_with("If uncommitted"));
+    let commands: Vec<&str> = line.unwrap().split('`').skip(1).step_by(2).collect();
+    let [save, finish, restore] = commands[..] else {
+        panic!("{commands:?}");
+    };
+    for command in [save, finish] {
+        let run = sh(&root, "t1", command);
+        assert_eq!(run.code, 0, "{command}: {}", run.stderr);
+    }
+    assert_eq!(git(&root, &["rev-parse", "main"]), old);
+    assert_eq!(git(&root, &["status", "--porcelain"]), "");
+    let work = scratch.dir.path().join("work");
+    git(
+        &root,
+        &["worktree", "add", "-q", work.to_str().unwrap(), &branch],
+    );
+    let run = sh(&work, "t1", restore);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(read(&work, "hello.txt"), "v2\nmine\n");
+}
+
+#[test]
+fn the_printed_steps_work_from_a_checkout_that_does_not_have_the_base_out() {
+    // Another checkout has the base out: the steps act there.
+    let (scratch, old, moved) = ahead(false);
+    let root = scratch.root();
+    let other = scratch.worktree("other");
+    let (_, steps) = refused_steps(&other);
+    let run = sh(&other, "t1", &steps);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    moved_to(&root, &moved);
+    assert_eq!(git(&root, &["rev-parse", "main"]), old);
+    assert_eq!(read(&root, "hello.txt"), "v1\n");
+    assert_eq!(git(&other, &["rev-parse", "HEAD"]), moved);
+
+    // None has: `start` switches, and the base is moved as a ref.
+    let (scratch, old, moved) = ahead(false);
+    let root = scratch.root();
+    git(&root, &["checkout", "-q", "--detach"]);
+    let (_, steps) = refused_steps(&root);
+    let run = sh(&root, "t1", &steps);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let branch = moved_to(&root, &moved);
+    assert_eq!(git(&root, &["symbolic-ref", "--short", "HEAD"]), branch);
+    assert_eq!(git(&root, &["rev-parse", "main"]), old);
+}
+
+#[test]
+fn a_start_that_fails_in_the_printed_steps_leaves_the_base_holding_the_commit() {
+    let (scratch, _, moved) = ahead(true);
+    let root = scratch.root();
+    let (_, steps) = refused_steps(&root);
+    // The claim cannot be pushed, so `start` makes no branch.
+    git(&root, &["remote", "set-url", "origin", "/nonexistent"]);
+    assert_ne!(sh(&root, "t1", &steps).code, 0);
+    assert_eq!(git(&root, &["rev-parse", "main"]), moved);
+}
+
+#[test]
+fn no_reset_is_printed_where_a_new_branch_would_not_hold_the_commits() {
+    // The forge's base moved on, so `start` would branch from it.
+    let (scratch, old, moved) = ahead(true);
+    let root = scratch.root();
+    let tree = format!("{old}^{{tree}}");
+    let theirs = git(&root, &["commit-tree", &tree, "-p", &old, "-m", "Theirs"]);
+    git(&root, &["update-ref", "refs/remotes/origin/main", &theirs]);
+    let push = git_as(&root, &["push", "origin", "main"]);
+    assert_ne!(push.code, 0);
+    assert!(!push.stderr.contains("reset --keep"), "{}", push.stderr);
+    assert!(!push.stderr.contains("branch -f"), "{}", push.stderr);
+    assert_eq!(git(&root, &["rev-parse", "main"]), moved);
 }

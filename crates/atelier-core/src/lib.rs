@@ -5,7 +5,7 @@
 //! Atelier's use cases: who is calling, the action table, which record of an
 //! item counts, what `status` shows, the disagreements the records hold,
 //! and the actions a program such as the Desk calls as functions, such as
-//! `ready` and a mission's `drop`, over a repository opened by path ([`Repo::open`]). Each returns what it did, or a refusal, as
+//! a mission's `drop`, over a repository opened by path ([`Repo::open`]). Each returns what it did, or a refusal, as
 //! data; a [`Skip`] made for the invocation passes the rules its reason
 //! covers.
 
@@ -30,8 +30,8 @@ pub use disputed::{
     disputes, not_built, rebuttals, split_rounds, Disputes, Judged, NotBuilt, Rebuttal, SplitRound,
 };
 pub use identity::identity;
-pub use log::{history, Happened, History, Logged, Move, PassedOver};
-pub use plan::{ready, Done};
+pub use log::{history, history_until, Happened, History, Logged, Move, PassedOver};
+pub use plan::Done;
 pub use repo::{Links, Repo, Walked};
 pub use review::{answer, carried, carried_plan, waits_on_lead, Carried};
 pub use show::{annotate, annotate_all, item_view, mission_view, ItemView, MissionView};

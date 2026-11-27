@@ -2,7 +2,7 @@
 //! and on a mission's plan.
 
 use crate::commands::Outcome;
-use crate::output::{self, Brief, Landing, PlanBrief};
+use crate::output::{self, Brief, Landing, PlanBrief, Previous};
 use crate::{git, merge};
 use anyhow::{anyhow, Context, Result};
 use atelier_core::actions::{check, plan_round, row, Action, Facts, MissionFacts, Refusal};
@@ -10,7 +10,7 @@ use atelier_core::forge::Github;
 use atelier_core::model::{
     Forge, Review, ReviewName, ReviewSchema, SchemaVersion, Thread, Threads, Verdict,
 };
-use atelier_core::plan::{misplaced, plan_changed, Belongs};
+use atelier_core::plan::{misplaced, plan_changed, plan_delta, Belongs};
 use atelier_core::records::{create_review, validate_id, ReviewFile};
 use atelier_core::repo::{facts, item_dir, item_path, mission_dir, mission_path};
 use atelier_core::{carried, carried_plan, refused, Repo};
@@ -36,8 +36,9 @@ pub fn review(repo: &mut Repo, id: &str) -> Result<Outcome> {
         Ok(_) => None,
         // Its one condition: the caller never implemented the item.
         Err(Refusal::Unmet(_)) => {
-            let text =
-                output::author(id, &repo.caller) + &brief(repo, &facts, None, forge.as_ref())?;
+            let checkout = git::checkout_of(&repo.root, &repo.branch_of(id))?;
+            let text = output::author(id, &repo.caller, checkout.as_deref())
+                + &brief(repo, &facts, None, forge.as_ref())?;
             Some(text.into())
         }
         Err(refusal) => Some(refused(Action::Review, &refusal, &facts)?),
@@ -130,8 +131,9 @@ fn behind(repo: &Repo, located: &atelier_core::Located) -> Option<Outcome> {
 }
 
 /// `command` refused in the base's own checkout, where nothing is written.
+/// A reviewer's detached checkout is where it runs.
 fn on_base(repo: &mut Repo, command: &str) -> Result<Option<Outcome>> {
-    Ok(misplaced(repo, command, Belongs::Backlog)?.map(Outcome::from))
+    Ok(misplaced(repo, command, Belongs::Review)?.map(Outcome::from))
 }
 
 /// The sections of a mission's record, in order.
@@ -223,6 +225,7 @@ fn plan_review(repo: &mut Repo, id: &str) -> Result<Outcome> {
         })
         .collect();
     let changed = plan_changed(repo, id, commit)?.unwrap_or_default();
+    let delta = plan_delta(repo, &mission, file.name.round, commit)?;
     let landing = landing(repo, id)?;
     let brief = output::plan_brief(&PlanBrief {
         id,
@@ -234,6 +237,8 @@ fn plan_review(repo: &mut Repo, id: &str) -> Result<Outcome> {
         documents,
         items,
         changed,
+        delta,
+        at: repo.git_at(),
         carried: &carried_plan(&mission, file.name.round)?,
         path: &format!("{}/reviews/{name}.md", mission_dir(id)),
         landing: &landing,
@@ -412,7 +417,8 @@ fn brief(
         .iter()
         .filter(|review| review.name.round < round.number)
         .max_by(|a, b| a.name.cmp(&b.name))
-        .map(|review| review.review.commit.clone());
+        .map(|review| previous(repo, &review.review.commit, &commit))
+        .transpose()?;
     let sections = ["Goal", "Done when", "Scope", "Report"]
         .into_iter()
         .filter_map(|heading| Some((heading, item.section(heading)?)))
@@ -426,10 +432,28 @@ fn brief(
         sections,
         base: &repo.base,
         commit: &commit,
-        previous: previous.as_deref(),
+        previous,
+        at: repo.git_at(),
         carried: &carried(item, round.number)?,
         path: path.as_deref(),
     }))
+}
+
+/// What the diff since `reviewed`, the commit the round before reviewed,
+/// can be at `commit`: none where `commit`'s history lacks it, and only of
+/// the paths the branch changes where a merge of the base came between.
+fn previous(repo: &Repo, reviewed: &str, commit: &str) -> Result<Previous> {
+    let (root, base, reviewed) = (&repo.root, &repo.base_tip, reviewed.to_string());
+    let here = git::has_commit(root, &reviewed)? && git::has_commit(root, commit)?;
+    if !here || !git::is_ancestor(root, &reviewed, commit)? {
+        return Ok(Previous::Lost(reviewed));
+    }
+    let fork = git::run(root, &["merge-base", base, commit])?;
+    if git::is_ancestor(root, &fork, &reviewed)? {
+        return Ok(Previous::All(reviewed));
+    }
+    let paths = git::changed_on_branch(root, base, (&reviewed, commit))?;
+    Ok(Previous::Scoped(reviewed, paths))
 }
 
 /// What the brief says of the pull request of item `id`'s branch on

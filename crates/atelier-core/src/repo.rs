@@ -3,7 +3,7 @@
 //! remote-tracking one.
 
 use crate::actions::{approval, mission_of, Checkout, Facts, SinceApproval, STARTED};
-use crate::model::{Config, Named, Status, Thread};
+use crate::model::{Config, MissionStatus, Named, Status, Thread};
 use crate::records::{allocate_id, parse_config, CommitReader, ItemDir, MissionDir, Store};
 use crate::view::Record;
 use crate::{git, say, Branch, Located, Skip};
@@ -132,7 +132,7 @@ struct Touching {
 /// What an item's start depends on, as [`Repo::links`] finds it.
 pub struct Links {
     pub blockers: Vec<(String, Option<Status>)>,
-    pub mission: Option<(String, Option<Status>)>,
+    pub mission: Option<(String, Option<MissionStatus>)>,
     /// The mission's lead, who decides the item's questions when it may.
     pub lead: Option<Thread>,
 }
@@ -221,6 +221,14 @@ impl<'s> Repo<'s> {
             committed,
             changed: Default::default(),
         })
+    }
+
+    /// Reads the base's tip again, as after a fetch of it: what is read
+    /// from then on is judged by that tip.
+    pub fn reread_base(&mut self) -> Result<()> {
+        self.base_tip = base_tip(&self.root, &self.config)?;
+        self.changed.get_mut().clear();
+        Ok(())
     }
 
     /// The root when the directory it was opened from is not the root, so
@@ -725,10 +733,10 @@ impl<'s> Repo<'s> {
         // before its own base has moved.
         if let Some((id, status)) = mission
             .as_mut()
-            .filter(|(_, s)| *s != Some(Status::Dropped))
+            .filter(|(_, s)| *s != Some(MissionStatus::Dropped))
         {
             if self.dropped_on_forge(id)? {
-                *status = Some(Status::Dropped);
+                *status = Some(MissionStatus::Dropped);
             }
         }
         Ok(Links {
@@ -800,17 +808,44 @@ impl<'s> Repo<'s> {
         let commit = &review.review.commit;
         Ok(Some(SinceApproval {
             changed: git::changed(&self.root, commit, head)?,
+            filed: self.filed(commit, head)?,
             reviewed: self.reader.item(commit, &record.item.id)?,
             head: self.reader.item(head, &record.item.id)?,
         }))
     }
 
+    /// The records that only file a new item between the commits `from`
+    /// and `to`: each is added since, is not on the base's tip, and is open
+    /// as `to` holds it. One that does not read files nothing.
+    fn filed(&mut self, from: &str, to: &str) -> Result<Vec<String>> {
+        let mut filed = Vec::new();
+        for path in git::added(&self.root, from, to)? {
+            let Some(id) = item_of_record(&path) else {
+                continue;
+            };
+            if !matches!(self.reader.item(&self.base_tip, id), Ok(None)) {
+                continue;
+            }
+            let added = self.reader.item(to, id).ok().flatten();
+            if added.is_some_and(|dir| dir.item.status == Status::Open) {
+                filed.push(path);
+            }
+        }
+        Ok(filed)
+    }
+
     /// What the checkout holds that no commit does and `merge` would leave
-    /// behind: changes to tracked files, and new files in the item's
-    /// directory, such as a review file.
+    /// behind: changes to tracked files, new files in the item's directory,
+    /// such as a review file, and the records of items filed on the branch,
+    /// which `new` does not commit.
     pub fn uncommitted(&self, id: &str) -> Result<Vec<String>> {
         let mut paths = git::uncommitted(&self.root)?;
-        paths.extend(git::untracked(&self.root, &item_dir(id))?);
+        let own = format!("{}/", item_dir(id));
+        let new = git::untracked(&self.root, ItemDir::DIR)?;
+        paths.extend(
+            new.into_iter()
+                .filter(|path| path.starts_with(&own) || item_of_record(path).is_some()),
+        );
         Ok(paths)
     }
 
@@ -876,6 +911,10 @@ pub fn facts<'a>(
         mission: links.mission.clone(),
         caller: &repo.caller,
         checkout,
+        worktree: match repo.named() {
+            Some(Named::Record(id)) if id == located.id => Some(&repo.root),
+            _ => None,
+        },
     }
 }
 
@@ -961,6 +1000,13 @@ pub fn item_dir(id: &str) -> String {
 
 pub fn item_path(id: &str) -> String {
     format!(".atelier/items/{id}/item.md")
+}
+
+/// The item whose record `path`, from the root, is, if it is one's.
+pub fn item_of_record(path: &str) -> Option<&str> {
+    path.strip_prefix(ItemDir::DIR)?
+        .strip_suffix("/item.md")
+        .filter(|id| !id.contains('/'))
 }
 
 pub fn mission_dir(id: &str) -> String {

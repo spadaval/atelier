@@ -7,150 +7,12 @@
 
 mod common;
 
+use common::hub::*;
 use common::*;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
-use tempfile::TempDir;
-
-/// The URL the clones' `origin` names, which `insteadOf` sends to the bare
-/// repository, so the forge reads a GitHub repository from it.
-const URL: &str = "git@github.com:owner/repo.git";
-
-/// Clones of one bare remote, whose base config names it as the forge's
-/// remote, with a fake `gh` that every command finds first on `PATH`.
-struct Hub {
-    dir: TempDir,
-    remote: PathBuf,
-    gh: PathBuf,
-}
-
-impl Hub {
-    /// A remote whose `main` holds `items`, each an ID with its status.
-    fn new(items: &[(&str, &str)]) -> Hub {
-        let dir = TempDir::new().unwrap();
-        let seed = dir.path().join("seed");
-        git(&seed, &["init", "-q", "-b", "main"]);
-        fs::create_dir_all(seed.join(".atelier")).unwrap();
-        fs::write(
-            seed.join(".atelier/config.toml"),
-            "schema_version = 3\nslug = \"demo\"\nbase_branch = \"main\"\n\n\
-             [forge]\nprovider = \"github\"\nremote = \"origin\"\n",
-        )
-        .unwrap();
-        for (id, status) in items {
-            write_item(&seed, id, status, &[], &[], "");
-        }
-        git(&seed, &["add", "-A"]);
-        git(&seed, &["commit", "-qm", "Plan"]);
-        let remote = dir.path().join("remote.git");
-        git(
-            dir.path(),
-            &[
-                "init",
-                "-q",
-                "--bare",
-                "-b",
-                "main",
-                remote.to_str().unwrap(),
-            ],
-        );
-        git(&seed, &["push", "-q", remote.to_str().unwrap(), "main"]);
-        let gh = dir.path().join("gh");
-        fs::create_dir_all(gh.join("bin")).unwrap();
-        fs::write(gh.join("bin/gh"), FAKE_GH).unwrap();
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(gh.join("bin/gh"), fs::Permissions::from_mode(0o755)).unwrap();
-        fs::write(gh.join("remote"), remote.to_str().unwrap()).unwrap();
-        Hub { dir, remote, gh }
-    }
-
-    /// A clone named `name`, detached at the remote's `main`.
-    fn clone(&self, name: &str) -> PathBuf {
-        let at = self.dir.path().join(name);
-        let from = self.remote.to_str().unwrap();
-        git(
-            self.dir.path(),
-            &["clone", "-q", from, at.to_str().unwrap()],
-        );
-        git(&at, &["remote", "set-url", "origin", URL]);
-        git(&at, &["config", &format!("url.{from}.insteadOf"), URL]);
-        git(&at, &["checkout", "-q", "--detach", "origin/main"]);
-        git(&at, &["branch", "-qD", "main"]);
-        git(&at, &["branch", "-q", "--track", "main", "origin/main"]);
-        at
-    }
-
-    fn command(&self, at: &Path, thread: &str, args: &[&str]) -> Command {
-        let path = format!(
-            "{}:{}",
-            self.gh.join("bin").display(),
-            std::env::var("PATH").unwrap()
-        );
-        let mut command = atelier_command(at, thread, args);
-        command.env("PATH", path).env("FAKE_GH", &self.gh);
-        command
-    }
-
-    fn atelier(&self, at: &Path, thread: &str, args: &[&str]) -> Run {
-        let output = self.command(at, thread, args).output().unwrap();
-        Run {
-            code: output.status.code().unwrap_or(-1),
-            stdout: String::from_utf8(output.stdout).unwrap(),
-            stderr: String::from_utf8(output.stderr).unwrap(),
-        }
-    }
-
-    /// The remote's copy of `branch`, if it has one.
-    fn tip(&self, branch: &str) -> Option<String> {
-        let output = git_output(
-            &self.remote,
-            &[
-                "rev-parse",
-                "--verify",
-                "--quiet",
-                &format!("refs/heads/{branch}"),
-            ],
-        );
-        output
-            .status
-            .success()
-            .then(|| String::from_utf8(output.stdout).unwrap().trim().to_string())
-    }
-
-    /// The item `ID`'s front-matter field `key` on the remote's `branch`.
-    fn field(&self, branch: &str, key: &str) -> String {
-        front(
-            &git(
-                &self.remote,
-                &["show", &format!("{branch}:{}", item_path(ID))],
-            ),
-            key,
-        )
-    }
-
-    /// `id` started by `thread` in `at`, with a change committed, submitted,
-    /// and approved by `r1`, whose commit is in `at`.
-    fn approved(&self, at: &Path, thread: &str) {
-        ok(self.atelier(at, thread, &["start", ID]));
-        fs::write(at.join("hello.txt"), "hello\n").unwrap();
-        git(at, &["add", "hello.txt"]);
-        git(at, &["commit", "-qm", "Say hello"]);
-        let path = at.join(item_path(ID));
-        let ticked = fs::read_to_string(&path).unwrap().replace("- [ ]", "- [x]");
-        fs::write(&path, ticked + "It prints hello.\n").unwrap();
-        ok(self.atelier(at, thread, &["submit"]));
-        ok(self.atelier(at, "r1", &["review", ID]));
-        let run = self.atelier(at, "r1", &["verdict", "approve"]);
-        ok(run.clone());
-        run_then(at, &run.stdout);
-    }
-}
-
-fn ok(run: Run) {
-    assert_eq!(run.code, 0, "{}{}", run.stdout, run.stderr);
-}
 
 fn head(at: &Path) -> String {
     git(at, &["rev-parse", "HEAD"])
@@ -178,7 +40,7 @@ fn finished(child: Child) -> Run {
 
 #[test]
 fn one_item_started_from_two_clones_at_once_has_one_holder_and_the_other_is_told_who() {
-    let hub = Hub::new(&[(ID, "ready")]);
+    let hub = Hub::new(&[(ID, "open")]);
     let (a, b) = (hub.clone("a"), hub.clone("b"));
     let (before_a, before_b) = (head(&a), head(&b));
     // Both are held after their commit and before their branch, then let
@@ -258,7 +120,7 @@ fn one_item_started_from_two_clones_at_once_has_one_holder_and_the_other_is_told
 
 #[test]
 fn start_is_refused_when_the_remote_cannot_be_reached_and_keeps_no_branch() {
-    let hub = Hub::new(&[(ID, "ready")]);
+    let hub = Hub::new(&[(ID, "open")]);
     let a = hub.clone("a");
     let gone = hub.dir.path().join("gone.git");
     let reachable = format!("url.{}.insteadOf", hub.remote.display());
@@ -291,7 +153,7 @@ fn start_is_refused_when_the_remote_cannot_be_reached_and_keeps_no_branch() {
 
 #[test]
 fn start_pushes_each_kind_of_branch_before_it_reports_success() {
-    let hub = Hub::new(&[(ID, "ready")]);
+    let hub = Hub::new(&[(ID, "open")]);
     let a = hub.clone("a");
     ok(hub.atelier(&a, "t1", &["start", ID]));
     assert_eq!(hub.tip(ID), Some(head(&a)));
@@ -323,7 +185,7 @@ fn start_pushes_each_kind_of_branch_before_it_reports_success() {
 
 #[test]
 fn start_in_the_bases_own_checkout_makes_the_branch_and_leaves_the_checkout_on_the_base() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let base = scratch.worktree("base");
     git(&base, &["switch", "-q", "main"]);
     let before = head(&base);
@@ -365,7 +227,7 @@ fn start_in_the_bases_own_checkout_makes_the_branch_and_leaves_the_checkout_on_t
 
 #[test]
 fn a_branch_prefix_names_every_kind_of_branch_and_the_item_loop_runs_on_it() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     append(&root, ".atelier/config.toml", "branch_prefix = \"x/\"\n");
     on_base(&root, "Configure");
@@ -396,7 +258,7 @@ fn a_branch_prefix_names_every_kind_of_branch_and_the_item_loop_runs_on_it() {
     let shown = atelier(&root, "t1", &["show", ID]).stdout;
     assert!(shown.contains("Status: done"), "{shown}");
 
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     let run = atelier(&root, "p1", &["start", "--backlog", "tidy"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert_eq!(
@@ -408,7 +270,7 @@ fn a_branch_prefix_names_every_kind_of_branch_and_the_item_loop_runs_on_it() {
         status.contains("on branch x/backlog/tidy, a backlog branch for record changes.\n"),
         "{status}"
     );
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     let run = atelier(&root, "p1", &["start", "--mission", "Greet"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     let mission = run.stdout.split_whitespace().nth(3).unwrap();
@@ -418,7 +280,7 @@ fn a_branch_prefix_names_every_kind_of_branch_and_the_item_loop_runs_on_it() {
     );
 
     // Without the prefix, a branch named for an ID is not the item's.
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     git(&root, &["switch", "-q", "-c", "demo-zz11"]);
     let status = atelier(&root, "t1", &["status"]).stdout;
     assert!(
@@ -429,14 +291,14 @@ fn a_branch_prefix_names_every_kind_of_branch_and_the_item_loop_runs_on_it() {
 
 #[test]
 fn a_backlog_branch_merges_its_record_changes_once_check_passes_with_no_review() {
-    let scratch = Scratch::new(&[(ID, "draft")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     let run = atelier(&root, "p1", &["start", "--backlog", "plan"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     // No commit: the branch is the base's tip.
     assert_eq!(head(&root), git(&root, &["rev-parse", "main"]));
-    let ready = atelier(&root, "p1", &["ready", ID, "--by", "ada"]);
-    assert_eq!(ready.code, 0, "{}", ready.stderr);
+    let set = atelier(&root, "p1", &["set", ID, "--priority", "low"]);
+    assert_eq!(set.code, 0, "{}", set.stderr);
 
     // Submit refuses while a record it changes is not committed.
     let run = atelier(&root, "p1", &["submit"]);
@@ -449,7 +311,7 @@ fn a_backlog_branch_merges_its_record_changes_once_check_passes_with_no_review()
         "{}",
         run.stderr
     );
-    run_then(&root, &ready.stdout);
+    run_then(&root, &set.stdout);
     let run = atelier(&root, "p1", &["submit"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert_eq!(
@@ -464,8 +326,9 @@ fn a_backlog_branch_merges_its_record_changes_once_check_passes_with_no_review()
     assert_eq!(
         run.stdout,
         format!(
-            "The branch changes records alone, so it merges with no review once its records are valid: `atelier check` passed on the merged tree of main.\nMerged backlog/plan into main with merge commit {}.\n",
-            &merged[..7]
+            "The branch changes records alone, so it merges with no review once its records are valid: `atelier check` passed on the merged tree of main.\nMerged backlog/plan into main with merge commit {}.\n{}",
+            &merged[..7],
+            deleted("backlog/plan", &branch)
         )
     );
     assert_eq!(
@@ -475,19 +338,16 @@ fn a_backlog_branch_merges_its_record_changes_once_check_passes_with_no_review()
     assert!(
         git(&root, &["log", "-1", "--format=%B", "main"]).ends_with("Atelier-Merge: backlog/plan")
     );
-    assert_eq!(field(&root, "main", "status"), "ready");
-    // Run again, it has nothing to do.
-    let again = atelier(&root, "p1", &["merge"]);
-    assert_eq!(again.code, 0, "{}", again.stderr);
-    assert_eq!(
-        again.stdout,
-        "backlog/plan is already merged into main; nothing is left to do on it.\n"
-    );
+    assert_eq!(field(&root, "main", "priority"), "low");
+    // The branch is gone, and its checkout is where it merged.
+    assert!(!branch_exists(&root, "backlog/plan"));
+    assert_eq!(git(&root, &["branch", "--show-current"]), "");
+    assert_eq!(head(&root), branch);
 }
 
 #[test]
 fn a_backlog_branch_with_code_a_new_mission_or_invalid_records_is_not_merged() {
-    let scratch = Scratch::new(&[(ID, "draft")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     let base = git(&root, &["rev-parse", "main"]);
 
@@ -521,7 +381,7 @@ fn a_backlog_branch_with_code_a_new_mission_or_invalid_records_is_not_merged() {
     assert_eq!(git(&root, &["rev-parse", "main"]), base);
 
     // A new mission waits for its plan reviews (atelier-2vdq).
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     assert_eq!(
         atelier(&root, "p1", &["start", "--backlog", "mission"]).code,
         0
@@ -549,7 +409,7 @@ fn a_backlog_branch_with_code_a_new_mission_or_invalid_records_is_not_merged() {
     assert_eq!(git(&root, &["rev-parse", "main"]), base);
 
     // A started item's record reaches the base only in its own merge.
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     assert_eq!(
         atelier(&root, "p1", &["start", "--backlog", "start-it"]).code,
         0
@@ -569,12 +429,12 @@ fn a_backlog_branch_with_code_a_new_mission_or_invalid_records_is_not_merged() {
     assert_eq!(git(&root, &["rev-parse", "main"]), base);
 
     // Records that do not validate on the merged tree are refused.
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     assert_eq!(
         atelier(&root, "p1", &["start", "--backlog", "broken"]).code,
         0
     );
-    write_item(&root, ID, "draft", &[], &["demo-zz99"], "");
+    write_item(&root, ID, "open", &[], &["demo-zz99"], "");
     git(&root, &["commit", "-qam", "Block on nothing"]);
     let run = atelier(&root, "p1", &["merge"]);
     assert_eq!(run.code, 1);
@@ -590,7 +450,7 @@ fn a_backlog_branch_with_code_a_new_mission_or_invalid_records_is_not_merged() {
 
 #[test]
 fn a_drop_pushed_on_the_items_branch_stops_its_merge_in_another_clone_and_then_reaches_the_base() {
-    let hub = Hub::new(&[(ID, "ready")]);
+    let hub = Hub::new(&[(ID, "open")]);
     let (a, b) = (hub.clone("a"), hub.clone("b"));
     hub.approved(&a, "t1");
     git(&a, &["push", "-q", "origin", ID]);
@@ -652,16 +512,21 @@ fn a_drop_pushed_on_the_items_branch_stops_its_merge_in_another_clone_and_then_r
 
 #[test]
 fn a_drop_after_the_item_merged_in_another_clone_is_refused() {
-    let hub = Hub::new(&[(ID, "ready")]);
-    let (a, b) = (hub.clone("a"), hub.clone("b"));
+    let hub = Hub::new(&[(ID, "open")]);
+    let (a, b, c) = (hub.clone("a"), hub.clone("b"), hub.clone("c"));
     hub.approved(&a, "t1");
+    // One clone has the branch, and one is on a backlog branch made before
+    // the merge, whose copy says ready.
+    git(&a, &["push", "-q", "origin", ID]);
+    git(&b, &["fetch", "-q", "origin"]);
+    git(&b, &["switch", "-q", ID]);
+    ok(hub.atelier(&c, "p1", &["start", "--backlog", "tidy"]));
     ok(hub.atelier(&a, "t1", &["merge"]));
     // The forge merged it as approved, which on the base reads as done.
     assert_eq!(hub.field("main", "status"), "approved");
 
     // The other clone has fetched, and its own base is behind.
     git(&b, &["fetch", "-q", "origin"]);
-    git(&b, &["switch", "-q", ID]);
     let before = read(&b, &item_path(ID));
     let run = hub.atelier(&b, "p1", &["drop", ID, "--reason", "Too late"]);
     assert_eq!(run.code, 1, "{}", run.stdout);
@@ -674,6 +539,18 @@ fn a_drop_after_the_item_merged_in_another_clone_is_refused() {
     );
     assert_eq!(read(&b, &item_path(ID)), before);
     assert_eq!(git(&b, &["status", "--porcelain"]), "");
+    // With the merged branch deleted and pruned, the base alone says so.
+    git(&c, &["fetch", "-q", "--prune", "origin"]);
+    let run = hub.atelier(&c, "p1", &["drop", ID, "--reason", "Too late"]);
+    assert_eq!(run.code, 1, "{}", run.stdout);
+    assert!(
+        run.stderr.starts_with(&format!(
+            "`atelier drop {ID}` refused; nothing written.\n{ID} is done on main, so it cannot be dropped."
+        )),
+        "{}",
+        run.stderr
+    );
+    assert_eq!(git(&c, &["status", "--porcelain"]), "");
     assert_eq!(hub.field("main", "status"), "approved");
 }
 
@@ -686,15 +563,15 @@ fn changed_since(at: &Path, head: &str) -> String {
 
 #[test]
 fn every_record_command_writes_its_files_prints_them_and_makes_no_commit_branch_or_push() {
-    let hub = Hub::new(&[(ID, "draft"), ("demo-c10s", "ready")]);
+    let hub = Hub::new(&[(ID, "open"), ("demo-c10s", "open")]);
     let a = hub.clone("a");
-    // A ready mission to lead, on the base.
+    // An agreed mission to lead.
     let path = a.join(".atelier/missions/demo-m1ss/mission.md");
     fs::create_dir_all(path.parent().unwrap()).unwrap();
     fs::write(
         &path,
         "---\nschema: atelier.mission\nschema_version: 3\nid: demo-m1ss\ntitle: Greet\n\
-         status: ready\nlabels: []\nlead: null\nready: null\n\
+         status: open\nlabels: []\nlead: null\n\
          created_at: 2026-11-10T09:00:00Z\n---\n\n## Outcome\n\nGreetings.\n",
     )
     .unwrap();
@@ -731,10 +608,6 @@ fn every_record_command_writes_its_files_prints_them_and_makes_no_commit_branch_
             ".atelier/items/demo-ab12/item.md",
         ),
         (
-            &["ready", ID, "--by", "ada"],
-            ".atelier/items/demo-ab12/item.md",
-        ),
-        (
             &["drop", ID, "--reason", "Not needed"],
             ".atelier/items/demo-ab12/item.md",
         ),
@@ -767,7 +640,7 @@ fn every_record_command_writes_its_files_prints_them_and_makes_no_commit_branch_
 
     // An item's review and verdict, on its branch, the same way.
     let c = hub.clone("c");
-    write_item(&c, "demo-r3vw", "ready", &[], &[], "");
+    write_item(&c, "demo-r3vw", "open", &[], &[], "");
     git(&c, &["add", "-A"]);
     git(&c, &["commit", "-qm", "Plan"]);
     git(&c, &["push", "-q", "origin", "HEAD:main"]);
@@ -816,7 +689,7 @@ fn every_record_command_writes_its_files_prints_them_and_makes_no_commit_branch_
 #[test]
 fn a_take_over_of_a_branch_another_worktree_has_out_moves_nothing() {
     // From the base's own checkout, with no remote.
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let base = scratch.worktree("base");
     git(&base, &["switch", "-q", "main"]);
     assert_eq!(atelier(&base, "t1", &["start", ID]).code, 0);
@@ -840,7 +713,7 @@ fn a_take_over_of_a_branch_another_worktree_has_out_moves_nothing() {
 
     // With the forge's copy ahead of a local branch another worktree has
     // out, the local branch is not moved under it either.
-    let hub = Hub::new(&[(ID, "ready")]);
+    let hub = Hub::new(&[(ID, "open")]);
     let a = hub.clone("a");
     ok(hub.atelier(&a, "t1", &["start", ID]));
     let b = hub.clone("b");
@@ -896,7 +769,7 @@ fn of_two_claims_of_one_backlog_branch_at_the_same_commit_one_wins() {
 
 #[test]
 fn status_names_a_holders_uncommitted_drop_with_its_commit() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
     let run = atelier(&root, "t1", &["drop", ID, "--reason", "Not needed"]);
@@ -913,7 +786,7 @@ fn status_names_a_holders_uncommitted_drop_with_its_commit() {
 
 #[test]
 fn review_and_verdict_are_refused_while_the_fetched_branch_is_ahead() {
-    let hub = Hub::new(&[(ID, "ready")]);
+    let hub = Hub::new(&[(ID, "open")]);
     let a = hub.clone("a");
     ok(hub.atelier(&a, "t1", &["start", ID]));
     let path = a.join(item_path(ID));
@@ -945,7 +818,7 @@ fn review_and_verdict_are_refused_while_the_fetched_branch_is_ahead() {
 
 #[test]
 fn list_flags_narrow_a_drop_that_has_not_reached_the_base() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
     let run = atelier(&root, "t1", &["drop", ID, "--reason", "Not needed"]);
@@ -956,7 +829,7 @@ fn list_flags_narrow_a_drop_that_has_not_reached_the_base() {
     );
     assert!(atelier(&root, "t9", &["list"]).stdout.contains(&pending));
     for args in [
-        &["list", "--ready"][..],
+        &["list", "--startable"][..],
         &["list", "--label", "unrelated"],
         &["list", "--mission", "demo-m1ss"],
     ] {
@@ -967,24 +840,24 @@ fn list_flags_narrow_a_drop_that_has_not_reached_the_base() {
 
 #[test]
 fn a_record_write_says_how_its_change_reaches_the_base_for_its_branch() {
-    let scratch = Scratch::new(&[(ID, "draft"), ("demo-c10s", "ready")]);
+    let scratch = Scratch::new(&[(ID, "open"), ("demo-c10s", "open")]);
     let root = scratch.root();
     assert_eq!(
         atelier(&root, "p1", &["start", "--backlog", "plan"]).code,
         0
     );
-    let run = atelier(&root, "p1", &["ready", ID, "--by", "ada"]);
+    let run = atelier(&root, "p1", &["set", ID, "--priority", "low"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     let path = item_path(ID);
     assert_eq!(
         run.stdout,
         format!(
-            "Made ready, as ada said: {ID}.\nWrote, and did not commit:\n  {path}\nIt counts once it is committed and its branch is merged: commit it, then run `atelier submit` and `atelier merge` on that branch.\nThen: git add -- {path} && git commit -m \"Ready {ID}\" -- {path}\n"
+            "Set the fields of item {ID}.\nWrote, and did not commit:\n  {path}\nIt counts once it is committed and its branch is merged: commit it, then run `atelier submit` and `atelier merge` on that branch.\nThen: git add -- {path} && git commit -m \"Set fields of {ID}\" -- {path}\n"
         )
     );
 
     // A started item's drop, on its branch, names its own next steps only.
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     assert_eq!(atelier(&root, "t1", &["start", "demo-c10s"]).code, 0);
     let run = atelier(
         &root,
@@ -1003,7 +876,7 @@ fn a_record_write_says_how_its_change_reaches_the_base_for_its_branch() {
 
 #[test]
 fn a_review_finds_the_pull_request_of_the_prefixed_branch() {
-    let hub = Hub::new(&[(ID, "ready")]);
+    let hub = Hub::new(&[(ID, "open")]);
     let a = hub.clone("a");
     let config = a.join(".atelier/config.toml");
     let text = fs::read_to_string(&config).unwrap().replace(
@@ -1132,7 +1005,7 @@ fn planned_and_pushed(hub: &Hub, at: &Path) -> (String, String) {
 
 #[test]
 fn a_plan_pushed_from_one_clone_is_proposed_in_another_once_it_has_fetched() {
-    let hub = Hub::new(&[(ID, "ready")]);
+    let hub = Hub::new(&[(ID, "open")]);
     let (a, b) = (hub.clone("a"), hub.clone("b"));
     let (mission, item) = planned_and_pushed(&hub, &a);
 
@@ -1159,7 +1032,7 @@ fn a_plan_pushed_from_one_clone_is_proposed_in_another_once_it_has_fetched() {
     ok(listed.clone());
     let proposed = format!(
         "Proposed, on branches not yet merged:\nMission {mission} (proposed on origin/{mission}): Greet\n  \
-         No label:\n    {item} (draft, medium, on origin/{mission}): Say hi\n"
+         No label:\n    {item} (open, medium, on origin/{mission}): Say hi\n"
     );
     assert!(listed.stdout.contains(&proposed), "{}", listed.stdout);
     assert!(
@@ -1171,7 +1044,7 @@ fn a_plan_pushed_from_one_clone_is_proposed_in_another_once_it_has_fetched() {
     );
     // The base's backlog is listed apart, and holds neither.
     let base = listed.stdout.split("\nProposed").next().unwrap();
-    assert!(base.contains(&format!("{ID} (ready, high, can start now)")));
+    assert!(base.contains(&format!("{ID} (open, high, can start now)")));
     assert!(!base.contains(&mission) && !base.contains(&item), "{base}");
 
     let only = hub.atelier(&b, "p1", &["list", "--proposed"]);
@@ -1196,7 +1069,7 @@ fn a_plan_pushed_from_one_clone_is_proposed_in_another_once_it_has_fetched() {
     assert_eq!(lines[2], "Status: proposed");
     assert!(
         shown.stdout.contains(&format!(
-            "\nItems:\n  Draft:\n    {item} (medium, on origin/{mission}): Say hi\n"
+            "\nItems:\n  Open:\n    {item} (medium, on origin/{mission}): Say hi\n"
         )),
         "{}",
         shown.stdout
@@ -1233,7 +1106,7 @@ fn a_plan_pushed_from_one_clone_is_proposed_in_another_once_it_has_fetched() {
 
 #[test]
 fn a_mission_dropped_on_its_branch_is_listed_as_dropped_and_not_as_proposed() {
-    let hub = Hub::new(&[(ID, "ready")]);
+    let hub = Hub::new(&[(ID, "open")]);
     let (a, b) = (hub.clone("a"), hub.clone("b"));
     let (mission, _) = planned_and_pushed(&hub, &a);
     let path = a.join(mission_path(&mission));
@@ -1284,12 +1157,12 @@ fn a_mission_dropped_on_its_branch_is_listed_as_dropped_and_not_as_proposed() {
 
 #[test]
 fn a_backlog_branch_s_record_changes_are_listed_as_proposed_with_its_branch() {
-    let hub = Hub::new(&[(ID, "ready")]);
+    let hub = Hub::new(&[(ID, "open")]);
     let (a, b) = (hub.clone("a"), hub.clone("b"));
     ok(hub.atelier(&a, "t1", &["start", "--backlog", "tidy"]));
     let path = a.join(item_path(ID));
     let text = fs::read_to_string(&path).unwrap();
-    fs::write(&path, text.replace("status: ready", "status: draft")).unwrap();
+    fs::write(&path, text.replace("status: open", "status: dropped")).unwrap();
     ok(hub.atelier(&a, "t1", &["new", "Say bye"]));
     git(&a, &["add", "-A"]);
     git(&a, &["commit", "-qm", "Tidy"]);
@@ -1301,7 +1174,7 @@ fn a_backlog_branch_s_record_changes_are_listed_as_proposed_with_its_branch() {
     assert!(
         listed.stdout.contains(&format!(
             "Record changes on branches not yet merged, which take effect when each merges:\n  \
-             {ID} (on origin/backlog/tidy: ready on the base, draft there): Say hello\n"
+             {ID} (on origin/backlog/tidy: open on the base, dropped there): Say hello\n"
         )),
         "{}",
         listed.stdout
@@ -1309,7 +1182,7 @@ fn a_backlog_branch_s_record_changes_are_listed_as_proposed_with_its_branch() {
     assert!(
         listed
             .stdout
-            .contains("(draft, medium, on origin/backlog/tidy): Say bye\n"),
+            .contains("(open, medium, on origin/backlog/tidy): Say bye\n"),
         "{}",
         listed.stdout
     );
@@ -1317,12 +1190,12 @@ fn a_backlog_branch_s_record_changes_are_listed_as_proposed_with_its_branch() {
     // base's until then.
     assert!(listed
         .stdout
-        .contains(&format!("{ID} (ready, high, can start now)")));
+        .contains(&format!("{ID} (open, high, can start now)")));
     let shown = hub.atelier(&b, "p1", &["show", ID]);
     ok(shown.clone());
     assert!(
         shown.stdout.starts_with(&format!(
-            "Item {ID}: Say hello\nRead from: main\nChanged on branches not yet merged: origin/backlog/tidy (draft there)\nStatus: ready"
+            "Item {ID}: Say hello\nRead from: main\nChanged on branches not yet merged: origin/backlog/tidy (dropped there)\nStatus: open"
         )),
         "{}",
         shown.stdout
@@ -1331,7 +1204,7 @@ fn a_backlog_branch_s_record_changes_are_listed_as_proposed_with_its_branch() {
 
 #[test]
 fn status_lists_an_item_started_in_another_clone_with_the_thread_its_branch_names() {
-    let hub = Hub::new(&[(ID, "ready")]);
+    let hub = Hub::new(&[(ID, "open")]);
     let (a, b) = (hub.clone("a"), hub.clone("b"));
     ok(hub.atelier(&a, "t1", &["start", ID]));
     git(&b, &["fetch", "-q", "origin"]);
@@ -1363,7 +1236,7 @@ fn status_lists_an_item_started_in_another_clone_with_the_thread_its_branch_name
 #[ignore]
 fn list_with_200_named_remote_branches_takes_under_two_seconds() {
     let ids: Vec<String> = (0..200).map(|n| format!("demo-p{n:03}")).collect();
-    let items: Vec<(&str, &str)> = ids.iter().map(|id| (id.as_str(), "ready")).collect();
+    let items: Vec<(&str, &str)> = ids.iter().map(|id| (id.as_str(), "open")).collect();
     let hub = Hub::new(&items);
     let seed = hub.dir.path().join("seed");
     for id in &ids {
@@ -1371,7 +1244,7 @@ fn list_with_200_named_remote_branches_takes_under_two_seconds() {
         let path = seed.join(item_path(id));
         let text = fs::read_to_string(&path).unwrap();
         let started = text
-            .replace("status: ready", "status: building")
+            .replace("status: open", "status: building")
             .replace("implementers: []", "implementers:\n- t1");
         fs::write(&path, started).unwrap();
         git(&seed, &["commit", "-qam", "Start"]);
@@ -1411,7 +1284,7 @@ fn new_item(at: &Path, known: &[&str]) -> String {
 
 #[test]
 fn a_record_written_but_not_committed_on_the_branch_checked_out_is_found() {
-    let hub = Hub::new(&[(ID, "ready")]);
+    let hub = Hub::new(&[(ID, "open")]);
     let a = hub.clone("a");
     ok(hub.atelier(&a, "t1", &["start", "--backlog", "tidy"]));
     // The branch is at the base's tip, with no commit of its own yet.
@@ -1421,7 +1294,7 @@ fn a_record_written_but_not_committed_on_the_branch_checked_out_is_found() {
     ok(listed.clone());
     assert!(
         listed.stdout.contains(&format!(
-            "{first} (draft, medium, on backlog/tidy): Say bye\n"
+            "{first} (open, medium, on backlog/tidy): Say bye\n"
         )),
         "{}",
         listed.stdout
@@ -1448,7 +1321,7 @@ fn a_record_written_but_not_committed_on_the_branch_checked_out_is_found() {
         assert!(
             listed
                 .stdout
-                .contains(&format!("{id} (draft, medium, on backlog/tidy): {title}\n")),
+                .contains(&format!("{id} (open, medium, on backlog/tidy): {title}\n")),
             "{}",
             listed.stdout
         );
@@ -1457,23 +1330,23 @@ fn a_record_written_but_not_committed_on_the_branch_checked_out_is_found() {
 }
 
 #[test]
-fn a_ready_item_only_on_an_unmerged_branch_cannot_start_and_is_not_said_to() {
-    let hub = Hub::new(&[(ID, "draft")]);
+fn an_open_item_only_on_an_unmerged_branch_cannot_start_and_is_not_said_to() {
+    let hub = Hub::new(&[(ID, "open")]);
     let a = hub.clone("a");
     ok(hub.atelier(&a, "t1", &["start", "--backlog", "tidy"]));
     ok(hub.atelier(&a, "t1", &["new", "Say bye"]));
     let id = new_item(&a, &[ID]);
-    let path = a.join(item_path(&id));
-    let text = fs::read_to_string(&path).unwrap();
-    fs::write(&path, text.replace("status: draft", "status: ready")).unwrap();
     git(&a, &["add", "-A"]);
-    git(&a, &["commit", "-qm", "File it ready"]);
+    git(&a, &["commit", "-qm", "File it"]);
 
-    let line = format!("{id} (ready, medium, on backlog/tidy): Say bye\n");
+    let line = format!("{id} (open, medium, on backlog/tidy): Say bye\n");
     let proposed = hub.atelier(&a, "t1", &["list", "--proposed"]);
     ok(proposed.clone());
     assert!(proposed.stdout.contains(&line), "{}", proposed.stdout);
-    for flags in [&["list", "--ready"][..], &["list", "--proposed", "--ready"]] {
+    for flags in [
+        &["list", "--startable"][..],
+        &["list", "--proposed", "--startable"],
+    ] {
         let listed = hub.atelier(&a, "t1", flags);
         ok(listed.clone());
         assert!(!listed.stdout.contains(&id), "{flags:?}: {}", listed.stdout);
@@ -1481,7 +1354,7 @@ fn a_ready_item_only_on_an_unmerged_branch_cannot_start_and_is_not_said_to() {
     let shown = hub.atelier(&a, "t1", &["show", &id]);
     ok(shown.clone());
     assert!(
-        shown.stdout.contains("\nStatus: ready\n"),
+        shown.stdout.contains("\nStatus: open\n"),
         "{}",
         shown.stdout
     );
@@ -1494,7 +1367,7 @@ fn a_ready_item_only_on_an_unmerged_branch_cannot_start_and_is_not_said_to() {
 
 #[test]
 fn a_proposed_record_change_is_narrowed_by_the_flags_its_record_would_be() {
-    let hub = Hub::new(&[(ID, "draft")]);
+    let hub = Hub::new(&[(ID, "open")]);
     let a = hub.clone("a");
     ok(hub.atelier(&a, "t1", &["start", "--backlog", "tidy"]));
     let path = a.join(item_path(ID));
@@ -1506,15 +1379,19 @@ fn a_proposed_record_change_is_narrowed_by_the_flags_its_record_would_be() {
     .unwrap();
     git(&a, &["commit", "-qam", "Retitle"]);
 
-    let change = format!("{ID} (on backlog/tidy: changed there, still draft): Say hello\n");
+    let change = format!("{ID} (on backlog/tidy: changed there, still open): Say hello\n");
     let listed = hub.atelier(&a, "t1", &["list", "--proposed"]);
     ok(listed.clone());
     assert!(listed.stdout.contains(&change), "{}", listed.stdout);
-    for flag in ["--mine", "--ready", "--needs-human", "--blocked"] {
+    for flag in ["--mine", "--needs-human", "--blocked"] {
         let narrowed = hub.atelier(&a, "t1", &["list", "--proposed", flag]);
         ok(narrowed.clone());
         assert!(!narrowed.stdout.contains(ID), "{flag}: {}", narrowed.stdout);
     }
+    // The item can start, so that flag keeps the change proposed to it.
+    let startable = hub.atelier(&a, "t1", &["list", "--proposed", "--startable"]);
+    ok(startable.clone());
+    assert!(startable.stdout.contains(&change), "{}", startable.stdout);
     let labelled = hub.atelier(&a, "t1", &["list", "--proposed", "--label", "none-such"]);
     ok(labelled.clone());
     assert!(!labelled.stdout.contains(ID), "{}", labelled.stdout);
@@ -1556,7 +1433,7 @@ fn approve(at: &Path, mission: &str, name: &str, thread: &str, commit: &str) {
 
 #[test]
 fn two_reviewers_in_clones_of_their_own_land_their_files_on_the_plans_branch_and_it_merges() {
-    let hub = Hub::new(&[(ID, "ready")]);
+    let hub = Hub::new(&[(ID, "open")]);
     let a = hub.clone("a");
     ok(hub.atelier(&a, "p1", &["start", "--mission", "Greet"]));
     let mission = current(&a);
@@ -1644,7 +1521,7 @@ fn two_reviewers_in_clones_of_their_own_land_their_files_on_the_plans_branch_and
 #[test]
 fn a_plan_dropped_on_its_branch_with_two_approvals_does_not_merge_and_the_stop_counts_once_pushed()
 {
-    let hub = Hub::new(&[(ID, "ready")]);
+    let hub = Hub::new(&[(ID, "open")]);
     let (a, b) = (hub.clone("a"), hub.clone("b"));
     let (mission, _) = planned_and_pushed(&hub, &a);
     let reviewed = git(&a, &["rev-parse", "HEAD^"]);
@@ -1704,10 +1581,10 @@ fn a_plan_dropped_on_its_branch_with_two_approvals_does_not_merge_and_the_stop_c
 }
 
 #[test]
-fn a_stop_of_an_agreed_mission_refuses_its_ready_and_started_items_in_a_clone_that_has_fetched() {
-    const READY: &str = "demo-r3dy";
+fn a_stop_of_an_agreed_mission_refuses_its_open_and_started_items_in_a_clone_that_has_fetched() {
+    const OPEN: &str = "demo-r3dy";
     const MISSION: &str = "demo-m1ss";
-    let hub = Hub::new(&[(ID, "ready"), (READY, "ready")]);
+    let hub = Hub::new(&[(ID, "open"), (OPEN, "open")]);
     let (a, b) = (hub.clone("a"), hub.clone("b"));
     // The mission agreed on the base, with both items in it.
     git(&a, &["checkout", "-q", "main"]);
@@ -1720,7 +1597,7 @@ fn a_stop_of_an_agreed_mission_refuses_its_ready_and_started_items_in_a_clone_th
          created_at: 2026-11-10T09:00:00Z\n---\n\n## Why\n\nAsked for.\n\n## Outcome\n\nGreetings.\n\n## Result\n",
     )
     .unwrap();
-    for id in [ID, READY] {
+    for id in [ID, OPEN] {
         let item = a.join(item_path(id));
         let text = fs::read_to_string(&item).unwrap();
         fs::write(&item, text.replace("mission: null", "mission: demo-m1ss")).unwrap();
@@ -1734,8 +1611,8 @@ fn a_stop_of_an_agreed_mission_refuses_its_ready_and_started_items_in_a_clone_th
     git(&b, &["branch", "-qf", "main", "origin/main"]);
     // One of its items started and approved in the other clone.
     hub.approved(&b, "t1");
-    let listed = hub.atelier(&b, "t2", &["list", "--ready"]);
-    assert!(listed.stdout.contains(READY), "{}", listed.stdout);
+    let listed = hub.atelier(&b, "t2", &["list", "--startable"]);
+    assert!(listed.stdout.contains(OPEN), "{}", listed.stdout);
 
     // The stop, written on a backlog branch, is not published until that
     // branch merges.
@@ -1761,7 +1638,7 @@ fn a_stop_of_an_agreed_mission_refuses_its_ready_and_started_items_in_a_clone_th
     );
     let stop =
         "Mission demo-m1ss is not dropped (it was stopped, so none of its items starts or merges)";
-    let run = hub.atelier(&b, "t2", &["start", READY]);
+    let run = hub.atelier(&b, "t2", &["start", OPEN]);
     assert_eq!(run.code, 1, "{}", run.stdout);
     assert!(run.stderr.contains(stop), "{}", run.stderr);
     // `show` reads it the same way: dropped, and published.
@@ -1778,9 +1655,9 @@ fn a_stop_of_an_agreed_mission_refuses_its_ready_and_started_items_in_a_clone_th
         shown.stdout
     );
     // `list` reads the stop the same way: nothing of it can start.
-    let listed = hub.atelier(&b, "t2", &["list", "--ready"]);
+    let listed = hub.atelier(&b, "t2", &["list", "--startable"]);
     ok(listed.clone());
-    assert!(!listed.stdout.contains(READY), "{}", listed.stdout);
+    assert!(!listed.stdout.contains(OPEN), "{}", listed.stdout);
     let run = hub.atelier(&b, "t1", &["merge"]);
     assert_eq!(run.code, 1, "{}", run.stdout);
     assert!(run.stderr.contains(stop), "{}", run.stderr);

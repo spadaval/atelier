@@ -9,12 +9,10 @@ use crate::model::{
 };
 use crate::records::{validate, ItemDir, MissionDir, Problem, ReviewFile};
 use crate::review::{answer, chain, waits_on_lead};
+use std::path::Path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
-    /// `ready` on an item. A mission has no go-ahead, and `ready` refuses
-    /// one.
-    Ready,
     Start,
     /// `start --new`, which creates the item it starts.
     StartNew,
@@ -72,9 +70,10 @@ pub struct Row {
     /// needs the caller to hold the role already, unless it is a planner's,
     /// which no thread holds.
     pub binds: bool,
-    /// The statuses it runs from; none for an action that creates its record.
+    /// The statuses of an item it runs from; none for an action that creates
+    /// its record or runs only on a mission ([`ON_MISSION`]) or a branch.
     pub from: &'static [Status],
-    /// The status the action sets; `None` leaves it unchanged.
+    /// The status the action sets on an item; `None` leaves it unchanged.
     pub to: Option<Status>,
 }
 
@@ -86,33 +85,17 @@ pub const STARTED: &[Status] = &[
     Status::Approved,
 ];
 
-/// The statuses of an item or mission whose front matter a planner may
-/// still change with `set`.
-pub const PLANNED: &[Status] = &[Status::Draft, Status::Ready];
+/// The statuses of a mission that is neither done nor dropped: `open`, or
+/// the old `draft`, which is proposed wherever it is read.
+pub const UNFINISHED: &[MissionStatus] = &[MissionStatus::Draft, MissionStatus::Open];
 
-/// Every status a mission can have. A mission's `open` is `ready` here,
-/// and the old `draft` is `draft` ([`MissionStatus::status`]).
-const MISSION: &[Status] = &[Status::Draft, Status::Ready, Status::Done, Status::Dropped];
-
-/// A mission that is proposed, read from its branch, which has not merged:
-/// `open`, or the old `draft`.
-pub const PROPOSED: &[Status] = &[Status::Draft, Status::Ready];
-
-pub const TABLE: [Row; 23] = [
-    Row {
-        action: Action::Ready,
-        command: "ready",
-        role: Role::Planner,
-        binds: false,
-        from: &[Status::Draft],
-        to: Some(Status::Ready),
-    },
+pub const TABLE: [Row; 22] = [
     Row {
         action: Action::Start,
         command: "start",
         role: Role::Implementer,
         binds: true,
-        from: &[Status::Ready],
+        from: &[Status::Open],
         to: Some(Status::Building),
     },
     Row {
@@ -131,7 +114,7 @@ pub const TABLE: [Row; 23] = [
         role: Role::Planner,
         binds: true,
         from: &[],
-        to: Some(Status::Ready),
+        to: None,
     },
     // The actions of a backlog branch: any thread, in a checkout on that
     // branch, with no record to take a status from. None is an
@@ -170,15 +153,15 @@ pub const TABLE: [Row; 23] = [
         command: "submit",
         role: Role::Planner,
         binds: true,
-        from: PROPOSED,
-        to: Some(Status::Ready),
+        from: &[],
+        to: None,
     },
     Row {
         action: Action::MergeMission,
         command: "merge",
         role: Role::Planner,
         binds: false,
-        from: &[Status::Ready],
+        from: &[],
         to: None,
     },
     Row {
@@ -243,8 +226,7 @@ pub const TABLE: [Row; 23] = [
         role: Role::Planner,
         binds: false,
         from: &[
-            Status::Draft,
-            Status::Ready,
+            Status::Open,
             Status::Building,
             Status::InReview,
             Status::ChangesRequested,
@@ -258,7 +240,7 @@ pub const TABLE: [Row; 23] = [
         command: "close",
         role: Role::Planner,
         binds: false,
-        from: PLANNED,
+        from: &[Status::Open],
         to: Some(Status::Done),
     },
     // Its lead or a planner; no role is checked. It runs on an agreed
@@ -268,15 +250,15 @@ pub const TABLE: [Row; 23] = [
         command: "close",
         role: Role::Planner,
         binds: false,
-        from: &[Status::Ready],
-        to: Some(Status::Done),
+        from: &[],
+        to: None,
     },
     Row {
         action: Action::PlanVerdictChanges,
         command: "verdict changes",
         role: Role::Reviewer,
         binds: false,
-        from: MISSION,
+        from: &[],
         to: None,
     },
     Row {
@@ -284,7 +266,7 @@ pub const TABLE: [Row; 23] = [
         command: "verdict approve",
         role: Role::Reviewer,
         binds: false,
-        from: MISSION,
+        from: &[],
         to: None,
     },
     // A planner on the base, or the implementer of the item whose branch
@@ -303,31 +285,48 @@ pub const TABLE: [Row; 23] = [
         command: "lead",
         role: Role::Lead,
         binds: true,
-        from: &[Status::Ready],
+        from: &[],
         to: None,
     },
 ];
 
+/// An action on a mission, the statuses it runs from and the one it sets.
+pub type OnMission = (Action, &'static [MissionStatus], Option<MissionStatus>);
+
 /// The actions on a mission. `drop` is also an item's; every other action is
 /// only an item's.
-const ON_MISSION: [Action; 8] = [
-    Action::StartMission,
-    Action::SubmitMission,
-    Action::MergeMission,
-    Action::CloseMission,
-    Action::Drop,
-    Action::PlanVerdictChanges,
-    Action::PlanVerdictApprove,
-    Action::Lead,
-];
+pub const ON_MISSION: [OnMission; 8] = {
+    use MissionStatus::{Done, Draft, Dropped, Open};
+    const ANY: &[MissionStatus] = &[Open, Draft, Done, Dropped];
+    [
+        (Action::StartMission, &[], Some(Open)),
+        (Action::SubmitMission, UNFINISHED, Some(Open)),
+        (Action::MergeMission, &[Open], None),
+        (Action::CloseMission, &[Open], Some(Done)),
+        (Action::Drop, UNFINISHED, Some(Dropped)),
+        (Action::PlanVerdictChanges, ANY, None),
+        (Action::PlanVerdictApprove, ANY, None),
+        (Action::Lead, &[Open], None),
+    ]
+};
 
-/// Whether an action on an item, or with `mission` on a mission, changes a
-/// status `from` to `to`: what the pre-commit hook asks of a status
-/// changed in a commit.
-pub fn changes(mission: bool, from: Status, to: Status) -> bool {
-    (TABLE.iter())
-        .filter(|row| row.action == Action::Drop || ON_MISSION.contains(&row.action) == mission)
-        .any(|row| row.from.contains(&from) && row.to == Some(to))
+/// Whether an action on an item changes its status `from` to `to`: what
+/// the pre-commit hook asks of a status changed in a commit.
+pub fn changes(from: Status, to: Status) -> bool {
+    (TABLE.iter()).any(|row| row.from.contains(&from) && row.to == Some(to))
+}
+
+/// [`changes`], of a mission's status.
+pub fn changes_mission(from: MissionStatus, to: MissionStatus) -> bool {
+    (ON_MISSION.iter()).any(|(_, runs, sets)| runs.contains(&from) && *sets == Some(to))
+}
+
+/// The row of `action` as a mission's.
+pub fn on_mission(action: Action) -> &'static OnMission {
+    ON_MISSION
+        .iter()
+        .find(|(on, _, _)| *on == action)
+        .expect("every action on a mission has a row")
 }
 
 pub fn row(action: Action) -> &'static Row {
@@ -349,12 +348,15 @@ pub struct Facts<'a> {
     pub blockers: &'a [(String, Option<Status>)],
     /// The item's mission, if it names one, with the mission's status on
     /// the base; `None` when no such mission is found. See [`mission_of`].
-    pub mission: Option<(String, Option<Status>)>,
+    pub mission: Option<(String, Option<MissionStatus>)>,
     pub caller: &'a Thread,
     /// The checkout on the item's branch, which `merge` reads. The CLI
     /// gathers it where `merge` runs and `status` lists its conditions: on
     /// that branch. Without it, the conditions it bears on are not listed.
     pub checkout: Option<&'a Checkout>,
+    /// The caller's checkout, when it is on the item's branch: where a
+    /// reviewer's task says to run.
+    pub worktree: Option<&'a Path>,
 }
 
 /// What `merge` reads from Git besides the item's record.
@@ -372,6 +374,9 @@ pub struct Checkout {
 pub struct SinceApproval {
     /// Every path that differs.
     pub changed: Vec<String>,
+    /// Those of `changed` that only file a new item: the record of an open
+    /// item that neither the reviewed commit nor the base holds.
+    pub filed: Vec<String>,
     /// The item's record at the reviewed commit, if it had one.
     pub reviewed: Option<ItemDir>,
     /// The item's record at the head, which is what merges, whatever the
@@ -426,10 +431,13 @@ pub fn plan_round<'a>(mission: &'a MissionDir, caller: &Thread) -> Round<'a> {
 }
 
 /// The mission `item` names, if any, with its status among `missions`.
-pub fn mission_of(item: &ItemDir, missions: &[MissionDir]) -> Option<(String, Option<Status>)> {
+pub fn mission_of(
+    item: &ItemDir,
+    missions: &[MissionDir],
+) -> Option<(String, Option<MissionStatus>)> {
     let id = item.item.mission.clone()?;
     let found = missions.iter().find(|dir| dir.mission.id == id);
-    let status = found.map(|dir| dir.mission.status.status());
+    let status = found.map(|dir| dir.mission.status);
     Some((id, status))
 }
 
@@ -441,6 +449,10 @@ pub fn approval(item: &ItemDir) -> Option<&ReviewFile> {
         .iter()
         .find(|r| r.name.round == latest && r.review.verdict == Some(Verdict::Approve))
 }
+
+/// The round from which changes requested go to the mission's lead, not
+/// straight into another round of review.
+pub const ROUND_CAP: u32 = 3;
 
 /// The sections of an item that a review approves along with the code.
 const REQUIREMENTS: [&str; 3] = ["Goal", "Done when", "Scope"];
@@ -533,7 +545,7 @@ pub enum Condition {
     /// `None` when the base has no such mission.
     MissionNotOpen {
         id: String,
-        status: Option<Status>,
+        status: Option<MissionStatus>,
     },
     /// A branch named for the item exists, so `start` cannot create it.
     BranchExists,
@@ -573,8 +585,8 @@ pub enum Condition {
     /// No review of the latest round approves the item.
     NoApproval,
     /// The approval no longer covers the head: since the commit it
-    /// reviewed, these paths outside the item's directory, or these of its
-    /// requirement sections, changed.
+    /// reviewed, these paths outside the item's directory that file no new
+    /// item, or these of its requirement sections, changed.
     Stale {
         round: u32,
         commit: String,
@@ -603,13 +615,18 @@ pub enum Condition {
     },
     /// A verdict needs its review file valid; this is what is not.
     Invalid(Problem),
+    /// A line under Responses is no response, so what it was meant to say,
+    /// a `not built` among them, is not known.
+    MalformedResponse(Problem),
 }
 
 impl Condition {
     /// Whether `action` refused for this condition breaks a rule, which
     /// `ATELIER_SKIP` passes, rather than having nothing to act on: a branch
     /// `start` would create, or one a take-over would switch to; a question
-    /// to decide; a finding to settle, or one settled already.
+    /// to decide; a finding to settle, or one settled already; or a malformed
+    /// response at `merge`, whose merged tree must validate whatever is
+    /// skipped, and which may hold a question to the lead.
     pub fn is_rule(&self, action: Action) -> bool {
         !matches!(
             (action, self),
@@ -617,6 +634,10 @@ impl Condition {
                 | (
                     _,
                     Condition::NoBranch | Condition::NoFinding(_) | Condition::Settled { .. }
+                )
+                | (
+                    Action::Merge | Action::MergeTrivial,
+                    Condition::MalformedResponse(_)
                 )
         )
     }
@@ -630,6 +651,11 @@ pub enum Refusal {
     From {
         action: Action,
         status: Status,
+    },
+    /// [`Refusal::From`], of a mission's status.
+    FromMission {
+        action: Action,
+        status: MissionStatus,
     },
     /// The action needs the caller to hold its role on the item, the item
     /// itself or this round's review, and it does not.
@@ -653,7 +679,10 @@ impl Refusal {
                 ..
             } => false,
             Refusal::Unmet(unmet) => unmet.iter().all(|c| c.is_rule(action)),
-            Refusal::Role(_) | Refusal::From { .. } | Refusal::NotHolder { .. } => true,
+            Refusal::Role(_)
+            | Refusal::From { .. }
+            | Refusal::FromMission { .. }
+            | Refusal::NotHolder { .. } => true,
         }
     }
 }
@@ -730,9 +759,7 @@ pub fn check_mission(
     facts: &MissionFacts,
 ) -> Result<Option<MissionStatus>, Refusal> {
     match mission_refusals(action, facts) {
-        Ok(found) => {
-            (found.into_iter().next()).map_or(Ok(row(action).to.and_then(MissionStatus::of)), Err)
-        }
+        Ok(found) => (found.into_iter().next()).map_or(Ok(on_mission(action).2), Err),
         Err(problem) => Err(Refusal::Record(problem)),
     }
 }
@@ -740,11 +767,11 @@ pub fn check_mission(
 /// Every reason `action`, a mission's, is refused, as [`refusals`] gives an
 /// item's.
 pub fn mission_refusals(action: Action, facts: &MissionFacts) -> Result<Vec<Refusal>, Problem> {
-    let row = row(action);
-    let status = facts.mission.mission.status.status();
+    let (_, from, _) = on_mission(action);
+    let status = facts.mission.mission.status;
     let mut found = Vec::new();
-    if !row.from.contains(&status) {
-        found.push(Refusal::From { action, status });
+    if !from.contains(&status) {
+        found.push(Refusal::FromMission { action, status });
     }
     // Merging a plan needs one of its planners; `submit` makes the caller
     // one, so a thread that is not takes the plan over there.
@@ -798,6 +825,19 @@ pub fn unmet_mission(action: Action, facts: &MissionFacts) -> Result<Vec<Conditi
 fn invalid(problems: Vec<Problem>, file: &ReviewFile) -> Vec<Condition> {
     let own = problems.into_iter().filter(|p| p.file == file.path);
     own.map(Condition::Invalid).collect()
+}
+
+/// A condition for each line of `item`'s Responses that is no response. It
+/// names the record by its path from the root, whichever copy was read: a
+/// skip writes it into a commit, as the pre-commit hook's rule of it does.
+pub(crate) fn malformed(item: &ItemDir) -> Vec<Condition> {
+    let file = std::path::PathBuf::from(crate::repo::item_path(&item.item.id));
+    let problems = item.malformed_responses().into_iter();
+    let from_root = problems.map(|problem| Problem {
+        file: file.clone(),
+        ..problem
+    });
+    from_root.map(Condition::MalformedResponse).collect()
 }
 
 /// What a verdict in `file` needs, given every finding, decision and
@@ -874,7 +914,7 @@ pub fn unmet(action: Action, facts: &Facts) -> Result<Vec<Condition>, Problem> {
     let item = facts.item;
     let mut unmet = Vec::new();
     match action {
-        Action::Ready | Action::StartNew | Action::Drop | Action::Lead => {}
+        Action::StartNew | Action::Drop | Action::Lead => {}
         // On no item: a backlog branch's actions, and a mission's.
         Action::StartMission
         | Action::StartBacklog
@@ -897,7 +937,10 @@ pub fn unmet(action: Action, facts: &Facts) -> Result<Vec<Condition>, Problem> {
             // Of its mission it asks only that it is agreed and not
             // dropped: on the base, and not the old `draft`.
             if let Some((id, status)) = &facts.mission {
-                if matches!(status, None | Some(Status::Draft | Status::Dropped)) {
+                if matches!(
+                    status,
+                    None | Some(MissionStatus::Draft | MissionStatus::Dropped)
+                ) {
                     unmet.push(Condition::MissionNotOpen {
                         id: id.clone(),
                         status: *status,
@@ -924,7 +967,8 @@ pub fn unmet(action: Action, facts: &Facts) -> Result<Vec<Condition>, Problem> {
             if !item.report_written() {
                 unmet.push(Condition::NoReport);
             }
-            let responses = item.responses()?;
+            unmet.extend(malformed(item));
+            let responses = item.responses();
             let findings = item.findings()?;
             let rebutted = |name: &FindingName| {
                 let rebuttal = |r: &Response| matches!(r, Response::Rebutted { finding, .. } if finding == name);
@@ -951,8 +995,9 @@ pub fn unmet(action: Action, facts: &Facts) -> Result<Vec<Condition>, Problem> {
                 return Ok(unmet);
             };
             let (findings, decisions) = (item.findings()?, item.decisions()?);
-            let responses = item.responses()?;
+            let responses = item.responses();
             unmet = invalid(validate(std::slice::from_ref(item), &[]), file);
+            unmet.extend(malformed(item));
             unmet.extend(verdict(action, file, &findings, &decisions, &responses));
         }
         Action::Close => {
@@ -974,11 +1019,12 @@ pub fn unmet(action: Action, facts: &Facts) -> Result<Vec<Condition>, Problem> {
                     unmet.push(Condition::Reviewed);
                 }
             }
+            unmet.extend(malformed(item));
             // A stop of its mission stops its merge too.
             unmet.extend(mission_dropped(facts));
             let checkout = facts.checkout;
             if action == Action::Merge {
-                let (findings, responses) = (item.findings()?, item.responses()?);
+                let (findings, responses) = (item.findings()?, item.responses());
                 for finding in item.open_findings()? {
                     if let Some(reason) = waits_on_lead(&finding.name, &findings, &responses) {
                         unmet.push(Condition::WaitsOnLead {
@@ -1008,9 +1054,9 @@ pub fn unmet(action: Action, facts: &Facts) -> Result<Vec<Condition>, Problem> {
 /// The stop of the item's mission, when it is dropped.
 fn mission_dropped(facts: &Facts) -> Option<Condition> {
     match &facts.mission {
-        Some((id, Some(Status::Dropped))) => Some(Condition::MissionNotOpen {
+        Some((id, Some(MissionStatus::Dropped))) => Some(Condition::MissionNotOpen {
             id: id.clone(),
-            status: Some(Status::Dropped),
+            status: Some(MissionStatus::Dropped),
         }),
         _ => None,
     }
@@ -1060,15 +1106,16 @@ pub fn unsettled(item: &ItemDir) -> Result<Vec<Finding>, Problem> {
 }
 
 /// Whether the approval still covers the head: since the commit it
-/// reviewed, nothing changed outside the item's own directory, and the
-/// item's requirements at the head are as it read them. A Report, a
-/// response or a review file never makes it stale.
+/// reviewed, nothing changed outside the item's own directory but to file
+/// new items, and the item's requirements at the head are as it read them.
+/// A Report, a response, a review file or a new item's record never makes
+/// it stale.
 fn stale(item: &ItemDir, review: &ReviewFile, since: &SinceApproval) -> Option<Condition> {
     let own = format!(".atelier/items/{}/", item.item.id);
     let mut changed: Vec<String> = since
         .changed
         .iter()
-        .filter(|path| !path.starts_with(&own))
+        .filter(|path| !path.starts_with(&own) && !since.filed.contains(path))
         .cloned()
         .collect();
     for heading in REQUIREMENTS {
@@ -1085,14 +1132,14 @@ fn stale(item: &ItemDir, review: &ReviewFile, since: &SinceApproval) -> Option<C
     })
 }
 
-/// The action the caller would run next on the item, if any: start a ready
+/// The action the caller would run next on the item, if any: start an open
 /// item; as its holder, submit it or merge it; as this round's reviewer,
 /// `verdict changes` while its file holds an open fix-now finding that does
 /// not wait on the lead, else `verdict approve`; as anyone else, review it when it is in review and
 /// they never implemented it, else take it over.
 pub fn next(facts: &Facts) -> Result<Option<Action>, Problem> {
     let status = facts.status();
-    if status == Status::Ready {
+    if status == Status::Open {
         return Ok(Some(Action::Start));
     }
     if !STARTED.contains(&status) {
@@ -1101,7 +1148,7 @@ pub fn next(facts: &Facts) -> Result<Option<Action>, Problem> {
     if let Some(file) = facts.reviewing() {
         let findings = facts.item.findings()?;
         let decisions = facts.item.decisions()?;
-        let responses = facts.item.responses()?;
+        let responses = facts.item.responses();
         let open = findings.iter().any(|f| {
             f.name.review == file.name && blocks_verdict(f, &findings, &decisions, &responses)
         });

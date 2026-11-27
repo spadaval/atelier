@@ -1,4 +1,4 @@
-use crate::model::{Ready, SchemaVersion, Status, Thread, Threads, Time};
+use crate::model::{Ready, SchemaVersion, Thread, Threads, Time};
 use serde::{Deserialize, Serialize};
 
 /// A mission's front matter, in the order it is written, and its Markdown
@@ -56,26 +56,6 @@ pub enum MissionStatus {
 }
 
 impl MissionStatus {
-    pub const ALL: [MissionStatus; 4] = [Self::Open, Self::Done, Self::Dropped, Self::Draft];
-
-    /// The item status the action table writes this status as. The table's
-    /// statuses are an item's, and a mission's `open` is written there as
-    /// `ready`, the old draft as `draft`.
-    pub fn status(self) -> Status {
-        match self {
-            Self::Draft => Status::Draft,
-            Self::Open => Status::Ready,
-            Self::Done => Status::Done,
-            Self::Dropped => Status::Dropped,
-        }
-    }
-
-    /// The mission status the action table's `status` stands for, if a
-    /// mission can have it.
-    pub fn of(status: Status) -> Option<MissionStatus> {
-        Self::ALL.into_iter().find(|s| s.status() == status)
-    }
-
     /// Its name as the record stores it.
     pub fn name(self) -> &'static str {
         match self {

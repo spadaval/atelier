@@ -8,10 +8,10 @@ use crate::setup::{Harness, Step};
 use atelier_core::actions::{Action, Condition, Refusal};
 use atelier_core::forge::{CiRun, ForgeError, MergeState, PullRequest};
 use atelier_core::model::{Config, Priority, Response, Status, Thread, Verdict};
-use atelier_core::plan::{Approvals, NotCounted, APPROVALS};
+use atelier_core::plan::{Approvals, NotCounted, PlanDelta, APPROVALS, SPLITS};
 use atelier_core::records::Problem;
-use atelier_core::{Carried, Entry, Overview};
-use std::path::Path;
+use atelier_core::{Carried, Entry, Overview, Refused};
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 pub(crate) use atelier_core::say::*;
@@ -24,6 +24,10 @@ pub(crate) fn priority_name(priority: Priority) -> &'static str {
         Priority::Low => "low",
     }
 }
+
+/// How many of the items that can start `status` names, the most urgent.
+/// The session-start hook prints it, and a backlog can hold hundreds.
+const STARTABLE_SHOWN: usize = 10;
 
 pub(crate) fn holder(entry: &Entry) -> String {
     match &entry.holder {
@@ -84,6 +88,9 @@ pub fn item(
     let done = entry.next.is_none() && entry.reviewed.is_some() && !entry.holds;
     if entry.next == Some(Action::TakeOver) || done {
         next = visiting(id, leads, &next);
+        if let (Some(_), Some(round)) = (leads, entry.capped) {
+            next += &cap_for_lead(id, round);
+        }
     }
     // Before `merge`, what it will run and wait for; a stale approval is
     // sent to `submit` instead.
@@ -97,7 +104,8 @@ pub fn item(
     }
     let code = outside(id, &entry.uncommitted);
     if entry.next == Some(Action::Submit) && !code.is_empty() {
-        let then = next.rfind("Then: ").expect("it ends with a Then line");
+        // At the round cap the lead's ruling takes the Then line's place.
+        let then = next.rfind("Then: ").unwrap_or(next.len());
         next.insert_str(then, &format!("Not committed: {}\n", some(&code)));
     }
     let undefined = match entry.undefined {
@@ -117,10 +125,11 @@ pub fn item(
         None => String::new(),
     };
     format!(
-        "{who}Title: {}\nStatus: {}{}\n{undefined}{unsaved}{next}",
+        "{who}Title: {}\nStatus: {}{}\n{undefined}{unsaved}{}{next}",
         entry.title,
         status_name(entry.status),
         since(entry),
+        malformed(entry),
     )
 }
 
@@ -163,7 +172,10 @@ fn gates(config: &Config) -> String {
 /// `status` away from an item's branch. `dropped` is each item dropped on
 /// the base while its branch is there, with why, and `unreached` each item
 /// dropped on its branch whose drop has not reached the base. `unsaved` is
-/// what [`unsaved`] says of the checkout.
+/// what [`unsaved`] says of the checkout. `plans` is the plans the
+/// checked-out records branch changes, with where their review stands.
+/// `there` is, in the base's checkout, how the caller gets to the first item
+/// it holds, since `start` does not switch that checkout.
 #[allow(clippy::too_many_arguments)]
 pub fn overview(
     caller: &Thread,
@@ -171,9 +183,11 @@ pub fn overview(
     base: &str,
     kind: Option<&str>,
     overview: &Overview,
+    plans: &Result<Vec<Approvals>, Problem>,
     dropped: &[(String, Option<String>)],
     unreached: &[(String, Option<String>)],
     unsaved: &str,
+    there: Option<&str>,
 ) -> String {
     let place = match (branch, kind) {
         (Some(branch), _) if branch == base => format!("the base branch {base}"),
@@ -182,6 +196,12 @@ pub fn overview(
         (None, _) => "a detached HEAD".into(),
     };
     let mut text = format!("You are thread {caller}, on {place}.\n");
+    text += &match plans {
+        Ok(plans) => plan_standing(plans),
+        Err(problem) => {
+            format!("Plan review not shown, since a committed record does not read: {problem}\n")
+        }
+    };
     if !overview.held.is_empty() {
         text += "You hold:\n";
         for entry in &overview.held {
@@ -192,11 +212,17 @@ pub fn overview(
                 since(entry),
                 entry.title
             );
+            for problem in &entry.malformed {
+                text += &format!("  {}\n", condition(&entry.id, problem));
+            }
+            if let Some(round) = entry.capped {
+                text += &format!("    Round {round} reached the review cap: its mission's lead rules before it is submitted again.\n");
+            }
         }
     }
-    if !overview.ready.is_empty() {
-        text += "Ready to start:\n";
-        for entry in &overview.ready {
+    if !overview.startable.is_empty() {
+        text += "Can start now:\n";
+        for entry in overview.startable.iter().take(STARTABLE_SHOWN) {
             text += &format!(
                 "  {} ({}): {}\n",
                 entry.id,
@@ -204,8 +230,12 @@ pub fn overview(
                 entry.title
             );
         }
+        let more = overview.startable.len().saturating_sub(STARTABLE_SHOWN);
+        if more > 0 {
+            text += &format!("  and {more} more: atelier list --startable\n");
+        }
     }
-    text += &cannot_start(&overview.cannot_start, !overview.ready.is_empty());
+    text += &cannot_start(&overview.cannot_start, !overview.startable.is_empty());
     if !overview.started.is_empty() {
         text += "Held by other threads:\n";
         for entry in &overview.started {
@@ -235,23 +265,49 @@ pub fn overview(
     text += &crate::view_output::overview(overview);
     text += unsaved;
     text += &crate::view_output::led(&overview.led);
+    // A planner stopped for the human's ruling is pointed at no other work.
+    if plans.iter().flatten().any(Approvals::stopped) {
+        return text;
+    }
     // A lead holding nothing hands its mission's items to other threads,
     // and is not pointed at one itself.
     if overview.held.is_empty() && !overview.led.is_empty() {
         return text;
     }
-    let startable = overview.ready.iter().find(|entry| entry.unmet.is_empty());
-    match (overview.held.first(), startable) {
-        (Some(held), _) => {
-            text += &format!("Then: atelier start {} (switches to its branch)\n", held.id)
+    match overview.held.first() {
+        Some(held) => match there {
+            Some(there) => text += there,
+            None => text += &format!("Then: atelier start {} (switches to its branch)\n", held.id),
+        },
+        // Which to start is the task's to say: a thread given one task
+        // takes a named item for its next step.
+        None if !overview.startable.is_empty() => {
+            text += "Start one only if that is your task: atelier start <id>\n";
         }
-        (None, Some(ready)) => text += &format!("Then: atelier start {}\n", ready.id),
-        (None, None) if overview.cannot_start.is_empty() => {
-            text += "Nothing is ready to start.\n";
-        }
-        (None, None) => text += "No ready item can start now.\n",
+        None if overview.cannot_start.is_empty() => text += "Nothing is open to start.\n",
+        None => text += "No open item can start now.\n",
     }
     text
+}
+
+/// How `status` in the base's checkout sends the holder of `id` to `path`,
+/// the checkout that has its branch.
+pub fn work_in(id: &str, path: &Path) -> String {
+    format!(
+        "{id}'s branch is checked out in {0}; work there.\nThen: cd {0}\n",
+        quoted(&path.display().to_string())
+    )
+}
+
+/// How `status` in the base's checkout sends the holder of `id` to a new
+/// checkout of `branch` at `path`. `stale` says Git still lists a checkout
+/// of it whose directory is gone, which it will not add another beside.
+pub fn work_in_new(id: &str, branch: &str, path: &Path, stale: bool) -> String {
+    let prune = if stale { "git worktree prune && " } else { "" };
+    format!(
+        "{id}'s branch needs a checkout of its own; work there.\nThen: {prune}git worktree add {} {branch}\n",
+        quoted(&path.display().to_string())
+    )
 }
 
 /// What `status` says of what the checkout `at` names, as for
@@ -277,10 +333,7 @@ pub fn unsaved(
         );
     }
     if let (Some(branch), Some(remote), false) = (branch, remote, unpushed.is_empty()) {
-        let git = match at {
-            Some(at) => format!("git -C {}", quoted(&at.display().to_string())),
-            None => "git".into(),
-        };
+        let git = git_command(at);
         let commits = match unpushed.len() {
             1 => "1 commit".to_string(),
             n => format!("{n} commits"),
@@ -294,7 +347,7 @@ pub fn unsaved(
     text
 }
 
-/// One line counting the ready items `start` would refuse, by each cause
+/// One line counting the open items `start` would refuse, by each cause
 /// among their unmet conditions, after `others` that can start, if any.
 fn cannot_start(entries: &[Entry], others: bool) -> String {
     if entries.is_empty() {
@@ -332,7 +385,7 @@ fn cannot_start(entries: &[Entry], others: bool) -> String {
     };
     let other = if others { " other" } else { "" };
     format!(
-        "{}{other} ready {item} cannot start yet: {}. See {them} with: atelier list\n",
+        "{}{other} open {item} cannot start yet: {}. See {them} with: atelier list\n",
         entries.len(),
         counts.join(", ")
     )
@@ -386,7 +439,7 @@ pub fn started_mission(id: &str, branch: &str) -> String {
 
 pub fn started_backlog(branch: &str) -> String {
     format!(
-        "Made branch {branch} at the base's tip, for record changes tied to no item or mission.\nMake them with `new`, `set`, `ready`, `drop`, `close` and `lead`, commit them with Git, then run `atelier submit` and `atelier merge` here.\n"
+        "Made branch {branch} at the base's tip, for record changes tied to no item or mission.\nMake them with `new`, `set`, `drop`, `close` and `lead`, commit them with Git, then run `atelier submit` and `atelier merge` here.\n"
     )
 }
 
@@ -438,10 +491,103 @@ pub fn lost_claim(what: &str, branch: &str, remote: &str, holder: Option<&Thread
     )
 }
 
-pub fn created_item(id: &str) -> String {
+/// `start <id>` could not fetch the base, which it judges by.
+pub fn base_unread(id: &str, base: &str, remote: &str, error: &anyhow::Error) -> String {
     format!(
-        "Created draft item {id}, with empty Goal, Done when and Scope sections to write.\nA planner makes it ready with: atelier ready {id} --by <name>\n"
+        "`atelier start` refused; nothing changed.\n{remote} cannot be reached to fetch {base}, which says whether {id} is already done or dropped: {error:#}\nRun it again once {remote} answers.\n"
     )
+}
+
+/// The claim was pushed and the base could not be fetched to confirm it.
+pub fn claim_unconfirmed(
+    id: &str,
+    branch: &str,
+    base: &str,
+    remote: &str,
+    error: &anyhow::Error,
+) -> String {
+    format!(
+        "`atelier start {id}` pushed branch {branch}, then could not fetch {base} from {remote} to confirm {id} is still open: {error:#}\nRun `atelier start {id}` again once {remote} answers, before working on it.\n"
+    )
+}
+
+/// `id` became `status` on the base while `start` claimed it.
+pub fn start_finished(id: &str, branch: &str, base: &str, remote: &str, status: Status) -> String {
+    format!(
+        "`atelier start {id}` refused: {id} became {} on {base} while it started. The local branch is removed, and this checkout is as it was.\nWarning: the branch {branch} it pushed stays on {remote}, where it counts for nothing, since {base}'s record wins.\n",
+        status_name(status)
+    )
+}
+
+/// `id` became `status` on the base while it was taken over; `here` is
+/// the branch this checkout was switched to for it.
+pub fn take_over_finished(
+    id: &str,
+    branch: &str,
+    base: &str,
+    remote: &str,
+    status: Status,
+    here: Option<&str>,
+) -> String {
+    let here = here.map_or(String::new(), |here| {
+        format!(" This checkout is on {here}.")
+    });
+    format!(
+        "`atelier start {id}` refused: {id} became {} on {base} while it was taken over, so nothing is left to do on it.\nBranch {branch} is kept here and on {remote}, with the work already on it.{here}\n",
+        status_name(status)
+    )
+}
+
+/// The commits only a detached HEAD holds, at most the first ten.
+fn loose(commits: &[String]) -> String {
+    let mut text = String::new();
+    for commit in commits.iter().take(10) {
+        text += &format!("  {commit}\n");
+    }
+    if commits.len() > 10 {
+        text += &format!("  and {} more\n", commits.len() - 10);
+    }
+    text
+}
+
+/// How to keep commits only a detached HEAD holds.
+const KEEP_LOOSE: &str = "Keep them with `git branch <name> HEAD`, then `git cherry-pick` them onto the branch they belong on.";
+
+/// What `status` says of commits only a detached HEAD holds.
+pub fn unattached(commits: &[String]) -> String {
+    if commits.is_empty() {
+        return String::new();
+    }
+    format!(
+        "Commits of this detached HEAD on no branch, remote-tracking branch or tag, which a switch away would lose:\n{}{KEEP_LOOSE}\n",
+        loose(commits)
+    )
+}
+
+/// `start` refused where it would switch away from such commits.
+pub fn start_strands(commits: &[String]) -> Refused {
+    Refused::then(
+        format!(
+            "`atelier start` refused; nothing changed.\nThis detached HEAD holds commits on no branch, remote-tracking branch or tag, which switching away would lose:\n{}",
+            loose(commits)
+        ),
+        format!("{KEEP_LOOSE} Then run `atelier start` again."),
+    )
+}
+
+pub fn rule_start_strands() -> String {
+    "`atelier start` does not switch away from commits on no branch".into()
+}
+
+/// `status`'s line where merged branches or detached worktrees piled up.
+pub fn piled_up(base: &str, merged: usize, detached: usize) -> String {
+    format!(
+        "Piled up in this clone: {merged} local branches merged into {base}, {detached} detached worktrees. See them with `git branch --merged {base}` and `git worktree list`.\n"
+    )
+}
+
+pub fn created_item(id: &str) -> String {
+    format!("Created open item {id}, with empty Goal, Done when and Scope sections to write.\n")
 }
 
 /// `name`, given to `new --from` or `drop`, is no finding's name.
@@ -462,7 +608,10 @@ pub fn settle_refused(command: &str, name: &str, id: &str, refusals: &[Refusal])
                 status_name(*status)
             ),
             Refusal::Unmet(unmet) => unmet.iter().map(|c| condition(id, c) + "\n").collect(),
-            Refusal::Role(_) | Refusal::NotHolder { .. } | Refusal::Record(_) => {
+            Refusal::Role(_)
+            | Refusal::FromMission { .. }
+            | Refusal::NotHolder { .. }
+            | Refusal::Record(_) => {
                 unreachable!("settling a finding needs no role, and a record problem is an error")
             }
         };
@@ -472,7 +621,7 @@ pub fn settle_refused(command: &str, name: &str, id: &str, refusals: &[Refusal])
 
 pub fn finding_taken(name: &str, id: &str) -> String {
     format!(
-        "Created draft item {id} from finding {name}: its Goal quotes the finding, and its Done when and Scope are empty to write.\nMarked finding {name} taken into {id}.\nA planner makes {id} ready with: atelier ready {id} --by <name>\n"
+        "Created open item {id} from finding {name}: its Goal quotes the finding, and its Done when and Scope are empty to write.\nMarked finding {name} taken into {id}.\n"
     )
 }
 
@@ -549,7 +698,7 @@ pub fn check_found(
 pub fn commit_refused(
     unread: &[Problem],
     invalid: &[Problem],
-    actions: &[(String, Status, Status)],
+    actions: &[(String, &str, &str)],
     base: &str,
     on_base: &[String],
 ) -> String {
@@ -569,8 +718,7 @@ pub fn commit_refused(
     for (path, before, now) in actions {
         text += &format!(
             "  {path}: status: {} to {}. Put back the status HEAD has; atelier status names the command for what comes next.\n",
-            status_name(*before),
-            status_name(*now)
+            before, now
         );
     }
     text + "Fix each file named, stage it with git add, and commit again.\n"
@@ -578,11 +726,9 @@ pub fn commit_refused(
 
 /// The rule that a status changes only as an action changes it, as the
 /// record at `path` breaks it.
-pub(crate) fn rule_status(path: &str, from: Status, to: Status) -> String {
+pub(crate) fn rule_status(path: &str, from: &str, to: &str) -> String {
     format!(
-        "A status changes only as an action of the lifecycle changes it ({path}: {} to {})",
-        status_name(from),
-        status_name(to)
+        "A status changes only as an action of the lifecycle changes it ({path}: {from} to {to})"
     )
 }
 
@@ -631,33 +777,74 @@ fn commits<T>(found: &[(String, String, T)], what: impl Fn(&T) -> String) -> Str
     text
 }
 
-/// The pre-push hook's refusal of a push of `base`, whose commit on the
-/// remote, if it has one this clone has, is `old`: the new commits on its
-/// first-parent line that are not Atelier merges.
-pub fn push_refused(base: &str, old: Option<&str>, plain: &[(String, String, ())]) -> String {
-    let back = match old.map(short) {
-        Some(old) => format!("git branch -f {base} {old}"),
-        None => format!("moving {base} back to the remote's commit"),
+/// How to take refused commits off the base, where one command line can: the
+/// base's tip is the commit pushed, and a branch `start` makes there holds
+/// them all.
+pub struct WayBack {
+    /// The remote's commit, which the base goes back to; whole, since the
+    /// command is run as printed.
+    pub old: String,
+    pub base_checkout: BaseCheckout,
+}
+
+/// Which checkout has the base out, for how it can be moved.
+pub enum BaseCheckout {
+    Here,
+    At(PathBuf),
+    /// None has, so Git lets `branch -f` move it.
+    Nowhere,
+}
+
+/// What the pre-push hook says to do with the commits it refused. The
+/// steps are one `&&` line, so a `start` that fails leaves the base, which
+/// is then all that holds them, where it is.
+fn off_base(base: &str, back: Option<&WayBack>) -> String {
+    let Some(WayBack { old, base_checkout }) = back else {
+        return format!(
+            "Move them to a branch: `atelier start --new \"<title>\"` starts an item that holds code, `atelier start --backlog <slug>` a branch for record changes. Once that branch holds them, move {base} back to the remote's commit, and atelier merge brings the branch in.\n"
+        );
     };
+    let at = match base_checkout {
+        BaseCheckout::At(path) => Some(path.as_path()),
+        BaseCheckout::Here | BaseCheckout::Nowhere => None,
+    };
+    let git = git_command(at);
+    let (cd, reset) = (
+        at.map_or(String::new(), |path| {
+            format!("cd {} && ", quoted(&path.display().to_string()))
+        }),
+        format!("{git} reset --keep {old}"),
+    );
+    let (back, refused) = match base_checkout {
+        BaseCheckout::Nowhere => (format!("git branch -f {base} {old}"), String::new()),
+        BaseCheckout::Here | BaseCheckout::At(_) => (
+            reset.clone(),
+            format!(
+                "If uncommitted changes make the reset refuse, nothing is lost and the new branch already has the commits: save the changes with `{git} stash push -u`, finish with `{reset}`, then run `git stash apply` in the new branch's checkout.\n"
+            ),
+        ),
+    };
+    format!(
+        "Move them to a new item's branch and put {base} back with:\n  {cd}atelier start --new \"<title>\" && {back}\n{refused}For record changes alone, use `atelier start --backlog <slug>` in place of `start --new`. atelier merge then brings the branch in.\n"
+    )
+}
+
+/// The pre-push hook's refusal of a push of `base`: the new commits on its
+/// first-parent line that are not Atelier merges, and the way `back`.
+pub fn push_refused(base: &str, back: Option<&WayBack>, plain: &[(String, String, ())]) -> String {
     let mut text = format!(
         "Atelier's pre-push hook refused this push; nothing was pushed.\nRule: {base} receives only merges made by atelier merge. Each new commit on {base}'s first-parent line is one. These are not:\n"
     );
     text += &commits(plain, |()| "not an Atelier merge".to_string());
-    text + &format!(
-        "Move them to a branch: atelier start --new \"<title>\" starts an item that holds code, atelier start --backlog <slug> a branch for record changes. Then {back} takes them off {base}, and atelier merge brings the branch in.\n"
-    )
+    text + &off_base(base, back)
 }
 
-/// The pre-push hook's refusal of a push that moves `base` where a forge
-/// on `remote` is configured; `old` is the remote's commit, if this clone
-/// has it.
-pub fn push_moves_base(base: &str, remote: &str, old: Option<&str>) -> String {
-    let back = match old.map(short) {
-        Some(old) => format!("`git branch -f {base} {old}` puts {base} back"),
-        None => format!("moving {base} back to {remote}'s commit puts it back"),
-    };
+/// The pre-push hook's refusal of a push that moves `base` where a forge is
+/// configured, and the way `back`.
+pub fn push_moves_base(base: &str, back: Option<&WayBack>) -> String {
     format!(
-        "Atelier's pre-push hook refused this push; nothing was pushed.\nRule: {base} is moved only by the forge's merge of a pull request. With a forge configured, atelier merge has the forge merge each branch's pull request and never pushes {base}, so no push may move it.\nPut the commits on a branch and run atelier merge there; {back}.\n"
+        "Atelier's pre-push hook refused this push; nothing was pushed.\nRule: {base} is moved only by the forge's merge of a pull request. With a forge configured, atelier merge has the forge merge each branch's pull request and never pushes {base}, so no push may move it.\n{}",
+        off_base(base, back)
     )
 }
 
@@ -801,11 +988,15 @@ pub fn item_only(id: &str, flags: &[&str]) -> String {
     )
 }
 
-pub fn not_planned(id: &str, status: Status) -> String {
+pub fn not_planned(id: &str, status: &str) -> String {
     format!(
-        "`atelier set {id}` refused; nothing changed.\n{id} is {}, and its record no longer changes.\n",
-        status_name(status)
+        "`atelier set {id}` refused; nothing changed.\n{id} is {status}, and its record no longer changes.\n"
     )
+}
+
+/// `ready`, which is no command since items are open from the start.
+pub fn no_go_ahead() -> String {
+    "`atelier ready` refused; nothing changed.\nItems need no go-ahead, and nor does a mission: `atelier start <id>` takes any open item that is on the base and whose blockers are done, and a mission is agreed when its plan merges.\n".into()
 }
 
 pub fn set_started(id: &str, status: Status) -> String {
@@ -833,8 +1024,9 @@ fn outside(id: &str, uncommitted: &[String]) -> Vec<String> {
     outside.cloned().collect()
 }
 
-/// `forge` is what `submit` did on the forge, if one is configured.
-pub fn submitted(id: &str, uncommitted: &[String], forge: &str) -> String {
+/// `checkout` is the one submitted from, and `forge` what `submit` did on
+/// the forge, if one is configured.
+pub fn submitted(id: &str, checkout: &Path, uncommitted: &[String], forge: &str) -> String {
     let code = outside(id, uncommitted);
     let mut text = format!("Submitted {id} for review.\n{forge}");
     if !code.is_empty() {
@@ -843,7 +1035,7 @@ pub fn submitted(id: &str, uncommitted: &[String], forge: &str) -> String {
             some(&code)
         );
     }
-    text + &start_reviewer(id)
+    text + &start_reviewer(id, Some(checkout))
 }
 
 /// `submit` on a records branch `branch` while `paths` are uncommitted.
@@ -912,7 +1104,7 @@ pub fn plan_submitted(branch: &str, plans: &[(String, u32)], head: &str, forge: 
     }
     text += &forge;
     text += &format!("Give each reviewer its own checkout at that commit, as `git worktree add --detach <path> {head}` makes one, so that neither sees the other's review.\n");
-    let then = format!("Then wait for both verdicts. Each reviewer pushes its review file to {branch}; once two approve, bring them here with `git pull`, and run `atelier merge`. If either asks for changes, change the plan, commit, and run `atelier submit` again for the next round.");
+    let then = format!("Then wait for both verdicts. Each reviewer pushes its review file to {branch}; once two approve, bring them here with `git pull`, and run `atelier merge`. If either asks for changes, change the plan, commit, and run `atelier submit` again for the next round, unless that makes {SPLITS} rounds in a row on this change where one approves and the other asks for changes: review stops there, and you bring the open findings to the human to rule.");
     text + &handoff("Each of two reviewers", &tasks, &then)
 }
 
@@ -951,9 +1143,16 @@ pub fn submit_no_pull_request(id: &str, error: &ForgeError, pushed: bool) -> Str
     )
 }
 
+/// `submit` could not fetch the base, so judged by the last fetch.
+pub fn submit_base_unread(id: &str, base: &str, remote: &str, error: &anyhow::Error) -> String {
+    format!(
+        "Warning: fetching {base} from {remote} failed, so whether {id} is done or dropped was judged by the last fetch: {error:#}\n"
+    )
+}
+
 pub fn not_on_item(command: &str, branch: Option<&str>) -> String {
     format!(
-        "`atelier {command}` runs on an item's branch, and this checkout is on {}. Nothing changed.\n`atelier status` lists what you hold; `atelier start <id>` switches to its branch.\n",
+        "`atelier {command}` runs on an item's branch, and this checkout is on {}. Nothing changed.\n`atelier status` lists what you hold and says how to get to its branch.\n",
         place(branch)
     )
 }
@@ -972,10 +1171,10 @@ pub fn review_taken_over(id: &str, round: u32, before: Option<&Thread>) -> Strin
     }
 }
 
-pub fn author(id: &str, caller: &Thread) -> String {
+pub fn author(id: &str, caller: &Thread, checkout: Option<&Path>) -> String {
     format!(
         "You (thread {caller}) have implemented {id}, and an author does not review its own work. Nothing changed.\n{}What a reviewer is shown:\n\n",
-        start_reviewer(id)
+        start_reviewer(id, checkout)
     )
 }
 
@@ -1029,13 +1228,37 @@ pub struct Brief<'a> {
     pub sections: Vec<(&'a str, &'a str)>,
     pub base: &'a str,
     pub commit: &'a str,
-    /// The commit the round before reviewed.
-    pub previous: Option<&'a str>,
+    /// The round before's, from round 2 on.
+    pub previous: Option<Previous>,
+    /// The checkout, where a printed Git command must name it.
+    pub at: Option<&'a Path>,
     pub carried: &'a [Carried],
     /// The caller's review file; `None` for an author.
     pub path: Option<&'a str>,
     /// What [`brief_pull_request`] says, where a forge is configured.
     pub pull_request: Option<String>,
+}
+
+/// The commit the round before reviewed, and the diff that can be given
+/// since it.
+pub enum Previous {
+    /// The branch alone changed since: the whole diff.
+    All(String),
+    /// The base was merged in since: the paths the branch changes.
+    Scoped(String, Vec<String>),
+    /// It is not in the history of the commit under review: no diff.
+    Lost(String),
+}
+
+/// The command that shows what changed from commit `from` to `to`, in
+/// `paths` alone where any are given.
+fn diff(at: Option<&Path>, from: &str, to: &str, paths: &[String]) -> String {
+    let mut line = format!("  {} diff {from} {to}", git_command(at));
+    if !paths.is_empty() {
+        let paths: Vec<String> = paths.iter().map(|path| quoted(path)).collect();
+        line += &format!(" -- {}", paths.join(" "));
+    }
+    line + "\n"
 }
 
 /// The brief's line on branch `id`'s pull request, as the forge `found` it.
@@ -1063,8 +1286,13 @@ pub fn brief(brief: &Brief) -> String {
             "You are the reviewer of {id} (thread {}), round {round}.\n",
             brief.caller
         );
-        text += &match brief.previous {
-            None => format!("Review the change on branch {id} as someone who did not write it: check that it meets each Done when line, that it is correct, and that the Report's claims hold. {LOOK}\n\n"),
+        text += &match &brief.previous {
+            None => format!("{}\n\n", whole_change(id)),
+            Some(Previous::Lost(reviewed)) => format!(
+                "The last round reviewed commit {}, which is not in this commit's history, so there is no diff since then. {} Judge each open finding below too.\n\n",
+                short(reviewed),
+                whole_change(id)
+            ),
             Some(_) => later_round(round),
         };
     }
@@ -1074,10 +1302,23 @@ pub fn brief(brief: &Brief) -> String {
         text += "\n";
     }
     let whole = format!("  git diff {}...{commit}\n", brief.base);
-    text += &match brief.previous {
+    let since = match &brief.previous {
+        None | Some(Previous::Lost(_)) => None,
+        Some(Previous::All(from)) => Some(format!(":\n{}", diff(brief.at, from, commit, &[]))),
+        Some(Previous::Scoped(_, paths)) if paths.is_empty() => Some(format!(
+            ": nothing of this branch's, only {} merged in.\n",
+            brief.base
+        )),
+        Some(Previous::Scoped(from, paths)) => Some(format!(
+            ", in the paths this branch changes, since {} was merged in between:\n{}",
+            brief.base,
+            diff(brief.at, from, commit, paths)
+        )),
+    };
+    text += &match since {
         None => format!("\nThe change, at commit {commit}:\n{whole}"),
-        Some(previous) => format!(
-            "\nWhat changed since the last round's review, at commit {commit}:\n  git diff {previous} {commit}\n\
+        Some(since) => format!(
+            "\nWhat changed since the last round's review, at commit {commit}{since}\
              The whole change:\n{whole}"
         ),
     };
@@ -1089,13 +1330,30 @@ pub fn brief(brief: &Brief) -> String {
     text + &review_file(
         path,
         brief.carried.len() + 1,
+        ITEM_REVIEWER_WRITES,
         "the change merges",
         "writes it and the item's new status and prints the Git command that commits the two",
     ) + "Run that command; your review is then done.\n"
 }
 
+/// What an item's reviewer may write beside its review file, in the
+/// implementer's checkout.
+const ITEM_REVIEWER_WRITES: &str = "Change no other file, except to file a problem outside this item, which you may do here before or after your verdict: run `atelier new \"<title>\"`, write the Goal and Done when in the file it names, then run the Git command it prints. The new item reaches the base in this item's merge and makes no approval stale.";
+
+/// What a plan's reviewer may write beside its review file.
+const PLAN_REVIEWER_WRITES: &str = "Change no other file until your review is pushed.";
+
+/// How a plan's reviewer files a problem its plan is not about, after its
+/// verdict is published.
+const PLAN_REVIEWER_FILES: &str = "Only once that push is made, you may file a problem unrelated to the plan, on a branch of its own so that the plan and your verdict stay as they are: run `atelier start --backlog <slug>`, then on that branch `atelier new \"<title>\"`, write it, run the Git command it prints, then `atelier submit` and `atelier merge`.\n";
+
 /// How every round's reviewer is to look.
 const LOOK: &str = "Read the code, run what proves it, and write down each problem you find. The author's reasoning is left out on purpose; judge what is there.";
+
+/// What a reviewer of the whole change on item `id`'s branch is told.
+fn whole_change(id: &str) -> String {
+    format!("Review the change on branch {id} as someone who did not write it: check that it meets each Done when line, that it is correct, and that the Report's claims hold. {LOOK}")
+}
 
 /// What a reviewer in `round`, after the first, is told the round is for:
 /// the earlier rounds read the whole change, so this one checks their
@@ -1152,12 +1410,14 @@ fn carried_findings(carried: &[Carried], reviewer: bool, item: bool) -> String {
 }
 
 /// How a reviewer writes its file at `path`, whose findings number on from
-/// `next`, and records its verdict, which `commits` it. `before` is what a
-/// fix-now finding must be fixed before.
-fn review_file(path: &str, next: usize, before: &str, commits: &str) -> String {
+/// `next`, and records its verdict, which `commits` it. `writes` is what
+/// else it may write, and `before` what a fix-now finding must be fixed
+/// before.
+fn review_file(path: &str, next: usize, writes: &str, before: &str, commits: &str) -> String {
     format!(
         "\nYour review file: {path}\n\
-         Write your review there, and change no other file. Leave its front matter, between the `---` lines, as it is.\n\
+         Write your review there. Leave its front matter, between the `---` lines, as it is.\n\
+         {writes}\n\
          Under `## Summary`, say what you checked and how, and what you could not check. Then add a section for each problem, numbered on from {next}:\n\n\
          ## Finding {next}: <a one-line title>\n\
          Recommendation: fix now\n\
@@ -1187,6 +1447,10 @@ pub struct PlanBrief<'a> {
     pub items: Vec<(String, Status, String)>,
     /// The paths of the plan that differ in this checkout from `commit`.
     pub changed: Vec<String>,
+    /// What a later round checks; `None` for a review of the whole plan.
+    pub delta: Option<PlanDelta>,
+    /// The checkout, where a printed Git command must name it.
+    pub at: Option<&'a Path>,
     pub carried: &'a [Carried],
     pub path: &'a str,
     /// Where the review file goes once it is committed.
@@ -1231,13 +1495,18 @@ impl Landing {
 
 pub fn plan_brief(brief: &PlanBrief) -> String {
     let PlanBrief { id, round, .. } = *brief;
+    let task = match &brief.delta {
+        Some(delta) => later_plan_round(delta, brief.commit, brief.at),
+        None => format!(
+            "Review the plan as commit {} holds it, as someone who did not write it: the mission below, its other documents and its items. Read them, and write down each problem you find.",
+            short(brief.commit)
+        ),
+    };
     let mut text = format!(
         "You are a reviewer of the plan of mission {id} (thread {}), round {round}.\n\
-         Review the plan as commit {} holds it, as someone who did not write it: the mission below, its other documents and its items. Read them, and write down each problem you find. Another reviewer may review the same plan blind, in a checkout of its own.\n\n\
+         {task} Another reviewer may review the same plan blind, in a checkout of its own.\n\n\
          Mission {id}: {}\n",
-        brief.caller,
-        short(brief.commit),
-        brief.title
+        brief.caller, brief.title
     );
     for (heading, content) in &brief.sections {
         text += &format!("\n## {heading}\n{}\n", content.trim_end());
@@ -1267,9 +1536,31 @@ pub fn plan_brief(brief: &PlanBrief) -> String {
     text + &review_file(
         brief.path,
         brief.carried.len() + 1,
+        PLAN_REVIEWER_WRITES,
         "the mission starts",
         "writes it, changing no status, and prints the Git command that commits it alone",
-    ) + "No command commits or pushes your review: you do, with Git. Run the command `verdict` prints, which commits the file alone, then push the commit to the branch of the plan:\n" + &brief.landing.commands() + "Tell whoever started you the commit. Your review is then done.\n"
+    ) + "No command commits or pushes your review: you do, with Git. Run the command `verdict` prints, which commits the file alone, then push the commit to the branch of the plan:\n" + &brief.landing.commands() + PLAN_REVIEWER_FILES + "Tell whoever started you the commit. Your review is then done.\n"
+}
+
+/// What a plan's reviewer after the first round is told, with the diff
+/// first: check `delta` at `commit` and the findings carried, and block on
+/// what did not change only for a serious defect.
+fn later_plan_round(delta: &PlanDelta, commit: &str, at: Option<&Path>) -> String {
+    let PlanDelta { round, from, paths } = delta;
+    let reviewed = format!("since round {round} reviewed it at commit {}", short(from));
+    let what = match paths.is_empty() {
+        true => format!(
+            "The plan is unchanged {reviewed}, so there is no diff to read.\nThis round judges each open finding carried from earlier rounds, below."
+        ),
+        false => format!(
+            "What changed in the plan {reviewed}:\n{}This round checks those changes and judges each open finding carried from earlier rounds, below.",
+            diff(at, from, commit, paths)
+        ),
+    };
+    format!(
+        "{what} A new finding in a part of the plan that did not change blocks only if it is a serious defect the earlier rounds missed: record that one as `fix now`, and any other as `defer`.\nThe plan as commit {} holds it follows, for reference.",
+        short(commit)
+    )
 }
 
 pub fn plan_not_committed(id: &str, commit: &str, commit_line: &str) -> String {
@@ -1295,7 +1586,7 @@ pub fn plan_verdict_recorded(
     landing: &Landing,
 ) -> String {
     format!(
-        "Recorded your verdict on the plan of mission {id}, round {round}: {}. Wrote, and did not commit:\n  {path}\nCommit it alone, and push it to the branch of the plan you reviewed; your review is done once it is there. Tell whoever started you the commit, and stop.\nThen: {commit_line}\n{}",
+        "Recorded your verdict on the plan of mission {id}, round {round}: {}. Wrote, and did not commit:\n  {path}\nCommit it alone, and push it to the branch of the plan you reviewed; your review is done once it is there. Tell whoever started you the commit, and stop.\nThen: {commit_line}\n{}{PLAN_REVIEWER_FILES}",
         verdict_name(verdict),
         landing.commands(),
     )
@@ -1386,6 +1677,56 @@ pub fn dropped_started(id: &str, branch: &str, reason: &str, remote: Option<&str
     format!(
         "Dropped item {id} on its branch {branch}: {reason}\n{push}\nThe base's copy of {id} is dropped on a backlog branch after that: `atelier start --backlog drop-{id}`, then there `atelier drop {id} --reason \"{reason}\"`, commit, `atelier submit` and `atelier merge`. Until then `status` and `list` say the drop has not reached the base.\n"
     )
+}
+
+/// `drop` of started item `id` written on a backlog branch. `branch` is
+/// the item's, whose pull request `merge` closes where there is a
+/// `remote`.
+pub fn dropped_on_backlog(id: &str, branch: &str, reason: &str, remote: Option<&str>) -> String {
+    let closes = match remote {
+        Some(_) => " That merge closes its pull request, if one is open.",
+        None => "",
+    };
+    format!(
+        "Dropped started item {id}: {reason}\nOnce this branch merges, {id}'s `submit`, `merge` and take-over are refused. Branch {branch} is left as it is.{closes}\n"
+    )
+}
+
+/// An item that a dropped item's branch filed and the base does not hold.
+pub struct LeftBehind {
+    pub id: String,
+    pub title: String,
+    /// The ref that holds it.
+    pub on: String,
+    /// The command that commits it there, where no commit has it as it is.
+    pub commit_first: Option<String>,
+}
+
+/// The items `added`, which the branch of dropped `id` filed and the base
+/// does not hold, each with what brings it over.
+pub fn dropped_adds(id: &str, branch: &str, base: &str, added: &[LeftBehind]) -> String {
+    if added.is_empty() {
+        return String::new();
+    }
+    let mut text = format!(
+        "Branch {branch} also adds items that are not on {base}, and dropping {id} leaves them behind. For each still wanted, run its command on a backlog branch and commit it:\n"
+    );
+    for item in added {
+        let dir = atelier_core::repo::item_dir(&item.id);
+        text += &format!("  {}: {}\n", item.id, item.title);
+        if let Some(commit) = &item.commit_first {
+            text += &format!(
+                "    It is not committed as it stands. Before its checkout leaves {branch}, commit it there:\n    {commit}\n    Then, on the backlog branch:\n"
+            );
+        }
+        text += &format!("    git checkout {} -- {dir}\n", item.on);
+    }
+    text
+}
+
+/// `drop` of an item the base holds done, whose branch may be gone.
+pub fn drop_done(id: &str, base: &str) -> String {
+    format!("`atelier drop {id}` refused; nothing written.\n{id} is done on {base}, so it cannot be dropped. Merge {base} into this branch to see it done.\n")
 }
 
 /// `drop` of an item whose branch the base, or the forge's copy of it,
@@ -1846,7 +2187,50 @@ pub fn plan_unapproved(
         Some(remote) => format!(" Reviewers push their files to {branch}; fetch them with `git pull {remote} {branch}` first if they are there."),
         None => String::new(),
     };
-    text + &format!("Run `atelier submit` here to open the next round of plan reviews, and start two reviewers, each in a checkout of its own at the commit submitted.{fetch}\n")
+    let stopped = split_exits(unapproved.iter().map(|(_, approvals)| approvals));
+    let next = match stopped.is_empty() {
+        true => "Run `atelier submit` here to open the next round of plan reviews, and start two reviewers, each in a checkout of its own at the commit submitted.",
+        false => stopped.trim_end(),
+    };
+    text + &format!("{next}{fetch}\n")
+}
+
+/// The human's ruling as the way out, for each of `plans` whose review
+/// stops at the split rounds.
+fn split_exits<'a>(plans: impl IntoIterator<Item = &'a Approvals>) -> String {
+    (plans.into_iter())
+        .filter(|plan| plan.stopped())
+        .map(|plan| plan_split_exit(&plan.id, plan.splits))
+        .collect()
+}
+
+/// `submit` refused, since review of some of `plans` stops for the human.
+pub fn plan_split_refused(plans: &[Approvals]) -> String {
+    format!(
+        "`atelier submit` refused; nothing changed.\n{}",
+        split_exits(plans)
+    )
+}
+
+pub fn rule_plan_split(id: &str) -> String {
+    format!("Plan review of a change to mission {id} stops after {SPLITS} split rounds in a row")
+}
+
+/// Where the review of each plan a records branch changes stands.
+fn plan_standing(plans: &[Approvals]) -> String {
+    let mut text = String::new();
+    for plan in plans {
+        let id = &plan.id;
+        text += &match plan.reviewed {
+            true => format!(
+                "Plan review of mission {id}, round {}: {} of {APPROVALS} approvals count.\n",
+                plan.round,
+                plan.counted()
+            ),
+            false => format!("Plan review of mission {id}: no review of this change here yet.\n"),
+        };
+    }
+    text + &split_exits(plans)
 }
 
 /// `merge` of item `id`'s branch, which adds or changes the plans of
@@ -1900,6 +2284,61 @@ pub fn problem_line(problem: &Problem) -> String {
 
 pub fn already_merged(id: &str, base: &str) -> String {
     format!("{id} is already merged into {base}; nothing is left to do on it.\n")
+}
+
+/// The comment on the pull request of dropped `id` that `merge` closes.
+pub fn dropped_comment(id: &str, base: &str, by: &str) -> String {
+    format!("{id} is dropped on {base}, by the merge of {by}.")
+}
+
+pub fn dropped_closed(id: &str, pull: &PullRequest) -> String {
+    format!("Closed pull request #{} of dropped {id}.\n", pull.number)
+}
+
+pub fn dropped_not_closed(id: &str, error: &ForgeError) -> String {
+    let (reason, _) = forge_reason(error);
+    format!(
+        "Warning: could not close an open pull request of dropped {id}: {reason}. Close it on the forge.\n"
+    )
+}
+
+/// The branch stays, since the base as fetched does not hold its merge.
+pub fn branch_kept(branch: &str, base: &str, remote: Option<&str>) -> String {
+    let everywhere = remote.map_or(String::new(), |remote| format!(" here and on {remote}"));
+    format!(
+        "Kept branch {branch}{everywhere}, since {base} as this clone has it does not hold the merge yet. Fetch, then run `atelier merge` again to delete it.\n"
+    )
+}
+
+pub fn remote_deleted(branch: &str, remote: &str) -> String {
+    format!("Deleted branch {branch} on {remote}.\n")
+}
+
+pub fn remote_already_deleted(branch: &str, remote: &str) -> String {
+    format!("Warning: {remote} had already deleted branch {branch}.\n")
+}
+
+pub fn remote_not_deleted(branch: &str, remote: &str, error: &anyhow::Error) -> String {
+    format!(
+        "Warning: branch {branch} stays on {remote}, which refused its deletion at the merged commit, as after a later push to it: {error:#}\n"
+    )
+}
+
+pub fn branch_deleted(branch: &str, head: &str) -> String {
+    format!(
+        "Deleted branch {branch} here; this checkout is on a detached HEAD at {}. For further changes, run `atelier start --backlog <slug>` or `atelier start <id>`.\n",
+        short(head)
+    )
+}
+
+pub fn branch_attached(branch: &str) -> String {
+    format!(
+        "Left branch {branch} checked out, since this checkout holds changes the merge does not. Take them to a branch made with `atelier start --backlog <slug>` or `atelier start <id>`.\n"
+    )
+}
+
+pub fn cleanup_failed(branch: &str, error: &anyhow::Error) -> String {
+    format!("Warning: the merge stands, and cleaning up branch {branch} failed: {error:#}\n")
 }
 
 /// What ends every refusal of a rule, after the way out.

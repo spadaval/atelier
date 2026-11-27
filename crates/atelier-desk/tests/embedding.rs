@@ -98,8 +98,8 @@ fn demo(root: &Path) {
     review(root, &format!("{plan}/2-bbbb.md"), 2, LATE, "null");
     mission(root, "demo-dddd", "done", LEAD, &[]);
     item(root, "demo-a001", "done", &[BOTH]);
-    item(root, "demo-a002", "ready", &[]);
-    item(root, "demo-a003", "ready", &[]);
+    item(root, "demo-a002", "open", &[]);
+    item(root, "demo-a003", "open", &[]);
     git(root, &["add", "-A"]);
     git(root, &["commit", "-qm", "Plan"]);
     // Each started item on its own branch, where its record counts.
@@ -116,7 +116,7 @@ fn demo(root: &Path) {
     git(root, &["switch", "-q", "main"]);
 }
 
-/// Repository `bare`, with no remote, and one ready item.
+/// Repository `bare`, with no remote, and one open item.
 fn bare(root: &Path) {
     fs::create_dir_all(root).unwrap();
     git(root, &["init", "-q", "-b", "main"]);
@@ -124,7 +124,7 @@ fn bare(root: &Path) {
     git(root, &["config", "user.email", "b@b"]);
     let config = "schema_version = 3\nslug = \"bare\"\nbase_branch = \"main\"\n";
     write(root, ".atelier/config.toml", config);
-    item(root, "bare-b001", "ready", &[]);
+    item(root, "bare-b001", "open", &[]);
     git(root, &["add", "-A"]);
     git(root, &["commit", "-qm", "Plan"]);
 }
@@ -205,7 +205,7 @@ async fn an_id_is_named_in_whichever_repository_holds_it() {
     let bare = ok(&app, "/api/records/bare-b001").await;
     assert_eq!(
         (&bare["repo"], &bare["status"]),
-        (&json!("bare"), &json!("ready"))
+        (&json!("bare"), &json!("open"))
     );
     let (status, body) = get(&app, "/api/records/demo-zzzz").await;
     assert_eq!(status, StatusCode::NOT_FOUND, "{body}");

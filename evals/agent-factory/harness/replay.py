@@ -175,16 +175,16 @@ def product_map(text: str, exists) -> str:
 
 
 def item_record(case: dict) -> str:
-    """The replayed item's record, ready, with the Goal, Done when and
+    """The replayed item's record, open, with the Goal, Done when and
     Context it had."""
     lines = "\n".join("- [ ] " + d.strip().replace("\n", "\n  ") for d in case["done_when"])
     body = f"## Goal\n\n{case['goal'].strip()}\n\n## Done when\n\n{lines}\n"
     if case.get("context", "").strip():
         body += f"\n## Context\n\n{case['context'].strip()}\n"
     return ("---\nschema: atelier.item\nschema_version: 3\n"
-            f"id: {case['id']}\ntitle: {json.dumps(case['title'])}\nstatus: ready\n"
+            f"id: {case['id']}\ntitle: {json.dumps(case['title'])}\nstatus: open\n"
             "mission: null\nlabels: []\npriority: medium\nblocked_by: []\nimplementers: []\n"
-            "ready:\n  by: dana\n  at: 2026-11-09T09:00:00Z\ntrivial: null\ncaused_by: null\n"
+            "ready: null\ntrivial: null\ncaused_by: null\n"
             f"created_at: 2026-11-09T09:00:00Z\n---\n\n{body}")
 
 

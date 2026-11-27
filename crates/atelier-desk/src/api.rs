@@ -214,7 +214,7 @@ pub struct ItemRow {
     pub holder: Option<String>,
     /// Who holds this round's review, while it is in review.
     pub reviewer: Option<String>,
-    /// For a ready item, why it cannot start now.
+    /// For an open item, why it cannot start now.
     pub cannot_start: Vec<String>,
     /// For a started item, what its holder's next action still lacks.
     pub needs: Vec<String>,
@@ -542,7 +542,7 @@ pub struct SideThread {
 /// strip.
 #[derive(Debug, Clone, Serialize, TS)]
 pub struct LaunchResponse {
-    /// Up to five ready items that can start now and need no human.
+    /// Up to five open items that can start now and need no human.
     pub ready: Vec<LaunchReady>,
     /// How many things wait on the human: needs-human items, proposed
     /// plans and waiting threads.
@@ -599,6 +599,51 @@ pub struct MotionHolder {
     /// Its title in T3 Code, live or ended; `null` where T3 Code does not
     /// know it.
     pub title: Option<String>,
+}
+
+/// `GET /api/repos/{repo}/missions/{id}/history`: the actions on a mission
+/// and its items, as `atelier log <id>` finds them in the records.
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct MissionHistoryResponse {
+    /// The base's tip it was read at.
+    pub commit: String,
+    /// Oldest first.
+    pub actions: Vec<MissionAction>,
+    /// The versions of those records that do not read, which the history
+    /// passed over.
+    pub passed_over: Vec<PassedOverVersion>,
+    pub fetched: FetchMark,
+}
+
+/// One action, found in one commit.
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct MissionAction {
+    /// The commit's committer time, as RFC 3339 in UTC.
+    pub timestamp: String,
+    /// The commit, as Git abbreviates it.
+    pub commit: String,
+    /// The mission, or the item of it, the action is on.
+    pub id: String,
+    /// Its name as `atelier log` prints it, such as `plan`, `plan-merge` or
+    /// `merge` (docs/design.md, The log).
+    pub action: String,
+    pub thread: Option<String>,
+    /// What changed, in the parts `atelier log` shows.
+    pub detail: Vec<String>,
+    /// Each rule its commit passed, as `<rule>: <reason>`.
+    pub skips: Vec<String>,
+    /// The thread that passed them, where the commit names it.
+    pub skipped_by: Option<String>,
+}
+
+/// A version of a record that does not read.
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct PassedOverVersion {
+    pub timestamp: String,
+    pub commit: String,
+    pub id: String,
+    pub path: String,
+    pub problem: String,
 }
 
 /// `GET /api/history?repo=&days=&ids=`: the records' steps, read from
@@ -919,7 +964,7 @@ pub struct MotionRepo {
     pub items: Vec<MotionItem>,
     /// Each agreed mission with a started item.
     pub missions: Vec<MotionMission>,
-    /// Up to five ready items that can start now, highest priority first.
+    /// Up to five open items that can start now, highest priority first.
     pub ready: Vec<ItemRow>,
 }
 
@@ -1056,8 +1101,7 @@ macro_rules! named {
 named!(
     Status,
     atelier_core::model::Status,
-    Draft,
-    Ready,
+    Open,
     Building,
     InReview,
     ChangesRequested,
@@ -1111,6 +1155,7 @@ pub fn export_types(dir: &std::path::Path) -> Result<(), ts_rs::ExportError> {
     SidebarResponse::export_all(&config)?;
     LaunchResponse::export_all(&config)?;
     HistoryResponse::export_all(&config)?;
+    MissionHistoryResponse::export_all(&config)?;
     ChecksResponse::export_all(&config)?;
     RoadmapResponse::export_all(&config)?;
     ProposedResponse::export_all(&config)?;

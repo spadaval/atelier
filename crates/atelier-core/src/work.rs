@@ -12,9 +12,8 @@ use std::collections::BTreeMap;
 pub const NEEDS_HUMAN: &str = "needs-human";
 
 /// The statuses in the order of the lifecycle, which views group items by.
-pub const LIFECYCLE: [Status; 8] = [
-    Status::Draft,
-    Status::Ready,
+pub const LIFECYCLE: [Status; 7] = [
+    Status::Open,
     Status::Building,
     Status::InReview,
     Status::ChangesRequested,
@@ -24,11 +23,11 @@ pub const LIFECYCLE: [Status; 8] = [
 ];
 
 impl Entry {
-    /// A thread could start it now: it is ready, its blockers are done and
-    /// its mission is ready, which are `start`'s conditions, and it is on
+    /// A thread could start it now: it is open, its blockers are done and
+    /// its mission is agreed, which are `start`'s conditions, and it is on
     /// the base, not proposed on a branch that has not merged.
     pub fn startable(&self) -> bool {
-        self.status == Status::Ready && self.unmet.is_empty() && !self.proposed
+        self.status == Status::Open && self.unmet.is_empty() && !self.proposed
     }
 
     pub fn needs_human(&self) -> bool {
@@ -53,7 +52,7 @@ impl Entry {
     }
 }
 
-/// Whether `mission` is in progress: ready, with a started item among
+/// Whether `mission` is in progress: open, with a started item among
 /// `entries`. That is shown, never stored.
 pub fn in_progress(mission: &MissionDir, entries: &[Entry]) -> bool {
     let id = &mission.mission.id;
@@ -79,7 +78,7 @@ pub fn items_of<'a>(id: &str, entries: &'a [Entry]) -> Vec<&'a Entry> {
 #[derive(Debug, Default)]
 pub struct Filter {
     /// Items a thread could start now.
-    pub ready: bool,
+    pub startable: bool,
     /// Items with a blocker that is not done.
     pub blocked: bool,
     pub needs_human: bool,
@@ -116,7 +115,7 @@ pub fn narrows_item(
 ) -> bool {
     let find = |id: &str| missions.iter().find(|m| m.mission.id == id);
     let leads = |m: &MissionDir| m.mission.lead.as_ref() == Some(caller);
-    (!filter.ready || entry.startable())
+    (!filter.startable || entry.startable())
         && (!filter.blocked || !entry.waiting_on().is_empty())
         && (!filter.needs_human || entry.needs_human())
         && (filter.mission.is_none() || entry.mission == filter.mission)
@@ -133,7 +132,7 @@ pub fn narrows_item(
 /// Whether `mission` passes `filter`'s narrowing flags, all but `done` and
 /// `proposed`: none that only items have is given, and the rest keep it.
 pub fn narrows_mission(mission: &MissionDir, caller: &Thread, filter: &Filter) -> bool {
-    let only_items = filter.ready || filter.blocked || filter.needs_human;
+    let only_items = filter.startable || filter.blocked || filter.needs_human;
     !only_items
         && filter
             .mission
@@ -146,7 +145,7 @@ pub fn narrows_mission(mission: &MissionDir, caller: &Thread, filter: &Filter) -
 /// What `list` shows with `filter`: each mission with an item kept, by
 /// ID, and then the kept items in no mission. A mission with no item kept
 /// is shown when the mission itself is kept, unless a flag only items have
-/// (`ready`, `blocked`, `needs_human`) is given. `proposed` names the
+/// (`startable`, `blocked`, `needs_human`) is given. `proposed` names the
 /// missions of `missions` that are proposed: they and the proposed items
 /// are kept with `filter.proposed`, and only then.
 pub fn list<'a>(

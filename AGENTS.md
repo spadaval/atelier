@@ -10,6 +10,8 @@ through the hooks in `.claude/settings.json` and `.codex/hooks.json`. It
 says who you are in this repository, what you hold, and the next command.
 Agent Factory (`skills/agent-factory`, loaded as `/agent-factory`) says how
 to decide; `atelier <command> --help` says what each command does.
+If a session starts in a different repository from its task, run `atelier
+status` again in the task's checkout.
 
 ## Work
 
@@ -21,12 +23,20 @@ item in `items/<id>/item.md` with its reviews beside it, and the rules in
   start` makes, and reaches `master` only by `atelier merge`. There are
   three kinds: `<item-id>` for an item's code and records, `<mission-id>`
   for a new mission's plan, its items and its plan reviews, and
-  `backlog/<slug>` for record changes tied to neither, such as filing,
-  readying or dropping an item, leading or closing a mission, or a lead's
-  notes.
-- Only `start`, `submit` and `merge` act on Git. `new`, `set`, `ready`,
-  `drop`, `close`, `lead`, `review` and `verdict` write files and commit
-  nothing; commit and push them with Git.
+  `backlog/<slug>` for record changes tied to neither, such as changing
+  or dropping an item, leading or closing a mission, or a lead's notes.
+- File a new item on the branch you are on: `atelier new "<title>"`, write
+  it, and commit it with the command `new` prints. It reaches `master` with
+  that branch's merge, and on an item's branch, as implementer or reviewer,
+  it makes no approval stale. A thread with no branch, or a plan reviewer
+  once its verdict is pushed, files on a backlog branch.
+- Only `start`, `submit` and `merge` act on Git. `new`, `set`, `drop`,
+  `close`, `lead`, `review` and `verdict` write files and commit nothing;
+  commit and push them with Git.
+- An item is open from the moment it is filed and needs no go-ahead: once
+  its record is on `master` and its blockers are done, `atelier start <id>`
+  takes it. To hold later work back, give it a blocker (`atelier set <id>
+  --blocked-by <ids>`).
 - A mission starts from the human's direction: `atelier start --mission
   "<title>"`, write the plan and its items, `atelier submit`, and two
   reviewers who did not plan it each run `atelier review <mission>` and push
@@ -68,7 +78,9 @@ item in `items/<id>/item.md` with its reviews beside it, and the rules in
   HTTPS credentials for GitHub needs one command in a fresh checkout:
   `git config remote.origin.pushurl git@github.com:spadaval/atelier.git`,
   or `gh auth setup-git`. `gh` must be signed in either way.
-- Never force-push `master` or delete remote branches without the human.
+- Never force-push `master`. Never delete a remote branch by hand without
+  the human: `atelier merge` alone deletes one, the branch it just merged,
+  and only while that is still at the merged commit.
 
 ## Sources
 
@@ -104,9 +116,10 @@ item in `items/<id>/item.md` with its reviews beside it, and the rules in
   the merge. CI skips the Rust jobs when a change touches only tracker
   records, Markdown outside `crates/`, the Desk's app outside
   `desk/src/api/`, and the T3 Code extension (`scripts/ci-jobs.sh` holds the
-  rule). CI's jobs are `rust` (the build, tests and `atelier check`), `desk`
-  (the Desk's app) and `extension` (the T3 Code extension's tests against
-  `atelier-desk` and its app built from the same commit); each runs only for
-  the paths that script names for it.
+  rule). CI's jobs are `rust` (lints, the build, tests and `atelier check`),
+  `desk` (the Desk's app) and `extension` (the T3 Code extension's tests
+  against `atelier-desk` and its app built from the same commit, and its
+  release script's test); each runs only for the paths that script names
+  for it.
 - The cutover kit, `scripts/cutover/`, stays until the work host has
   adopted the new tool (`scripts/cutover/README.md`).

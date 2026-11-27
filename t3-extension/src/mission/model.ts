@@ -44,7 +44,7 @@ export type PageState = "running" | "agreed" | "done" | "dropped";
 export function pageState(page: MissionPage): PageState {
   if (page.mission.status === "done") return "done";
   if (page.mission.status === "dropped") return "dropped";
-  return page.mission.in_progress || page.items.some((i) => i.status !== "draft" && i.status !== "ready" && i.status !== "dropped") ? "running" : "agreed";
+  return page.mission.in_progress || page.items.some((i) => i.status !== "open" && i.status !== "dropped") ? "running" : "agreed";
 }
 
 /** The mission's items that count: every one not dropped. */
@@ -205,13 +205,24 @@ export function running(w: Worker, now: number): string | null {
   return Number.isNaN(started) ? null : span(now - started);
 }
 
-/** *Not started*: its items that can start, those ready but waiting on others, and its drafts. */
+/**
+ * An unstarted item's note: that it can start, or what it waits on, which is its blockers and, for
+ * one the base does not hold yet, the branch that adds it (an unmerged branch not named for it).
+ * Held by neither, it names the condition of `start` that does not hold.
+ */
+export function startNote(row: ItemRow): string {
+  if (row.startable) return "can start";
+  const added = row.branch && !row.branch.merged && !row.branch.name.endsWith(row.id) ? [`${row.branch.name} to merge`] : [];
+  const on = [...row.waiting_on, ...added];
+  return on.length ? `waits on ${on.join(", ")}` : `cannot start until ${row.cannot_start.join("; ")}`;
+}
+
+/** *Not started*: its open items, those that can start and those that wait. */
 export function notStarted(page: MissionPage): { rows: ItemRow[]; label: string } {
-  const rows = page.items.filter((i) => i.status === "ready" || i.status === "draft");
-  const canStart = rows.filter((i) => i.status === "ready" && i.startable).length;
-  const blocked = rows.filter((i) => i.status === "ready" && !i.startable).length;
-  const drafts = rows.filter((i) => i.status === "draft").length;
-  const parts = [...(canStart ? [`${canStart} can start`] : []), ...(blocked ? [`${blocked} wait on others`] : []), ...(drafts ? [`${drafts} draft${drafts === 1 ? "" : "s"}`] : [])];
+  const rows = page.items.filter((i) => i.status === "open");
+  const canStart = rows.filter((i) => i.startable).length;
+  const waiting = rows.length - canStart;
+  const parts = [...(canStart ? [`${canStart} can start`] : []), ...(waiting ? [`${waiting} ${waiting === 1 ? "waits" : "wait"}`] : [])];
   return { rows, label: parts.join(", ") || "none" };
 }
 

@@ -173,7 +173,7 @@ fn a_rebuttal_the_next_reviewer_keeps_has_had_its_one_try_until_a_reviewer_lower
     );
     let merged = atelier(&root, "t1", &["merge"]);
     assert_eq!(merged.code, 0, "{}", merged.stderr);
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     assert!(atelier(&root, "t9", &["list", "--deferred"])
         .stdout
         .contains(&format!("  {ID}/{stem}.1: No period\n")),);
@@ -231,7 +231,7 @@ fn decided_before_removal(root: &Path, finding: &str) -> String {
     git(root, &["switch", "-q", "main"]);
     git(root, &["merge", "-q", "--no-ff", ID, "-m", "Merge"]);
     // Nothing is written in the base's own checkout.
-    git(root, &["checkout", "-q", "--detach"]);
+    off_base(root);
     "2-dcdd.1".into()
 }
 
@@ -281,7 +281,7 @@ fn an_item_decided_before_escalate_and_decide_were_removed_reads_as_it_did() {
 /// A ready mission led by `lead1`, holding the item, started by t1, and
 /// two plan reviews of its round 1 that disagree.
 fn led() -> Scratch {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     let dir = ".atelier/missions/demo-m1ss";
     fs::create_dir_all(root.join(format!("{dir}/reviews"))).unwrap();
@@ -629,5 +629,25 @@ fn a_finding_not_built_and_then_fixed_no_longer_waits_on_the_lead() {
             "Was: {carrier}\nResponse: fixed in {fix}\nNow: kept\n<!-- Set Now:"
         )),
         "{text}"
+    );
+}
+
+#[test]
+fn a_lead_is_shown_a_malformed_not_built_line_of_an_item_in_review() {
+    let scratch = led();
+    let root = scratch.root();
+    let base = scratch.worktree("base");
+    finish_and_submit(&root, "t1");
+    let bad = "- 1-aaaa.1 not built: too large";
+    append(
+        &root,
+        &item_path(ID),
+        &format!("\n### Responses\n\n{bad}\n"),
+    );
+    git(&root, &["commit", "-qam", "Answer"]);
+    let status = atelier(&base, "lead1", &["status"]).stdout;
+    assert!(
+        status.contains(&format!("Responses: `{bad}` is not")),
+        "{status}"
     );
 }

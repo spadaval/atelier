@@ -1,11 +1,14 @@
 //! Where an item's record is read from, and what `status` shows.
 
-use crate::actions::{mission_of, next, unmet, Action, Condition, Facts, PLANNED, STARTED};
+use crate::actions::{
+    malformed, mission_of, next, unmet, Action, Condition, Facts, ROUND_CAP, STARTED,
+};
 use crate::disputed::{disputes, Disputes};
 use crate::model::{MissionStatus, Priority, ReviewName, Status, Thread, Verdict};
 use crate::records::{ItemDir, MissionDir, Problem};
 use crate::work::{in_progress, items_of};
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 /// What the reader asks of a record of either kind, an item or a mission.
 pub trait Record {
@@ -240,9 +243,18 @@ pub struct Entry {
     /// requested: the round under review, or the round that asked for
     /// the changes.
     pub round: Option<u32>,
+    /// Whoever asks: the round that asked for changes, when it reached
+    /// [`crate::actions::ROUND_CAP`], so the mission's lead rules before
+    /// another round.
+    pub capped: Option<u32>,
     /// The last review the caller held, with its verdict, when it is not
     /// this round's reviewer.
     pub reviewed: Option<(ReviewName, Option<Verdict>)>,
+    /// The caller's checkout, when it is on the item's branch.
+    pub worktree: Option<PathBuf>,
+    /// While it is started, each line of its Responses that is no response,
+    /// whoever asks and whatever comes next.
+    pub malformed: Vec<Condition>,
     /// What the checkout has not committed, where the CLI gathered it.
     pub uncommitted: Vec<String>,
     /// Once approved, the time of the commit that recorded the approving
@@ -253,7 +265,8 @@ pub struct Entry {
     pub next: Option<Action>,
     pub unmet: Vec<Condition>,
     /// For a started item another thread holds: what its holder's next action
-    /// needs, the conditions the holder's `status` lists as unmet.
+    /// needs, the conditions the holder's `status` lists as unmet, or while
+    /// it has no next action, its malformed responses.
     pub needs: Vec<Condition>,
     /// The ref its record was read from, where views name it: a
     /// remote-tracking branch, or the unmerged branch a proposed item is
@@ -275,11 +288,14 @@ pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
     let undefined =
         (facts.holds() && item.status == Status::Building && unwritten != (false, false))
             .then_some(unwritten);
+    let asked = match item.status {
+        Status::ChangesRequested => facts.item.reviews.iter().map(|r| r.name.round).max(),
+        _ => None,
+    };
     let round = match item.status {
         _ if !facts.holds() => None,
         Status::InReview => Some(facts.round().number),
-        Status::ChangesRequested => facts.item.reviews.iter().map(|r| r.name.round).max(),
-        _ => None,
+        _ => asked,
     };
     Ok(Entry {
         id: item.id.clone(),
@@ -294,6 +310,7 @@ pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
         undefined,
         review: facts.reviewing().map(|file| file.name.clone()),
         round,
+        capped: asked.filter(|round| *round >= ROUND_CAP),
         reviewer: match facts.status() {
             Status::InReview => facts
                 .round()
@@ -307,6 +324,11 @@ pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
             .then(|| facts.reviewed())
             .flatten()
             .map(|file| (file.name.clone(), file.review.verdict)),
+        worktree: facts.worktree.map(PathBuf::from),
+        malformed: match STARTED.contains(&item.status) {
+            true => malformed(facts.item),
+            false => Vec::new(),
+        },
         uncommitted: facts
             .checkout
             .map(|checkout| checkout.uncommitted.clone())
@@ -334,25 +356,25 @@ fn needs(facts: &Facts) -> Result<Vec<Condition>, Problem> {
     };
     Ok(match next(&theirs)? {
         Some(action) => unmet(action, &theirs)?,
-        None => Vec::new(),
+        None => malformed(facts.item),
     })
 }
 
-/// `status` away from an item's branch: what the caller holds, what is
-/// ready, what other threads hold, and the missions.
+/// `status` away from an item's branch: what the caller holds, what can
+/// start, what other threads hold, and the missions.
 #[derive(Debug, Default)]
 pub struct Overview {
     pub held: Vec<Entry>,
-    /// Ready items `start` would accept now, except those waiting on a
+    /// Open items `start` would accept now, except those waiting on a
     /// human.
-    pub ready: Vec<Entry>,
-    /// The other ready items not waiting on a human, which `start` would
+    pub startable: Vec<Entry>,
+    /// The other open items not waiting on a human, which `start` would
     /// refuse for the conditions each lists as unmet.
     pub cannot_start: Vec<Entry>,
     pub started: Vec<Entry>,
     /// Items labelled needs-human that nobody has started.
     pub waiting: Vec<Entry>,
-    /// Ready missions with a started item.
+    /// Open missions with a started item.
     pub in_progress: Vec<MissionDir>,
     /// The missions the caller leads, each with its items, as
     /// [`items_of`] orders them, and its disagreements.
@@ -389,6 +411,7 @@ pub fn entries(
             mission: mission_of(record, missions),
             caller,
             checkout: None,
+            worktree: None,
         };
         let mut entry = entry(&facts)?;
         mark(&mut entry, located);
@@ -418,8 +441,8 @@ pub fn overview(
         if in_progress(mission, &entries) {
             overview.in_progress.push(mission.clone());
         }
-        let ready = mission.mission.status == MissionStatus::Open;
-        if ready && mission.mission.lead.as_ref() == Some(caller) {
+        let open = mission.mission.status == MissionStatus::Open;
+        if open && mission.mission.lead.as_ref() == Some(caller) {
             let id = &mission.mission.id;
             let of_mission = items_of(id, &entries).into_iter().cloned().collect();
             let disputed = disputes(items, std::slice::from_ref(mission), Some(id))?;
@@ -428,11 +451,11 @@ pub fn overview(
     }
     // A proposed item is not on the base yet: nobody can start it.
     for entry in entries.into_iter().filter(|entry| !entry.proposed) {
-        if entry.needs_human() && PLANNED.contains(&entry.status) {
+        if entry.needs_human() && entry.status == Status::Open {
             overview.waiting.push(entry);
         } else if entry.startable() {
-            overview.ready.push(entry);
-        } else if entry.status == Status::Ready {
+            overview.startable.push(entry);
+        } else if entry.status == Status::Open {
             overview.cannot_start.push(entry);
         } else if STARTED.contains(&entry.status) {
             if entry.holds {
@@ -443,7 +466,9 @@ pub fn overview(
         }
     }
     // The most urgent first.
-    overview.ready.sort_by_key(|e| (e.priority, e.id.clone()));
+    overview
+        .startable
+        .sort_by_key(|e| (e.priority, e.id.clone()));
     overview.held.sort_by(|a, b| a.id.cmp(&b.id));
     overview.started.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(overview)

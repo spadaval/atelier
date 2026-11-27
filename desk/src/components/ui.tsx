@@ -11,14 +11,17 @@ import { resolveLink, slug } from "../lib/links";
 import { countsLine, fetchedLine, statusName, statusTitle } from "../lib/words";
 
 const GLYPHS: Record<string, [typeof Circle, string]> = {
-  draft: [CircleDashed, "dim"],
-  ready: [Circle, "plain"],
+  open: [Circle, "plain"],
   building: [CircleDot, "run"],
   in_review: [Eye, "review"],
   changes_requested: [RotateCcw, "bad"],
   approved: [ShieldCheck, "ok"],
   done: [CircleCheck, "ok"],
   dropped: [CircleX, "dim"],
+  // A mission's states that no item has.
+  proposed: [CircleDashed, "dim"],
+  stop_pending: [RotateCcw, "bad"],
+  stopped: [CircleX, "dim"],
 };
 
 /**

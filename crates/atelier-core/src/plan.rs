@@ -1,15 +1,15 @@
-//! `ready`, and what every planning command shares. A planning command
-//! reads and writes records in the checkout it runs in, validates what it
-//! writes, and commits nothing: the agent commits with Git, on the branch
-//! the change belongs on, and the change reaches the base when that branch
-//! merges. Nothing is written in the base's own checkout.
+//! What every planning command shares, and a mission's `drop`. A planning
+//! command reads and writes records in the checkout it runs in, validates
+//! what it writes, and commits nothing: the agent commits with Git, on the
+//! branch the change belongs on, and the change reaches the base when that
+//! branch merges. Nothing is written in the base's own checkout.
 
-use crate::actions::{check, row, Action, Facts, Refusal, STARTED};
-use crate::model::{Item, Mission, MissionStatus, Named, Ready, Status};
+use crate::actions::{Action, Facts, STARTED};
+use crate::model::{Item, Mission, MissionStatus, Named};
 use crate::records::{put_first, validate, validate_id, ItemDir, MissionDir, Problem, ReviewFile};
 use crate::repo::{is_planning, item_dir, item_path, mission_dir, mission_path};
 use crate::skip::Refused;
-use crate::{git, say, Located, Repo};
+use crate::{git, say, split_rounds, Located, Repo};
 use anyhow::{anyhow, Result};
 use std::path::PathBuf;
 
@@ -20,71 +20,6 @@ pub struct Done {
     pub text: String,
     pub paths: Vec<String>,
     pub commit: Option<String>,
-}
-
-/// `ready`: marks each of `ids`, a draft item in this checkout, ready, as
-/// `by` said, and writes it without committing; or refuses, writing
-/// nothing, when one is unknown, not a draft, or a mission, which needs no
-/// go-ahead.
-pub fn ready(repo: &mut Repo, ids: &[String], by: &str) -> Result<Result<Done, Refused>> {
-    if let Some(refused) = misplaced(repo, "ready", Belongs::Backlog)? {
-        return Ok(Err(refused));
-    }
-    if ids.is_empty() {
-        return Ok(Err(say::ready_nothing()));
-    }
-    let ready = Ready {
-        by: by.to_string(),
-        at: chrono::Utc::now().into(),
-    };
-    let (mut items, mut missions, mut unknown, mut refused) = (vec![], vec![], vec![], vec![]);
-    let mut named: Vec<&str> = Vec::new();
-    for id in ids.iter().map(String::as_str) {
-        if named.contains(&id) {
-            continue;
-        }
-        named.push(id);
-        if is_mission(repo, id) {
-            missions.push(id);
-            continue;
-        }
-        let located = match validate_id(id) {
-            Ok(()) => repo.locate_planned(id)?,
-            Err(_) => {
-                unknown.push(id);
-                continue;
-            }
-        };
-        let Some(record) = located.record() else {
-            unknown.push(id);
-            continue;
-        };
-        let facts = planned_facts(repo, &located, record);
-        match check(Action::Ready, &facts) {
-            Ok(_) => {}
-            Err(Refusal::From { status, .. }) => refused.push((id, status)),
-            Err(other) => unreachable!("an item's ready has no role or conditions: {other:?}"),
-        }
-        let mut item = record.item.clone();
-        item.status = Status::Ready;
-        item.ready = Some(ready.clone());
-        items.push(item);
-    }
-    if !unknown.is_empty() || !refused.is_empty() || !missions.is_empty() {
-        let text = say::ready_refused(&unknown, &refused, &missions);
-        let from = row(Action::Ready).from;
-        let rules = (refused.iter()).map(|(id, status)| say::rule_from(id, from, *status));
-        let refused = match unknown.is_empty() && missions.is_empty() {
-            true => repo.skip.refuse(rules, text),
-            false => Some(text),
-        };
-        if let Some(refused) = refused {
-            return Ok(Err(refused));
-        }
-    }
-    let said = say::readied(&named, by);
-    let message = format!("Ready {}", named.join(", "));
-    save(repo, "ready", items, Vec::new(), &said, &message)
 }
 
 /// The paths of mission `id`'s plan, its directory less its reviews and
@@ -174,6 +109,7 @@ pub fn planned_facts<'a>(repo: &'a Repo, located: &Located, record: &'a ItemDir)
         mission: None,
         caller: &repo.caller,
         checkout: None,
+        worktree: None,
     }
 }
 
@@ -229,23 +165,36 @@ pub fn is_mission(repo: &Repo, id: &str) -> bool {
 pub enum Belongs<'a> {
     /// A backlog branch, or a mission's branch for its plan.
     Backlog,
+    /// Filing a new item: as `Backlog`, or the branch of any started item,
+    /// whoever files it, since the new item reaches the base in its merge.
+    New,
     /// Settling a finding: as `Backlog`, or the branch of a started item
     /// the caller implements.
     Settle,
     /// The branch of this started item.
     Item(&'a str),
+    /// A review's checkout: as `Backlog`, or detached at the commit it
+    /// reviews.
+    Review,
 }
 
 /// Refuses `command`, whose change belongs on a branch of kind `belongs`,
-/// where it runs: always in the base's own checkout, and on a branch of
-/// another kind. Each is a rule. A detached checkout, or a branch the
-/// convention does not name, takes any change, as a reviewer's checkout
-/// at a commit does.
+/// where it runs: always in the base's own checkout, on a detached HEAD,
+/// where only a review is written, since a commit there is on no branch,
+/// and on a branch of another kind. Each is a rule. A branch the
+/// convention does not name takes any change.
 pub fn misplaced(repo: &mut Repo, command: &str, belongs: Belongs) -> Result<Option<Refused>> {
     let base = repo.base.clone();
     if repo.branch.as_deref() == Some(base.as_str()) {
         let text = say::on_base_checkout(command, &base);
         return Ok(repo.skip.refuse([say::rule_on_base(&base)], text));
+    }
+    if repo.branch.is_none() && belongs != Belongs::Review {
+        let text = say::on_detached_head(command, &base);
+        let rule = say::rule_on_detached_head(command);
+        if let Some(refused) = repo.skip.refuse([rule], text) {
+            return Ok(Some(refused));
+        }
     }
     if let Belongs::Item(id) = belongs {
         let branch = repo.branch_of(id);
@@ -268,6 +217,17 @@ pub fn misplaced(repo: &mut Repo, command: &str, belongs: Belongs) -> Result<Opt
         return Ok(None);
     }
     let branch = repo.branch.clone().unwrap_or_default();
+    if belongs == Belongs::New {
+        let status = record.item.status;
+        if STARTED.contains(&status) {
+            return Ok(None);
+        }
+        // A branch that will not merge would strand what is filed on it.
+        let text = say::files_on_unmerging(command, &current.id, &branch, status);
+        return Ok(repo
+            .skip
+            .refuse([say::rule_files_on_unmerging(command, &branch)], text));
+    }
     let text = say::belongs_on_backlog(command, &current.id, &branch);
     Ok(repo
         .skip
@@ -295,7 +255,29 @@ pub fn save(
         Vec::new(),
         said,
         message,
-        false,
+        None,
+    )
+}
+
+/// [`save`] of `item`, a new one, which on an item's branch reaches the
+/// base in that item's merge and makes no approval of it stale.
+pub fn save_new(
+    repo: &mut Repo,
+    command: &str,
+    item: Item,
+    said: &str,
+    message: &str,
+) -> Result<Result<Done, Refused>> {
+    let reaches = repo.current()?.map(|on| say::Guidance::Filed(on.id));
+    save_with(
+        repo,
+        command,
+        vec![item],
+        Vec::new(),
+        Vec::new(),
+        said,
+        message,
+        reaches,
     )
 }
 
@@ -310,14 +292,17 @@ pub fn save_own(
     message: &str,
 ) -> Result<Result<Done, Refused>> {
     let (items, reviews) = (Vec::new(), Vec::new());
-    save_with(repo, command, items, missions, reviews, said, message, true)
+    let reaches = Some(say::Guidance::Own);
+    save_with(
+        repo, command, items, missions, reviews, said, message, reaches,
+    )
 }
 
 /// [`save`] without the commit, with `reviews` written too, and the Git
-/// command that commits what it wrote; with `own`, `said` says how the
-/// change reaches the base. A new item it creates is removed again when a
-/// later write fails, so a finding is never left untaken beside the item
-/// that took it.
+/// command that commits what it wrote; `reaches`, where given, is how the
+/// change reaches the base, which the branch it is on says otherwise. A
+/// new item it creates is removed again when a later write fails, so a
+/// finding is never left untaken beside the item that took it.
 #[allow(clippy::too_many_arguments)]
 pub fn save_with(
     repo: &Repo,
@@ -327,7 +312,7 @@ pub fn save_with(
     reviews: Vec<ReviewFile>,
     said: &str,
     message: &str,
-    own: bool,
+    reaches: Option<say::Guidance>,
 ) -> Result<Result<Done, Refused>> {
     let paths = match checked(repo, command, &items, &missions, &reviews)? {
         Ok(paths) => paths,
@@ -364,8 +349,7 @@ pub fn save_with(
     // On an item's branch, a write outside its own directory, as settling
     // another item's finding, reaches the base in the item's merge; one
     // inside it, as its own drop, is the item's.
-    let item = match repo.named() {
-        _ if own => say::Guidance::Own,
+    let by_branch = || match repo.named() {
         Some(Named::Record(id)) if repo.root.join(item_path(&id)).exists() => {
             let own = format!("{}/", item_dir(&id));
             match paths.iter().all(|path| path.starts_with(&own)) {
@@ -375,8 +359,9 @@ pub fn save_with(
         }
         _ => say::Guidance::Branch,
     };
+    let guidance = reaches.unwrap_or_else(by_branch);
     Ok(Ok(Done {
-        text: say::planned(said, &item, at, &paths, message, &repo.skip.trailers()),
+        text: say::planned(said, &guidance, at, &paths, message, &repo.skip.trailers()),
         paths,
         commit: None,
     }))
@@ -463,7 +448,6 @@ pub fn plan_diff(
     (from, to): (&str, &str),
     items: bool,
 ) -> Result<Vec<String>> {
-    let own = format!("{}/", mission_dir(id));
     let mut found = Vec::new();
     let (before, after) = (repo.mission_at(from, id)?, repo.mission_at(to, id)?);
     match (&before, &after) {
@@ -471,43 +455,136 @@ pub fn plan_diff(
         (None, Some(_)) => found.push(format!("{} is added", mission_path(id))),
         (Some(_), None) => found.push(format!("{} is removed", mission_path(id))),
         (Some(before), Some(after)) => {
-            for heading in PLAN_SECTIONS {
-                let text =
-                    |dir: &MissionDir| dir.section(heading).map(str::trim).map(str::to_string);
-                if text(before) != text(after) {
-                    found.push(format!("its {heading}"));
-                }
-            }
+            let changed = changed_sections(before, after);
+            found.extend(changed.into_iter().map(|heading| format!("its {heading}")));
         }
     }
-    let notes = format!("{own}notes.md");
-    let reviews = format!("{own}reviews/");
     for path in git::changed(&repo.root, from, to)? {
         if let Some(rest) = path.strip_prefix(".atelier/items/") {
             let Some(item) = rest.split('/').next().filter(|_| items) else {
                 continue;
             };
-            // An item whose record at either commit does not read is
-            // counted.
-            let mut of_mission = |at: &str| {
-                repo.item_at(at, item).map_or(true, |dir| {
-                    dir.is_some_and(|d| d.item.mission.as_deref() == Some(id))
-                })
-            };
-            if of_mission(from) || of_mission(to) {
+            if of_mission(repo, id, item, (from, to)) {
                 found.push(path);
             }
             continue;
         }
-        let other = path.starts_with(&own)
-            && path != mission_path(id)
-            && path != notes
-            && !path.starts_with(&reviews);
-        if other {
+        if is_plan_file(id, &path) {
             found.push(path);
         }
     }
     Ok(found)
+}
+
+/// The [`PLAN_SECTIONS`] that differ between a mission's versions.
+pub(crate) fn changed_sections(before: &MissionDir, after: &MissionDir) -> Vec<&'static str> {
+    let differs = |heading: &&str| {
+        before.section(heading).map(str::trim) != after.section(heading).map(str::trim)
+    };
+    PLAN_SECTIONS.into_iter().filter(differs).collect()
+}
+
+/// Whether `path` is a file of mission `id`'s plan beside its `mission.md`:
+/// any other in its directory but `notes.md` and its reviews.
+pub(crate) fn is_plan_file(id: &str, path: &str) -> bool {
+    let rest = path.strip_prefix(&format!("{}/", mission_dir(id)));
+    rest.is_some_and(|rest| {
+        rest != "mission.md" && rest != "notes.md" && !rest.starts_with("reviews/")
+    })
+}
+
+/// Whether `item` is of mission `id` at the commit `from` or `to`. An item
+/// whose record at either does not read is counted.
+fn of_mission(repo: &mut Repo, id: &str, item: &str, (from, to): (&str, &str)) -> bool {
+    [from, to].into_iter().any(|at| {
+        repo.item_at(at, item).map_or(true, |dir| {
+            dir.is_some_and(|d| d.item.mission.as_deref() == Some(id))
+        })
+    })
+}
+
+/// What a round of plan review has to check beside the findings it carries.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlanDelta {
+    /// The completed round before it, and the one commit that round reviewed.
+    pub round: u32,
+    pub from: String,
+    /// The plan's paths changed since; none when the plan is unchanged.
+    pub paths: Vec<String>,
+}
+
+/// The [`PlanDelta`] of round `round` of `mission`'s plan review at the
+/// commit `head`; `None`, for a review of the whole plan, when no round
+/// before it completed, or that round's reviews are not of one commit in
+/// the history of `head`.
+pub fn plan_delta(
+    repo: &mut Repo,
+    mission: &MissionDir,
+    round: u32,
+    head: &str,
+) -> Result<Option<PlanDelta>> {
+    let last = (mission.reviews.iter())
+        .map(|file| file.name.round)
+        .filter(|last| *last < round && completed(mission, *last))
+        .max();
+    let Some(last) = last else {
+        return Ok(None);
+    };
+    let mut commits: Vec<&str> = (mission.reviews.iter())
+        .filter(|file| file.name.round == last)
+        .map(|file| file.review.commit.as_str())
+        .collect();
+    commits.dedup();
+    let [from] = commits.as_slice() else {
+        return Ok(None);
+    };
+    if !git::has_commit(&repo.root, from)? || !git::is_ancestor(&repo.root, from, head)? {
+        return Ok(None);
+    }
+    Ok(Some(PlanDelta {
+        round: last,
+        from: from.to_string(),
+        paths: plan_paths(repo, &mission.mission.id, (from, head))?,
+    }))
+}
+
+/// Whether every review of round `round` of `mission`'s plan has a verdict.
+fn completed(mission: &MissionDir, round: u32) -> bool {
+    (mission.reviews.iter())
+        .filter(|file| file.name.round == round)
+        .all(|file| file.review.verdict.is_some())
+}
+
+/// The paths that differ between the commits `from` and `to` and are mission
+/// `id`'s plan's own: its directory but its reviews and `notes.md`, and the
+/// directories, but their reviews, of its items at either commit. Once it is
+/// agreed, of the items only the paths the amendment itself changes against
+/// the base at either commit, so what it took back is among them and what
+/// the base merged is not. [`plan_changed_at`] is wider, and no diff to read.
+fn plan_paths(repo: &mut Repo, id: &str, (from, to): (&str, &str)) -> Result<Vec<String>> {
+    let amended = match agreed(repo, id)? {
+        true => Some(git::changed_on_branch(
+            &repo.root,
+            &repo.base_tip,
+            (from, to),
+        )?),
+        false => None,
+    };
+    let record = mission_path(id);
+    let mut paths = git::changed(&repo.root, from, to)?;
+    paths.retain(|path| {
+        if *path == record || is_plan_file(id, path) {
+            return true;
+        }
+        let in_item = path.strip_prefix(".atelier/items/");
+        let Some((item, file)) = in_item.and_then(|rest| rest.split_once('/')) else {
+            return false;
+        };
+        !file.starts_with("reviews/")
+            && amended.as_ref().is_none_or(|paths| paths.contains(path))
+            && of_mission(repo, id, item, (from, to))
+    });
+    Ok(paths)
 }
 
 /// Why a plan review of the current round does not count toward a merge.
@@ -545,10 +622,19 @@ pub struct Approvals {
     /// The current round; 0 when the plan has no review.
     pub round: u32,
     pub reviews: Vec<Counted>,
+    /// Whether the plan change under review has a review of its own: one at
+    /// `head` that is not on the base.
+    pub reviewed: bool,
+    /// How many of that change's latest rounds split, in a row.
+    pub splits: usize,
 }
 
 /// How many approving plan reviews a plan needs to merge.
 pub const APPROVALS: usize = 2;
+
+/// How many split rounds in a row end the review of a plan change, for the
+/// human to rule.
+pub const SPLITS: usize = 2;
 
 impl Approvals {
     pub fn counted(&self) -> usize {
@@ -558,6 +644,25 @@ impl Approvals {
     pub fn enough(&self) -> bool {
         self.counted() >= APPROVALS
     }
+
+    /// Whether review of the plan change stops here for the human to rule.
+    pub fn stopped(&self) -> bool {
+        self.splits >= SPLITS && !self.enough()
+    }
+}
+
+/// How many rounds at the end of `change`'s reviews split in a row: each
+/// completed, with an approval and a request for changes.
+fn trailing_splits(change: &MissionDir) -> usize {
+    let split: Vec<u32> = (split_rounds(change).into_iter())
+        .map(|split| split.round)
+        .collect();
+    let mut rounds: Vec<u32> = change.reviews.iter().map(|r| r.name.round).collect();
+    rounds.sort_unstable_by(|a, b| b.cmp(a));
+    rounds.dedup();
+    (rounds.into_iter())
+        .take_while(|round| split.contains(round) && completed(change, *round))
+        .count()
 }
 
 /// The [`Approvals`] of mission `id`'s plan at the commit `head`.
@@ -567,8 +672,18 @@ pub fn approvals(repo: &mut Repo, id: &str, head: &str, on_base: bool) -> Result
             id: id.to_string(),
             round: 0,
             reviews: Vec::new(),
+            reviewed: false,
+            splits: 0,
         });
     };
+    // The change's own reviews, by name: an amendment made beside this one
+    // may have merged a round of the same number.
+    let base = repo.base_tip.clone();
+    let on_base_tip = repo
+        .mission_at(&base, id)?
+        .map_or(vec![], |dir| dir.reviews);
+    let mut change = mission.clone();
+    (change.reviews).retain(|file| !on_base_tip.iter().any(|base| base.name == file.name));
     let round = mission
         .reviews
         .iter()
@@ -614,5 +729,78 @@ pub fn approvals(repo: &mut Repo, id: &str, head: &str, on_base: bool) -> Result
         id: id.to_string(),
         round,
         reviews,
+        reviewed: !change.reviews.is_empty(),
+        splits: trailing_splits(&change),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::records::{parse_mission, parse_review};
+    use std::path::Path;
+
+    /// A mission with a plan review for each of `reviews`: its name and its
+    /// verdict.
+    fn mission(reviews: &[(&str, &str)]) -> MissionDir {
+        let path = Path::new("mission.md");
+        let text = "---\nschema: atelier.mission\nschema_version: 3\nid: demo-m1ss\ntitle: Greet\n\
+                    status: open\nlabels: []\nlead: null\ncreated_at: 2026-11-22T09:00:00Z\n---\n";
+        let reviews = reviews.iter().map(|(name, verdict)| {
+            let name: crate::model::ReviewName = name.parse().unwrap();
+            let text = format!(
+                "---\nschema: atelier.review\nschema_version: 3\nround: {}\ncommit: abc1234\n\
+                 reviewers:\n- r1\nmodel: null\nverdict: {verdict}\n\
+                 created_at: 2026-11-22T09:00:00Z\n---\n",
+                name.round
+            );
+            ReviewFile {
+                path: path.to_path_buf(),
+                review: parse_review(path, &text).unwrap(),
+                name,
+            }
+        });
+        MissionDir {
+            path: path.to_path_buf(),
+            mission: parse_mission(path, text).unwrap(),
+            reviews: reviews.collect(),
+        }
+    }
+
+    #[test]
+    fn only_completed_split_rounds_at_the_end_count_toward_the_exit() {
+        let (yes, no, open) = ("approve", "changes", "null");
+        type Case<'a> = (&'a [(&'a str, &'a str)], usize);
+        let cases: [Case; 7] = [
+            (&[], 0),
+            (&[("1-aaaa", yes), ("1-bbbb", no)], 1),
+            (&[("1-aaaa", no), ("1-bbbb", no)], 0),
+            (
+                &[
+                    ("1-aaaa", yes),
+                    ("1-bbbb", no),
+                    ("2-cccc", no),
+                    ("2-dddd", yes),
+                ],
+                2,
+            ),
+            // A round that did not split breaks the row.
+            (
+                &[
+                    ("1-aaaa", yes),
+                    ("1-bbbb", no),
+                    ("2-cccc", no),
+                    ("3-dddd", yes),
+                    ("3-eeee", no),
+                ],
+                1,
+            ),
+            // A round not over has not split.
+            (&[("1-aaaa", yes), ("1-bbbb", no), ("2-cccc", open)], 0),
+            (&[("1-aaaa", yes), ("1-bbbb", no), ("1-cccc", open)], 0),
+        ];
+        for (reviews, splits) in cases {
+            assert_eq!(trailing_splits(&mission(reviews)), splits, "{reviews:?}");
+        }
+    }
 }

@@ -14,6 +14,20 @@ const DONE: &str = "demo-d0ne";
 const DONE_REVIEW: &str = ".atelier/items/demo-d0ne/reviews/1-aaaa.md";
 const REASON: &str = "Ada said to";
 
+/// Writes item `id` as the binary from before items were open made one
+/// ready: `ready`, with who said go.
+fn readied(root: &Path, id: &str) {
+    let path = root.join(item_path(id));
+    let text = fs::read_to_string(&path)
+        .unwrap()
+        .replace("status: draft", "status: ready")
+        .replace(
+            "ready: null",
+            "ready:\n  by: ada\n  at: 2026-11-10T09:00:00Z",
+        );
+    fs::write(path, text).unwrap();
+}
+
 /// `atelier log` with `args`, which must succeed; its lines.
 fn log(root: &Path, args: &[&str]) -> Vec<String> {
     let mut all = vec!["log"];
@@ -85,7 +99,9 @@ fn the_plain_path_prints_its_actions_in_order_and_the_same_lines_once_its_branch
 ) {
     let scratch = Scratch::new(&[(ID, "draft")]);
     let root = scratch.root();
-    ok(planned(&root, "p1", &["ready", ID, "--by", "ada"]));
+    // History from before items were open keeps its go-ahead's line.
+    readied(&root, ID);
+    on_base(&root, "Ready it");
     ok(atelier(&root, "t1", &["start", ID]));
     hello(&root);
     finish_and_submit(&root, "t1");
@@ -111,11 +127,11 @@ fn the_plain_path_prints_its_actions_in_order_and_the_same_lines_once_its_branch
     assert_eq!(actions(&root, &merged), all);
     // The merge line is the merge commit's; the others are the branch's.
     assert_eq!(commit_of(&merged[5]), short(&root, "main"));
-    assert_eq!(commit_of(&merged[4]), short(&root, ID));
+    assert_eq!(commit_of(&merged[4]), short(&root, "main^2"));
 
-    git(&root, &["checkout", "-q", "--detach", "main"]);
-    git(&root, &["branch", "-qD", ID]);
+    // `merge` deleted the branch, and nothing that moves changes the lines.
     assert!(!branch_exists(&root, ID));
+    off_base(&root);
     assert_eq!(log(&root, &[]), merged);
     assert_eq!(log(&root, &[ID]), merged);
 }
@@ -137,7 +153,7 @@ fn codex(at: &Path, child: &str, args: &[&str]) -> Run {
 
 #[test]
 fn a_take_over_shows_both_implementers_and_a_review_taken_over_both_reviewers() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     ok(atelier(&root, "t1", &["start", ID]));
     ok(atelier(&root, "t3", &["start", ID]));
@@ -152,9 +168,7 @@ fn a_take_over_shows_both_implementers_and_a_review_taken_over_both_reviewers() 
     assert_eq!(
         actions(&root, &log(&root, &[])),
         [
-            // The fixture's first commit adds the item ready.
-            format!("{ID} ready - new -> ready"),
-            format!("{ID} start t1 ready -> building"),
+            format!("{ID} start t1 open -> building"),
             format!("{ID} take-over t3 from t1"),
             format!("{ID} submit t3 building -> in_review"),
             format!("{ID} review t2 {review}"),
@@ -207,8 +221,7 @@ fn a_deferred_finding_settled_on_a_gardeners_branch_shows_once_merged() {
     ok(atelier(&root, "r1", &["review", ID]));
     ok(verdict(&root, "r1", &["verdict", "approve"]));
     ok(atelier(&root, "g1", &["merge"]));
-    git(&root, &["checkout", "-q", "--detach", "main"]);
-    git(&root, &["branch", "-qD", ID]);
+    assert!(!branch_exists(&root, ID));
 
     let lines = log(&root, &[DONE]);
     assert_eq!(
@@ -253,11 +266,9 @@ fn a_mission_shows_its_ready_lead_plan_review_and_close_with_its_items_actions()
     write_mission(&root);
     git(&root, &["commit", "-qam", "Plan the mission"]);
     on_base(&root, "Add the mission");
-    ok(planned(
-        &root,
-        "p1",
-        &["ready", ID, "demo-0ther", "--by", "ada"],
-    ));
+    readied(&root, ID);
+    readied(&root, "demo-0ther");
+    on_base(&root, "Ready both");
     // Made ready as a mission was before it had no go-ahead, by the old
     // tool, which wrote who said go.
     let path = format!(".atelier/missions/{MISSION}/mission.md");
@@ -314,8 +325,10 @@ fn a_mission_shows_its_ready_lead_plan_review_and_close_with_its_items_actions()
 
 #[test]
 fn a_skip_ends_the_line_of_the_action_whose_commit_carries_it_with_its_thread() {
-    let scratch = Scratch::new(&[(ID, "draft")]);
+    let scratch = Scratch::new(&[("demo-b10c", "open")]);
     let root = scratch.root();
+    write_item(&root, ID, "open", &[], &["demo-b10c"], "");
+    on_base(&root, "Plan a blocked item");
     let output = atelier_command(&root, "t1", &["start", ID])
         .env("ATELIER_SKIP", REASON)
         .output()
@@ -324,7 +337,7 @@ fn a_skip_ends_the_line_of_the_action_whose_commit_carries_it_with_its_thread() 
     assert_eq!(
         actions(&root, &log(&root, &[])),
         [format!(
-            "{ID} start t1 draft -> building; skip {ID} is ready (it is draft): {REASON} (by t1)"
+            "{ID} start t1 open -> building; skip demo-b10c is done (it is open): {REASON} (by t1)"
         )]
     );
 }
@@ -338,10 +351,11 @@ fn show(root: &Path, id: &str) -> String {
 
 #[test]
 fn a_skip_from_before_its_thread_was_recorded_says_so_in_the_log_and_the_missions_page() {
-    let scratch = Scratch::new(&[(ID, "draft")]);
+    let scratch = Scratch::new(&[("demo-b10c", "open")]);
     let root = scratch.root();
+    write_item(&root, ID, "open", &[], &["demo-b10c"], "");
     write_mission(&root);
-    // Agreed, so that only the item's status is a rule its start passes.
+    // Agreed, so that only the item's blocker is a rule its start passes.
     let path = format!(".atelier/missions/{MISSION}/mission.md");
     let agreed = read(&root, &path).replace(
         "status: draft\nlabels: []\nlead: null\nready: null\n",
@@ -357,7 +371,7 @@ fn a_skip_from_before_its_thread_was_recorded_says_so_in_the_log_and_the_mission
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
-    let rule = format!("{ID} is ready (it is draft): {REASON}");
+    let rule = format!("demo-b10c is done (it is open): {REASON}");
     let message = git(&root, &["log", "-1", "--format=%B"]);
     assert!(
         message.ends_with(&format!("\n\nAtelier-Skip: {rule}\nAtelier-Skip-By: t1")),
@@ -379,7 +393,7 @@ fn a_skip_from_before_its_thread_was_recorded_says_so_in_the_log_and_the_mission
     assert_eq!(
         actions(&root, &log(&root, &[ID])),
         [format!(
-            "{ID} start t1 draft -> building; skip {rule} (thread not recorded)"
+            "{ID} start t1 open -> building; skip {rule} (thread not recorded)"
         )]
     );
     assert!(
@@ -402,7 +416,7 @@ fn since_leaves_out_the_actions_committed_before_it() {
             .unwrap();
         assert!(output.status.success(), "{output:?}");
     };
-    at("2026-01-01T00:00:00Z", "p1", &["ready", ID, "--by", "ada"]);
+    readied(&root, ID);
     // The agent commits it, and its backlog branch's merge moves the base.
     let committed = identity(
         Command::new("git")
@@ -451,7 +465,7 @@ fn since_leaves_out_the_actions_committed_before_it() {
 fn two_actions_on_one_record_in_one_commit_show_as_their_net_change() {
     let scratch = Scratch::new(&[(ID, "draft")]);
     let root = scratch.root();
-    // Made ready and closed at once: only closed.
+    // In old history, made ready and closed at once: only closed.
     let path = root.join(item_path(ID));
     write_item(&root, ID, "done", &[], &[], "Not needed.\n");
     let text = fs::read_to_string(&path).unwrap().replace(
@@ -523,13 +537,14 @@ fn an_id_no_record_has_is_refused_as_show_refuses_it() {
 /// branch's actions would be lost with the branch.
 #[test]
 fn actions_on_a_branch_whose_records_a_plain_merge_matches_survive_its_deletion() {
+    // An old record, so that the revert has a line of its own.
     let scratch = Scratch::new(&[(ID, "ready")]);
     let root = scratch.root();
     ok(atelier(&root, "t1", &["start", ID]));
     let started = short(&root, "HEAD");
     hello(&root);
     git(&root, &["revert", "--no-edit", &started]);
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     git(
         &root,
         &["merge", "-q", "--no-ff", "-m", "Merge the attempt", ID],
@@ -701,14 +716,14 @@ fn a_proposed_plans_lead_and_merge_and_a_set_of_a_started_item_each_show_their_p
     let passed = rules_passed(&page);
     assert!(
         passed.iter().any(|line| line
-            .starts_with(&format!("  {MISSION}, merge in {merged}, by p1: "))
+            .starts_with(&format!("  {MISSION}, plan-merge in {merged}, by p1: "))
             && line.ends_with(&format!(": {unreviewed}"))),
         "{page}"
     );
     let lines = actions(&root, &log(&root, &[MISSION]));
     assert!(
         lines.iter().any(
-            |line| line.starts_with(&format!("{MISSION} merge p1 skip "))
+            |line| line.starts_with(&format!("{MISSION} plan-merge p1 skip "))
                 && line.ends_with(&format!(": {unreviewed} (by p1)"))
         ),
         "{lines:?}"
@@ -716,9 +731,9 @@ fn a_proposed_plans_lead_and_merge_and_a_set_of_a_started_item_each_show_their_p
 
     // A started item's priority set on a backlog branch: no action, and
     // its rule still shows.
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     ok(atelier(&root, "t1", &["start", ID]));
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     ok(atelier(&root, "p1", &["start", "--backlog", "tidy"]));
     let lower = "Ada lowered it";
     let run = skipping(&root, "p1", lower, &["set", ID, "--priority", "low"]);
@@ -732,7 +747,7 @@ fn a_proposed_plans_lead_and_merge_and_a_set_of_a_started_item_each_show_their_p
     let dirty = "Ada keeps the note";
     skipping(&root, "p1", dirty, &["merge"]);
     let backlog = short(&root, "main");
-    let rule = format!("{ID} is draft or ready (it is building)");
+    let rule = format!("{ID} is open (it is building)");
     let page = show(&root, MISSION);
     assert!(
         rules_passed(&page).contains(&format!("  {ID}, change in {set}, by p1: {rule}: {lower}")),
@@ -765,10 +780,24 @@ fn a_record_with_no_action_beside_one_with_an_action_still_shows_the_rule_its_co
     let root = scratch.root();
     write_mission(&root);
     on_base(&root, "Add the mission");
-    // One ready already, in the mission; one a draft, in none.
+    // History from before items were open: one go-ahead in one commit for
+    // an item ready already, in the mission, and a draft, in none.
     let again = "Ada reconfirmed the ready item";
-    let run = skipping(&root, "p1", again, &["ready", ID, OTHER, "--by", "ada"]);
-    run_then(&root, &run.stdout);
+    readied(&root, ID);
+    readied(&root, OTHER);
+    let skipped = format!("Atelier-Skip: {ID} is draft (it is ready): {again}");
+    git(
+        &root,
+        &[
+            "commit",
+            "-qam",
+            "Ready both",
+            "--trailer",
+            &skipped,
+            "--trailer",
+            "Atelier-Skip-By: p1",
+        ],
+    );
     git(&root, &["branch", "-f", "main", "HEAD"]);
     let commit = short(&root, "HEAD");
     let rule = format!("{ID} is draft (it is ready): {again}");
@@ -898,7 +927,7 @@ fn a_proposed_mission_fetched_alone_or_ahead_of_its_local_branch_shows_its_passe
             "HEAD",
         ],
     );
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
     git(&root, &["branch", "-qD", MISSION]);
     shows(&root);
 
@@ -912,17 +941,17 @@ fn a_proposed_mission_fetched_alone_or_ahead_of_its_local_branch_shows_its_passe
 
 #[test]
 fn a_rule_passed_on_a_backlog_branch_not_merged_yet_shows_on_the_missions_page() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    let scratch = Scratch::new(&[(ID, "done")]);
     let root = scratch.root();
     write_mission(&root);
     on_base(&root, "Add the mission");
     ok(atelier(&root, "p1", &["start", "--backlog", "tidy"]));
     let again = "Ada reconfirmed it";
-    let run = skipping(&root, "p1", again, &["ready", ID, "--by", "ada"]);
+    let run = skipping(&root, "p1", again, &["set", ID, "--priority", "low"]);
     run_then(&root, &run.stdout);
     let commit = short(&root, "HEAD");
-    git(&root, &["checkout", "-q", "--detach", "main"]);
-    let rule = format!("{ID} is draft (it is ready): {again}");
+    off_base(&root);
+    let rule = format!("{ID} is open (it is done): {again}");
     assert_eq!(
         rules_passed(&show(&root, MISSION)),
         [format!("  {ID}, change in {commit}, by p1: {rule}")]
@@ -951,16 +980,16 @@ fn an_item_only_on_a_backlog_branch_not_merged_yet_shows_its_passed_rule_on_its_
     run_then(&root, &run.stdout);
     let added = git(&root, &["diff", "--name-only", "HEAD~1", "HEAD"]);
     let new = added.split('/').nth(2).unwrap().to_string();
-    let run = atelier(&root, "p1", &["ready", &new, "--by", "ada"]);
+    let run = atelier(&root, "p1", &["close", &new, "Nothing to change."]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     run_then(&root, &run.stdout);
     let again = "Ada reconfirmed it";
-    let run = skipping(&root, "p1", again, &["ready", &new, "--by", "ada"]);
+    let run = skipping(&root, "p1", again, &["set", &new, "--priority", "low"]);
     run_then(&root, &run.stdout);
     let commit = short(&root, "HEAD");
-    git(&root, &["checkout", "-q", "--detach", "main"]);
+    off_base(&root);
 
-    let rule = format!("{new} is draft (it is ready): {again}");
+    let rule = format!("{new} is open (it is done): {again}");
     let page = show(&root, MISSION);
     assert!(page.contains(&format!("  {new} ")), "{page}");
     assert_eq!(
@@ -972,4 +1001,180 @@ fn an_item_only_on_a_backlog_branch_not_merged_yet_shows_its_passed_rule_on_its_
         actions(&root, &log(&root, &[MISSION])).last().unwrap(),
         &format!("{new} change p1 skip {rule} (by p1)")
     );
+}
+
+/// The `plan` and `plan-merge` lines of `lines`, and any `merge`.
+fn plan_lines(lines: Vec<String>) -> Vec<String> {
+    (lines.into_iter())
+        .filter(|line| {
+            let action = line.split(' ').nth(1).unwrap();
+            ["plan", "plan-merge", "merge"].contains(&action)
+        })
+        .collect()
+}
+
+#[test]
+fn a_plan_shows_when_it_was_written_and_merged_and_each_amendment_and_never_as_a_merge() {
+    // The base has no record before the plan's merge.
+    let scratch = Scratch::new(&[]);
+    let root = scratch.root();
+    let run = atelier(&root, "p1", &["start", "--mission", "Greet"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let id = run.stdout.split_whitespace().nth(3).unwrap().to_string();
+    let path = format!(".atelier/missions/{id}/mission.md");
+    let edit = |from: &str, to: &str, message: &str| {
+        let text = read(&root, &path);
+        assert!(text.contains(from), "{text}");
+        fs::write(root.join(&path), text.replace(from, to)).unwrap();
+        git(&root, &["commit", "-qam", message]);
+    };
+    let planned = format!("{id} plan p1 new -> open");
+    let lines = || plan_lines(actions(&root, &log(&root, &[&id])));
+    // Proposed, it is planned and not merged.
+    edit(
+        "## Outcome\n",
+        "## Outcome\n\nGreetings.\n",
+        "Write the plan",
+    );
+    assert_eq!(lines(), [planned.as_str()]);
+
+    // As two reviewers, each in a checkout of its own, land one round.
+    let head = short(&root, "HEAD");
+    for (stem, reviewer) in [("1-aaaa", "r1"), ("1-bbbb", "r2")] {
+        let review = root.join(format!(".atelier/missions/{id}/reviews/{stem}.md"));
+        fs::create_dir_all(review.parent().unwrap()).unwrap();
+        fs::write(
+            review,
+            format!(
+                "---\nschema: atelier.review\nschema_version: 3\nround: 1\ncommit: {head}\n\
+                 reviewers:\n- {reviewer}\nmodel: null\nverdict: approve\n\
+                 created_at: 2026-11-10T09:00:00Z\n---\n## Summary\nFine.\n"
+            ),
+        )
+        .unwrap();
+    }
+    git(&root, &["add", "-A"]);
+    git(&root, &["commit", "-qm", "Review the plan"]);
+    ok(atelier(&root, "p1", &["merge"]));
+    let agreed = format!("{id} plan-merge p1");
+    let merged = log(&root, &[&id]);
+    assert_eq!(lines(), [planned.as_str(), agreed.as_str()]);
+    // The line is the merge commit's, and its action is not `merge`, by
+    // which the gardener counts merged items.
+    let line = (merged.iter())
+        .find(|line| line.split(' ').nth(3) == Some("plan-merge"))
+        .unwrap();
+    assert_eq!(commit_of(line), short(&root, "main"));
+    assert!(merged
+        .iter()
+        .all(|line| line.split(' ').nth(3) != Some("merge")));
+
+    // Its lead, its notes and its Result change no plan.
+    ok(atelier(&root, "l1", &["start", "--backlog", "lead"]));
+    edit("lead: null", "lead: l1", "Lead it");
+    fs::write(
+        root.join(format!(".atelier/missions/{id}/notes.md")),
+        "A note.\n",
+    )
+    .unwrap();
+    append(&root, &path, "\n## Result\n\nNot yet.\n");
+    git(&root, &["add", "-A"]);
+    git(&root, &["commit", "-qm", "Note it"]);
+    ok(atelier(&root, "l1", &["merge"]));
+    assert_eq!(lines(), [planned.as_str(), agreed.as_str()]);
+
+    // A branch that brings the base in merges no plan.
+    git(&root, &["switch", "-q", "-c", "backlog/behind", "main~1"]);
+    git(&root, &["merge", "-q", "--no-ff", "-m", "Catch up", "main"]);
+    assert_eq!(lines(), [planned.as_str(), agreed.as_str()]);
+
+    // A section changed, and then a document alone, each merged with the
+    // rule it passed on its line.
+    let amended = |slug: &str, change: &dyn Fn()| {
+        off_base(&root);
+        ok(atelier(&root, "l1", &["start", "--backlog", slug]));
+        change();
+        skipping(&root, "l1", "Ada agreed it", &["merge"]);
+        lines().pop().unwrap()
+    };
+    let amendments = [
+        amended("outcome", &|| {
+            edit("Greetings.", "Warm greetings.", "Amend the Outcome")
+        }),
+        amended("design", &|| {
+            let design = format!(".atelier/missions/{id}/design.md");
+            fs::write(root.join(&design), "Say hello.\n").unwrap();
+            git(&root, &["add", &design]);
+            git(&root, &["commit", "-qm", "Amend the design"]);
+        }),
+    ];
+    for line in &amendments {
+        assert!(
+            line.starts_with(&format!("{id} plan-merge l1 amendment; skip "))
+                && line.ends_with(": Ada agreed it (by l1)"),
+            "{line}"
+        );
+    }
+    assert_eq!(
+        lines(),
+        [
+            planned.clone(),
+            agreed.clone(),
+            amendments[0].clone(),
+            amendments[1].clone()
+        ]
+    );
+}
+
+#[test]
+fn only_a_new_open_plan_shows_as_planned() {
+    let hours = |ago: i64| (chrono::Utc::now() - chrono::Duration::hours(ago)).to_rfc3339();
+    let mission = |status: &str, lead: &str, created: &str, body: &str| {
+        format!(
+            "---\nschema: atelier.mission\nschema_version: 3\nid: {MISSION}\ntitle: Greet\n\
+             status: {status}\nlabels: []\nlead: {lead}\ncreated_at: {created}\n---\n\n\
+             ## Outcome\n\nGreetings.\n{body}"
+        )
+    };
+    let planned = format!("{MISSION} plan - new -> open");
+    for (case, text, expected) in [
+        (
+            "new, with no planner",
+            mission("open", "null", &hours(23), ""),
+            true,
+        ),
+        // As the cutover's conversion wrote atelier-g6rp and atelier-qr5s.
+        ("converted", mission("ready", "null", &hours(25), ""), false),
+        ("led already", mission("open", "l1", &hours(0), ""), false),
+        (
+            "with a Result",
+            mission("open", "null", &hours(0), "\n## Result\n\nGreeted.\n"),
+            false,
+        ),
+        (
+            "an old draft",
+            mission("draft", "null", &hours(0), ""),
+            false,
+        ),
+    ] {
+        let scratch = Scratch::new(&[]);
+        let root = scratch.root();
+        let path = root.join(format!(".atelier/missions/{MISSION}/mission.md"));
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, &text).unwrap();
+        on_base(&root, "Add the mission");
+        // Removed and added again, it has not first appeared again.
+        fs::remove_file(&path).unwrap();
+        on_base(&root, "Remove it");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, &text).unwrap();
+        on_base(&root, "Restore it");
+        let found = plan_lines(actions(&root, &log(&root, &[])));
+        let expected = if expected {
+            vec![planned.clone()]
+        } else {
+            vec![]
+        };
+        assert_eq!(found, expected, "{case}");
+    }
 }

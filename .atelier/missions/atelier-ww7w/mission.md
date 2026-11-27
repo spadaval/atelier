@@ -1,0 +1,129 @@
+---
+schema: atelier.mission
+schema_version: 3
+id: atelier-ww7w
+title: Cut review, CI, and branch overhead, and close the garden and Desk history loops
+status: done
+labels: []
+lead: mcp:launch:b3b5ffd62a4c227e4ec8ce23f1e32b83538dd28e5e6c91e0a2d3d91ead863ef6
+planners:
+- 92ddb56e-5c41-43a2-a697-03aa5ee83459
+created_at: 2026-11-22T05:30:19.649159093Z
+---
+
+## Why
+
+Sumeet asked for this mission in conversation on 2026-11-22 after a full review of Atelier's effectiveness and overhead on `master` (`ac44653e3`). During that conversation he explicitly approved all six areas below, including having `atelier merge` delete merged remote branches (lifting `AGENTS.md`'s blanket ban strictly for `atelier merge` using a lease check) while leaving `t3-extension/` untouched for now.
+
+Recent rewrites cut CLI+core size sharply and put the lead in charge, but concrete overhead and reliability gaps remain across six areas:
+
+1. **Plan reviews loop without narrowing or stopping:** `atelier-to83` took 7 plan-review rounds, `atelier-osel` took 7 across its initial plan and amendment, and `atelier-kw8u` took 4 plus a forced skip — repeatedly splitting 1-approve / 1-changes while fresh round 2+ reviewers re-read the whole plan from scratch (`atelier-s8wm`). Code reviews also lack a clear escalation cap after 3 rounds.
+2. **Record-only CI does unnecessary work and filters stale paths:** `.github/workflows/ci.yml` installs Node and `pnpm` and runs `scripts/t3-extension-release.test.sh` inside the `changes` gate on every record-only PR (taking ~26–39s instead of ~10–15s). `scripts/ci-jobs.sh` still filters deleted 0.4 paths (`.atelier/issues/*`, `.atelier/reviews/*`, `.atelier/evidence/*`) instead of `.atelier/items/*` and `.atelier/missions/*` (`atelier-i70l`), so non-Markdown validation artifacts trigger the full Rust suite. CI's `test` job also never runs `cargo clippy`.
+3. **Branch lifecycle leaves sprawl and takes two branches to drop a started item:** Dropping a started item requires a drop+commit+push on the item's branch *and* a second drop on a `backlog/*` branch. Nothing deletes merged branches on `atelier merge` or reports branch/worktree accumulation (this clone holds 285 merged local branches including `t3/*`, 266 merged remote branches, and 238 worktrees, slowing `atelier list` to ~1.0–1.4s vs. ~0.7s in a clean clone).
+4. **Five recurring CLI friction bugs keep causing failed calls:** `submit` omits the item checkout path in reviewer handoffs (`atelier-u49o`, hit in 3 of 7 smoke scenarios), `status` on base points delegated threads at unrelated items (`atelier-o2vv`) and tells held items that `start` switches the base checkout (`atelier-yhaf`), `pre-push`'s recovery command fails when the base branch is checked out (`atelier-jfos`), and one malformed `### Responses` line breaks every command on the item (`atelier-o91z`).
+5. **Garden runs stall at the human boundary:** `garden.md` holds approved garden branches unmerged until a synchronous human session, leaving `atelier-0019` and `atelier-qb4f` unmerged (approved locally, still `in_review` on `origin`) for over a week and stranding their upkeep fixes and deferred-finding settlements.
+6. **Desk mission history (M5) is still unimplemented and `atelier_core::log` omits mission-plan lifecycle actions:** `GET /api/repos/{repo}/missions/{id}/history` still returns 404, and `atelier_core::log::Happened` does not record when a mission was planned or when its plan merged, preventing the Desk from deriving exact mission timelines from `atelier-core`.
+
+## Outcome
+
+- **CI is fast for records and enforces lints:** Record-only PRs skip Node/`pnpm` and `t3-extension-release.test.sh` in the `changes` job; `scripts/ci-jobs.sh` uses current `.atelier/items/*` and `.atelier/missions/*` paths (including non-Markdown artifacts); and CI's `test` job enforces `cargo clippy --all-targets --locked -- -D warnings`.
+- **Reviews converge instead of spiraling:** Round 2+ plan reviews diff only the plan's own changed paths (excluding `reviews/`, `notes.md`, and on amendments excluding base-merged `.atelier/items/*` noise while keeping item edits the amendment branch itself made, and printing "plan unchanged" instead of an empty pathspec diff), split plan reviews stop at `submit`, `status`, and `merge` after 2 consecutive trailing split rounds on the current plan change (resetting for later amendments), code review `later_round` guards missing/rebased/base-merged commits, and code items at `changes_requested` in round 3+ replace `Then: atelier submit` with escalation to the mission lead.
+- **Branch operations are lean and clean:** A started item can be dropped in a single `backlog/*` branch (closing its open PR on merge and naming any newly filed items on its branch); `start` and `submit` check `<remote>/<base>` so deleted branches never let a stale clone restart or re-submit merged/dropped work (and a losing take-over never deletes the earlier implementer's branch); `atelier merge` deletes neither ref until `base_tip` contains `<head>`, then safely deletes the merged remote branch with `--force-with-lease=refs/heads/<branch>:<head>` and detaches/deletes the merged local branch at `<head>` while guarding detached `HEAD` against lost record commits (ignoring non-branch/tag refs like `refs/t3/*`) and keeping Desk PR links intact for done items; and `atelier status` prints a read-only summary when merged local branches or detached worktrees pile up.
+- **The five CLI paper cuts are fixed:** `submit` names the item checkout path, `status` never misdirects delegated threads or base checkouts, `pre-push`'s recovery steps move the commit off a checked-out base without discarding uncommitted work, and malformed `### Responses` lines report cleanly without crashing `status`, `show`, or `review`.
+- **Garden runs merge on approval:** Reviewed upkeep fixes and deferred-finding settlements merge immediately, while proposals and newly found bugs go to the human via one stable `backlog/garden-proposals` branch (reused whether merged or unmerged) updating a single `"Garden proposals"` `needs-human,garden` item (retaining every unanswered proposal until answered, closing only once all proposals are answered, and recovering both proposals and bugs from the last run's Report if a run stops before merging `backlog/garden-proposals`), with a planner applying answers.
+- **Desk mission history (M5) is backed by `atelier_core::log::history`:** `atelier_core::log` records mission creation (`plan`) and plan merge (`plan-merge`, distinct from item `merge`) with a bounded walk, and `GET /api/repos/{repo}/missions/{id}/history` serves exact record-diff history from `atelier-core`. Existing `/api/history` and `/api/launch` stay untouched so `t3-extension/` (including `t3-extension/fixture-desk.mjs`'s empty-commit fixture) and pre-cutover history keep working with zero `t3-extension/` edits.
+
+## Success criteria
+
+- **fast-record-ci:** In `.github/workflows/ci.yml`, the `changes` job has no Node/`pnpm` setup and does not run `t3-extension-release.test.sh` (which still runs when `t3-extension/` or `scripts/t3-extension-release*` changes). `scripts/ci-jobs.test.sh` passes with zero references to `.atelier/issues/`, `.atelier/reviews/`, or `.atelier/evidence/`, proving both `.md` and non-`.md` files under `.atelier/items/` and `.atelier/missions/` skip `rust` while `.atelier/config.toml` runs `rust`. CI's `test` job runs `cargo clippy --all-targets --locked -- -D warnings` and passes on `master`.
+- **converging-reviews:** CLI tests prove: (a) round 2+ `atelier review <mission>` prints a delta diff restricted to the plan's own changed paths (excluding `reviews/` and `notes.md`, and on amendments keeping item edits the amendment branch itself made relative to `base` while excluding item Reports/reviews merged into `base` between rounds; printing a plan-unchanged message when empty rather than an empty pathspec diff; and falling back when `prev` is missing, non-unique across the round, or not an ancestor); (b) after 2 consecutive split plan-review rounds on the current plan change (counting only rounds not on `base`, so later amendments of missions merged after 2 splits start at 0), `submit`, `status`, and `merge`'s refusal tell the planner to bring open findings to the human instead of opening another round; (c) at `changes_requested` in round 3+, `status` replaces `Then: atelier submit` with escalation to the mission lead (including the lead's "fix it" ruling); (d) `roles/planner.md`, `roles/lead.md`, and `roles/implementer.md` document these rules without modifying `roles/reviewer.md`.
+- **clean-branches-and-drop:** CLI and Desk tests prove: (a) `atelier drop <started-item> --reason "<why>"` works directly on a `backlog/*` branch, merges cleanly, stops the item on base, names any newly added item records on the dropped branch, and closes the item's open PR on forge merge; (b) `start` (fresh and take-over) and `submit` check freshly fetched `<remote>/<base>` (closing the fetch-to-push race without deleting any remote branch outside `atelier merge`, and with a losing take-over deleting neither ref so the previous implementer's unmerged work stays intact); (c) `atelier merge` deletes neither ref unless `base_tip` contains `<head>`, then deletes the remote branch via `--force-with-lease=refs/heads/<branch>:<head> --delete` (preserving late pushes) and detaches + deletes the local branch at `<head>` (with planning commands refusing detached `HEAD`, `status`/`start` guarding commits not reachable from `refs/heads`, `refs/remotes`, or `refs/tags` even when `refs/t3/*` checkpoints exist, and Desk still populating `pull_request` for done items with no branch); (d) `atelier status` prints a read-only count + inspection hint (`git branch --merged <base>`, `git worktree list`) above threshold without suggesting destructive deletion; (e) `AGENTS.md`, `roles/lead.md`, `docs/product.md`, and `docs/design.md` reflect all changes, and `evals/agent-factory/test.sh` + `node t3-extension/run-tests.mjs` pass.
+- **cli-paper-cuts-fixed:** CLI, hook, and unit tests prove all five fixes (`u49o`, `o2vv`, `yhaf`, `jfos` running the printed `git reset --keep` recovery steps end-to-end when ahead of remote, with non-overlapping uncommitted work, and refusing cleanly without losing work when uncommitted changes overlap touched files, and `o91z` keeping `status`/`show`/`review` working while `submit`/`verdict`/`merge` refuse malformed `Responses`), `docs/design.md` and `docs/product.md` are updated, and `evals/agent-factory/test.sh` passes against the updated binary.
+- **garden-unblocked:** `skills/agent-factory/procedures/garden.md`, `skills/agent-factory/SKILL.md`, `docs/product.md`, and `docs/design.md` specify merging approved upkeep/settlements immediately, reusing one stable `backlog/garden-proposals` branch (whether merged or unmerged, starting it only when neither local nor remote has it) to file/update a single `"Garden proposals"` `needs-human,garden` item (and `bug,needs-human` items), keeping every unanswered proposal until answered, closing only once every proposal is answered (on partial answers, moving answered proposals into a `### Decided` section in `"Garden proposals"` on `backlog/garden-proposals` so recovery never re-files them), recovering both proposals and bugs from the last merged run's Report if a run stopped before merging `backlog/garden-proposals`, and having a planner apply human answers; `atelier check` and `evals/agent-factory/test.sh` pass.
+- **desk-mission-history:** `atelier_core::log` records mission creation (`plan`) and plan merge (`plan-merge`, distinct from item `merge`) and supports a bounded walk; `GET /api/repos/{repo}/missions/{id}/history` returns exact record-diff mission history with generated `ts-rs` types and Rust tests; existing `/api/history` and `/api/launch` tests, `desk/` tests (`pnpm typecheck && pnpm test && pnpm build && pnpm e2e`), and `node t3-extension/run-tests.mjs` pass with zero edits under `t3-extension/`.
+- **all-checks-pass:** On `master` after the final item merges, `cargo fmt -- --check`, `cargo clippy --all-targets --locked -- -D warnings`, `cargo nextest run --locked`, `atelier check`, `evals/agent-factory/test.sh`, `desk/` tests, and `node t3-extension/run-tests.mjs` all pass.
+
+## Scope
+
+**In:**
+- `.github/workflows/ci.yml`, `scripts/ci-jobs.sh`, `scripts/ci-jobs.test.sh`
+- `crates/atelier-core`, `crates/atelier-cli`, `crates/atelier-desk`
+- `desk/src/api/` (generated TypeScript types for mission history) and Desk docs (`docs/architecture/desk.md`, `docs/product/desk.md`)
+- `evals/agent-factory/` (fixture updates where tests assumed merged local branches stayed behind or asserted old buggy CLI wording)
+- `skills/agent-factory/SKILL.md`, `roles/planner.md`, `roles/lead.md`, `roles/implementer.md`, `procedures/garden.md`, `AGENTS.md`, `docs/product.md`, `docs/design.md`
+- Dropping the 8 superseded loose items (`atelier-i70l`, `atelier-s8wm`, `atelier-u49o`, `atelier-o2vv`, `atelier-yhaf`, `atelier-jfos`, `atelier-o91z`, `atelier-y0ba`) on this mission's branch.
+
+**Out:**
+- **`t3-extension/`:** Zero file changes in `t3-extension/` (deferred by Sumeet on 2026-11-22, including `atelier-yy4j` and migrating `t3-extension/fixture-desk.mjs` off empty commits). Because of that freeze, `/api/history` and `/api/launch` keep their existing commit-subject parser in this mission; migrating them is filed as a follow-up for when `t3-extension/` reopens.
+- **`atelier-dh7a`:** Removing `draft`/`ready` and letting `atelier new` file on the current branch stays in its already-agreed mission.
+- **`atelier-kw8u` / `atelier-oiwy`:** Do not edit `skills/agent-factory/roles/reviewer.md` or run model eval matrices; keep `oiwy`'s reviewer experiment isolated.
+- **Moving all CLI actions into `atelier-core` & plain-English/docs-site overhaul:** Deferred to Mission 2 after `atelier-dh7a` merges so CLI wording and docs are rewritten once against the `open`-only model.
+- **Post-cutover 2-week scorecard (`atelier-pwhn`)** and **settling existing garden branches (`atelier-0019`, `atelier-qb4f`)**: handled outside this mission.
+
+## Authority
+
+- **Approved by Sumeet on 2026-11-22:** Lifting `AGENTS.md:71`'s blanket prohibition on deleting remote branches specifically for `atelier merge` deleting a just-merged branch using `--force-with-lease=refs/heads/<branch>:<head> --delete`. Manual remote branch deletion and force-pushing `master` remain forbidden.
+- **The lead and implementers may decide:** exact helper module layout inside `atelier-core`/`atelier-cli`/`atelier-desk`, exact wording of new CLI messages (in plain, direct English), threshold values for read-only stale-branch/worktree notices in `status`, caching/timeout details for Desk's mission history route, and execution order across independent items.
+- **The lead may shrink or drop** an individual sub-fix if it creates an unexpected conflict with `atelier-dh7a`, `atelier-oiwy`, or `evals/agent-factory/test.sh`, recording the reason and filing a follow-up.
+- **Reserved for the human:** changing the round-cap thresholds (3 code rounds / 2 split plan rounds), touching `t3-extension/`, altering `atelier-dh7a` or `atelier-kw8u` plans, editing `roles/reviewer.md`, or breaking record format compatibility across repositories.
+
+## Result
+
+Done on 2026-11-22. All six items merged, and every check in
+`all-checks-pass` passes on `master` at `435025919`.
+
+**What `master` has now**
+
+- **CI** (`atelier-1n49`): the `changes` job runs no Node or `pnpm` setup and
+  takes 10 to 13 seconds, down from 26. Records and their artifacts under
+  `.atelier/items/` and `.atelier/missions/` skip the Rust job, and that
+  job runs clippy with warnings denied.
+- **Reviews** (`atelier-h6ij`): a later plan round opens with the diff of
+  the plan's own paths, two split plan rounds in a row send the planner to
+  the human, and an item asked for changes in round 3 or later goes to its
+  lead.
+- **Branches** (`atelier-gqtw`): a started item is dropped on one backlog
+  branch, `start` and `submit` judge by the freshly fetched base, and
+  `atelier merge` deletes the branch it merged, on the remote under a lease
+  and locally, leaving the checkout on a detached HEAD. `status` counts
+  merged branches and detached worktrees once they pile up.
+- **Paper cuts** (`atelier-zc9b`): `submit` names the checkout's path,
+  `status` no longer sends a thread to an unrelated item or to a `start`
+  that does not switch, the pre-push recovery steps work on a checked-out
+  base, and a malformed `### Responses` line is reported, not fatal.
+- **Garden** (`atelier-7637`): an approved run merges at once, and its
+  proposals and bugs wait for the human in one `"Garden proposals"` item on
+  `backlog/garden-proposals`.
+- **Desk** (`atelier-js4a`): `atelier log` prints `plan` and `plan-merge`,
+  and `GET /api/repos/{repo}/missions/{id}/history` serves a mission's
+  history from the records, bounded at 15 seconds.
+
+**Verified on `435025919`, in the lead's checkout:** `cargo fmt -- --check`,
+`cargo clippy --all-targets --locked -- -D warnings`, `cargo nextest run
+--locked` (459 tests), `atelier check`, `scripts/ci-jobs.test.sh`,
+`evals/agent-factory/test.sh`, the Desk's `pnpm typecheck`, `test`, `build`
+and `e2e`, and `node t3-extension/run-tests.mjs`, unmodified. CI passed on
+the same commit. Nothing under `t3-extension/` and nothing in
+`skills/agent-factory/roles/reviewer.md` changed.
+
+**Not proven by use yet**
+
+- No reviewer agent has worked from a plan's delta brief, and no plan has
+  met the two-split exit outside a test and a scratch clone.
+- Closing a dropped item's pull request on GitHub has run only in tests.
+- `atelier merge` has deleted one real branch, `atelier-gqtw`'s own.
+- The 308 merged local branches and 72 detached worktrees this clone
+  already held are only counted. Removing them is the human's.
+
+**Left as it was, by the plan:** `/api/history` and `/api/launch` still read
+commit subjects, until `t3-extension/` reopens (`atelier-jz8q`).
+
+**Changes others will meet:** planning commands refuse a detached HEAD,
+`atelier start <id>` needs the remote to answer, and a checkout is detached
+after its branch merges.
+
+**Filed from what the work found:** `atelier-jz8q`, `atelier-tuln`,
+`atelier-itqc`, `atelier-vfnn`, `atelier-kjc4`, `atelier-10d6`,
+`atelier-p8bu`, `atelier-in1t`, `atelier-5asm`, `atelier-5erp`,
+`atelier-a9jo` and `atelier-vv54`, all drafts. `notes.md` has the lead's
+rulings and the one change outside the plan, `atelier-fxwl`.
