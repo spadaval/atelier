@@ -436,7 +436,7 @@ fn a_failing_merge_check_on_the_base_tip_stops_the_merge_with_its_command_and_ou
              The end of its output:\n  first line\n  the cause\n\
              Fix it on branch {ID} and commit; if main broke it, bring main in first with `git merge main`. `atelier status` then says what comes next.\n\
              If the change should merge with this check failing, say so on purpose: run `atelier merge` again with a reason that names the check, \
-             ATELIER_SKIP=\"{check}: <why it may fail>\" in front of it.\n"
+             ATELIER_SKIP='{check}: <why it may fail>' in front of it.\n"
         )
     );
     assert_eq!(state(&root), before);
@@ -2176,6 +2176,17 @@ const MISSION: &str = "demo-m1ss";
 /// `true`, with a change left uncommitted in its checkout: a rule any
 /// reason passes.
 fn broken_and_uncommitted() -> Scratch {
+    let config = format!(
+        "\n[[merge_check]]\nrun = \"true\"\n\n[[merge_check]]\nrun = \"\"\"\n{BROKEN}\"\"\"\n"
+    );
+    let scratch = approved_in_mission(&config);
+    fs::write(scratch.root().join("hello.txt"), "hello?\n").unwrap();
+    scratch
+}
+
+/// An item of [`MISSION`], approved, on a base whose config has `config`
+/// added.
+fn approved_in_mission(config: &str) -> Scratch {
     let scratch = Scratch::new(&[(ID, "open")]);
     let root = scratch.root();
     let mission = root.join(format!(".atelier/missions/{MISSION}/mission.md"));
@@ -2192,19 +2203,14 @@ fn broken_and_uncommitted() -> Scratch {
     let item = read(&root, &item_path(ID)).replace("mission: null", &format!("mission: {MISSION}"));
     fs::write(root.join(item_path(ID)), item).unwrap();
     on_base(&root, "Add the mission");
-    let scratch_config = format!(
-        "\n[[merge_check]]\nrun = \"true\"\n\n[[merge_check]]\nrun = \"\"\"\n{BROKEN}\"\"\"\n"
-    );
-    append(&root, ".atelier/config.toml", &scratch_config);
+    append(&root, ".atelier/config.toml", config);
     on_base(&root, "Configure");
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
     fs::write(root.join("hello.txt"), "hello\n").unwrap();
     git(&root, &["add", "-A"]);
     git(&root, &["commit", "-qm", "Say hello"]);
     finish_and_submit(&root, "t1");
-    let scratch = approve(scratch);
-    fs::write(scratch.root().join("hello.txt"), "hello?\n").unwrap();
-    scratch
+    approve(scratch)
 }
 
 const UNCOMMITTED: &str =
@@ -2231,7 +2237,7 @@ fn a_reason_given_for_another_rule_does_not_carry_the_merge_past_a_failing_merge
              ATELIER_SKIP is set, and its reason does not name this check, so it does not pass the failure: \
              a reason given for another rule never carries a merge past a failed check.\n\
              If the change should merge with this check failing, say so on purpose: run `atelier merge` again with a reason that names the check, \
-             ATELIER_SKIP=\"{BROKEN_LINE}: <why it may fail>\" in front of it.\n"
+             ATELIER_SKIP='{BROKEN_LINE}: <why it may fail>' in front of it.\n"
         )
     );
     // Nothing was merged.
@@ -2261,12 +2267,17 @@ fn a_reason_that_names_a_failing_merge_check_merges_past_it_and_says_so_last() {
             "{}{}Merged {ID} into main with merge commit {}; it is done.\n\
              Left branch {ID} checked out, since this checkout holds changes the merge does not. \
              Take them to a branch made with `atelier start --backlog <slug>` or `atelier start <id>`.\n\
-             The merge went ahead past a failed merge check, as ATELIER_SKIP's reason asked: `{BROKEN}` failed (exit 3).\n",
+             The merge went ahead past a failed merge check, as ATELIER_SKIP's reason asked: `{BROKEN_LINE}` failed (exit 3).\n",
             skipped_for(&rules[0], &said_reason),
             skipped_for(&rules[1], &said_reason),
             &head(&root, "main")[..7]
         )
     );
+    // The last line, whole, names the check made one line.
+    let last = format!(
+        "The merge went ahead past a failed merge check, as ATELIER_SKIP's reason asked: `{BROKEN_LINE}` failed (exit 3)."
+    );
+    assert_eq!(run.stdout.lines().last(), Some(last.as_str()));
     assert_eq!(field(&root, "main", "status"), "approved");
     // The branch stays under what is not committed.
     assert_eq!(git(&root, &["branch", "--show-current"]), ID);
@@ -2316,6 +2327,36 @@ fn a_reason_that_names_a_failing_merge_check_merges_past_it_and_says_so_last() {
     // What was not committed stays in the checkout, not merged.
     assert_eq!(read(&root, "hello.txt"), "hello?\n");
     assert_eq!(git(&root, &["show", "main:hello.txt"]), "hello");
+}
+
+#[test]
+fn the_skip_a_failed_check_prints_passes_it_when_a_shell_runs_it_as_printed() {
+    // Quotes, `$` and a backtick, which a shell reads inside double quotes.
+    let check = r#"echo "broken $HOME `true`"; exit 3"#;
+    let scratch = approved_in_mission(&format!("\n[[merge_check]]\nrun = '''{check}'''\n"));
+    let root = scratch.root();
+    let refused = merge(&root, "t1", &[]);
+    assert_eq!(refused.code, 1, "{}", refused.stdout);
+    let last = refused.stderr.lines().last().unwrap();
+    let assignment = last
+        .split_once(" ATELIER_SKIP=")
+        .and_then(|(_, rest)| rest.strip_suffix(" in front of it."))
+        .unwrap_or_else(|| panic!("{last}"));
+    // The agent writes its reason in place of the placeholder, and runs it.
+    let assignment = assignment.replace("<why it may fail>", "the lead ruled it flaky");
+    let run = sh(
+        &root,
+        "t1",
+        &format!("ATELIER_SKIP={assignment} atelier merge"),
+    );
+    assert_eq!(run.code, 0, "{}{}", run.stdout, run.stderr);
+    assert!(
+        run.stdout.starts_with(&format!(
+            "Skipped with ATELIER_SKIP: The merge check `{check}` failed (exit 3), and the merge went ahead: {check}: the lead ruled it flaky\n"
+        )),
+        "{}",
+        run.stdout
+    );
 }
 
 #[test]

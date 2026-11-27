@@ -1196,8 +1196,10 @@ In order:
    another rule must not carry the merge past it (atelier-7ci6, after two
    merges on the Hub went past a failed test run on a reason given for "you
    are not this item's implementer"). Its refusal says that, and how to name
-   it: `ATELIER_SKIP="<check>: <why it may fail>" atelier merge`, one
-   `<check>:` for each that fails. A check
+   it: `ATELIER_SKIP='<check>: <why it may fail>' atelier merge`, one
+   `<check>:` for each that fails. It prints the reason as one shell word,
+   in single quotes, so the shell passes the command's quotes, `$` and
+   backticks as written; and names each check in the last line with its whitespace made one line. A check
    passed that way has its skip line instead, no line says the checks
    passed, and the last line the merge prints names the check, how it
    failed and that the merge went ahead. The merge commit is written again

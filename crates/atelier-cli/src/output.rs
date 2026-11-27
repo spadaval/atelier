@@ -3,6 +3,7 @@
 //! `atelier-core` say and the wording of a refusal, which live in
 //! `atelier_core::say` and are used from here.
 
+use crate::history;
 use crate::merge::Moved;
 use crate::setup::{Harness, Step};
 use atelier_core::actions::{Action, Condition, Refusal};
@@ -1865,7 +1866,13 @@ pub(crate) fn rule_check(run: &str, code: Option<i32>) -> String {
 /// The last line of a merge that went ahead past each check in `failed`.
 pub fn merged_past(failed: &[FailedCheck]) -> String {
     let checks: Vec<String> = (failed.iter())
-        .map(|check| format!("`{}` failed ({})", check.run, exit_status(check.code)))
+        .map(|check| {
+            format!(
+                "`{}` failed ({})",
+                history::one_line(&check.run),
+                exit_status(check.code)
+            )
+        })
         .collect();
     let (noun, checks) = match checks.len() {
         1 => ("check", checks.join("")),
@@ -1910,13 +1917,15 @@ pub fn check_failed(id: &str, base: &str, run: &str, code: Option<i32>, tail: &s
 /// only by a reason that names it. `given` is whether a reason was given,
 /// which then did not name it.
 pub fn check_unnamed(run: &str, given: bool) -> String {
-    let run = run.split_whitespace().collect::<Vec<_>>().join(" ");
+    // One shell word, so the shell hands the check's command over as
+    // written, quotes and `$` included, for the reason to name it.
+    let skip = quoted(&format!("{}: <why it may fail>", history::one_line(run)));
     let mut text = String::new();
     if given {
         text += "ATELIER_SKIP is set, and its reason does not name this check, so it does not pass the failure: a reason given for another rule never carries a merge past a failed check.\n";
     }
     text + &format!(
-        "If the change should merge with this check failing, say so on purpose: run `atelier merge` again with a reason that names the check, ATELIER_SKIP=\"{run}: <why it may fail>\" in front of it.\n"
+        "If the change should merge with this check failing, say so on purpose: run `atelier merge` again with a reason that names the check, ATELIER_SKIP={skip} in front of it.\n"
     )
 }
 
