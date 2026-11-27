@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-f0sn
 title: Put what waits on the reader first in status, one line per item, with a line of review pace for a mission's lead
-status: in_review
+status: approved
 mission: atelier-oqsz
 labels: []
 priority: high
