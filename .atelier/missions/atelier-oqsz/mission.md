@@ -85,8 +85,8 @@ Items, in priority order: `atelier-f0sn` (`status`), `atelier-7ci6`
   wrong lines in `status` and `log` and stay separate. `atelier-b0vb`
   stays the human's.
 - Hosts: this host has one installed `atelier` for every repository. The
-  lead bumps the version in a trivial merge once the three items in
-  `crates/` are merged, and installs after `hub-v2-bg14` closes. A vendored skill
+  lead bumps the version in a trivial merge once every item that changes
+  `crates/` is merged, and installs after `hub-v2-bg14` closes. A vendored skill
   is refreshed by an item in its repository. The work host and astromech's
   pin are the human's (`atelier-7w9s`, `atelier-pv58`).
 
