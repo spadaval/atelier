@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-u88z
 title: Log what a Pi thread did to a file, so the comparison runs yield tool, context and stop data
-status: in_review
+status: approved
 mission: null
 labels: []
 priority: medium
