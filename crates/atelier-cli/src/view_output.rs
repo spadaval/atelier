@@ -776,7 +776,7 @@ fn pace_line(pace: &Pace) -> String {
     let per = pace.rounds as f64 / pace.items as f64;
     let took = match (pace.median(), pace.longest()) {
         (Some(median), Some(longest)) => format!(
-            "a round took {} at the median, {} at most",
+            "a reviewer took {} a round at the median, {} at most",
             span(median),
             span(longest)
         ),
@@ -784,11 +784,21 @@ fn pace_line(pace: &Pace) -> String {
     };
     let found = match pace.rounds > pace.items {
         false => "no item has had a later round yet".to_string(),
-        true => format!(
-            "later rounds found {}, {} to fix now",
-            plural(pace.later_new, "new finding", "new findings"),
-            pace.later_fix_now
-        ),
+        true => {
+            let cycle = match (pace.cycle_median(), pace.cycle_longest()) {
+                (Some(median), Some(longest)) => format!(
+                    "from one verdict to the next took {} at the median, {} at most; ",
+                    span(median),
+                    span(longest)
+                ),
+                _ => String::new(),
+            };
+            format!(
+                "{cycle}later rounds found {}, {} to fix now",
+                plural(pace.later_new, "new finding", "new findings"),
+                pace.later_fix_now
+            )
+        }
     };
     format!(
         "Review pace: {} for {}, {per:.1} each; {took}; {found}.",

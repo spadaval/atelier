@@ -374,7 +374,7 @@ You are thread <lead>, on the base branch main.
 Nothing in the missions you lead waits on you now.
 Each item's holder, blockers and Done when lines: atelier show <item>.
 You lead mission hub-v2-bg14: Ask the human early: rubrics, check rows, builds to look at, and a decision in the browser
-  Review pace: 22 rounds for 11 items, 2.0 each; a round took 15m at the median, 31m at most; later rounds found 6 new findings, 0 to fix now.
+  Review pace: 22 rounds for 11 items, 2.0 each; a reviewer took 15m a round at the median, 31m at most; from one verdict to the next took 55m at the median, 1h 22m at most; later rounds found 6 new findings, 0 to fix now.
   hub-v2-aohy (building): Take one cell of the sorting hall to the human's decision on the running Hub
   And 11 done.
 The backlog, which waits on nobody in particular:
@@ -382,8 +382,12 @@ Can start now:
   hub-v2-cram (medium): Bound what a model can make the 3D viewer decode
 ```
 
-A round's time runs from its review's opening to the commit that wrote its
-verdict, and a finding is new when it carries no earlier one. A lead's
+A reviewer's time runs from its review's opening to the commit that wrote its
+verdict. For each round after the first, the time from one verdict to the
+next runs from the latest verdict of an earlier round to this round's, so it
+holds the implementer's fixing and the wait as well as the review: what a
+later round cost the mission. A finding is new when it carries no earlier
+one. A lead's
 `status` of a twelve-item mission stays under 2 KB.
 
 On an item's branch, a thread that holds nothing on the item is offered the

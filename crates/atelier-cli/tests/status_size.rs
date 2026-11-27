@@ -405,13 +405,15 @@ fn a_leads_status_names_the_commands_that_show_what_it_leaves_out() {
 fn a_leads_status_says_its_review_pace_as_a_count_of_the_records_gives_it() {
     let (_scratch, base) = twelve();
     let shown = status(&base, LEAD);
-    // Two items in three rounds; rounds of 40, 15 and 25 minutes, from each
-    // review's opening to the commit of its verdict; round 2 of demo-d001
-    // carried two findings and raised one, to defer.
+    // Two items in three rounds; reviews of 40, 15 and 25 minutes, from
+    // each review's opening to the commit of its verdict; 35 minutes from
+    // demo-d001's first verdict to its second; round 2 of demo-d001 carried
+    // two findings and raised one, to defer.
     assert!(
         shown.contains(
-            "\n  Review pace: 3 rounds for 2 items, 1.5 each; a round took 25m at the median, \
-             40m at most; later rounds found 1 new finding, 0 to fix now.\n"
+            "\n  Review pace: 3 rounds for 2 items, 1.5 each; a reviewer took 25m a round at \
+             the median, 40m at most; from one verdict to the next took 35m at the median, \
+             35m at most; later rounds found 1 new finding, 0 to fix now.\n"
         ),
         "{shown}"
     );
