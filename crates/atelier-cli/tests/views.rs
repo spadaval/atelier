@@ -309,18 +309,25 @@ fn lead_takes_an_open_mission_and_hands_each_item_that_can_start_to_another_thre
     run_then(&root, &led);
     git(&root, &["branch", "-f", "main", "HEAD"]);
 
-    // The lead's status: its mission and what each item needs. A question
-    // an item holds from before `escalate` was removed waits on nothing.
+    // The lead's status: first the handoff, which waits on it, then its
+    // mission, one line an item, then the backlog without the mission's
+    // items. A question an item holds from before `escalate` was removed
+    // waits on nothing.
     let status = stdout(&root, "lead1", &["status"]);
-    let tail = format!(
-        "You lead mission demo-m1ss: Greet everyone\n{}{handoff}",
-        &items[11..]
-    );
-    assert!(status.ends_with(&tail), "{status}");
+    let mission = "Each item's holder, blockers and Done when lines: atelier show <item>.\n\
+                   You lead mission demo-m1ss: Greet everyone\n  \
+                   Review pace: no round has a verdict yet.\n  \
+                   demo-a1aa (open, high, can start now): Say hello\n  \
+                   demo-b2bb (open, medium, blocked by demo-a1aa): Say goodbye\n  \
+                   demo-c3cc (open, medium, can start now): Say hi\n  \
+                   demo-d4dd (building): Wave\n\
+                   The backlog, which waits on nobody in particular:\n\
+                   Can start now:\n  demo-g7gg (medium): Add a version flag\n";
     assert!(
-        status.contains("  demo-m1ss (in progress, led by lead1): Greet everyone\n"),
+        status.contains(&format!(", which is no item's.\n{handoff}{mission}")),
         "{status}"
     );
+    assert!(!status.contains("demo-m1ss (in progress"), "{status}");
 
     // Another thread takes it over, and is told who led it.
     let taken = stdout(&root, "lead2", &["lead", "demo-m1ss"]);

@@ -91,9 +91,11 @@ fn orientation(repo: &mut Repo) -> Result<String> {
     let missions = repo.missions()?;
     let mut overview = overview(&items, &missions, &repo.caller)?;
     annotate_all(repo, &mut overview.held, &items)?;
-    for (_, entries, _) in &mut overview.led {
+    let mut paces = Vec::new();
+    for (dir, entries, _) in &mut overview.led {
         annotate_all(repo, entries.iter_mut(), &items)?;
         approved_needs(repo, entries, &items)?;
+        paces.push(atelier_core::pace(repo, &items, &dir.mission.id)?);
     }
     // An item dropped on the base while its branch is there.
     let dropped: Vec<(String, Option<String>)> = items
@@ -119,7 +121,7 @@ fn orientation(repo: &mut Repo) -> Result<String> {
     let reviewing = plan_reviews(repo)?;
     let mut unsaved = unsaved(repo)?;
     unsaved += &output::unattached(&git::unattached(&repo.root)?);
-    unsaved += &piled_up(repo)?;
+    let piled = piled_up(repo)?;
     // A stop of a mission this checkout holds dropped, until published.
     for id in repo.store().ids("missions")? {
         let dropped =
@@ -145,10 +147,12 @@ fn orientation(repo: &mut Repo) -> Result<String> {
         &repo.base,
         kind,
         &overview,
+        &paces,
         &reviewing,
         &dropped,
         &unreached,
         &unsaved,
+        &piled,
         there.as_deref(),
     ))
 }

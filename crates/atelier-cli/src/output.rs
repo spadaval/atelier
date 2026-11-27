@@ -11,7 +11,7 @@ use atelier_core::forge::{CiRun, ForgeError, MergeState, PullRequest};
 use atelier_core::model::{Config, Priority, Response, Status, Thread, Verdict};
 use atelier_core::plan::{Approvals, NotCounted, PlanDelta, APPROVALS, SPLITS};
 use atelier_core::records::Problem;
-use atelier_core::{Carried, Entry, Overview, Refused};
+use atelier_core::{Carried, Entry, Overview, Pace, Refused};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -29,6 +29,10 @@ pub(crate) fn priority_name(priority: Priority) -> &'static str {
 /// How many of the items that can start `status` names, the most urgent.
 /// The session-start hook prints it, and a backlog can hold hundreds.
 const STARTABLE_SHOWN: usize = 10;
+
+/// How many `status` names to a caller that holds an item or leads a
+/// mission, whose own work comes first.
+const BUSY_STARTABLE_SHOWN: usize = 3;
 
 pub(crate) fn holder(entry: &Entry) -> String {
     match &entry.holder {
@@ -170,13 +174,19 @@ fn gates(config: &Config) -> String {
     text
 }
 
-/// `status` away from an item's branch. `dropped` is each item dropped on
-/// the base while its branch is there, with why, and `unreached` each item
-/// dropped on its branch whose drop has not reached the base. `unsaved` is
-/// what [`unsaved`] says of the checkout. `plans` is the plans the
-/// checked-out records branch changes, with where their review stands.
-/// `there` is, in the base's checkout, how the caller gets to the first item
-/// it holds, since `start` does not switch that checkout.
+/// `status` away from an item's branch, in the order of what waits on the
+/// caller: its plan reviews, what it holds and its way there, what its
+/// checkout has not saved, then what waits on it as a mission's lead, the
+/// missions it leads, one line an item, and last the backlog, with what is
+/// already shown above left out, then the drops of any thread's items. `dropped` is each item dropped on the base
+/// while its branch is there, with why, and `unreached` each item dropped on
+/// its branch whose drop has not reached the base. `unsaved` is what
+/// [`unsaved`] says of the checkout, and `piled` what [`piled_up`] says of
+/// the clone. `paces` is the review pace of each mission led, in the order
+/// of `overview.led`. `plans` is the plans the checked-out records branch
+/// changes, with where their review stands. `there` is, in the base's
+/// checkout, how the caller gets to the first item it holds, since `start`
+/// does not switch that checkout.
 #[allow(clippy::too_many_arguments)]
 pub fn overview(
     caller: &Thread,
@@ -184,10 +194,12 @@ pub fn overview(
     base: &str,
     kind: Option<&str>,
     overview: &Overview,
+    paces: &[Pace],
     plans: &Result<Vec<Approvals>, Problem>,
     dropped: &[(String, Option<String>)],
     unreached: &[(String, Option<String>)],
     unsaved: &str,
+    piled: &str,
     there: Option<&str>,
 ) -> String {
     let place = match (branch, kind) {
@@ -203,6 +215,8 @@ pub fn overview(
             format!("Plan review not shown, since a committed record does not read: {problem}\n")
         }
     };
+    // A planner stopped for the human's ruling is pointed at no other work.
+    let stopped = plans.iter().flatten().any(Approvals::stopped);
     if !overview.held.is_empty() {
         text += "You hold:\n";
         for entry in &overview.held {
@@ -221,28 +235,57 @@ pub fn overview(
             }
         }
     }
-    if !overview.startable.is_empty() {
-        text += "Can start now:\n";
-        for entry in overview.startable.iter().take(STARTABLE_SHOWN) {
-            text += &format!(
+    if let (Some(held), false) = (overview.held.first(), stopped) {
+        match there {
+            Some(there) => text += there,
+            None => text += &format!("Then: atelier start {} (switches to its branch)\n", held.id),
+        }
+    }
+    text += unsaved;
+    text += &crate::view_output::lead_waits(&overview.led);
+    text += &crate::view_output::led(&overview.led, paces);
+    // The backlog leaves out the items of the missions the caller leads,
+    // which it has just been shown.
+    let led: Vec<&str> = (overview.led.iter())
+        .map(|(dir, ..)| dir.mission.id.as_str())
+        .collect();
+    let elsewhere = |entry: &&Entry| !entry.mission.as_deref().is_some_and(|m| led.contains(&m));
+    let startable: Vec<&Entry> = overview.startable.iter().filter(elsewhere).collect();
+    let cannot: Vec<Entry> = (overview.cannot_start.iter())
+        .filter(elsewhere)
+        .cloned()
+        .collect();
+    let started: Vec<&Entry> = overview.started.iter().filter(elsewhere).collect();
+    // With work of its own, the caller is shown less of the backlog.
+    let busy = !overview.held.is_empty() || !overview.led.is_empty();
+    let shown = if busy {
+        BUSY_STARTABLE_SHOWN
+    } else {
+        STARTABLE_SHOWN
+    };
+    let mut backlog = String::new();
+    if !startable.is_empty() {
+        backlog += "Can start now:\n";
+        for entry in startable.iter().take(shown) {
+            backlog += &format!(
                 "  {} ({}): {}\n",
                 entry.id,
                 priority_name(entry.priority),
                 entry.title
             );
         }
-        let more = overview.startable.len().saturating_sub(STARTABLE_SHOWN);
+        let more = startable.len().saturating_sub(shown);
         if more > 0 {
-            text += &format!("  and {more} more: atelier list --startable\n");
+            backlog += &format!("  and {more} more: atelier list --startable\n");
         }
     }
-    text += &cannot_start(&overview.cannot_start, !overview.startable.is_empty());
-    if !overview.started.is_empty() {
-        text += "Held by other threads:\n";
-        for entry in &overview.started {
+    backlog += &cannot_start(&cannot, !startable.is_empty());
+    if !started.is_empty() {
+        backlog += "Held by other threads:\n";
+        for entry in &started {
             // Read from a remote-tracking branch: held in another clone.
             let on = (entry.on.as_ref()).map_or(String::new(), |on| format!(", on {on}"));
-            text += &format!(
+            backlog += &format!(
                 "  {} ({}, {}{on}): {}\n",
                 entry.id,
                 status_name(entry.status),
@@ -251,42 +294,43 @@ pub fn overview(
             );
         }
     }
+    backlog += &crate::view_output::overview(overview, &led);
+    if busy && !backlog.is_empty() {
+        text += "The backlog, which waits on nobody in particular:\n";
+    }
+    text += &backlog;
+    // Drops of any thread's items, which wait on nobody in particular.
+    let mut notices = String::new();
     if !dropped.is_empty() {
-        text += "Dropped on the base while started; nothing is left to do on them:\n";
+        notices += "Dropped on the base while started; nothing is left to do on them:\n";
         for (id, why) in dropped {
-            text += &format!("  {id}: {}\n", why.as_deref().unwrap_or("no reason given"));
+            notices += &format!("  {id}: {}\n", why.as_deref().unwrap_or("no reason given"));
         }
     }
     if !unreached.is_empty() {
-        text += "Dropped on their branch, and the drop has not reached the base; carry it on a backlog branch with `atelier drop <id> --reason \"<why>\"` there, then `submit` and `merge`:\n";
+        notices += "Dropped on their branch, and the drop has not reached the base; carry it on a backlog branch with `atelier drop <id> --reason \"<why>\"` there, then `submit` and `merge`:\n";
         for (id, why) in unreached {
-            text += &format!("  {id}: {}\n", why.as_deref().unwrap_or("no reason given"));
+            notices += &format!("  {id}: {}\n", why.as_deref().unwrap_or("no reason given"));
         }
     }
-    text += &crate::view_output::overview(overview);
-    text += unsaved;
-    text += &crate::view_output::led(&overview.led);
-    // A planner stopped for the human's ruling is pointed at no other work.
-    if plans.iter().flatten().any(Approvals::stopped) {
+    text += &notices;
+    text += piled;
+    if stopped {
         return text;
     }
     // A lead holding nothing hands its mission's items to other threads,
     // and is not pointed at one itself.
-    if overview.held.is_empty() && !overview.led.is_empty() {
+    if busy {
         return text;
     }
-    match overview.held.first() {
-        Some(held) => match there {
-            Some(there) => text += there,
-            None => text += &format!("Then: atelier start {} (switches to its branch)\n", held.id),
-        },
-        // Which to start is the task's to say: a thread given one task
-        // takes a named item for its next step.
-        None if !overview.startable.is_empty() => {
-            text += "Start one only if that is your task: atelier start <id>\n";
-        }
-        None if overview.cannot_start.is_empty() => text += "Nothing is open to start.\n",
-        None => text += "No open item can start now.\n",
+    // Which to start is the task's to say: a thread given one task takes a
+    // named item for its next step.
+    if !overview.startable.is_empty() {
+        text += "Start one only if that is your task: atelier start <id>\n";
+    } else if overview.cannot_start.is_empty() {
+        text += "Nothing is open to start.\n";
+    } else {
+        text += "No open item can start now.\n";
     }
     text
 }
