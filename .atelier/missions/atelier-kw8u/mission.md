@@ -3,7 +3,7 @@ schema: atelier.mission
 schema_version: 3
 id: atelier-kw8u
 title: 'Put the lead in charge and measure the loop: departures said on the record, and evals that grade what came out, run as the hosts run'
-status: open
+status: done
 labels: []
 lead: 0b3307d5-85cd-4102-be6c-51da3b535c89
 planners:
@@ -220,7 +220,94 @@ the evals not grow complex.
 
 ## Result
 
-Line counts, as an indication and not a target (atelier-id3v,
+Closed on 2026-11-27, on the human's word, with 17 items done and one
+dropped. The plan held 10 items; the lead and the implementers added 8, and
+a second mission, atelier-8az0, carried seven more.
+
+**What the mission left in use**
+
+- The lead is in charge (atelier-mtzj): the process is its default, and it
+  departs from any of it with a recorded reason. A commit that passes a
+  rule records who passed it, and `atelier show <mission>` lists each one
+  (atelier-nv22). In 469 graded runs no planted defect reached main, no
+  departure went unrecorded and no lead stopped with nothing raised; of 40
+  recorded departures the judge found two reasons that did not hold.
+- The human's scale of severity is in `roles/reviewer.md` (atelier-oiwy),
+  by the lead's ruling on part of the evidence the item asked for. On the
+  14 review cases that ran in both matrices it took the fix-now findings
+  the judge rates useful or nit from 9 to 0 and found 19 known defects
+  against 19. On one case, `quiet-tokens`, it found the defect in 2 of 10
+  runs against 5 of 10.
+- The eval harness runs a named setup with a model and an effort for each
+  role, grades by facts and a rubric a model from another lab reads,
+  confines a replayed review from the fix it is graded against, and holds
+  38 cases, 17 of them real changes from this repository.
+
+**What it found**
+
+- On Sol, the skill's whole effect on the lead's cases is its section on
+  starting another thread: 4 of 25 with no skill, 25 of 25 with the skill,
+  25 of 25 with that section alone. Codex will not start a subagent unless
+  a skill, an `AGENTS.md` or the user asks. On this host every lead case
+  passed in both arms, and the skill made leads faster.
+- The skill costs a reviewer one real defect: on `touched-claims`, 15 of
+  26 reviews found it with no skill and 4 of 26 with it. No one part of
+  `SKILL.md` is the cause, and `roles/reviewer.md` is not. The cause was
+  not found.
+- Reviewers found the known defect in about one replayed review in five,
+  with or without the skill, and raised no fix-now finding the code did not
+  support.
+- Every Codex eval before atelier-8e8e ran at `low` effort, whatever was
+  asked.
+
+**What it cost, and what the human made of it**
+
+The two missions made 1,754 eval runs in two days, about 944M input tokens,
+861M of them cached. They spent Claude's weekly allowance and then the
+ChatGPT Pro allowance, which kept every Sol reviewer out from 2026-11-19 to
+2026-11-23, and replayed reviews filled this host's disk twice. In 87% of
+cells every repeat gave the same answer. The human asked how hundreds of
+runs could be justified, and they could not: the findings above needed
+about 150 to 250. The lead fixed a number of runs for every cell, ran the
+cases as a grid for each question, and never gave the human a total. On
+2026-11-27 the human froze the eval matrices. The suite stays in the
+repository, CI still checks its fixtures with no model, and nothing runs
+it.
+
+What the lead took from it, and from the sources the human had it read:
+most of the cases are too easy to tell anything, because they were written
+from the rules and not from failures that happened. The three that told
+the most came from real records: findings built without need, defects that
+escaped review, and work later removed.
+
+**Against each criterion**
+
+- setups, no-null-grades, judge-holds, overrides-seen, lead-in-charge,
+  reviews-from-history, cost-shown, still-gated: met. The judge matched a
+  hand read on 30 of 30 runs.
+- every-case-earns: met to the letter and not in spirit. The README says
+  what each case guards, and none was cut, though 24 of the 38 gave the
+  same answer in every run.
+- passages-tried: not met. Of the four passages the plan names, "What to
+  judge" was tried and left out, and three were never tried, since every
+  case they could change passed all its runs. The fifth, the human's
+  scale, was tried on 14 of 22 cases, in `sol` alone, and merged on the
+  lead's ruling. The 96 replays and the `house` run it still wanted were
+  cut by the human's ruling of 2026-11-27.
+
+**Where the lead left the plan**
+
+- It merged the plan past its second approval, after four rounds, on the
+  human's question whether a fifth was splitting hairs.
+- It raised the limit of two eval agents, which the plan's Authority
+  forbade, on the human's word of 2026-11-18.
+- It cut three passages and atelier-oiwy's `house` run, and dropped
+  atelier-wtun.
+
+Each is in `notes.md` with its date and reason.
+
+
+**Line counts**, as an indication and not a target (atelier-id3v,
 2026-11-19). Before is master when the plan merged (4a94d05c5's first
 parent); after is atelier-id3v's head, with master merged in, cases from
 mission atelier-8az0 included.
