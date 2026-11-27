@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-0019
 title: Garden atelier, 2026-11-11
-status: ready
+status: dropped
 mission: null
 labels:
 - garden
@@ -35,3 +35,7 @@ Measure atelier by `skills/agent-factory/procedures/garden.md`, fix the upkeep a
 In: garden.md steps 1 to 7 up to the approval, for atelier only. atelier-j86z's ten entries are read as evidence and the page says which the rewrite made moot.
 
 Out: the session and what it settles, the run's merge, closing or changing atelier-j86z, any new or removed rule, check, merge check or hook, a scorecard snapshot or a run of `scripts/scorecard/`, and other items' branches.
+
+## Report
+
+Dropped: Stale Nov 11 garden run conflicts with master; superseded by current workflow and new garden rules
