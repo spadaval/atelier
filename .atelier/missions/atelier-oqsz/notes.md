@@ -119,3 +119,13 @@ line on the next real missions is the test in its place.
 The same direction: no new Atelier feature, Desk or eval mission after
 this one closes, and `atelier-oiwy` closes before `atelier-qut2` starts,
 so that item's freeze on the two files no longer applies.
+
+## 2026-11-27: the pace line counts what a later round cost
+
+`atelier-f0sn`'s implementer asked the lead to rule: its pace line times
+the reviewer alone, 2 to 31 minutes a round on `hub-v2-bg14`, while one
+verdict to the next took 33 to 86. The plan says "the time a round took",
+which reads either way. The lead ruled for the whole cycle of a later
+round, because that is the cost the human's example names ("took over an
+hour each and caught nothing") and the one a lead can avoid. Filed as
+`atelier-cpfd` in this mission. The version bump follows it.
