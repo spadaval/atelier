@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-oiwy
 title: Find which part of the skill costs a reviewer a defect, and try two passages for the reviewer
-status: changes_requested
+status: in_review
 mission: atelier-kw8u
 labels: []
 priority: medium
@@ -121,12 +121,16 @@ human's scale is merged into `roles/reviewer.md` by the lead's ruling.
   that keeps only Your Role's pointer to the role file, or accept the
   trade 7h71 measured: the skill wins `costly-hardening` and the overbuilt
   cases and costs this one replay.
-- **"What to Judge".** It passed no case more often and `costly-hardening`
-  once less (4 of 5 in matrix 1), so the item's rule leaves it out. It
-  found `touched-claims` 0 of 10 times, so comparing the change with its
-  Goal in these words does not send a reviewer to test the walk's
-  boundary. It made reviews slower and added fix-now findings (176
-  against 165 on the 14 cases that finished).
+- **"What to Judge".** The item's rule leaves it out: no case gains two
+  runs in either matrix, and four pass fewer (`costly-hardening` and
+  `touched-claims` in matrix 1, `base-done-claims` and `quiet-tokens` in
+  both). Its one gain is a run on `priority-contract` in matrix 2. On the
+  four replays some review has found it found the known defect 9 times in
+  40 runs, against the skill's 19, and `touched-claims` in none of 10, so
+  comparing the change with its Goal in these words does not send a
+  reviewer to test the walk's boundary. It made reviews slower and raised
+  more fix-now findings (176 against 165 on the 14 cases that finished),
+  9 of them rated useful, as many as the skill's.
 - **The scale.** On the 14 cases that finished in both matrices, the
   skill raised 9 fix-now findings the judge rated useful or nit (4 and 5),
   and the skill with the scale none. Known defects found: 9 against 10 in
@@ -197,3 +201,7 @@ human's scale is merged into `roles/reviewer.md` by the lead's ruling.
   pushed and not to be merged. The runs are in
   `~/.cache/af-evals/runs/oiwy/`. `evals/agent-factory/test.sh` passes on
   the merged branch.
+
+### Responses
+
+1-m989.1: fixed in d64c371e9
