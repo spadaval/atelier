@@ -18,12 +18,17 @@ judged by `claude-opus-5-5`).
   arms without it in 8 of 23. Whatever costs it lies in what the four parts
   hold together, or in the role file and the body acting together, and no
   arm here can say which.
-- **"What to Judge" is left out, by the item's rule.** It passed no case
-  more often, and one case less often: `costly-hardening` 4 of 5 in matrix
-  1, against 5 of 5. It found `touched-claims` in 0 of 10 runs. It made
-  reviews longer (a median of 127 s against 90 s on `costly-hardening`)
-  and added fix-now findings (176 against 165 on the 14 cases that
-  finished), none of which the judge rated useful or nit.
+- **"What to Judge" is left out, by the item's rule, and it did worse on
+  the replays.** It gained one run on one cell (`priority-contract` 5 of 5
+  against 4 of 5 in matrix 2) and lost runs on four cases: `costly-hardening`
+  4 of 5 against 5 of 5 and `touched-claims` 0 of 5 against 1 of 5 in
+  matrix 1, `base-done-claims` 0 and 1 of 5 against 2 and 4 of 5, and
+  `quiet-tokens` 0 of 5 against 3 and 2 of 5 in both. Over the four replays
+  some review has found it found the known defect 9 times in 40 runs, against
+  the skill's 19. It made reviews longer (a median of 127 s against 90 s on
+  `costly-hardening`) and raised more fix-now findings (176 against 165 on
+  the 14 cases that finished), of which the judge rated 9 useful, as many as
+  the skill's.
 - **The scale is merged, by the lead's ruling of 2026-11-27, not by the
   item's rule.** On the 14 review cases that finished in both matrices,
   reviews with the skill raised 9 fix-now findings the judge rated useful
@@ -118,8 +123,11 @@ The judge rated no finding in any arm `wrong` (not real).
 What the item's rules ask, on the runs that exist:
 
 - **"What to Judge"** needs some case to pass at least two more runs with
-  it in each matrix and none to pass fewer in either. No case passes more,
-  and `costly-hardening` passes fewer in matrix 1. Left out.
+  it in each matrix and none to pass fewer in either. No case gains two
+  runs in either matrix; its one gain is a run on `priority-contract` in
+  matrix 2. Four cases pass fewer: `costly-hardening` and `touched-claims`
+  in matrix 1, and `base-done-claims` and `quiet-tokens` in both. Left
+  out.
 - **The scale** needs fewer fix-now findings rated useful or nit in both
   matrices (4 to 0, 5 to 0 on the 14 cases) and no fewer known defects
   found in either (9 to 10, 10 to 10 on the four replays some review has
@@ -158,7 +166,9 @@ Its gains elsewhere (`base-done-claims` 8 of 10 against 6 of 10,
 better, but on this case the drop is unexplained and the counts are small.
 
 **"What to Judge".** Its reviewers checked the change against its Goal
-and Scope, as the passage asks, and raised more findings: on
+and Scope, as the passage asks, and found fewer of the known defects: 3
+against 9 in matrix 1 and 6 against 10 in matrix 2. They raised more
+findings: on
 `overbuilt-robustness` a second fix-now finding beside the `Shrink:` in
 every run (10 against 5), and on `costly-hardening` 48 against 40. The one
 `costly-hardening` review that failed asked for the ledger's three defects
