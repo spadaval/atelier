@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-hota
 title: Print atelier log newest first with a default limit
-status: in_review
+status: changes_requested
 mission: atelier-oqsz
 labels: []
 priority: low
