@@ -77,8 +77,7 @@ jobs:
   # Agent Factory's eval fixtures and harness tests
   # (evals/agent-factory/test.sh) against the atelier built from this
   # commit: each scenario's setup and grader walks, with no model called, on
-  # the runner's own python3. A change to the binary or the skill that
-  # breaks a scenario fails here.
+  # the runner's own python3. Runs only when evals/ or CI config changes.
   evals:
     needs: changes
     if: needs.changes.outputs.evals == 'true'
