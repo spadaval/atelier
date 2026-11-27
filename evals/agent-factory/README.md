@@ -27,8 +27,7 @@ need each fix's regression test ported to the old code.
 
 `evals/agent-factory/test.sh` sets up and grades every case against a
 binary built from this tree, with no agent and no model. CI's `evals` job
-runs it on every change to the binary, the skill or the evals, so a change
-that breaks a fixture fails CI.
+runs it when `evals/` or the CI workflow changes.
 
 ## Cases
 

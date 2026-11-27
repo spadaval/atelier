@@ -32,10 +32,8 @@
 #
 # evals (Agent Factory's eval fixtures and harness tests,
 # evals/agent-factory/test.sh, against an atelier built from the same
-# commit; no model is called) runs when a change touches what they drive or
-# stage: crates/atelier-cli/, crates/atelier-core/, the workspace's
-# Cargo.toml, Cargo.lock or rust-toolchain.toml, skills/agent-factory/,
-# evals/, the CI workflow or this script.
+# commit; no model is called) runs only when a change touches evals/, the CI
+# workflow or this script.
 set -euo pipefail
 
 base=${1:-}
@@ -50,7 +48,7 @@ needs_extension() {
 
 needs_evals() {
   case $1 in
-    crates/atelier-cli/* | crates/atelier-core/* | Cargo.toml | Cargo.lock | rust-toolchain.toml | skills/agent-factory/* | evals/* | .github/workflows/ci.yml | scripts/ci-jobs.sh) return 0 ;;
+    evals/* | .github/workflows/ci.yml | scripts/ci-jobs.sh) return 0 ;;
     *) return 1 ;;
   esac
 }

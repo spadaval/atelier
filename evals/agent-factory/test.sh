@@ -2,9 +2,7 @@
 # Runs the agent-factory evals' own tests, which start no agent and call no
 # model: harness/test_run.py, and each scenario's test_grade.py, which runs
 # its setup.sh and walks the binary through passing and failing paths.
-# CI's evals job runs this on every change to the binary, the skill or the
-# evals, so a change that breaks a fixture fails there, not in the next
-# eval round.
+# CI's evals job runs this only when evals/ or CI config changes.
 #
 # Usage: evals/agent-factory/test.sh [<atelier binary>]
 # The binary defaults to target/debug/atelier; build it first with

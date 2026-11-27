@@ -58,33 +58,33 @@ expect true false false false config .atelier/config.toml
 expect true false false false config-and-records .atelier/config.toml .atelier/items/a/item.md
 expect true false false false markdown-under-crates crates/a/tests/fixtures/new.md
 expect true false false false rust-source crates/a/src/lib.rs
-expect true false true true lockfile Cargo.lock
+expect true false true false lockfile Cargo.lock
 expect true false false false workflow-policy .atelier/workflow.yaml
 expect true false true true github-workflow .github/workflows/ci.yml
 expect true false false false script scripts/x.sh
-expect true false false true skill skills/agent-factory/SKILL.md skills/agent-factory/evals.json
-expect true false true true markdown-and-code README.md Cargo.toml
+expect true false false false skill skills/agent-factory/SKILL.md skills/agent-factory/evals.json
+expect true false true false markdown-and-code README.md Cargo.toml
 expect false true true false desk-app desk/src/pages/Mission.tsx desk/package.json
 expect true true true false desk-api-types desk/src/api/MissionPage.ts
 expect false true true false desk-readme desk/README.md
 expect false true true false desk-fixtures desk/e2e/fixtures.ts
 expect true true true false rust-and-desk crates/a/src/lib.rs desk/src/App.tsx
-expect true false true true toolchain rust-toolchain.toml
+expect true false true false toolchain rust-toolchain.toml
 expect false false true false t3-extension t3-extension/custom.js t3-extension/install.py t3-extension/README.md
 expect true true true false t3-extension-and-desk-api t3-extension/custom.js desk/src/api/MissionPage.ts
 expect true false true false desk-server crates/atelier-desk/src/api.rs
-expect true false false true core-alone crates/atelier-core/src/repo.rs
+expect true false false false core-alone crates/atelier-core/src/repo.rs
 expect true false false false nested-cargo-toml crates/a/Cargo.toml
-expect true false true true workspace-cargo-toml Cargo.toml
+expect true false true false workspace-cargo-toml Cargo.toml
 expect true false true true ci-jobs-script scripts/ci-jobs.sh
 expect true false false false ci-jobs-test scripts/ci-jobs.test.sh
 expect true false false false other-workflow .github/workflows/v-release.yml
 expect true false true false t3-extension-release-script scripts/t3-extension-release.sh
 expect true false true false t3-extension-release-test scripts/t3-extension-release.test.sh
 expect false false true false t3-extension-test t3-extension/test-extension.mjs
-expect true false false true cli crates/atelier-cli/src/main.rs
+expect true false false false cli crates/atelier-cli/src/main.rs
 expect false false false true eval-scenario evals/agent-factory/scenarios/x/setup.sh evals/agent-factory/README.md
-expect false false false true skill-reference skills/agent-factory/roles/implementer.md
+expect false false false false skill-reference skills/agent-factory/roles/implementer.md
 
 # Moving a fixture out of crates/ changes crates/.
 repo="$scratch/rename"
