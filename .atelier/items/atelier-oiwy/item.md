@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-oiwy
 title: Find which part of the skill costs a reviewer a defect, and try two passages for the reviewer
-status: in_review
+status: changes_requested
 mission: atelier-kw8u
 labels: []
 priority: medium
