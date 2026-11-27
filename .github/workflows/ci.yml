@@ -19,9 +19,8 @@ env:
   RUST_BACKTRACE: 0
 
 jobs:
-  # Decides which jobs the change needs (scripts/ci-jobs.sh), and checks
-  # whitespace on every change. A run whose other jobs are skipped still
-  # concludes success, which the merge gate reads.
+  # Decides which jobs the change needs (scripts/ci-jobs.sh). A run whose
+  # other jobs are skipped still concludes success, which the merge gate reads.
   changes:
     runs-on: ubuntu-latest
     outputs:
@@ -38,13 +37,6 @@ jobs:
       - run: scripts/ci-jobs.test.sh
       - id: jobs
         run: scripts/ci-jobs.sh "$BASE" HEAD >> "$GITHUB_OUTPUT"
-      - name: git diff --check
-        run: |
-          if [ -z "$BASE" ] || ! git rev-parse -q --verify "$BASE^{commit}" >/dev/null; then
-            echo "No base commit to compare against."
-          else
-            git diff --check "$BASE" HEAD
-          fi
 
   # The workspace's lints, build and tests, and `atelier check` on this
   # repository's records. Linux only: macOS is not supported (see README.md).

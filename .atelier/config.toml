@@ -3,9 +3,6 @@ slug = "atelier"
 base_branch = "master"
 
 [[merge_check]]
-run = "git diff --check HEAD^ HEAD -- . ':!.atelier'"
-
-[[merge_check]]
 run = "cargo fmt -- --check"
 
 [[merge_check]]

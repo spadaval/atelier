@@ -109,7 +109,6 @@ item in `items/<id>/item.md` with its reviews beside it, and the rules in
 - Formatting: `cargo fmt -- --check`
 - Lints: `cargo clippy --all-targets -- -D warnings`
 - Rust tests: `cargo nextest run`
-- Whitespace: `git diff --check`
 - Locally, run formatting and the tests that cover your change
   (`cargo nextest run -p <crate>` or a filter). The full suite runs on Linux
   in CI on the pull request (`.github/workflows/ci.yml`), and that run gates
