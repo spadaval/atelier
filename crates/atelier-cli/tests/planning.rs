@@ -1587,7 +1587,8 @@ fn a_mission_goes_from_its_branch_through_two_plan_reviews_and_its_items_to_clos
     let text = fs::read_to_string(&why).unwrap();
     fs::write(
         &why,
-        text.replace("## Why\n", "## Why\n\nAda asked, in conversation.\n"),
+        text.replace("## Why\n", "## Why\n\nAda asked, in conversation.\n")
+            .replace("## Outcome\n", "## Outcome\n\nEveryone is greeted.\n"),
     )
     .unwrap();
     commit_all(&root, "Define it");
@@ -1662,6 +1663,20 @@ fn a_mission_goes_from_its_branch_through_two_plan_reviews_and_its_items_to_clos
         );
         let run = atelier(&at, thread, &["review", &mission]);
         assert_eq!(run.code, 0, "{}", run.stderr);
+        // It says what a plan review is for, and when it stops.
+        assert!(
+            run.stdout.contains(
+                "A plan review is for what the mission will make true: whether it is what the \
+                 human asked for, whether each criterion can be checked, and whether the items, \
+                 their order and what is out reach the Outcome. How an item is built is for its \
+                 implementer and its reviewer: record a finding about a mechanism, or about a \
+                 case the plan does not state, as `defer` and name the item it concerns, unless \
+                 the plan cannot reach its Outcome without it. The plan's review stops once both \
+                 reviewers of a round approve, and a deferred finding does not hold that up."
+            ),
+            "{}",
+            run.stdout
+        );
         after.push(at);
     }
     let landed: Vec<bool> = after
@@ -1698,7 +1713,18 @@ fn a_mission_goes_from_its_branch_through_two_plan_reviews_and_its_items_to_clos
     git(&work, &["add", "-A"]);
     git(&work, &["commit", "-qm", "Say hello"]);
     assert_eq!(atelier(&work, "t1", &["submit"]).code, 0);
-    assert_eq!(atelier(&work, "t2", &["review", &a]).code, 0);
+    // Its reviewer weighs its Done when against the mission's Outcome.
+    let review = atelier(&work, "t2", &["review", &a]);
+    assert_eq!(review.code, 0, "{}", review.stderr);
+    assert!(
+        review.stdout.contains(&format!(
+            "\nThe Outcome of mission {mission}, which this item serves:\nEveryone is greeted.\n\
+             A Done when line that asks for more than that Outcome needs is not a box to tick: \
+             record a `Shrink:` finding against the item that names the line.\n"
+        )),
+        "{}",
+        review.stdout
+    );
     assert_eq!(verdict(&work, "t2", &["verdict", "approve"]).code, 0);
     let merged = atelier(&work, "t1", &["merge"]);
     assert_eq!(merged.code, 0, "{}", merged.stderr);

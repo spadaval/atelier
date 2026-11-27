@@ -45,6 +45,21 @@ its Scope or Done when, drop it, or have it fixed. Only once you rule to fix
 it does its implementer submit the next round; write that ruling in
 `notes.md`.
 
+## Shaping Items as Work Lands
+
+What lands first changes what the rest should be. As earlier items land,
+you may split an item, shrink its Done when or rewrite it, inside the
+mission's Outcome and Authority: on its branch once it is started, else on
+a backlog branch, with the reason in `notes.md`. A Done when line that asks
+for more than the Outcome needs is reason enough, whether you see it or an
+item's reviewer raises `Shrink:`. Before an item starts, read the deferred
+findings of the plan's review that name it, and write those still wanted
+into it.
+
+When you report on the mission to the human, give its review pace as
+`status` prints it: rounds per item, the time a round took, and the new
+findings after round one.
+
 ## Doing Less
 
 Where the work turns out much harder than the plan took it to be, you may

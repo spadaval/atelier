@@ -423,7 +423,21 @@ fn brief(
         .into_iter()
         .filter_map(|heading| Some((heading, item.section(heading)?)))
         .collect();
+    // The mission's Outcome as this checkout holds it, against which a
+    // reviewer weighs the item's Done when.
+    let mission = item
+        .item
+        .mission
+        .as_deref()
+        .and_then(|id| repo.store().mission(id).ok());
+    let outcome = mission.as_ref().and_then(|mission| {
+        let outcome = mission
+            .section("Outcome")
+            .filter(|text| !text.trim().is_empty())?;
+        Some((mission.mission.id.as_str(), outcome))
+    });
     Ok(output::brief(&Brief {
+        outcome,
         pull_request: forge.map(|forge| pull_request(repo, forge, &item.item.id)),
         id: &item.item.id,
         title: &item.item.title,

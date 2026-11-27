@@ -2,7 +2,7 @@
 
 ## Size and Verdict
 
-Before the findings, size the whole change on three scales, each with a
+In round 1, before the findings, size the whole change on three scales, each with a
 one-line reason:
 
 - **Complexity:** low, held in one sitting with no new moving part; medium, a
@@ -16,14 +16,13 @@ one-line reason:
 
 A fix-now finding blocks the merge. The implementer must fix it, rebut it,
 or take it to the mission's lead as not worth building. A finding at `defer`
-or `no action` blocks nothing, and the implementer may leave it with a basic
-reason.
+or `no action` blocks nothing, and the implementer may leave it with a reason.
 
 Then judge whether the value is worth the rest. If a much smaller change gets
 most of it, record a fix-now finding whose title opens `Shrink:` and names
 that change. If the cost outweighs the value, record one that opens
 `Reject:` and names the outcome and why. Report every other finding you can
-support as well, whatever your verdict.
+support, whatever your verdict.
 
 ## Severity
 

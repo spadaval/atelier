@@ -1227,6 +1227,8 @@ pub struct Brief<'a> {
     pub round: u32,
     /// Goal, Done when, Scope and Report, those the item has.
     pub sections: Vec<(&'a str, &'a str)>,
+    /// The item's mission and its Outcome, where it has both.
+    pub outcome: Option<(&'a str, &'a str)>,
     pub base: &'a str,
     pub commit: &'a str,
     /// The round before's, from round 2 on.
@@ -1302,6 +1304,14 @@ pub fn brief(brief: &Brief) -> String {
         text += &format!("\n## {heading}\n{}", content.trim_end());
         text += "\n";
     }
+    let whole_round = matches!(brief.previous, None | Some(Previous::Lost(_)));
+    if let (Some((mission, outcome)), Some(_), true) = (brief.outcome, brief.path, whole_round) {
+        text += &format!(
+            "\nThe Outcome of mission {mission}, which this item serves:\n{}\n\
+             A Done when line that asks for more than that Outcome needs is not a box to tick: record a `Shrink:` finding against the item that names the line.\n",
+            outcome.trim()
+        );
+    }
     let whole = format!("  git diff {}...{commit}\n", brief.base);
     let since = match &brief.previous {
         None | Some(Previous::Lost(_)) => None,
@@ -1348,6 +1358,10 @@ const PLAN_REVIEWER_WRITES: &str = "Change no other file until your review is pu
 /// verdict is published.
 const PLAN_REVIEWER_FILES: &str = "Only once that push is made, you may file a problem unrelated to the plan, on a branch of its own so that the plan and your verdict stay as they are: run `atelier start --backlog <slug>`, then on that branch `atelier new \"<title>\"`, write it, run the Git command it prints, then `atelier submit` and `atelier merge`.\n";
 
+/// What a plan's review is for, where a finding about how something is
+/// built goes, and when the review stops.
+const PLAN_REVIEW_IS_FOR: &str = "A plan review is for what the mission will make true: whether it is what the human asked for, whether each criterion can be checked, and whether the items, their order and what is out reach the Outcome. How an item is built is for its implementer and its reviewer: record a finding about a mechanism, or about a case the plan does not state, as `defer` and name the item it concerns, unless the plan cannot reach its Outcome without it. The plan's review stops once both reviewers of a round approve, and a deferred finding does not hold that up.";
+
 /// How every round's reviewer is to look.
 const LOOK: &str = "Read the code, run what proves it, and write down each problem you find. The author's reasoning is left out on purpose; judge what is there.";
 
@@ -1366,7 +1380,7 @@ fn later_round(round: u32) -> String {
         n => format!("{n} rounds have"),
     };
     format!(
-        "{earlier} reviewed the whole change before this one. This round checks the earlier findings and what changed since the last round's review: judge each open finding below, and check that the commits since then are correct, that the change still meets each Done when line, and that the Report's claims hold. {LOOK}\n\
+        "{earlier} reviewed the whole change before this one, so this round does not review it again. It checks the earlier findings and what changed since the last round's review: judge each open finding below, read the commits since then, run what proves them, and write down each problem you find. Leave the change's size, and each Done when line and Report claim those commits did not touch, as the earlier rounds judged them. The author's reasoning is left out on purpose; judge what is there.\n\
          A new finding in code that did not change since the last round's review blocks only if the work would come out wrong without it: record that one as `fix now`, and any other as `defer`, for later work.\n\n"
     )
 }
@@ -1499,7 +1513,7 @@ pub fn plan_brief(brief: &PlanBrief) -> String {
     let task = match &brief.delta {
         Some(delta) => later_plan_round(delta, brief.commit, brief.at),
         None => format!(
-            "Review the plan as commit {} holds it, as someone who did not write it: the mission below, its other documents and its items. Read them, and write down each problem you find.",
+            "Review the plan as commit {} holds it, as someone who did not write it: the mission below, its other documents and its items. Read them, and write down each problem you find. {PLAN_REVIEW_IS_FOR}",
             short(brief.commit)
         ),
     };
@@ -1559,7 +1573,7 @@ fn later_plan_round(delta: &PlanDelta, commit: &str, at: Option<&Path>) -> Strin
         ),
     };
     format!(
-        "{what} A new finding in a part of the plan that did not change blocks only if it is a serious defect the earlier rounds missed: record that one as `fix now`, and any other as `defer`.\nThe plan as commit {} holds it follows, for reference.",
+        "{what} A new finding in a part of the plan that did not change blocks only if it is a serious defect the earlier rounds missed: record that one as `fix now`, and any other as `defer`. {PLAN_REVIEW_IS_FOR}\nThe plan as commit {} holds it follows, for reference.",
         short(commit)
     )
 }
