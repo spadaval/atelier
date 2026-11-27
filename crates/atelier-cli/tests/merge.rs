@@ -434,7 +434,9 @@ fn a_failing_merge_check_on_the_base_tip_stops_the_merge_with_its_command_and_ou
         format!(
             "`atelier merge` refused: the merge check `{check}` failed (exit 3) on {ID} merged into main. Nothing changed.\n\
              The end of its output:\n  first line\n  the cause\n\
-             Fix it on branch {ID} and commit; if main broke it, bring main in first with `git merge main`. `atelier status` then says what comes next.\n{SKIP}"
+             Fix it on branch {ID} and commit; if main broke it, bring main in first with `git merge main`. `atelier status` then says what comes next.\n\
+             If the change should merge with this check failing, say so on purpose: run `atelier merge` again with a reason that names the check, \
+             ATELIER_SKIP='{check}: <why it may fail>' in front of it.\n"
         )
     );
     assert_eq!(state(&root), before);
@@ -2131,10 +2133,15 @@ const REASON: &str = "Ada said to";
 /// `atelier merge` as t1 with `ATELIER_SKIP` set, its waiting check
 /// released from the start.
 fn merge_skipping(at: &Path) -> Run {
+    merge_skipping_for(at, REASON)
+}
+
+/// [`merge_skipping`] with `reason`.
+fn merge_skipping_for(at: &Path, reason: &str) -> Run {
     let release = at.parent().unwrap().join("released");
     fs::write(&release, "").unwrap();
     let output = atelier_command(at, "t1", &["merge"])
-        .env("ATELIER_SKIP", REASON)
+        .env("ATELIER_SKIP", reason)
         .env("MERGE_MARK", at.parent().unwrap().join("mark"))
         .env("MERGE_RELEASE", &release)
         .output()
@@ -2143,52 +2150,152 @@ fn merge_skipping(at: &Path) -> Run {
 }
 
 fn skipped(rule: &str) -> String {
-    format!("Skipped with ATELIER_SKIP: {rule}: {REASON}\n")
+    skipped_for(rule, REASON)
+}
+
+fn skipped_for(rule: &str, reason: &str) -> String {
+    format!("Skipped with ATELIER_SKIP: {rule}: {reason}\n")
 }
 
 fn trailer(rule: &str) -> String {
-    format!("Atelier-Skip: {rule}: {REASON}")
+    trailer_for(rule, REASON)
+}
+
+fn trailer_for(rule: &str, reason: &str) -> String {
+    format!("Atelier-Skip: {rule}: {reason}")
+}
+
+/// A check of two lines, named in one, so Git still reads the trailers.
+const BROKEN: &str = "echo broken\nexit 3";
+const BROKEN_LINE: &str = "echo broken exit 3";
+
+/// The mission the item of [`broken_and_uncommitted`] is in.
+const MISSION: &str = "demo-m1ss";
+
+/// An approved item of [`MISSION`] whose merge fails `BROKEN` and passes
+/// `true`, with a change left uncommitted in its checkout: a rule any
+/// reason passes.
+fn broken_and_uncommitted() -> Scratch {
+    let config = format!(
+        "\n[[merge_check]]\nrun = \"true\"\n\n[[merge_check]]\nrun = \"\"\"\n{BROKEN}\"\"\"\n"
+    );
+    let scratch = approved_in_mission(&config);
+    fs::write(scratch.root().join("hello.txt"), "hello?\n").unwrap();
+    scratch
+}
+
+/// An item of [`MISSION`], approved, on a base whose config has `config`
+/// added.
+fn approved_in_mission(config: &str) -> Scratch {
+    let scratch = Scratch::new(&[(ID, "open")]);
+    let root = scratch.root();
+    let mission = root.join(format!(".atelier/missions/{MISSION}/mission.md"));
+    fs::create_dir_all(mission.parent().unwrap()).unwrap();
+    fs::write(
+        mission,
+        format!(
+            "---\nschema: atelier.mission\nschema_version: 3\nid: {MISSION}\ntitle: Greet\n\
+             status: open\nlabels: []\nlead: null\nready: null\n\
+             created_at: 2026-11-10T09:00:00Z\n---\n\n## Outcome\n\nGreetings.\n"
+        ),
+    )
+    .unwrap();
+    let item = read(&root, &item_path(ID)).replace("mission: null", &format!("mission: {MISSION}"));
+    fs::write(root.join(item_path(ID)), item).unwrap();
+    on_base(&root, "Add the mission");
+    append(&root, ".atelier/config.toml", config);
+    on_base(&root, "Configure");
+    assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
+    fs::write(root.join("hello.txt"), "hello\n").unwrap();
+    git(&root, &["add", "-A"]);
+    git(&root, &["commit", "-qm", "Say hello"]);
+    finish_and_submit(&root, "t1");
+    approve(scratch)
+}
+
+const UNCOMMITTED: &str =
+    "Every change to a tracked file or to this item's directory is committed (these are not: hello.txt)";
+
+#[test]
+fn a_reason_given_for_another_rule_does_not_carry_the_merge_past_a_failing_merge_check() {
+    // The Hub's merges 122403ea and acf8a7f4, replayed: a reason written
+    // for another rule, and a merge check that fails.
+    let scratch = broken_and_uncommitted();
+    let root = scratch.root();
+    let before = state(&root);
+    let run = merge_skipping(&root);
+    assert_eq!(run.code, 1, "{}", run.stdout);
+    // The other rule passed, and the check refused, named with how it
+    // failed and how to pass it on purpose.
+    assert_eq!(run.stdout, skipped(UNCOMMITTED));
+    assert_eq!(
+        run.stderr,
+        format!(
+            "`atelier merge` refused: the merge check `{BROKEN}` failed (exit 3) on {ID} merged into main. Nothing changed.\n\
+             The end of its output:\n  broken\n\
+             Fix it on branch {ID} and commit; if main broke it, bring main in first with `git merge main`. `atelier status` then says what comes next.\n\
+             ATELIER_SKIP is set, and its reason does not name this check, so it does not pass the failure: \
+             a reason given for another rule never carries a merge past a failed check.\n\
+             If the change should merge with this check failing, say so on purpose: run `atelier merge` again with a reason that names the check, \
+             ATELIER_SKIP='{BROKEN_LINE}: <why it may fail>' in front of it.\n"
+        )
+    );
+    // Nothing was merged.
+    assert_eq!(state(&root), before);
+    assert_eq!(field(&root, "main", "status"), "open");
+    assert_eq!(git(&root, &["worktree", "list"]).lines().count(), 1);
 }
 
 #[test]
-fn with_a_skip_a_failing_merge_check_or_uncommitted_change_does_not_stop_the_merge() {
-    // A check of two lines is named in one, so Git still reads the trailers.
-    let check = "echo broken\nexit 3";
-    let scratch = approved_with(
-        &format!("\n[[merge_check]]\nrun = \"\"\"\n{check}\"\"\"\n"),
-        |_| {},
-    );
+fn a_reason_that_names_a_failing_merge_check_merges_past_it_and_says_so_last() {
+    let scratch = broken_and_uncommitted();
     let root = scratch.root();
-    fs::write(root.join("hello.txt"), "hello?\n").unwrap();
-    let run = merge_skipping(&root);
+    // Its whitespace differs from the check's, which is made one line.
+    let reason = format!("{BROKEN}: the lead ruled it flaky");
+    let said_reason = format!("{BROKEN_LINE}: the lead ruled it flaky");
+    let run = merge_skipping_for(&root, &reason);
     assert_eq!(run.code, 0, "{}", run.stderr);
     let rules = [
-        "Every change to a tracked file or to this item's directory is committed (these are not: hello.txt)".to_string(),
-        "The merge check `echo broken exit 3` passes (it failed: exit 3)".to_string(),
+        UNCOMMITTED.to_string(),
+        format!("The merge check `{BROKEN_LINE}` failed (exit 3), and the merge went ahead"),
     ];
-    // The skip's line stands, and nothing says the checks passed.
+    // The skip's lines stand, nothing says the checks passed, and the last
+    // line says which check failed and that the merge went ahead.
     assert_eq!(
         run.stdout,
         format!(
             "{}{}Merged {ID} into main with merge commit {}; it is done.\n\
              Left branch {ID} checked out, since this checkout holds changes the merge does not. \
-             Take them to a branch made with `atelier start --backlog <slug>` or `atelier start <id>`.\n",
-            skipped(&rules[0]),
-            skipped(&rules[1]),
+             Take them to a branch made with `atelier start --backlog <slug>` or `atelier start <id>`.\n\
+             The merge went ahead past a failed merge check, as ATELIER_SKIP's reason asked: `{BROKEN_LINE}` failed (exit 3).\n",
+            skipped_for(&rules[0], &said_reason),
+            skipped_for(&rules[1], &said_reason),
             &head(&root, "main")[..7]
         )
     );
+    // The last line, whole, names the check made one line.
+    let last = format!(
+        "The merge went ahead past a failed merge check, as ATELIER_SKIP's reason asked: `{BROKEN_LINE}` failed (exit 3)."
+    );
+    assert_eq!(run.stdout.lines().last(), Some(last.as_str()));
     assert_eq!(field(&root, "main", "status"), "approved");
     // The branch stays under what is not committed.
     assert_eq!(git(&root, &["branch", "--show-current"]), ID);
-    // The merge commit was made again once the check was skipped, so its
-    // message names both.
+    // The merge commit lists the check that failed apart from the one that
+    // passed, and carries both skips.
     let message = git(&root, &["log", "-1", "--format=%B", "main"]);
+    assert!(
+        message.contains(&format!(
+            "These merge checks passed on this tree:\n- true\n\
+             These merge checks failed on this tree, and ATELIER_SKIP passed them (see Atelier-Skip):\n- {BROKEN} (exit 3)\n"
+        )),
+        "{message}"
+    );
     assert!(
         message.ends_with(&format!(
             "\n\nAtelier-Merge: {ID}\n{}\n{}\nAtelier-Skip-By: t1",
-            trailer(&rules[0]),
-            trailer(&rules[1])
+            trailer_for(&rules[0], &said_reason),
+            trailer_for(&rules[1], &said_reason)
         )),
         "{message}"
     );
@@ -2198,9 +2305,58 @@ fn with_a_skip_a_failing_merge_check_or_uncommitted_change_does_not_stop_the_mer
     );
     assert_eq!(parsed.lines().next(), Some(ID), "{parsed}");
     assert_eq!(parsed.lines().count(), 4, "{parsed}");
+    // `atelier log` shows the failed check as it shows every rule passed.
+    let log = atelier(&root, "t1", &["log"]);
+    assert!(
+        log.stdout
+            .contains(&format!("skip {}: {said_reason} (by t1)", rules[1])),
+        "{}",
+        log.stdout
+    );
+    // So does `atelier show` of its mission.
+    let shown = atelier(&root, "t1", &["show", MISSION]);
+    let commit = &head(&root, "main")[..7];
+    assert!(
+        shown.stdout.contains(&format!(
+            "\nRules passed:\n  {ID}, merge in {commit}, by t1: {}: {said_reason}\n  {ID}, merge in {commit}, by t1: {}: {said_reason}\n",
+            rules[0], rules[1]
+        )),
+        "{}",
+        shown.stdout
+    );
     // What was not committed stays in the checkout, not merged.
     assert_eq!(read(&root, "hello.txt"), "hello?\n");
     assert_eq!(git(&root, &["show", "main:hello.txt"]), "hello");
+}
+
+#[test]
+fn the_skip_a_failed_check_prints_passes_it_when_a_shell_runs_it_as_printed() {
+    // Quotes, `$` and a backtick, which a shell reads inside double quotes.
+    let check = r#"echo "broken $HOME `true`"; exit 3"#;
+    let scratch = approved_in_mission(&format!("\n[[merge_check]]\nrun = '''{check}'''\n"));
+    let root = scratch.root();
+    let refused = merge(&root, "t1", &[]);
+    assert_eq!(refused.code, 1, "{}", refused.stdout);
+    let last = refused.stderr.lines().last().unwrap();
+    let assignment = last
+        .split_once(" ATELIER_SKIP=")
+        .and_then(|(_, rest)| rest.strip_suffix(" in front of it."))
+        .unwrap_or_else(|| panic!("{last}"));
+    // The agent writes its reason in place of the placeholder, and runs it.
+    let assignment = assignment.replace("<why it may fail>", "the lead ruled it flaky");
+    let run = sh(
+        &root,
+        "t1",
+        &format!("ATELIER_SKIP={assignment} atelier merge"),
+    );
+    assert_eq!(run.code, 0, "{}{}", run.stdout, run.stderr);
+    assert!(
+        run.stdout.starts_with(&format!(
+            "Skipped with ATELIER_SKIP: The merge check `{check}` failed (exit 3), and the merge went ahead: {check}: the lead ruled it flaky\n"
+        )),
+        "{}",
+        run.stdout
+    );
 }
 
 #[test]

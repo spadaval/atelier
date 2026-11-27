@@ -20,6 +20,10 @@ pub enum Outcome {
     /// Nothing is wrong and the action cannot finish yet, as when CI has not
     /// finished; the same command run later goes on.
     NotYet(String),
+    /// Refused by a rule that a skip passes only where its reason names
+    /// it, as a merge check that failed: the text says how to pass it,
+    /// with a reason given or without one.
+    Unnamed(String),
 }
 
 /// A refusal as the command prints it: its text, its way out, and, when it

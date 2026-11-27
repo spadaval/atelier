@@ -21,7 +21,7 @@
 use crate::cleanup;
 use crate::commands::{self, hold, Outcome};
 use crate::git;
-use crate::output;
+use crate::output::{self, FailedCheck};
 use anyhow::{Context, Result};
 use atelier_core::actions::{check, Action, MissionFacts, Refusal, STARTED};
 use atelier_core::forge::{CiRun, ForgeError, Github, MergeState, PullRequest};
@@ -160,14 +160,15 @@ pub fn merge(root: &Path, caller: Thread, trivial: Option<String>, skip: &Skip) 
             }
         }
     }
-    let message = match records {
+    let title = match records {
+        true => String::new(),
+        false => (repo.item_at(&head, &id)?)
+            .map(|dir| dir.item.title)
+            .unwrap_or_default(),
+    };
+    let message = |failed: &[FailedCheck]| match records {
         true => output::records_merge_message(&branch, &base),
-        false => {
-            let title = (repo.item_at(&head, &id)?)
-                .map(|dir| dir.item.title)
-                .unwrap_or_default();
-            output::merge_message(&id, &title, &base, &config)
-        }
+        false => output::merge_message(&id, &title, &base, &config, failed),
     };
     let commit = match checked_merge(
         &root,
@@ -236,10 +237,12 @@ fn record_trivial(root: &Path, caller: Thread, why: &str, skip: &Skip) -> Result
 
 /// The merge commit of `branch`, item `id`'s or a records branch, at
 /// `head` into the base at `base_tip`, whose merged tree is `tree`, with
-/// `message`, once the merge checks pass on it: `atelier check` always,
-/// and for an item the merge checks of `config`. Also whether a skip
-/// passed a check that failed. With a forge the commit is not written
-/// anywhere; the forge makes its own with the same message.
+/// the message `message` writes, once the merge checks pass on it:
+/// `atelier check` always, and for an item the merge checks of `config`.
+/// Also each check that failed, which a skip whose reason named it passed;
+/// the message lists those apart from the checks that passed. With a forge
+/// the commit is not written anywhere; the forge makes its own with the
+/// same message.
 #[allow(clippy::too_many_arguments)]
 fn checked_merge(
     root: &Path,
@@ -248,37 +251,48 @@ fn checked_merge(
     (id, branch, base): (&str, &str, &str),
     config: &Config,
     records: bool,
-    message: &str,
+    message: &dyn Fn(&[FailedCheck]) -> String,
     skip: &Skip,
-) -> Result<Result<(String, bool), Outcome>> {
+) -> Result<Result<(String, Vec<FailedCheck>), Outcome>> {
     // Its message carries each rule skipped so far.
-    let commit_merge = || git::commit_tree(root, tree, &[base_tip, head], message, skip);
-    let mut commit = commit_merge()?;
+    let commit_merge = |failed: &[FailedCheck]| {
+        git::commit_tree(root, tree, &[base_tip, head], &message(failed), skip)
+    };
+    let mut commit = commit_merge(&[])?;
     let problems = records_at(root, &commit)?;
     if !problems.is_empty() {
         return Ok(Err(Outcome::Refused(output::records_invalid(
             branch, base, &problems,
         ))));
     }
-    let mut skipped = false;
+    let mut failed = Vec::new();
     if !records && !config.merge_checks.is_empty() {
         let checkout = MergedCheckout::add(root, &commit)?;
         for check in &config.merge_checks {
             if let Some((code, tail)) = run_check(&checkout.path, &check.run)? {
-                let text = output::check_failed(id, base, &check.run, code, &tail);
+                // A reason passes a failed check only where it names it,
+                // so one given for another rule does not carry it.
                 let rule = output::rule_check(&check.run, code);
-                if let Some(refused) = skip.refuse([rule], text) {
-                    return Ok(Err(refused.into()));
+                if !skip.pass_naming(&check.run, rule) {
+                    let text = output::check_failed(id, base, &check.run, code, &tail);
+                    let given = skip.reason().is_some();
+                    return Ok(Err(Outcome::Unnamed(
+                        text + &output::check_unnamed(&check.run, given),
+                    )));
                 }
-                skipped = true;
+                failed.push(FailedCheck {
+                    run: check.run.clone(),
+                    code,
+                });
             }
         }
-        // The same merge, with the checks it skipped in its message.
-        if skipped {
-            commit = commit_merge()?;
+        // The same merge, its message listing the checks that failed and
+        // carrying the skip of each.
+        if !failed.is_empty() {
+            commit = commit_merge(&failed)?;
         }
     }
-    Ok(Ok((commit, skipped)))
+    Ok(Ok((commit, failed)))
 }
 
 /// Merges `commit`, the merge of the branch whose `head` the checks ran
@@ -292,7 +306,7 @@ fn finish(
     uncommitted: &Dirt,
     (base_checkout, base_dirt): (Option<&Path>, Option<&Dirt>),
     id: &str,
-    (commit, skipped): (String, bool),
+    (commit, failed): (String, Vec<FailedCheck>),
     config: &Config,
     records: bool,
     pull: Option<&PullRequest>,
@@ -313,11 +327,16 @@ fn finish(
     if let Some(moved) = moved(repo, (id, records), read, base_read)? {
         return Ok(Outcome::Refused(output::moved(&moved, id, &base)));
     }
-    // A check a skip passed failed, and its skip's line says so.
-    let mut said = match (records, skipped) {
+    // A check a skip passed failed, and its skip's line says so, as does
+    // the last line.
+    let mut said = match (records, failed.is_empty()) {
         (true, _) => output::records_checked(&base),
-        (false, true) => String::new(),
-        (false, false) => output::checks_passed(&base, config.merge_checks.len()),
+        (false, false) => String::new(),
+        (false, true) => output::checks_passed(&base, config.merge_checks.len()),
+    };
+    let past = match failed.is_empty() {
+        true => String::new(),
+        false => output::merged_past(&failed),
     };
     let Some(forge) = &config.forge else {
         match base_checkout {
@@ -338,7 +357,7 @@ fn finish(
             false => output::merged(id, &base, commit),
         };
         said += &cleanup::delete_merged(repo, None, &branch, head);
-        return Ok(Outcome::Done(said));
+        return Ok(Outcome::Done(said + &past));
     };
     // With a forge the base moves only by its merge of the pull request,
     // which the wait before the lock found or opened.
@@ -374,7 +393,7 @@ fn finish(
     said += &catch_up(&root, &forge.remote, &base)?;
     said += &cleanup::close_pull_requests(repo, forge, &dropped, &branch);
     said += &cleanup::delete_merged(repo, Some(forge), &branch, head);
-    Ok(Outcome::Done(said))
+    Ok(Outcome::Done(said + &past))
 }
 
 /// Why the forge refused to merge pull request `pull` with `error`, from

@@ -645,8 +645,14 @@ and `merge` waits for nothing.
 
 A merge that runs the checks says, before the line that reports the merge, how many of the base's merge checks ran on the
 merged tree and that they passed, or that `config.toml` names none. A
-failing check passed with `ATELIER_SKIP` gets its skip line instead, and
-nothing says the checks passed. A run that finds the branch already merged
+failing check refuses the merge, naming the check and how it failed, and
+`ATELIER_SKIP` passes it only when its reason names the check, its command
+and then a colon, as in
+`ATELIER_SKIP="npm test: <why it may fail>"`: a reason given for another
+rule never carries a merge past a failed check. One passed that way gets
+its skip line instead, nothing says the checks passed, the last line says
+which check failed and that the merge went ahead, and the merge commit
+lists it under the checks that failed, not those that passed. A run that finds the branch already merged
 says so, and says nothing of checks.
 
 Once the base this clone has fetched holds the merged commit, `merge`

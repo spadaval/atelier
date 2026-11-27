@@ -75,7 +75,7 @@ impl Skip {
     /// A skip for `reason`, its whitespace made one line. A blank reason is
     /// none.
     pub fn new(reason: Option<&str>) -> Skip {
-        let reason = reason.map(|reason| reason.split_whitespace().collect::<Vec<_>>().join(" "));
+        let reason = reason.map(one_line);
         Skip {
             reason: reason.filter(|reason| !reason.is_empty()),
             by: None,
@@ -125,13 +125,24 @@ impl Skip {
         let mut passed = self.passed.borrow_mut();
         for rule in rules {
             // A trailer is one line: a merge check's command may hold several.
-            let rule = rule.split_whitespace().collect::<Vec<_>>().join(" ");
+            let rule = one_line(&rule);
             let line = format!("{rule}: {reason}");
             if !passed.contains(&line) {
                 passed.push(line);
             }
         }
         true
+    }
+
+    /// Whether a reason is given that names `name`, so that `rule` passes,
+    /// as [`Skip::pass`] passes it. A rule that fails the work itself, as a
+    /// merge check does, passes only this way, so that a reason written for
+    /// another rule cannot carry the work past it (atelier-7ci6).
+    pub fn pass_naming(&self, name: &str, rule: String) -> bool {
+        match &self.reason {
+            Some(reason) if names(reason, name) => self.pass([rule]),
+            _ => false,
+        }
     }
 
     /// Each rule passed so far, as `<rule>: <reason>`.
@@ -208,6 +219,25 @@ impl Skip {
             Some(first) => self.gate(action, id, &all, say::mission_refused(action, id, first)),
         })
     }
+}
+
+/// Whether `reason` names `name`: writes it followed by a colon, at its
+/// start or after a space, quote or backtick, each with its whitespace made
+/// one line. So the short check `true` is not named by "construe:".
+fn names(reason: &str, name: &str) -> bool {
+    let named = format!("{}:", one_line(name));
+    let reason = one_line(reason);
+    (reason.match_indices(&named)).any(|(at, _)| {
+        reason[..at]
+            .chars()
+            .next_back()
+            .is_none_or(|before| before == ' ' || "\"'`".contains(before))
+    })
+}
+
+/// `text` with its whitespace made single spaces, as a trailer's one line.
+fn one_line(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 /// What the caller is told when `action` is refused for `refusal`. Only a

@@ -268,3 +268,29 @@ fn history_past_its_deadline_is_an_error_and_before_it_is_the_whole_history() {
         .unwrap();
     assert_eq!(found.actions.len(), 1, "{:?}", found.actions);
 }
+
+#[test]
+fn a_reason_passes_a_failed_merge_check_only_where_it_writes_the_check_and_a_colon() {
+    let rule = || "The check failed".to_string();
+    let passes = |reason: Option<&str>, check: &str| Skip::new(reason).pass_naming(check, rule());
+    // No reason, or one given for another rule, passes nothing.
+    assert!(!passes(None, "npm test"));
+    assert!(!passes(Some("I am the lead"), "npm test"));
+    // Named without the colon, or inside another word, it is not named.
+    assert!(!passes(Some("npm test is flaky"), "npm test"));
+    assert!(!passes(Some("construe: as you like"), "true"));
+    // Named at the start, after a space or a quote, it passes, its
+    // whitespace made one line on both sides.
+    assert!(passes(Some("npm test: flaky upstream"), "npm test"));
+    assert!(passes(
+        Some("Ruled: `cargo fmt: rustfmt drift`"),
+        "cargo fmt"
+    ));
+    assert!(passes(
+        Some("both: true: flaky; echo  a\nb: too"),
+        "echo a\n b"
+    ));
+    let skip = Skip::new(Some("npm test: flaky"));
+    assert!(skip.pass_naming("npm test", rule()));
+    assert_eq!(skip.passed(), ["The check failed: npm test: flaky"]);
+}
