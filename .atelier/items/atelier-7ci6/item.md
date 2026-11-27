@@ -91,9 +91,14 @@ by "construe:". Every other rule still passes on any reason, as Scope asks.
 Why naming, not a second variable: `docs/design.md` keeps `ATELIER_SKIP`
 the whole interface, and a reason that names the check also makes the
 trailer say what was ruled on. The cost is that a lead types the check's
-command; the refusal prints it ready to copy.
+command; the refusal prints it ready to copy, as one single-quoted shell word.
 
 Checks run: `cargo nextest run -p atelier-cli -p atelier-core` (400
 passed), `cargo clippy -p atelier-cli -p atelier-core --all-targets -- -D
 warnings`, `cargo fmt -- --check`, `git diff --check`. Commits that passed a
 check under the old wording keep their old trailer; nothing parses it.
+
+### Responses
+
+1-0urt.1: fixed in 2621fc1cf
+1-0urt.2: fixed in 2621fc1cf
