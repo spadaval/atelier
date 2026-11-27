@@ -3,12 +3,13 @@ schema: atelier.item
 schema_version: 3
 id: atelier-f0sn
 title: Put what waits on the reader first in status, one line per item, with a line of review pace for a mission's lead
-status: open
+status: building
 mission: atelier-oqsz
 labels: []
 priority: high
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A7729b331-a9bb-417c-90ef-4521f33e62cd%3Adelegate-task%3Aoqsz-impl-f0sn
 ready: null
 trivial: null
 caused_by: null
