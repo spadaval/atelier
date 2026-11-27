@@ -3,6 +3,7 @@
 //! first found.
 
 use crate::model::{Recommendation, Time};
+use crate::records::ReviewFile;
 use crate::repo::item_dir;
 use crate::view::Located;
 use crate::{git, Repo};
@@ -21,6 +22,11 @@ pub struct Pace {
     /// review's opening, its `created_at`, to the commit that wrote its
     /// verdict.
     pub took: Vec<Duration>,
+    /// For each round after the first whose verdict commit was found, and
+    /// an earlier round's: the time from the latest earlier verdict to
+    /// this round's, which holds the implementer's fixing as well as the
+    /// review.
+    pub cycle: Vec<Duration>,
     /// The findings a round after the first raised that no earlier round
     /// had, which carry no `Was:`.
     pub later_new: usize,
@@ -32,14 +38,27 @@ impl Pace {
     /// The middle of [`Pace::took`], the lower of the two middle ones when
     /// their count is even.
     pub fn median(&self) -> Option<Duration> {
-        let mut took = self.took.clone();
-        took.sort();
-        took.get(took.len().saturating_sub(1) / 2).copied()
+        median(&self.took)
     }
 
     pub fn longest(&self) -> Option<Duration> {
         self.took.iter().max().copied()
     }
+
+    /// The middle of [`Pace::cycle`], as [`Pace::median`] takes it.
+    pub fn cycle_median(&self) -> Option<Duration> {
+        median(&self.cycle)
+    }
+
+    pub fn cycle_longest(&self) -> Option<Duration> {
+        self.cycle.iter().max().copied()
+    }
+}
+
+fn median(times: &[Duration]) -> Option<Duration> {
+    let mut times = times.to_vec();
+    times.sort();
+    times.get(times.len().saturating_sub(1) / 2).copied()
 }
 
 /// The pace of mission `mission`, from its items among `items`, each as
@@ -80,10 +99,21 @@ pub fn pace(repo: &Repo, items: &[Located], mission: &str) -> Result<Pace> {
         }
         pace.items += 1;
         pace.rounds += judged.len();
-        for file in judged {
+        let at = |file: &ReviewFile| {
             let path = format!("{}/reviews/{}.md", item_dir(&located.id), file.name);
-            if let Some(at) = written.get(&path) {
-                pace.took.push(*at - file.review.created_at);
+            written.get(&path).copied()
+        };
+        for file in judged.iter().copied() {
+            if let Some(at_verdict) = at(file) {
+                pace.took.push(at_verdict - file.review.created_at);
+                // From the latest verdict of a round before this one.
+                let before = (judged.iter().copied())
+                    .filter(|earlier| earlier.name.round < file.name.round)
+                    .filter_map(at)
+                    .max();
+                if let Some(before) = before {
+                    pace.cycle.push(at_verdict - before);
+                }
             }
             if file.name.round < 2 {
                 continue;
