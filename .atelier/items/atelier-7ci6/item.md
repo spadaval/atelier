@@ -3,12 +3,13 @@ schema: atelier.item
 schema_version: 3
 id: atelier-7ci6
 title: Refuse a merge whose merge check failed unless the reason was given for that failure, and say plainly when one is passed
-status: open
+status: building
 mission: atelier-oqsz
 labels: []
 priority: medium
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A7729b331-a9bb-417c-90ef-4521f33e62cd%3Adelegate-task%3Aoqsz-impl-7ci6
 ready: null
 trivial: null
 caused_by: null
