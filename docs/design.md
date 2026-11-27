@@ -1188,8 +1188,24 @@ In order:
    command, its exit status and the last 20 lines of its output. When none
    failed, the output says, before the line that reports the merge, how
    many checks ran and that each passed, or that `config.toml` names none.
-   A failing check `ATELIER_SKIP` passed has its skip line instead, and no
-   line says the checks passed. `atelier check` on the merged tree is
+   `ATELIER_SKIP` passes a failing check only when its reason names it:
+   writes its command followed by a colon, at the start or after a space,
+   quote or backtick, with the whitespace of both made one line
+   (`Skip::pass_naming`), so the check `true` is not named by "construe:".
+   A check fails the work itself, not the process, so a reason written for
+   another rule must not carry the merge past it (atelier-7ci6, after two
+   merges on the Hub went past a failed test run on a reason given for "you
+   are not this item's implementer"). Its refusal says that, and how to name
+   it: `ATELIER_SKIP="<check>: <why it may fail>" atelier merge`, one
+   `<check>:` for each that fails. A check
+   passed that way has its skip line instead, no line says the checks
+   passed, and the last line the merge prints names the check, how it
+   failed and that the merge went ahead. The merge commit is written again
+   with a message that lists it under "These merge checks failed on this
+   tree, and ATELIER_SKIP passed them", apart from those that passed, and
+   its trailer reads ``The merge check `<check>` failed (<exit>), and the
+   merge went ahead: <reason>``, which `log` and `show` print as every
+   rule passed. `atelier check` on the merged tree is
    always among the checks, whatever `config.toml` lists, and runs first;
    on a record-only branch it is the only one.
 8. Confirm the branch tip, the base tip and the checkouts are what steps 4
@@ -1660,7 +1676,8 @@ rule names.
   `check` gives the first. Otherwise the first is refused as before, with
   no skip offered.
 - **Rules:** a role, a status and a holder of the action table, and its
-  conditions; a merge check that fails; CI that failed, and CI whose run
+  conditions; a merge check that fails, which a skip passes only when its
+  reason names the check (step 7 of `merge`); CI that failed, and CI whose run
   has not finished, which a skip passes without waiting (the "not yet" at
   the bound is no refusal and offers no skip); a record-writing command run
   on a kind of branch the action table does not give for its change, and

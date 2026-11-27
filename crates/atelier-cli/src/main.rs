@@ -388,6 +388,13 @@ fn exit(result: anyhow::Result<Outcome>, skip: &Skip) -> ExitCode {
         Ok(Outcome::Done(text)) => (text, String::new(), 0),
         Ok(Outcome::Refused(text)) => (String::new(), text, 1),
         Ok(Outcome::NotYet(text)) => (text, String::new(), 3),
+        // It says itself how a reason passes it, so it is no "cannot be
+        // skipped" below.
+        Ok(Outcome::Unnamed(text)) => {
+            let _ = std::io::stdout().write_all(output::skipped(&skip.passed()).as_bytes());
+            let _ = std::io::stderr().write_all(text.as_bytes());
+            return ExitCode::from(1);
+        }
         Err(error) => (String::new(), format!("atelier: {error:#}\n"), 2),
     };
     let mut err = err;

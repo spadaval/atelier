@@ -28,7 +28,13 @@ You settle a dispute between an implementer and a reviewer in your mission,
 either way, and record the ruling. For the implementer, merge past the
 finding on the item's branch: `ATELIER_SKIP="<ruling>" atelier merge`. For
 the reviewer, tell the implementer to fix it, and write the ruling in
-`notes.md`. Where the dispute is whether the work belongs in the item, you
+`notes.md`.
+
+A reason passes a failed merge check only when it names the check, since
+a check that fails says the work is broken, not the process. To merge past
+one on purpose, run `ATELIER_SKIP="<check>: <why it may fail>" atelier
+merge`, the check's command as the refusal prints it and then a colon; the merge's last
+line and its commit then say the check failed and the merge went ahead. Where the dispute is whether the work belongs in the item, you
 may instead change its Scope or Done when on its branch and file the rest
 as an item.
 

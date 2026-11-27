@@ -1807,16 +1807,41 @@ pub fn conflicts(id: &str, base: &str, paths: &[String]) -> String {
     )
 }
 
-/// The merge commit's message. Its last line is the trailer the pre-push
-/// hook knows an Atelier merge by.
-pub fn merge_message(id: &str, title: &str, base: &str, config: &Config) -> String {
+/// A merge check that failed on the merged tree, which a skip whose reason
+/// named it passed: its command and its exit code.
+pub struct FailedCheck {
+    pub run: String,
+    pub code: Option<i32>,
+}
+
+/// The merge commit's message, which lists the merge checks of `config`
+/// that passed and, apart, those in `failed`. Its last line is the trailer
+/// the pre-push hook knows an Atelier merge by.
+pub fn merge_message(
+    id: &str,
+    title: &str,
+    base: &str,
+    config: &Config,
+    failed: &[FailedCheck],
+) -> String {
     let mut text = format!(
         "Merge {id}: {title}\n\nMerges branch {id} into {base}, where its record reads as done.\n"
     );
-    if !config.merge_checks.is_empty() {
+    let failed_run = |run: &str| failed.iter().any(|check| check.run == run);
+    let passed: Vec<&str> = (config.merge_checks.iter())
+        .map(|check| check.run.as_str())
+        .filter(|run| !failed_run(run))
+        .collect();
+    if !passed.is_empty() {
         text += "These merge checks passed on this tree:\n";
-        for check in &config.merge_checks {
-            text += &format!("- {}\n", check.run);
+        for run in passed {
+            text += &format!("- {run}\n");
+        }
+    }
+    if !failed.is_empty() {
+        text += "These merge checks failed on this tree, and ATELIER_SKIP passed them (see Atelier-Skip):\n";
+        for check in failed {
+            text += &format!("- {} ({})\n", check.run, exit_status(check.code));
         }
     }
     text + &format!("\nAtelier-Merge: {id}\n")
@@ -1828,12 +1853,25 @@ fn exit_status(code: Option<i32>) -> String {
     })
 }
 
-/// The rule that the merge check `run` passes, which it failed with `code`.
+/// The rule a failed merge check breaks, as a skip's line and trailer say
+/// it: that the check `run` failed with `code`.
 pub(crate) fn rule_check(run: &str, code: Option<i32>) -> String {
     format!(
-        "The merge check `{run}` passes (it failed: {})",
+        "The merge check `{run}` failed ({}), and the merge went ahead",
         exit_status(code)
     )
+}
+
+/// The last line of a merge that went ahead past each check in `failed`.
+pub fn merged_past(failed: &[FailedCheck]) -> String {
+    let checks: Vec<String> = (failed.iter())
+        .map(|check| format!("`{}` failed ({})", check.run, exit_status(check.code)))
+        .collect();
+    let (noun, checks) = match checks.len() {
+        1 => ("check", checks.join("")),
+        _ => ("checks", checks.join(", and ")),
+    };
+    format!("The merge went ahead past a failed merge {noun}, as ATELIER_SKIP's reason asked: {checks}.\n")
 }
 
 /// The rule that CI passed on the head, where `run` is the run that
@@ -1865,6 +1903,20 @@ pub fn check_failed(id: &str, base: &str, run: &str, code: Option<i32>, tail: &s
     }
     text + &format!(
         "Fix it on branch {id} and commit; if {base} broke it, bring {base} in first with `git merge {base}`. `atelier status` then says what comes next.\n"
+    )
+}
+
+/// How a merge check that failed, `run`, is passed, after its refusal:
+/// only by a reason that names it. `given` is whether a reason was given,
+/// which then did not name it.
+pub fn check_unnamed(run: &str, given: bool) -> String {
+    let run = run.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut text = String::new();
+    if given {
+        text += "ATELIER_SKIP is set, and its reason does not name this check, so it does not pass the failure: a reason given for another rule never carries a merge past a failed check.\n";
+    }
+    text + &format!(
+        "If the change should merge with this check failing, say so on purpose: run `atelier merge` again with a reason that names the check, ATELIER_SKIP=\"{run}: <why it may fail>\" in front of it.\n"
     )
 }
 
