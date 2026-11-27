@@ -129,3 +129,16 @@ which reads either way. The lead ruled for the whole cycle of a later
 round, because that is the cost the human's example names ("took over an
 hour each and caught nothing") and the one a lead can avoid. Filed as
 `atelier-cpfd` in this mission. The version bump follows it.
+
+## 2026-11-27: the version bump is an item, not a trivial merge
+
+The plan had the lead bump the version in a trivial merge. The repository
+keeps a changelog with an "Updating a host" part, and two of this
+mission's changes need saying there: plain `atelier log` now prints the
+30 newest actions, which breaks a script or a vendored garden counter
+that read it whole, and a failed merge check needs its own reason. A
+changelog entry is prose, so the lead filed `atelier-fbte` and has it reviewed. No
+tag is pushed: nobody asked for a release.
+
+`atelier-hlvq` is filed outside the mission, from `atelier-cpfd`'s implementer:
+`merge` judged CI on the commit before the one just pushed.
