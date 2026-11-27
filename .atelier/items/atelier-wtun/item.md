@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-wtun
 title: Give each eval run its own ports, so two runs of one case cannot collide
-status: draft
+status: dropped
 mission: atelier-kw8u
 labels: []
 priority: medium
@@ -35,3 +35,7 @@ are run one at a time.
 ## Scope
 
 `evals/agent-factory/harness/`, the `refused-push` case and the README.
+
+## Report
+
+Dropped: The human froze parallel LLM eval matrices on 2026-11-27 and asked for atelier-kw8u to close once atelier-oiwy merges. Per-run ports matter only when two runs of one case go side by side.
