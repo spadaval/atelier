@@ -3,12 +3,13 @@ schema: atelier.item
 schema_version: 3
 id: atelier-hota
 title: Print atelier log newest first with a default limit
-status: open
+status: building
 mission: atelier-oqsz
 labels: []
 priority: low
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A97bcfb9a-33e0-42f5-882a-004f5d9c6644%3Adelegate-task%3Aoqsz-impl-hota
 ready: null
 trivial: null
 caused_by: null
