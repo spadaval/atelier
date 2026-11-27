@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-f0sn
 title: Put what waits on the reader first in status, one line per item, with a line of review pace for a mission's lead
-status: changes_requested
+status: in_review
 mission: atelier-oqsz
 labels: []
 priority: high
@@ -68,7 +68,9 @@ for every startable item, or "Nothing in the missions you lead waits on
 you now."); each mission led, as `You lead mission <id>:`, a review pace
 line, one line per item not done and a count of the done ones; then the
 backlog under a heading, without the led missions' items, with 3
-startable items instead of 10 when the caller holds or leads something.
+startable items instead of 10 when the caller holds or leads something;
+last, the drops of any thread's items, which wait on nobody in particular
+(moved there in round 2).
 On an item's branch `status` already printed that item alone. The held
 item's `Then:` line now comes before the backlog, so it is no longer the
 last line when a backlog follows.
@@ -131,4 +133,13 @@ hypothetical, and on these records the reviews were shorter.
   `kept-finding-wrong`, which read a kept rebuttal from the lead's
   `status`; `1c8821395` puts disputes back in full under their mission.
 
+Round 2: `ad31d97d2` moves the drop notices after the backlog. Its test
+leads a mission with one startable item and forty items dropped on the
+base with their branches left, and checks that the handoff comes in the
+first 2 KB, ahead of the drops. The same commit also fixes the deferred
+1-1tto.2: a led mission's needs-human item now prints once, under its
+mission.
+
 ### Responses
+
+- 1-1tto.1: fixed in ad31d97d2
