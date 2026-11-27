@@ -1,6 +1,7 @@
 //! `log`: the history of actions that `atelier-core` returns, one line each
-//! (docs/design.md, The log). The line's layout lives here; the words for
-//! what changed are the core's, which the Desk shows too.
+//! (docs/design.md, The log). The line's layout lives here, and the order
+//! and limit a reader gets; the words for what changed are the core's, which
+//! the Desk shows too.
 
 use crate::commands::Outcome;
 use crate::view_output;
@@ -9,7 +10,18 @@ use atelier_core::model::Thread;
 use atelier_core::{history, Logged, Repo};
 use chrono::{DateTime, Utc};
 
-pub fn log(repo: &mut Repo, id: Option<&str>, since: Option<DateTime<Utc>>) -> Result<Outcome> {
+/// How many actions `log` prints with no `--all`, newest first. At
+/// [`WIDTH`] characters a line, the most it prints is 9 KB.
+pub const LIMIT: usize = 30;
+/// The most characters a line holds with no `--all`.
+pub const WIDTH: usize = 300;
+
+pub fn log(
+    repo: &mut Repo,
+    id: Option<&str>,
+    since: Option<DateTime<Utc>>,
+    all: bool,
+) -> Result<Outcome> {
     let Some(history) = history(repo, id, since)? else {
         let id = id.expect("only an ID can name no record");
         return Ok(Outcome::Refused(view_output::unknown(id, &repo.base)));
@@ -22,7 +34,52 @@ pub fn log(repo: &mut Repo, id: Option<&str>, since: Option<DateTime<Utc>>) -> R
             one_line(&passed.problem)
         );
     }
-    Ok(Outcome::Done(history.actions.iter().map(line).collect()))
+    if all {
+        return Ok(Outcome::Done(history.actions.iter().map(line).collect()));
+    }
+    let whole = whole_command(id, since);
+    let mut out: String = history
+        .actions
+        .iter()
+        .rev()
+        .take(LIMIT)
+        .map(|logged| cut(line(logged), &whole))
+        .collect();
+    let older = history.actions.len().saturating_sub(LIMIT);
+    if older > 0 {
+        let actions = if older == 1 { "action" } else { "actions" };
+        out += &format!(
+            "{older} older {actions} not shown. `{whole}` prints every action, oldest first, each line whole.\n"
+        );
+    }
+    Ok(Outcome::Done(out))
+}
+
+/// The command that prints what this `log` printed, all of it and whole.
+fn whole_command(id: Option<&str>, since: Option<DateTime<Utc>>) -> String {
+    let mut command = String::from("atelier log");
+    if let Some(id) = id {
+        command += " ";
+        command += id;
+    }
+    if let Some(since) = since {
+        command += " --since ";
+        command += &since.to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true);
+    }
+    command + " --all"
+}
+
+/// `line`, a printed line ending in a line break, held to [`WIDTH`]
+/// characters: one longer is cut and ends saying where it is whole.
+fn cut(line: String, whole: &str) -> String {
+    let text = line.trim_end_matches('\n');
+    if text.chars().count() <= WIDTH {
+        return line;
+    }
+    let tail = format!(" [cut; `{whole}` prints it whole]");
+    let keep = WIDTH.saturating_sub(tail.chars().count());
+    let kept: String = text.chars().take(keep).collect();
+    format!("{}{tail}\n", kept.trim_end())
 }
 
 /// `<time> <commit> <id> <action> <thread>`, then what changed, then each

@@ -28,9 +28,10 @@ fn readied(root: &Path, id: &str) {
     fs::write(path, text).unwrap();
 }
 
-/// `atelier log` with `args`, which must succeed; its lines.
+/// `atelier log --all` with `args`, which must succeed; its lines, every
+/// action oldest first and each whole.
 fn log(root: &Path, args: &[&str]) -> Vec<String> {
-    let mut all = vec!["log"];
+    let mut all = vec!["log", "--all"];
     all.extend(args);
     let run = atelier(root, "t9", &all);
     assert_eq!(run.code, 0, "{}", run.stderr);
@@ -134,6 +135,81 @@ fn the_plain_path_prints_its_actions_in_order_and_the_same_lines_once_its_branch
     off_base(&root);
     assert_eq!(log(&root, &[]), merged);
     assert_eq!(log(&root, &[ID]), merged);
+    // With no option, the same lines newest first, and nothing older.
+    let newest: Vec<String> = merged.iter().rev().cloned().collect();
+    for args in [&["log"][..], &["log", ID]] {
+        let run = atelier(&root, "t9", args);
+        assert_eq!(run.code, 0, "{}", run.stderr);
+        assert_eq!(run.stdout.lines().collect::<Vec<_>>(), newest);
+    }
+}
+
+#[test]
+fn with_no_option_log_prints_the_newest_thirty_and_says_how_to_see_the_older_ones() {
+    let ids: Vec<String> = (0..32).map(|n| format!("demo-{n:04}")).collect();
+    let items: Vec<(&str, &str)> = ids.iter().map(|id| (id.as_str(), "draft")).collect();
+    let scratch = Scratch::new(&items);
+    let root = scratch.root();
+    for id in &ids {
+        readied(&root, id);
+        on_base(&root, &format!("Ready {id}"));
+    }
+    let every = log(&root, &[]);
+    assert_eq!(every.len(), 32);
+    assert!(every[0].contains(" demo-0000 ready "), "{}", every[0]);
+
+    let run = atelier(&root, "t9", &["log"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let lines: Vec<&str> = run.stdout.lines().collect();
+    assert_eq!(lines.len(), 31, "{}", run.stdout);
+    let newest: Vec<&str> = every.iter().rev().take(30).map(String::as_str).collect();
+    assert_eq!(lines[..30], newest[..]);
+    assert_eq!(
+        lines[30],
+        "2 older actions not shown. `atelier log --all` prints every action, oldest first, each line whole."
+    );
+
+    // `--since` narrows both, and the command it names keeps it.
+    let since = "2000-01-01";
+    let run = atelier(&root, "t9", &["log", "--since", since]);
+    assert!(
+        run.stdout.ends_with(
+            "\n2 older actions not shown. `atelier log --since 2000-01-01T00:00:00Z --all` prints every action, oldest first, each line whole.\n"
+        ),
+        "{}",
+        run.stdout
+    );
+}
+
+#[test]
+fn a_line_over_300_characters_is_cut_and_says_where_it_is_whole() {
+    let scratch = Scratch::new(&[("demo-b10c", "open")]);
+    let root = scratch.root();
+    write_item(&root, ID, "open", &[], &["demo-b10c"], "");
+    on_base(&root, "Plan a blocked item");
+    let reason = "Ada said so, at length. ".repeat(20);
+    skipping(&root, "t1", &reason, &["start", ID]);
+
+    let whole = log(&root, &[ID]);
+    assert_eq!(whole.len(), 1);
+    assert!(
+        whole[0].len() > 300 && whole[0].ends_with(" (by t1)"),
+        "{}",
+        whole[0]
+    );
+    for (args, command) in [
+        (&["log"][..], "atelier log --all"),
+        (&["log", ID], &*format!("atelier log {ID} --all")),
+    ] {
+        let run = atelier(&root, "t9", args);
+        assert_eq!(run.code, 0, "{}", run.stderr);
+        let line = run.stdout.lines().next().unwrap();
+        assert_eq!(run.stdout.lines().count(), 1, "{}", run.stdout);
+        assert!(line.chars().count() <= 300, "{line}");
+        let tail = format!(" [cut; `{command}` prints it whole]");
+        let kept = line.strip_suffix(&tail).unwrap_or_else(|| panic!("{line}"));
+        assert!(whole[0].starts_with(kept), "{line}");
+    }
 }
 
 /// `atelier` as a Codex subagent `child` of the session `s1`, in T3 Code's
@@ -312,7 +388,13 @@ fn a_mission_shows_its_ready_lead_plan_review_and_close_with_its_items_actions()
         format!("{ID} drop - ready -> dropped; Nobody needs it."),
         format!("{MISSION} close - open -> done"),
     ];
-    assert_eq!(actions(&root, &log(&root, &[MISSION])), ours);
+    let whole = log(&root, &[MISSION]);
+    assert_eq!(actions(&root, &whole), ours);
+    // With no option, the mission's lines newest first.
+    let run = atelier(&root, "t9", &["log", MISSION]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let newest: Vec<&str> = whole.iter().rev().map(String::as_str).collect();
+    assert_eq!(run.stdout.lines().collect::<Vec<_>>(), newest);
     // Everything holds the other item too; the item alone holds its own.
     let all = actions(&root, &log(&root, &[]));
     assert_eq!(all.len(), ours.len() + 1);

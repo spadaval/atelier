@@ -57,13 +57,13 @@ checkout. Commit the page's `Focus:` line before taking any number. Every run ta
 ## 2. Take the Numbers and the Checklist
 
 **The window** starts at the end the newest earlier run's `Window:` line
-gives; a first run's, at the time on the first line `atelier log` prints. It
+gives; a first run's, at the time on the first line `atelier log --all` prints. It
 ends when you take the numbers: run `date -u +%Y-%m-%dT%H:%M:%SZ` once and
 use that time for every number. Log times compare as text.
 
 **The items** are those whose `merge` line is after the start and at or
-before the end: `atelier log | awk -v s=<start> -v e=<end> '$4 == "merge" &&
-$1 > s && $1 <= e {print $3}'`. Copy all of each one's `atelier log <id>`,
+before the end: `atelier log --all | awk -v s=<start> -v e=<end> '$4 == "merge" &&
+$1 > s && $1 <= e {print $3}'`. Copy all of each one's `atelier log <id> --all`,
 its lines before the window too, into `artifacts/numbers.md`.
 
 - **Time in each status.** A line holding `<from> -> <to>` puts the item in

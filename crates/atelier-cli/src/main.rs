@@ -72,7 +72,9 @@ enum Command {
     Setup { harness: Option<setup::Harness> },
     /// One item in full with its reviews, or one mission on one page with its items, disputed findings and the rules its commits passed, found on the base or on any named branch this clone has, local or fetched, and saying where it was read from. It fetches nothing.
     Show { id: String },
-    /// The history of actions, read from Git, one line each, oldest first: of everything, of one item, or of one mission with its plan reviews and its items.
+    /// The history of actions, read from Git, one line each, the 30 newest first, or with --all every one oldest first: of everything, of one item, or of one mission with its plan reviews and its items.
+    ///
+    /// With no --all it ends by saying how many older actions it left out and the command that prints them, and a line over 300 characters is cut to 300 and ends with the command that prints it whole. With --all each line is whole, in the order a script can rely on.
     ///
     /// Each line is the commit's time in UTC, the commit, the item or mission, the action, the thread that acted or `-` where no record holds one, then what changed, and last each rule its commit skipped as `skip <rule>: <reason> (by <thread>)`, or `(thread not recorded)` in a commit from before the thread was. Where a commit that passed a rule names the thread that ran the command, its action's line shows that thread. The first five hold no space; what changed and the skips are parts separated by `; `.
     ///
@@ -83,6 +85,9 @@ enum Command {
         /// Only actions committed at or after this RFC 3339 time, or this date's start in UTC (YYYY-MM-DD).
         #[arg(long, value_name = "TIME", value_parser = since)]
         since: Option<chrono::DateTime<chrono::Utc>>,
+        /// Every action, oldest first, each line whole, for a script; without it, the 30 newest, newest first, each at most 300 characters.
+        #[arg(long)]
+        all: bool,
     },
     /// All open work on the base, grouped by mission and then by label, and then what is proposed on branches not yet merged; each flag given narrows it. It reads the branches this clone has, local and fetched, and fetches nothing.
     List {
@@ -283,7 +288,7 @@ fn main() -> ExitCode {
                 harness: Some(harness),
             } => setup::harness(&repo.root, harness),
             Command::Show { id } => views::show(&mut repo, &id),
-            Command::Log { id, since } => history::log(&mut repo, id.as_deref(), since),
+            Command::Log { id, since, all } => history::log(&mut repo, id.as_deref(), since, all),
             Command::List { deferred: true, .. } => views::deferred(&mut repo),
             Command::List {
                 disputed: true,

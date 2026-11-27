@@ -1341,15 +1341,26 @@ in. `atelier-core` returns the same history as data (`history`, in
 `crates/atelier-core/src/log.rs`), which is how the Desk reads it, and the
 command only formats it (`crates/atelier-cli/src/history.rs`).
 
-`atelier log` prints everything; `atelier log <item>` that item's actions;
-`atelier log <mission>` the actions on the mission, its plan reviews and its
+`atelier log` prints the 30 newest actions, newest first, so a reader
+with a cut view sees the last hour and not the first day. It ends by saying
+how many older actions it left out and the command that prints them, and
+cuts a line over 300 characters to at most 300, ending it with
+`[cut; <command> prints it whole]`, since a skip's reason is quoted in full
+and has run to 2,456 characters. On the Hub's history of 695 actions on
+2026-11-27, 174 KB whole, it printed 6 KB; 30 lines of 300 characters are at
+most 9 KB. `--all` prints every action, oldest first, each line whole: the
+order and form a script relies on, and what `log` printed before the limit.
+The scorecard's `freeze.py` and the garden procedure's counter read it.
+
+With or without `--all`, `atelier log` covers everything; `atelier log
+<item>` that item's actions; `atelier log <mission>` the actions on the mission, its plan reviews and its
 items, an item being the mission's when its record names it: on the base's
 tip, else on its own branch, else, as `show` finds a record the base does
 not hold, on the first unmerged named branch that adds it, such as the
 mission's or a backlog branch. A proposed mission, on its
 branch alone, is found there. `--since <time>` keeps the actions committed at
 or after an RFC 3339 time or a `YYYY-MM-DD` date, which is that day's start
-in UTC. An ID no record has on the base's tip or on a branch named for it is
+in UTC, before the limit is applied. An ID no record has on the base's tip or on a branch named for it is
 refused as `show` refuses it.
 
 | Line | Found where | Thread shown |

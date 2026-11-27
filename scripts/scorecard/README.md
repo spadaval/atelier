@@ -58,7 +58,7 @@ TMPDIR=~/.cache/scorecard-tmp python3 -m unittest discover scripts/scorecard
 - **The snapshot** (`--snapshot`), made once by `freeze.py` and described by `manifest.json`:
   `t3/statev2.sqlite` (T3's database), `claude-projects/<dir>/<session>.jsonl` with
   `<session>/subagents/agent-<id>.jsonl`, `codex-sessions/YYYY/MM/DD/rollout-*-<session>.jsonl`,
-  and `logs/<repository>.txt`, each repository's whole `atelier log` output. It holds private
+  and `logs/<repository>.txt`, each repository's `atelier log --all` output. It holds private
   messages: never commit it, copy it into the repository, or send any of it to an outside service.
 - **The log** is read as text, by the line layout in `docs/design.md`, The log. The scripts never
   run `atelier`, and compute none of the numbers the gardener takes from the log itself (time in

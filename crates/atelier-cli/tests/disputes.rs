@@ -416,7 +416,7 @@ fn a_lead_rules_for_the_implementer_by_merging_past_a_kept_finding_with_its_reas
         "{}",
         disputed(&root, &[])
     );
-    let log = atelier(&root, "t9", &["log", ID]).stdout;
+    let log = atelier(&root, "t9", &["log", "--all", ID]).stdout;
     let merge = log.lines().last().unwrap();
     assert!(
         merge.contains(&format!(

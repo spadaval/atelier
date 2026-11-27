@@ -80,7 +80,7 @@ counted from `atelier log`. A line whose failure shows in no measure is cut.
    cause and so read better than the code is.
 10. **A branch that changes only records passes CI in under two minutes.**
     Test: its last run, `gh run list --branch <branch>`. Shows in: the time
-    from `submit` to `merge` on such branches in `atelier log`.
+    from `submit` to `merge` on such branches in `atelier log --all`.
 
 Line 3's script, run from the repository's root:
 
