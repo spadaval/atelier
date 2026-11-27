@@ -287,7 +287,7 @@ branch for the change.
 
 | Command | Behaviour |
 | --- | --- |
-| `status` | Who this thread is, what it holds, what each thing needs, and the next command. Away from an item's branch with nothing held: of the open items `start` would accept now, the 10 most urgent by priority and then ID and how many more `list --startable` lists, with none named as the next command, since the thread's task says which to start; one line counting the other open items by what stops them, missions in progress and what waits on the human, which is not listed as able to start. For a thread holding a started item: in the base's checkout, the checkout that has the item's branch or the `git worktree add` that makes one; elsewhere, `start <id>`. Away from an item's branch, it also shows a detached HEAD's commits that no branch holds and, from 20 merged local branches or 10 detached worktrees, one line that counts both and names the Git commands that list them; it deletes nothing. For a mission's lead, its mission, what each item needs, and what is disputed in it. |
+| `status` | Who this thread is, what it holds, what each thing needs, and the next command, with what waits on this thread before anything that does not and the backlog last. Away from an item's branch: where the plan a records branch changes stands in review; what it holds, with the way to the first, in the base's checkout the checkout that has the item's branch or the `git worktree add` that makes one, elsewhere `start <id>`; what the checkout has not committed or pushed, and a detached HEAD's commits that no branch holds. For a mission's lead, next, what waits on it: each finding not built, each item at the round cap, and the handoff for each item that can start now. Then each mission it leads: one line of review pace, with rounds per item, the time a round took and what rounds after the first found, then one line for each item not done, with its status, its blocker or how many, and no holder's thread ID or Done when lines, which `show <item>` gives and `status` names. Last, the backlog, without the items of the missions it leads: of the open items `start` would accept now, the 10 most urgent by priority and then ID, or 3 when the thread holds an item or leads a mission, and how many more `list --startable` lists, with none named as the next command, since the thread's task says which to start; one line counting the other open items by what stops them; the items other threads hold; the missions in progress it does not lead; what waits on the human, which is not listed as able to start; and, from 20 merged local branches or 10 detached worktrees, one line that counts both and names the Git commands that list them; it deletes nothing. |
 | `show <id>` | An item in full, with a summary of each review: its round, reviewer, model, the commit it reviewed and its verdict, and each finding's name, recommendation, state and title. A finding's text is in its review file. For a mission, the whole mission on one page: whether it is proposed, agreed, done or dropped, its outcome and criteria, its items grouped by status with who holds each and what blocks each, what is disputed in it as `list --disputed` gives it, and its reviews by round. Either says which ref the record was read from, and, for a fetched ref, how long ago the remote was fetched. |
 | `list` | With no flags, all open work on the base, grouped by mission and then by label, and apart from it what is proposed: missions on unmerged branches and record changes waiting to merge, each with its branch. Narrowed by `--startable` (open and can start now), `--blocked`, `--needs-human`, `--proposed`, `--mission <id>`, `--label <l>`, `--mine` and `--deferred`; `--done` shows finished missions and items instead. `--disputed` lists instead, across open and done items, each open fix-now finding answered `not built`, which waits on the lead, each finding whose Response is `rebutted` with what the next round made of it (kept, withdrawn, fixed, kept at defer or no action, or not yet reviewed), and each plan-review round whose reviewers gave different verdicts; `--mission <id>` narrows it. The listing refuses nothing; `submit` refuses another plan round after two split rounds in a row (see Review). |
 | `log` | The history of actions, read from Git, one line each and oldest first: when, the commit, which item or mission, the action, the thread where the record holds one, what changed, and any rule its commit skipped. For everything, one item, or one mission with its plan reviews and its items, and only actions `--since` a time. It adds nothing up. |
@@ -365,6 +365,26 @@ and after two split rounds in a row the human's ruling as the way out. On
 an approved item it names, before `Then: atelier merge`, the merge checks the
 base's `config.toml` lists, which `merge` runs on the merged tree. It does not
 say when they last passed, since nothing records that.
+
+Away from an item's branch, a mission's lead reads first what waits on it,
+then its missions one line an item, and the backlog last:
+
+```text
+You are thread <lead>, on the base branch main.
+Nothing in the missions you lead waits on you now.
+Each item's holder, blockers and Done when lines: atelier show <item>.
+You lead mission hub-v2-bg14: Ask the human early: rubrics, check rows, builds to look at, and a decision in the browser
+  Review pace: 22 rounds for 11 items, 2.0 each; a round took 15m at the median, 31m at most; later rounds found 6 new findings, 0 to fix now.
+  hub-v2-aohy (building): Take one cell of the sorting hall to the human's decision on the running Hub
+  And 11 done.
+The backlog, which waits on nobody in particular:
+Can start now:
+  hub-v2-cram (medium): Bound what a model can make the 3D viewer decode
+```
+
+A round's time runs from its review's opening to the commit that wrote its
+verdict, and a finding is new when it carries no earlier one. A lead's
+`status` of a twelve-item mission stays under 2 KB.
 
 On an item's branch, a thread that holds nothing on the item is offered the
 take-over, and a reviewer whose review is done is told to stop. The lead of

@@ -10,7 +10,7 @@ use atelier_core::model::{
     Finding, Mission, MissionStatus, Outcome, Ready, Recommendation, Status, Thread,
 };
 use atelier_core::records::{ItemDir, MissionDir, ReviewFile};
-use atelier_core::{Disputes, Entry, Filter, Group, Judged, Logged, Overview, LIFECYCLE};
+use atelier_core::{Disputes, Entry, Filter, Group, Judged, Logged, Overview, Pace, LIFECYCLE};
 use std::time::SystemTime;
 
 /// Where `show` read a record from, and the other unmerged branches that
@@ -621,13 +621,16 @@ pub fn deferred(findings: &[(String, Finding)]) -> String {
     )
 }
 
-/// What `status` adds on the base: the missions in progress and the items
-/// waiting on a human.
-pub fn overview(overview: &Overview) -> String {
+/// The end of `status`'s backlog: the missions in progress that the caller
+/// does not lead, which are `led`, and the items waiting on a human.
+pub fn overview(overview: &Overview, led: &[&str]) -> String {
     let mut text = String::new();
-    if !overview.in_progress.is_empty() {
+    let others: Vec<&MissionDir> = (overview.in_progress.iter())
+        .filter(|dir| !led.contains(&dir.mission.id.as_str()))
+        .collect();
+    if !others.is_empty() {
         text += "Missions in progress:\n";
-        for dir in &overview.in_progress {
+        for dir in others {
             text += &format!("  {}", mission_line(dir, true, None));
         }
     }
@@ -640,43 +643,164 @@ pub fn overview(overview: &Overview) -> String {
     text
 }
 
-/// What `status` tells a mission's lead: each mission it leads, where each
-/// item stands, what is disputed in it, and a handoff for each item that
-/// can start now.
-pub fn led(led: &[(MissionDir, Vec<Entry>, Disputes)]) -> String {
+/// What waits on a mission's lead in the missions it leads, before
+/// anything else of them: each finding not built, which waits on its
+/// ruling, each item at the review cap, each response another thread wrote
+/// that does not read, and one handoff for every item that can start now.
+pub fn lead_waits(led: &[(MissionDir, Vec<Entry>, Disputes)]) -> String {
+    if led.is_empty() {
+        return String::new();
+    }
     let mut text = String::new();
-    for (dir, items, disputed) in led {
-        let items: Vec<&Entry> = items.iter().collect();
-        text += &format!(
-            "You lead mission {}: {}\n{}",
-            dir.mission.id,
-            dir.mission.title,
-            by_status(&items, true),
-        );
-        if !disputed.not_built.is_empty() {
-            text += "Waiting on your ruling: each finding a reviewer asked to fix now, which its implementer did not build and says why. `atelier merge` holds the item until you rule. To have it built, tell the implementer. To merge without it, run `ATELIER_SKIP=\"<ruling>\" atelier merge` on the item's branch once a reviewer approves the rest.\n";
-            let only = Disputes {
-                not_built: disputed.not_built.clone(),
-                ..Disputes::default()
-            };
-            text += &disputes(&only);
-        }
-        if !disputed.rebuttals.is_empty() || !disputed.plans.is_empty() {
-            text += "Disputed in this mission (nothing waits on these; you settle each, either way, and record your ruling):\n";
-            let rest = Disputes {
-                not_built: Vec::new(),
-                ..disputed.clone()
-            };
-            text += &disputes(&rest);
-        }
-        for entry in &items {
+    let not_built: Vec<_> = (led.iter())
+        .flat_map(|(_, _, disputed)| disputed.not_built.iter().cloned())
+        .collect();
+    if !not_built.is_empty() {
+        text += "Waiting on your ruling: each finding a reviewer asked to fix now, which its implementer did not build and says why. `atelier merge` holds the item until you rule. To have it built, tell the implementer. To merge without it, run `ATELIER_SKIP=\"<ruling>\" atelier merge` on the item's branch once a reviewer approves the rest.\n";
+        let only = Disputes {
+            not_built,
+            ..Disputes::default()
+        };
+        text += &disputes(&only);
+    }
+    for (_, items, _) in led {
+        for entry in items {
             if let Some(round) = entry.capped {
                 text += &cap_for_lead(&entry.id, round);
             }
+            // A response that does not read may be a finding meant for the
+            // lead as not built.
+            if !entry.holds && !entry.malformed.is_empty() {
+                text += &format!("{} holds a response that does not read:\n", entry.id);
+                for problem in &entry.malformed {
+                    text += &format!("  {}\n", condition(&entry.id, problem));
+                }
+            }
         }
+    }
+    let items: Vec<&Entry> = led.iter().flat_map(|(_, items, _)| items).collect();
+    if items.iter().any(|e| e.startable() && !e.needs_human()) {
         text += &start_threads(&items);
     }
+    match text.is_empty() {
+        true => "Nothing in the missions you lead waits on you now.\n".into(),
+        false => text,
+    }
+}
+
+/// Each mission `status`'s caller leads, after what waits on it: the
+/// mission's review pace, from `paces` in the same order, its items not
+/// done, one line each, and how many are done. `atelier show <item>` has
+/// the rest of each, and the first line names it.
+pub fn led(led: &[(MissionDir, Vec<Entry>, Disputes)], paces: &[Pace]) -> String {
+    if led.is_empty() {
+        return String::new();
+    }
+    // The pi extension reads the mission from the first `You lead mission`.
+    let mut text =
+        "Each item's holder, blockers and Done when lines: atelier show <item>.\n".to_string();
+    for (index, (dir, items, disputed)) in led.iter().enumerate() {
+        text += &format!(
+            "You lead mission {}: {}\n",
+            dir.mission.id, dir.mission.title
+        );
+        if let Some(pace) = paces.get(index) {
+            text += &format!("  {}\n", pace_line(pace));
+        }
+        let done = items.iter().filter(|e| e.status == Status::Done).count();
+        let rest: Vec<&Entry> = items.iter().filter(|e| e.status != Status::Done).collect();
+        for entry in &rest {
+            text += &format!("  {}", led_line(entry));
+        }
+        match (rest.is_empty(), done) {
+            (true, 0) => text += "  No items yet.\n",
+            (_, 0) => {}
+            (true, n) => text += &format!("  All {n} done.\n"),
+            (false, n) => text += &format!("  And {n} done.\n"),
+        }
+        let disputed = disputed.rebuttals.len() + disputed.plans.len();
+        if disputed > 0 {
+            text += &format!(
+                "  Disputed, which nothing waits on and you settle, either way, recording your ruling: {disputed}; each with: atelier list --disputed --mission {}\n",
+                dir.mission.id
+            );
+        }
+    }
     text
+}
+
+/// One item of a mission its lead is shown: where it stands in a few
+/// words, and its title. The holder's ID, each blocker's status and the
+/// unmet conditions are in `atelier show`.
+fn led_line(entry: &Entry) -> String {
+    let mut facts = vec![status_name(entry.status).to_string()];
+    if entry.status == Status::Open {
+        facts.push(priority_name(entry.priority).to_string());
+    }
+    if entry.status == Status::InReview && entry.reviewer.is_none() {
+        facts.push("no reviewer yet".into());
+    }
+    match entry.waiting_on().as_slice() {
+        [] => {}
+        [(id, _)] => facts.push(format!("blocked by {id}")),
+        many => facts.push(format!("blocked by {} items", many.len())),
+    }
+    if entry.needs_human() && entry.status == Status::Open {
+        facts.push("waits on a human".into());
+    } else if entry.startable() {
+        facts.push("can start now".into());
+    }
+    let stale = |c: &Condition| matches!(c, Condition::Stale { .. });
+    if entry.status == Status::Approved && entry.needs.iter().any(stale) {
+        facts.push("approval gone stale, back to review".into());
+    }
+    if let Some(on) = &entry.on {
+        facts.push(format!("on {on}"));
+    }
+    format!("{} ({}): {}\n", entry.id, facts.join(", "), entry.title)
+}
+
+/// A mission's review pace on one line.
+fn pace_line(pace: &Pace) -> String {
+    if pace.rounds == 0 {
+        return "Review pace: no round has a verdict yet.".into();
+    }
+    let plural = |n: usize, one: &str, many: &str| match n {
+        1 => format!("1 {one}"),
+        n => format!("{n} {many}"),
+    };
+    let per = pace.rounds as f64 / pace.items as f64;
+    let took = match (pace.median(), pace.longest()) {
+        (Some(median), Some(longest)) => format!(
+            "a round took {} at the median, {} at most",
+            span(median),
+            span(longest)
+        ),
+        _ => "no round's verdict commit was found".into(),
+    };
+    let found = match pace.rounds > pace.items {
+        false => "no item has had a later round yet".to_string(),
+        true => format!(
+            "later rounds found {}, {} to fix now",
+            plural(pace.later_new, "new finding", "new findings"),
+            pace.later_fix_now
+        ),
+    };
+    format!(
+        "Review pace: {} for {}, {per:.1} each; {took}; {found}.",
+        plural(pace.rounds, "round", "rounds"),
+        plural(pace.items, "item", "items")
+    )
+}
+
+/// A length of time in hours and minutes, or minutes alone.
+fn span(time: chrono::Duration) -> String {
+    let minutes = time.num_minutes().max(0);
+    match (minutes / 60, minutes % 60) {
+        (0, m) => format!("{m}m"),
+        (h, 0) => format!("{h}h"),
+        (h, m) => format!("{h}h {m}m"),
+    }
 }
 
 /// What `lead` says once the caller leads the mission: who led it before,

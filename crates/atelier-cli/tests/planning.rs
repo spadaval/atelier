@@ -752,16 +752,22 @@ fn status_names_the_ten_most_urgent_that_can_start_and_a_leads_own_items_whole()
     let all = atelier(&root, "t1", &["list", "--startable"]).stdout;
     assert_eq!(all.matches("can start now").count(), 12, "{all}");
 
-    // The lead of their mission still sees each of them.
+    // The lead of their mission still sees each of them, in its handoff
+    // and in its mission, and the backlog does not repeat them.
     assert_eq!(planned(&root, "lead1", &["lead", MISSION]).code, 0);
     let status = atelier(&root, "lead1", &["status"]).stdout;
-    let (general, led) = status.split_once("You lead mission").unwrap();
-    assert!(general.contains(&listed), "{status}");
+    let (waits, led) = status.split_once("Each item's holder, blockers").unwrap();
+    assert_eq!(
+        waits.matches("  Run atelier start ").count(),
+        12,
+        "{status}"
+    );
     assert_eq!(
         led.matches(", can start now): Say hello").count(),
         12,
         "{status}"
     );
+    assert!(!status.contains("Can start now:"), "{status}");
 }
 
 #[test]
@@ -789,7 +795,7 @@ fn status_on_the_base_lists_only_what_can_start_and_counts_the_rest_by_cause() {
 
     // Once t1 holds the one that could, nothing can start: a thread
     // holding nothing is told so and offered no start, and t1 is sent to
-    // the checkout its item is in.
+    // the checkout its item is in before it is shown the backlog.
     assert_eq!(atelier(&root, "t1", &["start", "demo-a1aa"]).code, 0);
     let base = scratch.worktree("base");
     git(&base, &["switch", "-q", "main"]);
@@ -806,8 +812,8 @@ fn status_on_the_base_lists_only_what_can_start_and_counts_the_rest_by_cause() {
         atelier(&base, "t1", &["status"]).stdout,
         format!(
             "{NO_HOOKS}You are thread t1, on the base branch main.\nYou hold:\n  demo-a1aa \
-             (building): Say hello\n{count}demo-a1aa's branch is checked out in {0}; work there.\n\
-             Then: cd {0}\n",
+             (building): Say hello\ndemo-a1aa's branch is checked out in {0}; work there.\n\
+             Then: cd {0}\nThe backlog, which waits on nobody in particular:\n{count}",
             git(&root, &["rev-parse", "--show-toplevel"])
         )
     );

@@ -16,6 +16,7 @@ pub mod git;
 mod identity;
 pub mod log;
 pub mod model;
+mod pace;
 pub mod plan;
 pub mod records;
 pub mod repo;
@@ -31,6 +32,7 @@ pub use disputed::{
 };
 pub use identity::identity;
 pub use log::{history, history_until, Happened, History, Logged, Move, PassedOver};
+pub use pace::{pace, Pace};
 pub use plan::Done;
 pub use repo::{Links, Repo, Walked};
 pub use review::{answer, carried, carried_plan, waits_on_lead, Carried};

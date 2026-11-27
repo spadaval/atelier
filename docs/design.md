@@ -727,31 +727,60 @@ a visitor, naming the holder. On a mission's branch it speaks to a planner
 as planner, with what the plan still needs to merge, and to anyone else as
 a possible reviewer of the plan. A visitor is offered the take-over, and a
 reviewer whose review is done is told to stop; the lead of the item's
-mission is told so and offered no take-over. Anywhere else it lists the
-started items the caller holds, with `start <id>` to return to one, the
-open items `start` would accept now (`Entry::startable`, as `list
---startable` reads it), the 10 most urgent by priority and then ID and a
-line with how many more (`output::STARTABLE_SHOWN`, since the session-start
-hook prints it), one line counting the other open items by what stops them (a
-blocker not done, a mission dropped, a branch of their name) that names
-`list`, and the started items others hold. Holding nothing, it ends with
-`start` on an item that can start, or says no open item can start now and
-names no `start`. Wherever it runs it also
-lists the record changes the checkout has not committed and the commits of
-its branch not yet pushed, with the Git command for each, and each drop
-written but not yet published. Away from an
-item's branch it also lists a detached HEAD's unattached commits ([A
-detached HEAD](#a-detached-head)), the line on branches and worktrees that
-piled up ([After the merge](#after-the-merge)), the missions in progress and, apart from the
-items that can start, the items labelled `needs-human` that nobody has started, as
-waiting on a human, and the items dropped on their branch whose drop has
-not reached the base, each with its reason. A thread that is the `lead` of an agreed
-mission is told so, with each of the mission's items by
-status, what holds or blocks each, under each started item the conditions
-its holder's `status` lists as unmet, read from the branch's last commit and
-so without what the holder has not committed, what is disputed in the
-mission when anything is, and the handoff line that starts a thread for each item that can
-start now; holding nothing else, it is pointed at no item itself. On the item's branch it says a dropped item
+mission is told so and offered no take-over. Anywhere else it prints, in this
+order, what waits on the caller first and the backlog last
+(`output::overview`): where each plan the checked-out records branch changes
+stands in review; the started items the caller holds, then the way to the
+first, `start <id>` or, in the base's checkout, the checkout that has its
+branch; the record changes the checkout has not committed and the commits
+of its branch not yet pushed, with the Git command for each, a detached
+HEAD's unattached commits ([A detached HEAD](#a-detached-head)) and each
+drop written but not yet published; the items dropped on the base while
+started and those dropped on their branch whose drop has not reached the
+base, each with its reason. A thread that is the `lead` of an agreed
+mission is shown next what waits on it in the missions it leads
+(`view_output::lead_waits`): each finding not built, which waits on its
+ruling, each item at the round cap with the rulings, each response another
+thread wrote that does not read, since it may be a finding meant for the
+lead, and one handoff that starts a thread for each item that can start
+now; or one line saying nothing there waits on it. Then each mission it
+leads (`view_output::led`): one line of review pace, one line for each item
+not done, giving its status, an open item's priority, an item in review
+with no reviewer, its blocker when it has one and how many when more, whether it can start
+now, and an approval gone stale, and one line counting the done ones and
+one counting what is disputed, naming `list --disputed --mission <id>`. It
+leaves out each holder's thread ID, each blocker's status and the
+conditions a holder's `status` lists as unmet, which made a lead's `status`
+of three missions 17,870 bytes on the Hub, of which a harness showed the
+first 2 KB; the line before the missions names `atelier show <item>`,
+which has them. Each mission's first line is `You lead mission <id>:`, which
+the pi extension reads. A
+lead's `status` of a twelve-item mission stays under 2 KB, and of the
+Hub's state under 4 KB (`tests/status_size.rs`). The review pace
+(`atelier_core::pace`) counts, over the mission's items with a verdict, the
+rounds with a verdict and the rounds per item; the time a round took, from
+its review's `created_at` to the latest commit that wrote its `verdict:`
+line, which one `git log -G` over the items' review directories finds, at
+the median and the longest; and the findings of rounds after the first that
+carry no `Was:`, with how many are fix-now. Last comes the backlog, under
+a heading when the caller holds an item or leads a mission, and without the
+items of the missions it leads, which it was just shown: the open items
+`start` would accept now (`Entry::startable`, as `list --startable` reads
+it), the 10 most urgent by priority and then ID, or 3 for a caller holding
+or leading something, and a line with how many more
+(`output::STARTABLE_SHOWN`, since the session-start hook prints it); one
+line counting the other open items by what stops them (a blocker not done,
+a mission dropped, a branch of their name) that names `list`; the started
+items others hold, with each holder; the missions in progress the caller
+does not lead; the items labelled `needs-human` that nobody has started, as
+waiting on a human; and the line on branches and worktrees that piled up
+([After the merge](#after-the-merge)). Holding nothing and leading nothing,
+it ends with `start` on an item that can start, or says no open item can
+start now and names no `start`; a lead holding nothing is pointed at no
+item itself. On an item's branch it prints that item alone, so what waits
+on the caller is all it prints. Wherever it runs it lists the record changes
+the checkout has not committed and the commits of its branch not yet
+pushed, and each drop written but not yet published. On the item's branch it says a dropped item
 was dropped and why, as does the refusal of any action on it, and it
 speaks to the round's reviewer as reviewer, naming its file, tells
 the implementer of an item in review which thread holds the round's review,
