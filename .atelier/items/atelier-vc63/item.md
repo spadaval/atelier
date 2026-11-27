@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-vc63
 title: Tighten implementer, reviewer, and lead role files
-status: in_review
+status: approved
 mission: null
 labels: []
 priority: medium
