@@ -72,22 +72,25 @@ what there is to decide.
   now` and useful is `defer`; `Shrink:` and `Reject:` stay blocking,
   outside the scale. It holds no guard against rating everything high.
 - [ ] The skill, and the skill with each passage, run in `sol` as two separate
-  matrices on the review cases, five runs a cell, and three for a replay no
-  review has ever found, topped up to five where any arm finds it: the
-  twelve replayed defects, `vacuous-test-review`, `costly-hardening`, the
-  five cases of atelier-s6xk and the three later-round cases. Each arm is
-  staged from a commit that differs from the skill's in its passage alone,
-  and the results name the commits. The rubric reports, for each finding,
+  matrices on the review cases: `vacuous-test-review`, `costly-hardening`,
+  the five cases of atelier-s6xk, the three later-round cases and the four
+  replays some review has found, five runs a cell; and the eight replays
+  no review has found, three runs a cell, as far as matrix 1's skill and
+  "What to judge" arms. The rest of the floor replays and their top-ups
+  are not run: both allowances ran out on 2026-11-19, and the human ruled
+  on 2026-11-27 that the item closes on what it has. Each arm is staged
+  from a commit that differs from the skill's in its passage alone, and
+  the results name the commits. The rubric reports, for each finding,
   which of the four levels the judge gives it beside the reviewer's own.
 - [ ] "What to judge" is merged into the skill where some case passes at
   least two more runs with it in each of the two matrices and no case
   passes fewer in either.
-- [ ] The scale is merged where, in both matrices, fewer fix-now findings
-  are ones the judge rates useful or nit, and in neither are fewer of the
-  known defects found.
-- [ ] A passage that is kept is then run once in `house` on the same
-  cases, five runs a cell, and the results give it. It stays unless a case
-  there passes fewer runs with it.
+- [ ] The scale is merged into `roles/reviewer.md` by the lead's ruling of
+  2026-11-27, with its reason in the Report, since the item's rule (fewer
+  fix-now findings the judge rates useful or nit in both matrices, and
+  in neither fewer known defects found) cannot be met on runs that were
+  not made. The results give the rule's counts on the cases that ran.
+  By the human's ruling, no `house` run follows it.
 - [ ] Nothing else in the skill is changed. If a part of `SKILL.md` is
   found to cost the defect, the Report says which, what the runs show and
   what the lead and the human might do, and changes nothing.
