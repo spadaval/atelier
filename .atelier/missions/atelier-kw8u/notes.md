@@ -191,3 +191,14 @@ The lead's rulings:
 
 The lead of atelier-oqsz holds its item atelier-qut2 off `roles/reviewer.md`
 until atelier-oiwy merges, and is told when it does.
+
+## 2026-11-27: the human freezes the eval matrices and asks for the mission to close
+
+In the thread "Agent role split tradeoffs" the human said "Okay. Do it." to
+a plan whose first step is to finish this mission at once: review and merge
+atelier-oiwy, drop atelier-wtun while large parallel LLM eval matrices are
+paused, and close atelier-kw8u, so that `roles/reviewer.md` and `SKILL.md`
+are free for atelier-oqsz's item atelier-qut2. The lead read his words
+there, dropped atelier-wtun, and closes the mission when atelier-oiwy
+merges. The eval suite stays in the repository as it is, and no matrix
+runs.
