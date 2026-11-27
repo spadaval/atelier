@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-3km9
 title: Let mission lead merge approved items, make architecture/decisions living docs, and update role skills
-status: changes_requested
+status: in_review
 mission: null
 labels: []
 priority: medium
@@ -50,3 +50,8 @@ Wired `lead: Option<&'a Thread>` into `actions::Facts` (populated from `repo::li
 - `cargo clippy --all-targets --locked -- -D warnings` — passed
 - `cargo nextest run -p atelier-core -p atelier-cli` — passed
 - `git diff --check` — passed
+
+### Responses
+
+- 1-e5xa.1: fixed in b7c28134c
+- 1-e5xa.2: fixed in b7c28134c
