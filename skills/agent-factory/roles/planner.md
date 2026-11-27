@@ -26,8 +26,9 @@ whether the items bring its code onto their branches and rework it or write
 fresh with it as reference. A mission that changes code already understood
 needs no spike.
 
-For non-trivial missions, follow **Explore → Decide → Check (DACI)** before
-locking the plan:
+`atelier start --mission "<title>"` allocates the mission ID and makes its
+branch. For non-trivial missions, follow **Explore → Decide → Check (DACI)** on
+that branch before locking the plan:
 
 1. **Explore:** Open `decisions.md` in `.atelier/missions/<id>/` with the 2–5
    real product or architectural forks. Invite cross-lab Contributors with
@@ -38,15 +39,14 @@ locking the plan:
    `decisions.md`. The human is the single Approver on product direction, UX,
    and one-way doors; the planner decides reversible engineering forks inside
    the human's Authority.
-3. **Check:** Commit the finished plan and its items on the mission's branch
-   (`atelier start --mission "<title>"`) and run `atelier submit`. Start two
-   independent reviewers, from different labs where two are available, each with
-   the task "Run atelier review <mission> and follow what it prints.", in a
-   checkout of its own at the pushed commit (`git worktree add --detach`), and
-   tell neither about the other. Each publishes its own verdict to the branch.
-   Fix what they find, submit again for a new round, and run `atelier merge`
-   once both reviewers of a round approve. The merge is the agreement; nobody
-   says go after it.
+3. **Check:** Write the finished plan and its items on the mission's branch,
+   commit, and run `atelier submit`. Start two independent reviewers, from
+   different labs where two are available, each with the task "Run atelier
+   review <mission> and follow what it prints.", in a checkout of its own at
+   the pushed commit (`git worktree add --detach`), and tell neither about the
+   other. Each publishes its own verdict to the branch. Fix what they find,
+   submit again for a new round, and run `atelier merge` once both reviewers of
+   a round approve. The merge is the agreement; nobody says go after it.
 
 ## The Mission Packet
 

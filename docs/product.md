@@ -321,7 +321,7 @@ matter; `set` and the status commands write it.
 | --- | --- |
 | `start <id>` | On an open item on the base whose blockers are done: creates branch `<id>` from the base, sets `building`, binds this thread as implementer, and pushes the branch where a remote is configured, which is the claim. On a started item: switches to its branch and takes it over. For either, where a remote is configured, it first fetches the base and refuses an item done or dropped there, and after its push looks again. `start --new "<title>"` creates an item on a new branch already `building`, for work the human asked for directly. In the checkout that has the base out, `start` makes the branch without switching and prints the Git command that adds a worktree for it. |
 | `submit` | Where a remote is configured, fetches the base and refuses an item done or dropped there. Checks every Done when line is ticked, the Report is written, and each open fix-now finding has a response; sets `in_review` and commits the item's directory; opens a new round; prints the reviewer's handoff line. On a branch that proposes or changes a plan, it opens a round of plan review, and refuses to once the change's last two rounds split. Where a forge is configured it then pushes the branch and opens its pull request, so CI runs while the review does; a push or pull request that fails is a warning, and `merge` does it later. |
-| `merge` | Runs the checks below and merges the branch. With a forge, the forge merges the pull request, as a merge commit; without one, `merge` makes the merge commit and moves the base locally. If CI has not finished it waits for it, up to 9 minutes, then says "not yet" and is run again later. Once merged, it deletes the branch, on the forge's remote and here. Its only flag is `--trivial "<why>"`, which skips review for a change whose correctness is evident from the diff and records the claim. |
+| `merge` | Runs the checks below and merges the branch. On an approved item of a mission, the mission's lead may also run `merge` without holding the item or passing `ATELIER_SKIP`; `--trivial` and `submit` remain implementer-only. With a forge, the forge merges the pull request, as a merge commit; without one, `merge` makes the merge commit and moves the base locally. If CI has not finished it waits for it, up to 9 minutes, then says "not yet" and is run again later. Once merged, it deletes the branch, on the forge's remote and here. Its only flag is `--trivial "<why>"`, which skips review for a change whose correctness is evident from the diff and records the claim. |
 
 ### Reviewer
 
@@ -392,7 +392,8 @@ one. A lead's
 
 On an item's branch, a thread that holds nothing on the item is offered the
 take-over, and a reviewer whose review is done is told to stop. The lead of
-the item's mission is told it leads the mission and is offered no take-over. In
+the item's mission is told it leads the mission, is offered `atelier merge`
+once the item is approved, and is offered no take-over. In
 a Git checkout with no `.atelier/`, `status` says this is not an Atelier
 repository and exits 2.
 
@@ -623,7 +624,9 @@ record is committed on the base.
 once the branch has what its contents need (see [Branches](#branches)). A
 mission's or a backlog branch needs its two plan approvals or its passing
 `atelier check`, and a mission dropped on its branch is refused. On an
-item's branch, `merge` runs only on an approved item, or with `--trivial`.
+item's branch, `merge` runs only on an approved item (by its implementer, or
+by its mission's lead without taking it over or using `ATELIER_SKIP`), or
+with `--trivial` (by its implementer only).
 It checks:
 
 1. The latest round has an approve verdict that still covers the head: since
