@@ -164,13 +164,14 @@ review file's `created_at` to the commit that adds it.
   the plan review's counts and `atelier-ww7w`'s 45 findings. It goes in
   the brief and not in `roles/reviewer.md`, as the Scope says, because
   `atelier-7h71` found the skill already costs reviewers defects.
-- The item brief, round 1 only: it prints the mission's Outcome and says
-  a Done when line asking for more than it needs is a `Shrink:` finding
-  against the item, not a box to tick. This follows from the human's
-  direction (`atelier-8az0`: none of 50 reviews questioned a Done when
-  line). Before this change the reviewer never saw the Outcome, so the
-  rule needed the text beside it. `crates/atelier-cli/src/review.rs` reads
-  the Outcome from the checkout's mission record.
+- The item brief, in every round: it prints the mission's Outcome and
+  says a Done when line asking for more than it needs is a `Shrink:`
+  finding against the item, not a box to tick. From round 2 on, that
+  applies to the lines the new commits add or change. This follows from
+  the human's direction (`atelier-8az0`: none of 50 reviews questioned a
+  Done when line). Before this change the reviewer never saw the Outcome,
+  so the rule needed the text beside it. `crates/atelier-cli/src/review.rs`
+  reads the Outcome from the checkout's mission record.
 - The later-round item brief (`later_round`): "this round does not review
   it again". It reads the commits since the last round, runs what proves
   them, and leaves the size and the untouched Done when lines and Report
@@ -190,10 +191,10 @@ hosts criterion rules out. `roles/planner.md` says what goes in them
 instead. `atelier-b0vb` is untouched. No eval matrix was run and no plan
 was reviewed again.
 
-**Checks.** `cargo nextest run -p atelier-cli`: 280 passed.
+**Checks.** `cargo nextest run -p atelier-cli`: 281 passed.
 `cargo clippy -p atelier-cli --all-targets -- -D warnings`,
 `cargo fmt -- --check` and `git diff --check` are clean.
 `evals/agent-factory/test.sh` passes. New assertions in
 `tests/planning.rs` cover the plan brief's text and the Outcome and
-`Shrink:` lines in an item's round-1 brief. `tests/scenarios.rs` covers
+`Shrink:` lines in an item's round-1 and round-2 briefs. `tests/scenarios.rs` covers
 the new later-round text.

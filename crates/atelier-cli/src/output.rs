@@ -1304,11 +1304,18 @@ pub fn brief(brief: &Brief) -> String {
         text += &format!("\n## {heading}\n{}", content.trim_end());
         text += "\n";
     }
-    let whole_round = matches!(brief.previous, None | Some(Previous::Lost(_)));
-    if let (Some((mission, outcome)), Some(_), true) = (brief.outcome, brief.path, whole_round) {
+    if let (Some((mission, outcome)), Some(_)) = (brief.outcome, brief.path) {
+        // A later round judges only the lines its commits add or change;
+        // the earlier rounds judged the rest.
+        let lines = match brief.previous {
+            None | Some(Previous::Lost(_)) => "A Done when line",
+            Some(_) => {
+                "A Done when line that the commits since the last round's review add or change, and"
+            }
+        };
         text += &format!(
             "\nThe Outcome of mission {mission}, which this item serves:\n{}\n\
-             A Done when line that asks for more than that Outcome needs is not a box to tick: record a `Shrink:` finding against the item that names the line.\n",
+             {lines} that asks for more than that Outcome needs is not a box to tick: record a `Shrink:` finding against the item that names the line.\n",
             outcome.trim()
         );
     }

@@ -2493,3 +2493,65 @@ fn an_old_draft_on_the_base_is_agreed_only_by_two_plan_reviews() {
     let merged = git(&root, &["show", &format!("main:{}", mission_path(MISSION))]);
     assert_eq!(front(&merged, "status"), "open");
 }
+
+#[test]
+fn an_items_reviewer_weighs_its_done_when_against_the_missions_outcome_in_every_round() {
+    let scratch = Scratch::new(&[(ID, "open")]);
+    let root = scratch.root();
+    write_mission(&root, MISSION, "open");
+    join_mission(&root, ID, MISSION);
+    commit_all(&root, "Plan");
+    assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
+    fs::write(root.join("hello.txt"), "hello\n").unwrap();
+    git(&root, &["add", "hello.txt"]);
+    git(&root, &["commit", "-qm", "Say hello"]);
+    finish_and_submit(&root, "t1");
+    let outcome =
+        format!("\nThe Outcome of mission {MISSION}, which this item serves:\nGreetings.\n");
+    let tail = "that asks for more than that Outcome needs is not a box to tick: record a \
+                `Shrink:` finding against the item that names the line.\n";
+
+    // Round 1 weighs every line.
+    let run = atelier(&root, "t2", &["review", ID]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(
+        run.stdout
+            .contains(&format!("{outcome}A Done when line {tail}")),
+        "{}",
+        run.stdout
+    );
+    let (first, path) = review_of(&root, 1);
+    append(
+        &root,
+        &path,
+        "\n## Finding 1: No period\nRecommendation: fix now\nIt lacks one.\n",
+    );
+    assert_eq!(verdict(&root, "t2", &["verdict", "changes"]).code, 0);
+
+    // A later round weighs the lines its commits add or change.
+    fs::write(root.join("hello.txt"), "hello.\n").unwrap();
+    git(&root, &["commit", "-qam", "Add the period"]);
+    let fix = git(&root, &["rev-parse", "--short", "HEAD"]);
+    let item = item_path(ID);
+    let text = read(&root, &item).replace(
+        "## Scope",
+        "- [x] `hello.txt` ends with a period.\n\n## Scope",
+    );
+    fs::write(root.join(&item), text).unwrap();
+    append(
+        &root,
+        &item,
+        &format!("\n### Responses\n\n- {first}.1: fixed in {fix}\n"),
+    );
+    assert_eq!(atelier(&root, "t1", &["submit"]).code, 0);
+    let run = atelier(&root, "t3", &["review", ID]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(
+        run.stdout.contains(&format!(
+            "{outcome}A Done when line that the commits since the last round's review add or \
+             change, and {tail}"
+        )),
+        "{}",
+        run.stdout
+    );
+}
