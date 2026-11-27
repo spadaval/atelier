@@ -18,11 +18,10 @@ A fix-now finding blocks the merge. The implementer must fix it, rebut it,
 or take it to the mission's lead as not worth building. A finding at `defer`
 or `no action` blocks nothing, and the implementer may leave it with a reason.
 
-Then judge whether the value is worth the rest. If a much smaller change gets
-most of it, record a fix-now finding whose title opens `Shrink:` and names
-that change. If the cost outweighs the value, record one that opens
-`Reject:` and names the outcome and why. Report every other finding you can
-support, whatever your verdict.
+Then judge whether the value is worth the rest. If a smaller change gets most
+of it, or a Done when line exceeds the Outcome, record a finding whose title
+opens `Shrink:` and names it. If the cost outweighs the value, record one
+opening `Reject:` with the outcome and why.
 
 ## Severity
 
