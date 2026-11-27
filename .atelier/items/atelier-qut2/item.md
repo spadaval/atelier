@@ -3,12 +3,13 @@ schema: atelier.item
 schema_version: 3
 id: atelier-qut2
 title: Rewrite the skill for plans as outcomes and lighter later rounds, from what this mission's own plan review showed
-status: open
+status: building
 mission: atelier-oqsz
 labels: []
 priority: medium
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A97bcfb9a-33e0-42f5-882a-004f5d9c6644%3Adelegate-task%3Aoqsz-impl-qut2
 ready: null
 trivial: null
 caused_by: null
