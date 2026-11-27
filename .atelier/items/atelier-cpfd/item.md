@@ -81,4 +81,3 @@ two times say what each measures.
 - `cargo fmt -- --check`, `cargo clippy --all-targets -- -D warnings` and
   `git diff --check` pass.
 - `docs/product.md` shows the new line and says what each time measures.
-
