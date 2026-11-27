@@ -75,3 +75,20 @@ verdict, four findings, all about outcomes. `atelier-ww7w`: five rounds,
 (`submit` orders its runner to start a reviewer), `atelier-nc7t` (a branch
 with two merge bases is refused for reasons that name something else) and
 `atelier-jahm` (`merge` says a plan merges with no review).
+
+## 2026-11-27: the planner leads, and the order the items start in
+
+Sumeet, in the planner's thread: "Yeah, close it. Then, lead the mission."
+The "it" is `atelier-oiwy`, which he ruled closed on the evidence it has,
+with no further runs. That ruling went to the lead of `atelier-kw8u`, whose
+item it is.
+
+The lead starts `atelier-f0sn` and `atelier-7ci6` first. This host allows
+two heavy builds at once (`~/.cargo/config.toml`), and each item's reviewer
+builds too, so `atelier-hota` starts when one of the two merges.
+
+`atelier-qut2` is held until `atelier-oiwy` is merged or dropped. Then it
+may change `roles/reviewer.md` and all of `SKILL.md` itself, and the item
+its Scope would have filed for them is not needed. If `atelier-oiwy` is
+still open when the three other items are merged, `atelier-qut2` starts
+with its Scope as written.
