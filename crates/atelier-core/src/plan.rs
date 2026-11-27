@@ -107,6 +107,7 @@ pub fn planned_facts<'a>(repo: &'a Repo, located: &Located, record: &'a ItemDir)
         branch: located.branch.is_some(),
         blockers: &[],
         mission: None,
+        lead: None,
         caller: &repo.caller,
         checkout: None,
         worktree: None,
@@ -485,11 +486,16 @@ pub(crate) fn changed_sections(before: &MissionDir, after: &MissionDir) -> Vec<&
 }
 
 /// Whether `path` is a file of mission `id`'s plan beside its `mission.md`:
-/// any other in its directory but `notes.md` and its reviews.
+/// any other in its directory but `notes.md`, `architecture.md`,
+/// `decisions.md`, and its reviews.
 pub(crate) fn is_plan_file(id: &str, path: &str) -> bool {
     let rest = path.strip_prefix(&format!("{}/", mission_dir(id)));
     rest.is_some_and(|rest| {
-        rest != "mission.md" && rest != "notes.md" && !rest.starts_with("reviews/")
+        rest != "mission.md"
+            && rest != "notes.md"
+            && rest != "architecture.md"
+            && rest != "decisions.md"
+            && !rest.starts_with("reviews/")
     })
 }
 

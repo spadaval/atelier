@@ -227,7 +227,9 @@ Result; Outcome is required, and `check` says when Why is empty, since it
 names whose direction the mission started from. `drop` writes `Dropped:
 <reason>` first under `## Result`, as on an item, and `MissionDir::dropped`
 reads it. Its plan reviews are review files under `reviews/`, read and
-validated as an item's are. `notes.md` holds the lead's notes. Any other
+validated as an item's are. `notes.md` holds the lead's notes, and
+`architecture.md` and `decisions.md` hold living technical contracts and
+DACI decisions; none of the three are part of the plan. Any other
 file in the directory is a planning document with no required shape, and is
 not read.
 
@@ -442,7 +444,7 @@ will check.
 | `review` of a plan | Reviewer | proposed, or `open` with its plan changed on the backlog branch the checkout is on | unchanged | the caller is not in the mission's `planners` |
 | `verdict changes` on a plan review | Reviewer | as `review` of a plan | unchanged | the file validates; it has an open fix-now finding; no finding has a `Decided:` line |
 | `verdict approve` on a plan review | Reviewer | as `review` of a plan | unchanged | the file validates; no fix-now finding is open among the file's own and those of earlier rounds; no finding has a `Decided:` line |
-| `merge` | Implementer | `approved` | `done`, read from the merge | a review of the latest round approves it and still covers the head; no line in Responses is malformed; nothing uncommitted in tracked files, the item's directory or a newly filed item's record; the item and its mission are not dropped |
+| `merge` | Implementer (or mission lead) | `approved` | `done`, read from the merge | a review of the latest round approves it and still covers the head; no line in Responses is malformed; nothing uncommitted in tracked files, the item's directory or a newly filed item's record; the item and its mission are not dropped |
 | `merge --trivial` | Implementer | `building` | `done`, read from the merge | Done when ticked; Report written; no review file; no line in Responses is malformed; nothing uncommitted in tracked files, the item's directory or a newly filed item's record; the item and its mission are not dropped |
 | `merge` (mission) | Planner | proposed | agreed, by being on the base | Until atelier-2vdq, refused as a backlog branch that adds a mission is, a rule a skip passes. From atelier-2vdq: two reviews of the current round, from threads not in `planners`, approve, and the plan has not changed since the commit each reviewed; the mission is not dropped on its branch; no code changed; nothing uncommitted |
 | `merge` (backlog) | Any | none | none | in a checkout on the backlog branch; no code changed (no path outside `.atelier/`, and not `config.toml`), which is no rule; it adds no mission and changes no mission's plan, which until atelier-2vdq gives a plan its gate is a rule refused; it brings no item record in a started status; `atelier check` passes on the merged tree; nothing uncommitted. No review file is asked for. Not an implementer's action on an item |
@@ -533,8 +535,9 @@ How the table is built:
   the caller does not hold, then one with an unmet condition, and otherwise
   gives the status to set. An action that binds a role (`start`, `review`)
   needs nothing held;
-  `submit` and `merge` need the caller to be the item's last
-  implementer, and a verdict needs it to be the round's reviewer. No
+  `submit` needs the caller to be the item's last implementer, `merge`
+  needs the caller to be the item's last implementer or its mission's lead,
+  and a verdict needs it to be the round's reviewer. No
   thread holds the planner's role on an item, so a planner's action on one
   (`close`, `drop`) needs nothing held and is never refused for a role the caller
   holds. On a mission, `submit` and `merge` need the caller to be in
@@ -542,7 +545,8 @@ How the table is built:
   not to be.
 - `actions::next` names the action the caller would run next: `start` on an open
   item; as its holder, `submit` from building or changes requested, `merge`
-  from approved, and nothing while it is in review; as the round's
+  from approved, and nothing while it is in review; as its mission's lead,
+  `merge` from approved; as the round's
   reviewer, `verdict changes` while its file holds an open fix-now finding,
   else `verdict approve`; as anyone else, `review` when it is in review and
   they never implemented it, else nothing when they reviewed it before
@@ -675,7 +679,8 @@ criteria can be checked, and whether its items, order and what is out reach
 the Outcome), that a finding about a mechanism or an unstated case is
 `defer` and names its item unless the plan cannot reach its Outcome without
 it, and that the review stops once both reviewers of a round approve. The paths are the
-mission's directory but its reviews and `notes.md`, and its items' but
+mission's directory but its reviews, `notes.md`, `architecture.md` and
+`decisions.md`, and its items' but
 their reviews, for an item of the mission at either commit. Once the
 mission is agreed, an item's paths count only where the amendment changes
 them by the same union, which leaves out the Reports and reviews the base
@@ -1190,7 +1195,8 @@ In order:
    merge base: code is any changed path outside `.atelier/`, and
    `.atelier/config.toml`; a plan change is a mission added, or a change to
    a mission's plan, compared by section of `mission.md`, by file for its
-   other documents but `notes.md` and its reviews, and by item while the
+   other documents but `notes.md`, `architecture.md`, `decisions.md` and its
+   reviews, and by item while the
    plan is proposed.
    - **Code** needs an item's approval: on an item's branch, the approval
      covers the head, or `--trivial` was given on a building item with no
@@ -1415,7 +1421,7 @@ refused as `show` refuses it.
 | review, take-over | A review file appears, or its `reviewers` gains an entry | That entry |
 | verdict | A review's verdict is set, on an item or a mission | The review's holder |
 | merge | On the base's first-parent line, an item's copy first holds a started status, or becomes `done` in an Atelier merge made before the branch model | The item's holder |
-| plan-merge | A merge on the base's first-parent line brings a mission to the base `open`, or changes the plan of an agreed one as `merge` judges it: a plan section of `mission.md`, or another file in its directory but `notes.md` and `reviews/` | The mission's latest planner |
+| plan-merge | A merge on the base's first-parent line brings a mission to the base `open`, or changes the plan of an agreed one as `merge` judges it: a plan section of `mission.md`, or another file in its directory but `notes.md`, `architecture.md`, `decisions.md` and `reviews/` | The mission's latest planner |
 | settle | A finding gains `Taken` or `Dropped` | The thread in that line |
 | lead | A mission's `lead` is set or changes | That entry |
 | ready | Only in history from before items were open: an item's record comes to spell its status `ready`; on a mission in the old form, its status | None; the name given with `--by` |

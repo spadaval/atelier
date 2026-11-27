@@ -77,7 +77,7 @@ Each word has one meaning in the CLI, its help, the docs and the skill.
 | Word | Meaning |
 | --- | --- |
 | Mission | A batch of related work the human hands to agents to run unattended. It has an outcome, limits on what agents may decide, and an end. A theme with no end is a label. |
-| Plan | What a mission's two plan reviews approve: the Why, Outcome, Success criteria, Scope and Authority sections of `mission.md`, the documents beside it other than `notes.md` and its reviews, and, until the plan has merged, the mission's items. Nothing called a plan is stored. |
+| Plan | What a mission's two plan reviews approve: the Why, Outcome, Success criteria, Scope and Authority sections of `mission.md`, the documents beside it other than `notes.md`, `architecture.md`, `decisions.md` and its reviews, and, until the plan has merged, the mission's items. Nothing called a plan is stored. |
 | Proposed | A mission whose record says `open` and is read from a branch that has not merged. It is shown, never stored. |
 | Agreed | A mission whose record is on the base. Its plan merged after two approving plan reviews. |
 | Branch | Where a thread's changes live until they merge. There are three kinds, named by convention: an item's ID, a mission's ID, and `backlog/<slug>` for record changes tied to neither. |
@@ -437,6 +437,8 @@ with the harness's own tool, using a line the tool prints:
   missions/<id>/
     mission.md
     design.md             optional
+    architecture.md       optional; living technical map, not part of the plan
+    decisions.md          optional; living DACI tradeoffs and decisions, not part of the plan
     notes.md              optional; the lead's notes, not part of the plan
     <other documents>     spikes, comparisons, mockups
     reviews/1-k3fa.md     plan reviews
@@ -450,7 +452,7 @@ with the harness's own tool, using a line the tool prints:
 | --- | --- | --- | --- |
 | `mission.md` | status (`open`, `done` or `dropped`), labels, lead thread, planner threads | Why, Outcome, Success criteria (optional), Scope, Authority, Result | The human's direction, recorded by the planner, whose Why says whose direction it is; the lead writes Result |
 | `design.md` and other documents | none required | Shape, Design, Sizing, Derisking, Risks and unknowns | Agents |
-| `notes.md` | none | Free text | The lead |
+| `notes.md`, `architecture.md`, `decisions.md` | none | Free text (notes, living contracts, DACI decisions) | Agents / the lead |
 | `item.md` | status, mission, labels, priority, blocked-by, caused-by, implementer threads, trivial, and in an old record who made it ready | Goal, Done when, Scope, Report (with Validation and Responses) | The planner writes the definition; the implementer writes the Report |
 | `reviews/<round>-<suffix>.md` | round, commit reviewed, reviewer threads and model, verdict | Summary and limits, then one heading per finding with its recommendation | The reviewer |
 
@@ -467,8 +469,9 @@ Rules:
   needs two approving plan reviews again before it merges. The other
   documents in a mission's directory are the agents', and they may change
   them during the run inside the limits Authority sets; a change to one of
-  them is a change to the plan, except to `notes.md`. The Result, the lead,
-  the notes and the status are records, not plan.
+  them is a change to the plan, except to `notes.md`, `architecture.md` and
+  `decisions.md`. The Result, the lead, the living documents and the status
+  are records, not plan.
 - When a mission was created is read from the commit that created it, which
   `log` already reads; a mission's record stores no time.
 - A small mission may put a short Design section in `mission.md` and have no

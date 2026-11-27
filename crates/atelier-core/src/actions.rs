@@ -349,6 +349,9 @@ pub struct Facts<'a> {
     /// The item's mission, if it names one, with the mission's status on
     /// the base; `None` when no such mission is found. See [`mission_of`].
     pub mission: Option<(String, Option<MissionStatus>)>,
+    /// The lead of the item's mission, if any; a mission's lead may merge its
+    /// approved items without holding them as implementer.
+    pub lead: Option<&'a Thread>,
     pub caller: &'a Thread,
     /// The checkout on the item's branch, which `merge` reads. The CLI
     /// gathers it where `merge` runs and `status` lists its conditions: on
@@ -478,6 +481,10 @@ impl<'a> Facts<'a> {
 
     pub fn holds(&self) -> bool {
         self.holder() == Some(self.caller)
+    }
+
+    pub fn is_lead(&self) -> bool {
+        self.lead == Some(self.caller)
     }
 
     pub fn round(&self) -> Round<'a> {
@@ -725,7 +732,10 @@ fn found(action: Action, facts: &Facts, all: bool) -> Result<Vec<Refusal>, Probl
         let (holds, holder) = match row.role {
             // A mission's roles bind, so their actions never come here.
             Role::Planner | Role::Lead => (true, None),
-            Role::Implementer => (facts.holds(), facts.holder()),
+            Role::Implementer => (
+                facts.holds() || (matches!(action, Action::Merge) && facts.is_lead()),
+                facts.holder(),
+            ),
             Role::Reviewer => (
                 facts.reviewing().is_some(),
                 facts
@@ -1159,6 +1169,9 @@ pub fn next(facts: &Facts) -> Result<Option<Action>, Problem> {
         }));
     }
     if !facts.holds() {
+        if status == Status::Approved && facts.is_lead() {
+            return Ok(Some(Action::Merge));
+        }
         let implemented = facts.item.item.implementers.0.contains(facts.caller);
         if status == Status::InReview && !implemented {
             return Ok(Some(Action::Review));

@@ -404,11 +404,18 @@ pub fn entries(
             .iter()
             .map(|id| (id.clone(), statuses.get(id.as_str()).copied()))
             .collect();
+        let lead = record.item.mission.as_deref().and_then(|id| {
+            missions
+                .iter()
+                .find(|dir| dir.mission.id == id)
+                .and_then(|dir| dir.mission.lead.as_ref())
+        });
         let facts = Facts {
             item: record,
             branch: located.branch.is_some(),
             blockers: &blockers,
             mission: mission_of(record, missions),
+            lead,
             caller,
             checkout: None,
             worktree: None,
