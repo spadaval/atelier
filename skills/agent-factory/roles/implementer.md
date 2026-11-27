@@ -4,6 +4,10 @@ A question you cannot settle goes to the thread that started you, as advice:
 ask, carry on, and say in the Report what the answer changed. One that
 touches product direction is the human's, as an item labelled `needs-human`.
 
+If a Done when line turns out much harder or bigger than the Goal justifies,
+or no longer fits what landed earlier, ask your mission's lead (or the thread
+that started you) to shrink or rewrite the item before building it.
+
 ## Findings
 
 You pass no rule on your own work. A fix-now finding blocks the merge, and
