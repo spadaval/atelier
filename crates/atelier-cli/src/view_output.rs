@@ -634,9 +634,12 @@ pub fn overview(overview: &Overview, led: &[&str]) -> String {
             text += &format!("  {}", mission_line(dir, true, None));
         }
     }
-    if !overview.waiting.is_empty() {
+    let waiting: Vec<&Entry> = (overview.waiting.iter())
+        .filter(|e| !e.mission.as_deref().is_some_and(|m| led.contains(&m)))
+        .collect();
+    if !waiting.is_empty() {
         text += "Waiting on a human (labelled needs-human):\n";
-        for entry in &overview.waiting {
+        for entry in waiting {
             text += &format!("  {}", line(entry, true));
         }
     }

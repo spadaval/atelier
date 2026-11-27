@@ -735,9 +735,7 @@ first, `start <id>` or, in the base's checkout, the checkout that has its
 branch; the record changes the checkout has not committed and the commits
 of its branch not yet pushed, with the Git command for each, a detached
 HEAD's unattached commits ([A detached HEAD](#a-detached-head)) and each
-drop written but not yet published; the items dropped on the base while
-started and those dropped on their branch whose drop has not reached the
-base, each with its reason. A thread that is the `lead` of an agreed
+drop written but not yet published. A thread that is the `lead` of an agreed
 mission is shown next what waits on it in the missions it leads
 (`view_output::lead_waits`): each finding not built, which waits on its
 ruling, each item at the round cap with the rulings, each response another
@@ -773,8 +771,11 @@ or leading something, and a line with how many more
 line counting the other open items by what stops them (a blocker not done,
 a mission dropped, a branch of their name) that names `list`; the started
 items others hold, with each holder; the missions in progress the caller
-does not lead; the items labelled `needs-human` that nobody has started, as
-waiting on a human; and the line on branches and worktrees that piled up
+does not lead; the items labelled `needs-human` that nobody has started,
+as waiting on a human; the items dropped on the base while started and
+those dropped on their branch whose drop has not reached the base, each
+with its reason, which may be any thread's; and the line on branches and
+worktrees that piled up
 ([After the merge](#after-the-merge)). Holding nothing and leading nothing,
 it ends with `start` on an item that can start, or says no open item can
 start now and names no `start`; a lead holding nothing is pointed at no

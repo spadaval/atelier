@@ -544,3 +544,50 @@ fn a_leads_status_of_the_hubs_largest_state_is_under_4_kb_in_the_same_order() {
     assert!(!rest.contains("Missions in progress:"), "{shown}");
     assert!(!rest.contains("Held by other threads:"), "{shown}");
 }
+
+#[test]
+fn drops_of_other_items_print_after_a_leads_handoff_and_its_backlog() {
+    let scratch = Scratch::new(&[]);
+    let m = Some("demo-m1ss");
+    let ids: Vec<String> = (0..40).map(|n| format!("demo-q{n:03}")).collect();
+    let mut items = vec![
+        spec("demo-a1aa", m, "open", None, &[], 3, TITLES[0]),
+        Spec {
+            labels: &["needs-human"],
+            ..spec("demo-h1um", m, "open", None, &[], 3, TITLES[1])
+        },
+    ];
+    for (n, id) in ids.iter().enumerate() {
+        items.push(spec(id, None, "building", Some(n), &[], 3, TITLES[n % 12]));
+    }
+    let base = build(
+        &scratch,
+        &[("demo-m1ss", LEAD, "Give the Hub one model in studio terms")],
+        &items,
+    );
+    // Each is dropped on the base while its branch of building is left.
+    let root = scratch.root();
+    for spec in &items[2..] {
+        let text = item_text(spec, "dropped").replace(
+            "## Report\n\n",
+            "## Report\n\nDropped: Superseded by a later item that does the same thing.\n",
+        );
+        write(&root, &item_path(spec.id), &text);
+    }
+    commit_at(&root, "Drop forty", "2026-11-20T14:00:00Z");
+    git(&base, &["checkout", "-q", "--detach", "main"]);
+    let shown = status(&base, LEAD);
+    let handoff = at(
+        &shown,
+        "  Run atelier start demo-a1aa and follow what it prints.\n",
+    );
+    let mission = at(&shown, "You lead mission demo-m1ss: ");
+    let dropped = at(&shown, "Dropped on the base while started");
+    assert!(
+        handoff < 2048 && handoff < mission && mission < dropped,
+        "{shown}"
+    );
+    // The needs-human item of the mission is shown once, in the mission.
+    assert_eq!(shown.matches("demo-h1um (").count(), 1, "{shown}");
+    assert!(!shown.contains("Waiting on a human"), "{shown}");
+}

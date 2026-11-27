@@ -177,7 +177,7 @@ fn gates(config: &Config) -> String {
 /// caller: its plan reviews, what it holds and its way there, what its
 /// checkout has not saved, then what waits on it as a mission's lead, the
 /// missions it leads, one line an item, and last the backlog, with what is
-/// already shown above left out. `dropped` is each item dropped on the base
+/// already shown above left out, then the drops of any thread's items. `dropped` is each item dropped on the base
 /// while its branch is there, with why, and `unreached` each item dropped on
 /// its branch whose drop has not reached the base. `unsaved` is what
 /// [`unsaved`] says of the checkout, and `piled` what [`piled_up`] says of
@@ -241,18 +241,6 @@ pub fn overview(
         }
     }
     text += unsaved;
-    if !dropped.is_empty() {
-        text += "Dropped on the base while started; nothing is left to do on them:\n";
-        for (id, why) in dropped {
-            text += &format!("  {id}: {}\n", why.as_deref().unwrap_or("no reason given"));
-        }
-    }
-    if !unreached.is_empty() {
-        text += "Dropped on their branch, and the drop has not reached the base; carry it on a backlog branch with `atelier drop <id> --reason \"<why>\"` there, then `submit` and `merge`:\n";
-        for (id, why) in unreached {
-            text += &format!("  {id}: {}\n", why.as_deref().unwrap_or("no reason given"));
-        }
-    }
     text += &crate::view_output::lead_waits(&overview.led);
     text += &crate::view_output::led(&overview.led, paces);
     // The backlog leaves out the items of the missions the caller leads,
@@ -310,6 +298,21 @@ pub fn overview(
         text += "The backlog, which waits on nobody in particular:\n";
     }
     text += &backlog;
+    // Drops of any thread's items, which wait on nobody in particular.
+    let mut notices = String::new();
+    if !dropped.is_empty() {
+        notices += "Dropped on the base while started; nothing is left to do on them:\n";
+        for (id, why) in dropped {
+            notices += &format!("  {id}: {}\n", why.as_deref().unwrap_or("no reason given"));
+        }
+    }
+    if !unreached.is_empty() {
+        notices += "Dropped on their branch, and the drop has not reached the base; carry it on a backlog branch with `atelier drop <id> --reason \"<why>\"` there, then `submit` and `merge`:\n";
+        for (id, why) in unreached {
+            notices += &format!("  {id}: {}\n", why.as_deref().unwrap_or("no reason given"));
+        }
+    }
+    text += &notices;
     text += piled;
     if stopped {
         return text;
