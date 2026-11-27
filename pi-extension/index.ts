@@ -18,6 +18,7 @@ import {
   sessionName,
   type Role,
 } from "./lib.ts";
+import { itemStatus, logFile, size, write } from "./log.ts";
 
 const REMIND_EVERY = Number(process.env.ATELIER_PI_REMIND_EVERY ?? 25);
 
@@ -70,6 +71,80 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", async () => {
     greeted = false;
     turns = 0;
+  });
+
+  // A log of what the session did, for measuring a run afterward: see log.ts.
+  // These handlers return nothing and send nothing, so they cannot change a run.
+  const started = new Map<string, { at: number; argBytes: number }>();
+  const log = (ctx: ExtensionContext, event: string, fields: Record<string, unknown>) => {
+    try {
+      write(logFile(ctx.sessionManager?.getSessionFile?.()), event, { thread: process.env.T3CODE_THREAD_ID, ...fields });
+    } catch {
+      // Logging never disturbs the run.
+    }
+  };
+
+  pi.on("session_start", async (event, ctx) => {
+    log(ctx, "session_start", { reason: (event as { reason?: string }).reason, cwd: ctx.cwd });
+  });
+
+  pi.on("tool_execution_start", async (event) => {
+    started.set(event.toolCallId, { at: Date.now(), argBytes: size(event.args) });
+  });
+
+  pi.on("tool_execution_end", async (event, ctx) => {
+    const begun = started.get(event.toolCallId);
+    started.delete(event.toolCallId);
+    log(ctx, "tool", {
+      tool: event.toolName,
+      toolCallId: event.toolCallId,
+      parent: (event as { parentToolCallId?: string }).parentToolCallId ?? null,
+      argBytes: begun?.argBytes ?? null,
+      resultBytes: size(event.result),
+      // durationMs is execute()'s own time and is absent for a call that was blocked; wallMs includes the hooks.
+      durationMs: (event as { durationMs?: number }).durationMs ?? null,
+      wallMs: begun ? Date.now() - begun.at : null,
+      isError: event.isError === true,
+    });
+  });
+
+  pi.on("turn_end", async (_event, ctx) => {
+    log(ctx, "turn", { context: ctx.getContextUsage?.() ?? null });
+  });
+
+  pi.on("session_compact", async (event, ctx) => {
+    const compact = event as { reason?: string; fromExtension?: boolean; willRetry?: boolean };
+    log(ctx, "compact", { reason: compact.reason, fromExtension: compact.fromExtension, willRetry: compact.willRetry });
+  });
+
+  pi.on("session_compact_failed", async (event, ctx) => {
+    const failed = event as { reason?: string; errorMessage?: string; aborted?: boolean };
+    log(ctx, "compact_failed", { reason: failed.reason, error: failed.errorMessage, aborted: failed.aborted });
+  });
+
+  // Pi records what a provider did to a request, such as OpenAI dropping
+  // replayed reasoning items ("prefix_mismatch"), as diagnostics on the assistant message.
+  pi.on("message_end", async (event, ctx) => {
+    const message = (event as { message?: { role?: string; diagnostics?: unknown[] } }).message;
+    if (message?.role !== "assistant" || !Array.isArray(message.diagnostics) || message.diagnostics.length === 0) return;
+    const bytes = size(message.diagnostics);
+    // The session file keeps every diagnostic in full; the log keeps them when they are small.
+    log(ctx, "diagnostics", { count: message.diagnostics.length, bytes, diagnostics: bytes <= 20_000 ? message.diagnostics : null });
+  });
+
+  // Each time the agent stops: what it holds and where that stands. Counting the
+  // stops with an item still building says whether a completion gate is worth building.
+  pi.on("agent_settled", async (event, ctx) => {
+    const branch = (await run("git", ["branch", "--show-current"], { cwd: ctx.cwd, timeoutMs: 5000 })).stdout.trim();
+    log(ctx, "settled", {
+      aborted: (event as { aborted?: boolean }).aborted === true,
+      branch,
+      role,
+      itemStatus: itemStatus(ctx.cwd, branch),
+      ledMission: ledMissionFromStatus(status, process.env.T3CODE_THREAD_ID),
+      pendingMessages: ctx.hasPendingMessages?.() ?? null,
+      context: ctx.getContextUsage?.() ?? null,
+    });
   });
 
   // Codex and Claude Code run `atelier status` from a session-start hook. Pi

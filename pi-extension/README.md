@@ -4,8 +4,8 @@ Lets a thread run in the [Pi coding agent](https://pi.dev) under the same
 rules as a Codex or Claude Code thread, so one model can be compared across
 harnesses. It is an experiment: whether it stays depends on that comparison.
 
-In a checkout with no `.atelier` directory it does nothing but offer the
-background-command tools.
+In a checkout with no `.atelier` directory it offers background-command
+tools and passive session logging, but does not inject Atelier records.
 
 ## What it does
 
@@ -56,6 +56,33 @@ project's own extensions in a folder it has not been told to trust.
 | --- | --- | --- |
 | `ATELIER_PI_REMIND_EVERY` | `25` | Turns between reminders; `0` turns them off. |
 | `ATELIER_PI_GUARD` | `~/.local/bin/handoff-guard-logged pi`, else `handoff-guard hook` | The guard command; `off` disables the check. |
+
+## Session logs
+
+Each session appends JSONL to `~/.local/state/atelier-pi/<session-file-name>.jsonl`.
+Set `ATELIER_PI_LOG_DIR` to override the directory. Sessions without a file use
+`ephemeral-<pid>.jsonl`. Resuming a session appends to its existing log.
+
+Every row has an ISO `ts`, an `event`, and the `T3CODE_THREAD_ID` when set:
+
+- `session_start`: startup reason and working directory.
+- `tool`: tool name, `toolCallId`, `parent` call ID (null for top-level calls),
+  serialized UTF-8 `argBytes` and `resultBytes`, execution `durationMs`, hook-inclusive
+  `wallMs`, and `isError`. Missing timing or arguments are null; unserializable
+  values have size -1. Nested codemode calls are included.
+- `turn`: Pi's current `context` usage, or null when unavailable.
+- `compact` / `compact_failed`: reason and outcome metadata, including an error
+  message on failure.
+- `diagnostics`: assistant provider diagnostics (for example dropped reasoning),
+  their count and serialized size. Diagnostics over 20,000 bytes are omitted
+  from this log; consult the Pi session for full diagnostics.
+- `settled`: aborted flag, Git branch, cached Atelier role and led mission,
+  branch item's on-disk status, pending-message flag and context usage.
+
+Tool arguments and results are measured but never stored. Diagnostics and error
+messages can contain sensitive provider data: treat logs as private session data.
+Writes are best-effort; an unwritable directory drops records without sending
+messages or requesting continuation. Logging does not implement a completion gate.
 
 ## Test
 
