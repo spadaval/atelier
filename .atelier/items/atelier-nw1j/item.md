@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-nw1j
 title: Run evals CI job only when evals or CI config change
-status: in_review
+status: approved
 mission: null
 labels: []
 priority: medium
